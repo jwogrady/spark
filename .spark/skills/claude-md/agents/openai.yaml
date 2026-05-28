@@ -1,0 +1,4 @@
+interface:
+  display_name: "Claude MD"
+  short_description: "Generate and maintain CLAUDE.md for Spark-managed repos"
+  emoji: "📝"

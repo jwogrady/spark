@@ -1,0 +1,80 @@
+name: Feature
+description: Propose a new feature for Spark.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        One atomic feature per issue. If you have two ideas, open two issues.
+
+  - type: input
+    id: feature_id
+    attributes:
+      label: Feature ID
+      description: "e.g. FEAT-SPARK-FOO-001"
+      placeholder: FEAT-SPARK-FOO-001
+    validations:
+      required: false
+
+  - type: input
+    id: namespace
+    attributes:
+      label: Namespace
+      description: "e.g. spark.skills.foo"
+      placeholder: spark.skills.foo
+    validations:
+      required: false
+
+  - type: input
+    id: bounded_context
+    attributes:
+      label: Bounded Context
+      description: The domain this feature belongs to.
+    validations:
+      required: false
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What problem does this solve? Be specific.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed_behavior
+    attributes:
+      label: Proposed Behavior
+      description: What should Spark do? Describe the behavior, not the implementation.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance Criteria
+      description: Checkboxes that define done.
+      value: |
+        - [ ]
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+
+  - type: textarea
+    id: non_goals
+    attributes:
+      label: Non-Goals
+      description: What is explicitly out of scope for this issue?
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: attribution
+    attributes:
+      label: Attribution
+      options:
+        - label: >
+            I will not credit AI systems in any commit, PR, comment, doc, or generated file.
+            Credit belongs to the author.
+          required: true

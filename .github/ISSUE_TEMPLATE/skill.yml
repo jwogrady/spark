@@ -1,0 +1,84 @@
+name: Skill
+description: Propose a new Spark skill.
+labels: ["skill", "enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Skills live in `.spark/skills/<name>/`. Each skill requires `SKILL.md`
+        and `agents/openai.yaml`. `README.md` is recommended. Long schemas,
+        prompts, or examples go in `references/`.
+
+        Do not propose a skill that implements runtime automation unless runtime
+        is explicitly in scope. Document-only skills are preferred at this stage.
+
+  - type: input
+    id: skill_name
+    attributes:
+      label: Skill name
+      placeholder: "e.g. fork-init"
+    validations:
+      required: true
+
+  - type: input
+    id: namespace
+    attributes:
+      label: Namespace
+      placeholder: "e.g. spark.skills.fork-init"
+    validations:
+      required: false
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What workflow or gap does this skill address?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed_behavior
+    attributes:
+      label: Proposed Behavior
+      description: What will the skill do? What outputs will it produce?
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance Criteria
+      value: |
+        - [ ] Add `.spark/skills/<name>/SKILL.md`
+        - [ ] Add `.spark/skills/<name>/agents/openai.yaml`
+        - [ ] Add `.spark/skills/<name>/README.md` (recommended)
+        - [ ] Skill does not implement runtime automation
+        - [ ] No invented commands or fake integrations
+        - [ ] No AI attribution in any file
+    validations:
+      required: true
+
+  - type: textarea
+    id: non_goals
+    attributes:
+      label: Non-Goals
+    validations:
+      required: false
+
+  - type: input
+    id: source
+    attributes:
+      label: Source (if imported)
+      description: URL of the original skill if this is imported from another repo.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: attribution
+    attributes:
+      label: Attribution
+      options:
+        - label: >
+            I will not credit AI systems in any commit, PR, comment, doc, or generated file.
+            Credit belongs to the author.
+          required: true

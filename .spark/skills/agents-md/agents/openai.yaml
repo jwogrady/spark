@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agents MD"
+  short_description: "Generate and maintain AGENTS.md for Spark-managed repos"
+  emoji: "🤖"

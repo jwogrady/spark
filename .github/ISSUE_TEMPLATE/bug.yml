@@ -1,0 +1,42 @@
+name: Bug
+description: Report something that is wrong or missing in Spark's documentation or skills.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Spark has no runtime yet. Most bugs at this stage are documentation errors,
+        broken links, or incorrect skill instructions.
+
+  - type: textarea
+    id: what_is_wrong
+    attributes:
+      label: What is wrong?
+      description: Describe the incorrect behavior or content.
+    validations:
+      required: true
+
+  - type: textarea
+    id: where
+    attributes:
+      label: Where is it?
+      description: File path, section heading, or URL.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What should it say or do instead?
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: attribution
+    attributes:
+      label: Attribution
+      options:
+        - label: >
+            I will not credit AI systems in any commit, PR, comment, doc, or generated file.
+            Credit belongs to the author.
+          required: true

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Fork Init"
+  short_description: "Clone Spark and wire a new downstream project repo"
+  emoji: "🌿"

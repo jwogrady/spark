@@ -1,0 +1,52 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Run tests (TODO: no pyproject.toml yet)",
+      "type": "shell",
+      "command": "echo 'pytest not yet implemented — add pyproject.toml first'",
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Run ruff (TODO: no pyproject.toml yet)",
+      "type": "shell",
+      "command": "echo 'ruff not yet implemented — add pyproject.toml first'",
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Black check (TODO: no pyproject.toml yet)",
+      "type": "shell",
+      "command": "echo 'black not yet implemented — add pyproject.toml first'",
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Spark init (placeholder)",
+      "type": "shell",
+      "command": "echo 'spark init not yet implemented'",
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    }
+  ]
+}
