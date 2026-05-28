@@ -1,3 +1,8 @@
+---
+name: agents-md
+description: Generate and maintain AGENTS.md for Spark-managed project repos. Use when user wants to create, update, audit, or sync-check an AGENTS.md file.
+---
+
 # agents-md
 
 **Feature ID:** FEAT-SPARK-AGENTS-MD-001

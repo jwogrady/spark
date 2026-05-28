@@ -1,3 +1,8 @@
+---
+name: fork-init
+description: Guide a user through cloning Spark as an upstream seed and wiring a new downstream project repo. Use when user wants to fork Spark, set up a new project, or asks about fork-init.
+---
+
 # fork-init
 
 **Feature ID:** FEAT-SPARK-FORK-INIT-001

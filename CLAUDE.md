@@ -39,8 +39,8 @@ AGENTS.md        # tool-agnostic agent guide (maintained by agents-md skill)
 1. Work on a feature branch. Never commit directly to `master`.
 2. Open a PR for every change, even small ones.
 3. Keep PRs focused. One concern per PR.
-4. Run `ruff` and `black --check` before pushing.
-5. Run `pytest` before pushing.
+4. Run `ruff` and `black --check` before pushing. (TODO: no pyproject.toml yet)
+5. Run `pytest` before pushing. (TODO: no pyproject.toml yet)
 6. Update `CHANGELOG.md` when behavior changes.
 
 ### Branch naming for config presets
@@ -77,8 +77,8 @@ presets that downstream projects fork — not project workspaces.
 ## Skill Authoring
 
 - Skills live in `.spark/skills/<skill-name>/`.
-- Scaffold a new skill with `bash scripts/new-skill.sh <name>`.
-- Each skill must include: `skill.md`, `README.md`, and any supporting assets.
+- Scaffold a new skill with `bash scripts/new-skill.sh <name>`. (TODO: script not yet implemented)
+- Each skill must include: `SKILL.md`, `README.md`, and any supporting assets.
 - Skills must be self-contained. No cross-skill imports at runtime.
 - Test skills with a real project before merging.
 

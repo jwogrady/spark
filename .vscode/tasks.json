@@ -2,9 +2,9 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Run tests",
+      "label": "Run tests (TODO: no pyproject.toml yet)",
       "type": "shell",
-      "command": "uv run pytest",
+      "command": "echo 'pytest not yet implemented — add pyproject.toml first'",
       "group": {
         "kind": "test",
         "isDefault": true
@@ -16,9 +16,9 @@
       "problemMatcher": []
     },
     {
-      "label": "Run ruff",
+      "label": "Run ruff (TODO: no pyproject.toml yet)",
       "type": "shell",
-      "command": "uv run ruff check .",
+      "command": "echo 'ruff not yet implemented — add pyproject.toml first'",
       "group": "build",
       "presentation": {
         "reveal": "always",
@@ -27,9 +27,9 @@
       "problemMatcher": []
     },
     {
-      "label": "Black check",
+      "label": "Black check (TODO: no pyproject.toml yet)",
       "type": "shell",
-      "command": "uv run black --check .",
+      "command": "echo 'black not yet implemented — add pyproject.toml first'",
       "group": "build",
       "presentation": {
         "reveal": "always",

@@ -1,3 +1,8 @@
+---
+name: claude-md
+description: Generate and maintain CLAUDE.md for Spark-managed project repos. Use when user wants to create, update, or audit a CLAUDE.md file.
+---
+
 # claude-md
 
 **Feature ID:** FEAT-SPARK-CLAUDE-MD-001
