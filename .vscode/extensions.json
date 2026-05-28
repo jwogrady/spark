@@ -1,0 +1,11 @@
+{
+  "recommendations": [
+    "ms-python.python",
+    "charliermarsh.ruff",
+    "ms-python.black-formatter",
+    "redhat.vscode-yaml",
+    "yzhang.markdown-all-in-one",
+    "github.vscode-github-actions",
+    "editorconfig.editorconfig"
+  ]
+}

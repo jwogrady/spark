@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+.venv/
+.env
+
+# uv
+.python-version
+
+# Claude Code local settings (intentionally not committed)
+.claude/settings.local.json
+
+# Override global gitignore — VS Code workspace config is intentionally tracked
+# in this repo as a template for downstream projects.
+!.vscode/
