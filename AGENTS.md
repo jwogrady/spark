@@ -1,5 +1,8 @@
 # Spark — AI Agent Guide
 
+> This file is maintained using the Spark `agents-md` skill.
+> See `.spark/skills/agents-md/SKILL.md` for authoring rules.
+
 This guide applies to any AI coding agent working in this repo, regardless of tool.
 
 ## What This Repo Is
