@@ -5,17 +5,36 @@
 
 ## Mission
 
-Spark is an AI-native project operations framework. It provides reusable skills,
-documentation templates, structured prompts, and GitHub automation to standardize
-how AI-assisted workflows are bootstrapped across projects.
+Spark is a portable AI skills and agent configuration layer. Skills, prompts,
+and agent configs travel from project to project. You fork Spark into a new
+project, Spark becomes the upstream, and your project is the downstream. When
+the Spark engine improves, downstream projects pull those improvements in.
+
+Branches are a first-class mechanism: a `spark/python-uv` branch carries Python
+defaults, a `spark/typescript` branch carries TypeScript defaults. Downstream
+projects fork the branch that matches their stack.
 
 ## Repo Purpose
 
-This repo is the source of truth for Spark itself — the skills, templates, and
-tooling that other projects pull in. It is not a runtime application; it is a
-library of reusable patterns.
+This repo is the Spark engine — the skills, configs, templates, and tooling that
+downstream projects pull in. It is not a runtime application. Changes here
+propagate to every project that has Spark as an upstream.
 
-## Expected Workflow
+## Repo Map
+
+```
+.spark/
+├── skills/      # reusable agent skills — travel to every downstream project
+├── configs/     # project-type presets — basis for stack-specific branches
+├── templates/   # document templates
+├── prompts/     # structured prompts
+└── issues/      # GitHub-ready issue drafts
+.vscode/         # VS Code workspace settings (tracked as a downstream template)
+CLAUDE.md        # Claude Code instruction file (maintained by claude-md skill)
+AGENTS.md        # tool-agnostic agent guide (maintained by agents-md skill)
+```
+
+## Development Workflow
 
 1. Work on a feature branch. Never commit directly to `master`.
 2. Open a PR for every change, even small ones.
@@ -23,6 +42,19 @@ library of reusable patterns.
 4. Run `ruff` and `black --check` before pushing.
 5. Run `pytest` before pushing.
 6. Update `CHANGELOG.md` when behavior changes.
+
+### Branch naming for config presets
+
+Stack-specific preset branches follow `spark/<type>`:
+
+```
+spark/python-uv
+spark/typescript
+spark/monorepo
+```
+
+Never add project-specific content to these branches. They are Spark-owned
+presets that downstream projects fork — not project workspaces.
 
 ## Coding Standards
 
