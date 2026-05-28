@@ -58,7 +58,7 @@ presets that downstream projects fork — not project workspaces.
 
 ## Coding Standards
 
-- Python only. Use `uv` for dependency management.
+- Runtime language is not implemented yet. Future runtime defaults should be documented in stack-specific branches such as `spark/python-uv`.
 - Formatter: Black (line length 88).
 - Linter: Ruff. Fix all warnings before committing.
 - Type hints required on all public functions.
@@ -78,7 +78,7 @@ presets that downstream projects fork — not project workspaces.
 
 - Skills live in `.spark/skills/<skill-name>/`.
 - Scaffold a new skill with `bash scripts/new-skill.sh <name>`. (TODO: script not yet implemented)
-- Each skill must include: `SKILL.md`, `README.md`, and any supporting assets.
+- Each skill must include: `SKILL.md` and `agents/openai.yaml`. `README.md` is recommended for copied/external or complex skills.
 - Skills must be self-contained. No cross-skill imports at runtime.
 - Test skills with a real project before merging.
 

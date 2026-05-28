@@ -1,20 +1,4 @@
-name: agents-md
-namespace: spark.skills.agents-md
-feature_id: FEAT-SPARK-AGENTS-MD-001
-bounded_context: Spark AI agent workspace
-status: draft
-
-description: |
-  Generates and maintains AGENTS.md files for Spark-managed project repos.
-  AGENTS.md is the tool-agnostic companion to CLAUDE.md — the behavioral
-  contract for any AI coding agent regardless of vendor or tool. Reads both
-  CLAUDE.md and any existing AGENTS.md before generating output. Flags drift
-  between the two files rather than silently resolving it.
-
-model: gpt-4o
-temperature: 0.2
-
-# Full agent behavior and I/O contract live in references/
-# system_prompt: references/system-prompt.md
-# io_schema:     references/io-schema.yaml
-# examples:      references/examples.md
+interface:
+  display_name: "Agents MD"
+  short_description: "Generate and maintain AGENTS.md for Spark-managed repos"
+  emoji: "🤖"

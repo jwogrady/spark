@@ -1,19 +1,4 @@
-name: fork-init
-namespace: spark.skills.fork-init
-feature_id: FEAT-SPARK-FORK-INIT-001
-bounded_context: Spark project inception workflow
-status: draft
-
-description: |
-  Guides a user through cloning Spark as an upstream seed repo, converting
-  the clone into a new downstream project repo, and running project inception
-  from a new branch. Documents the workflow only — does not automate git
-  commands or call GitHub APIs.
-
-model: gpt-4o
-temperature: 0.2
-
-# Full agent behavior and I/O contract live in references/
-# system_prompt: references/system-prompt.md
-# io_schema:     references/io-schema.yaml
-# examples:      references/examples.md
+interface:
+  display_name: "Fork Init"
+  short_description: "Clone Spark and wire a new downstream project repo"
+  emoji: "🌿"

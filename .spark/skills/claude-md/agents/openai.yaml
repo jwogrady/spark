@@ -1,19 +1,4 @@
-name: claude-md
-namespace: spark.skills.claude-md
-feature_id: FEAT-SPARK-CLAUDE-MD-001
-bounded_context: Spark AI agent workspace
-status: draft
-
-description: |
-  Generates and maintains CLAUDE.md files for Spark-managed project repos.
-  Inspects any existing CLAUDE.md before modifying it. Preserves useful
-  repo-specific content. Adds missing required sections. Avoids invented
-  integrations and fake commands.
-
-model: gpt-4o
-temperature: 0.2
-
-# Full agent behavior and I/O contract live in references/
-# system_prompt: references/system-prompt.md
-# io_schema:     references/io-schema.yaml
-# examples:      references/examples.md
+interface:
+  display_name: "Claude MD"
+  short_description: "Generate and maintain CLAUDE.md for Spark-managed repos"
+  emoji: "📝"
