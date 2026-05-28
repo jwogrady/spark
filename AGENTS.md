@@ -24,10 +24,16 @@ runtime application. Do not treat it as one.
 - Do not open, close, or comment on issues or PRs without explicit instruction.
 
 ### Code Quality
-- All Python must pass `ruff` (no warnings) and `black --check` before commit.
-- All tests must pass (`pytest`) before commit.
+- No commented-out code. No debug `print()` statements in library code.
 - Type hints are required on public functions. Docstrings are required.
-- No commented-out code. No debug `print()` statements.
+- Before committing, run the project's quality gates. Commands are not yet
+  confirmed — check `CLAUDE.md` for the current list, or add a TODO marker:
+
+  ```bash
+  # TODO: confirm linter command once pyproject.toml is set up
+  # TODO: confirm formatter command once pyproject.toml is set up
+  # TODO: confirm test command once test suite exists
+  ```
 
 ### Documentation
 - Update `CHANGELOG.md` when behavior changes.
@@ -60,11 +66,18 @@ Never perform these without explicit user confirmation:
 
 ## Skill Authoring Quick Reference
 
-New skills go in `.spark/skills/<skill-name>/`. Scaffold with:
+New skills go in `.spark/skills/<skill-name>/`. Required files:
 
 ```
-bash scripts/new-skill.sh <name>
+.spark/skills/<name>/
+├── SKILL.md              # required — skill instructions and behavior rules
+├── agents/openai.yaml    # required — agent definition and schema
+├── README.md             # recommended — usage summary and source attribution
+└── references/           # optional — long schemas, prompts, or examples
 ```
 
-Required files per skill: `skill.md`, `README.md`.
-Skills must be self-contained and tested against a real project before merge.
+Scaffold script: `bash scripts/new-skill.sh <name>`
+(TODO: script not yet implemented — create the directory structure manually.)
+
+Skills must not implement runtime automation unless runtime is explicitly in
+scope. Document-only skills are the standard at this stage.

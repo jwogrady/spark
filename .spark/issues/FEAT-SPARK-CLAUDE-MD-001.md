@@ -40,6 +40,7 @@ a human or AI agent to follow.
 
 - [ ] Add `.spark/skills/claude-md/SKILL.md`
 - [ ] Add `.spark/skills/claude-md/agents/openai.yaml`
+- [ ] Add `.spark/skills/claude-md/README.md` (recommended)
 - [ ] Add `.spark/issues/FEAT-SPARK-CLAUDE-MD-001.md`
 - [ ] Skill defines all required `CLAUDE.md` sections
 - [ ] Skill specifies that existing `CLAUDE.md` content must be inspected before
@@ -54,6 +55,7 @@ a human or AI agent to follow.
       drafts before automation)
 - [ ] Skill forbids invented integrations and fake commands
 - [ ] Skill requires TODO markers instead of invented commands
+- [ ] Long schemas or prompts moved to `references/` if `agents/openai.yaml` grows unwieldy
 - [ ] Skill does not implement runtime CLI automation
 
 ---

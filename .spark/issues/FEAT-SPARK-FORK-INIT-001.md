@@ -42,6 +42,7 @@ updates later.
 
 - [ ] Add `.spark/skills/fork-init/SKILL.md`
 - [ ] Add `.spark/skills/fork-init/agents/openai.yaml`
+- [ ] Add `.spark/skills/fork-init/README.md` (recommended)
 - [ ] Add `.spark/issues/FEAT-SPARK-FORK-INIT-001.md`
 - [ ] Skill explains the upstream/downstream remote model clearly
 - [ ] Skill provides a safe, manual, step-by-step git workflow
@@ -50,6 +51,7 @@ updates later.
 - [ ] Skill asks for missing repo details before generating final commands
 - [ ] Skill documents how downstream projects can later pull Spark updates
 - [ ] Skill does not implement runtime automation
+- [ ] Long schemas or prompts moved to `references/` if `SKILL.md` exceeds ~100 lines
 - [ ] No AI system is credited anywhere in generated artifacts or commit messages
 
 ---

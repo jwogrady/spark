@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Read the docs
+    url: https://github.com/jwogrady/spark/blob/master/README.md
+    about: Start here before opening an issue.
+  - name: Contributing guide
+    url: https://github.com/jwogrady/spark/blob/master/CONTRIBUTING.md
+    about: How to propose skills, open PRs, and write commits.
