@@ -35,9 +35,9 @@ Spark makes that work reusable. Build a skill once, carry it everywhere.
 - **Stack preset branches** — a `spark/python-uv` branch, a `spark/typescript`
   branch, each carrying the right defaults for that project type. Fork the branch
   that matches your stack.
-- **GitHub-native project metadata** — issue templates, PR templates, milestones,
-  and wiki pages aligned with repo artifacts. GitHub is the public operating
-  surface; the repo is the source of truth.
+- **GitHub-native project metadata** — issue templates and PR templates are
+  included today. Milestone and wiki generation are planned for v0.4. GitHub is
+  the public operating surface; the repo is the source of truth.
 - **AI workspace config** — `CLAUDE.md` and `AGENTS.md` generated from skills,
   not written from scratch. Agent behavior is consistent across projects.
 

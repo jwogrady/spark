@@ -7,9 +7,10 @@ This guide applies to any AI coding agent working in this repo, regardless of to
 
 ## What This Repo Is
 
-Spark is an AI-native project operations framework. It provides reusable skills,
-documentation templates, structured prompts, and GitHub automation. It is not a
-runtime application. Do not treat it as one.
+Spark is a portable AI skills and agent configuration layer. It provides reusable
+skills, documentation templates, structured prompts, and GitHub-ready templates
+and issue drafts. It is not a runtime application. Do not treat it as one.
+Runtime automation is not yet implemented.
 
 ## Core Rules
 
