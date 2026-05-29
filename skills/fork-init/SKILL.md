@@ -12,6 +12,11 @@ description: Guide a user through cloning Spark as an upstream seed and wiring a
 
 ---
 
+> **Role:** `fork-init` is for *project inception* — scaffolding a brand-new
+> project from Spark as a seed. It is **not** how you get the Spark toolkit into
+> an existing project; that's the plugin (`/plugin install spark`). See
+> `docs/explanation/scope-and-upstream.md`.
+
 ## Purpose
 
 `fork-init` guides you through turning a fresh Spark clone into a new downstream

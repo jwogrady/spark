@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Spark commit-msg hook — enforces the commit rules from CLAUDE.md mechanically.
+#
+# Install with: spark install-git-hooks  (or copy into .git/hooks/commit-msg)
+# Receives the path to the commit message file as $1.
+
+set -euo pipefail
+
+msg_file="$1"
+# First non-comment, non-blank line is the subject.
+subject="$(grep -vE '^\s*#' "$msg_file" | grep -vE '^\s*$' | head -n1 || true)"
+body="$(cat "$msg_file")"
+
+fail() {
+  echo "✖ commit-msg (spark): $1" >&2
+  echo "  Run the 'commit' skill, or fix the message and try again." >&2
+  exit 1
+}
+
+# 1. No AI attribution anywhere in the message.
+if printf '%s' "$body" | grep -iEq 'co-authored-by:.*(claude|anthropic|openai|chatgpt|copilot|gpt|gemini|bard)'; then
+  fail "AI co-author trailers are not allowed. Credit belongs to the author only."
+fi
+if printf '%s' "$body" | grep -iEq '(generated|written|authored|assisted) (with|by) (claude|anthropic|chatgpt|copilot|ai)'; then
+  fail "AI attribution is not allowed in commit messages."
+fi
+
+# 2. Conventional commit type prefix.
+if ! printf '%s' "$subject" | grep -Eq '^(feat|fix|docs|chore|refactor|test)(\([a-z0-9_-]+\))?!?: .+'; then
+  fail "subject must start with a conventional type: feat|fix|docs|chore|refactor|test. Got: '$subject'"
+fi
+
+# 3. Subject length <= 72 chars.
+if [ "${#subject}" -gt 72 ]; then
+  fail "subject is ${#subject} chars; keep it under 72."
+fi
+
+# 4. No trailing period on the subject.
+case "$subject" in
+  *.) fail "subject must not end with a period." ;;
+esac
+
+exit 0

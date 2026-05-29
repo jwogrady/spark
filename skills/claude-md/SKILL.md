@@ -84,9 +84,7 @@ that are not self-explanatory. Update when the structure changes.
 
 ```
 .
-├── .spark/           # Spark skills, templates, prompts, issues
-│   ├── skills/       # one directory per skill
-│   └── issues/       # GitHub-ready issue drafts
+├── skills/           # one directory per skill (Spark/plugin repos)
 ├── .vscode/          # VS Code workspace settings
 ├── docs/             # Project documentation
 └── scripts/          # Dev automation scripts
@@ -114,8 +112,8 @@ Document the actual branch and PR strategy. Include:
 
 ### Skill Authoring Rules
 For Spark repos, document:
-- Where skills live (`.spark/skills/<name>/`)
-- How to scaffold a new skill (`bash scripts/new-skill.sh <name>`)
+- Where skills live (`skills/<name>/`)
+- How to scaffold a new skill (`spark new-skill <name>`)
 - Required files per skill
 - Testing requirements before merge
 

@@ -1,103 +1,101 @@
 # Spark — Claude Code Guide
 
 > This file is maintained using the Spark `claude-md` skill.
-> See `.spark/skills/claude-md/SKILL.md` for authoring rules.
+> See `skills/claude-md/SKILL.md` for authoring rules.
 
 ## Mission
 
-Spark is a portable AI skills and agent configuration layer. Skills, prompts,
-and agent configs travel from project to project. You fork Spark into a new
-project, Spark becomes the upstream, and your project is the downstream. When
-the Spark engine improves, downstream projects pull those improvements in.
+Spark is a Claude Code **plugin**: a portable, GitHub-native software-development
+toolkit you install once and carry into every project. It puts one opinionated
+lifecycle at your fingertips and enforces the guardrails that keep work clean:
 
-Branches are a first-class mechanism: a `spark/python-uv` branch carries Python
-defaults, a `spark/typescript` branch carries TypeScript defaults. Downstream
-projects fork the branch that matches their stack.
+```
+Ideate → Plan → Generate → Solve → Ship
+```
+
+You install it (`/plugin marketplace add jwogrady/spark` → `/plugin install spark`)
+and every project gets the same versioned toolkit — skills, enforcement hooks,
+and the `spark` CLI.
 
 ## Repo Purpose
 
-This repo is the Spark engine — the skills, configs, templates, and tooling that
-downstream projects pull in. It is not a runtime application. Changes here
-propagate to every project that has Spark as an upstream.
+This repo *is* the Spark plugin. Changes here ship to every project that has the
+plugin installed. It is additive: it builds on Anthropic's skill/plugin spec and
+reuses Claude Code's built-in tools (`/code-review`, `/security-review`,
+`verify`) rather than reinventing them.
 
 ## Repo Map
 
 ```
-.spark/
-├── skills/      # reusable agent skills — travel to every downstream project
-├── configs/     # project-type presets — basis for stack-specific branches
-├── templates/   # document templates
-├── prompts/     # structured prompts
-└── issues/      # GitHub-ready issue drafts
-.vscode/         # VS Code workspace settings (tracked as a downstream template)
-CLAUDE.md        # Claude Code instruction file (maintained by claude-md skill)
-AGENTS.md        # tool-agnostic agent guide (maintained by agents-md skill)
+.claude-plugin/
+├── plugin.json         # plugin manifest
+└── marketplace.json    # makes this repo git-installable as a marketplace
+skills/<name>/SKILL.md  # lifecycle skills + carried-over skills
+hooks/
+├── hooks.json          # PreToolUse wiring
+└── guard-bash.sh       # blocks force-push and pushes to trunk
+scripts/hooks/          # git hook sources (commit-msg, pre-commit)
+bin/spark               # the CLI (doctor, new-skill, install-git-hooks)
+docs/                   # documentation, organized by Diátaxis
+.github/                # PR + issue templates (the plan skill uses these)
+CLAUDE.md               # this file (maintained by the claude-md skill)
+AGENTS.md               # tool-agnostic agent guide (maintained by agents-md skill)
 ```
+
+## The Lifecycle Skills
+
+| Stage | Skill | Job |
+|---|---|---|
+| Ideate | `ideate` | Frame the problem in writing (uses `grill-me`) |
+| Plan | `plan` | Decompose into GitHub issues + milestone |
+| Generate | `build` | Implement one issue on a feature branch |
+| Solve | `fix-issue` | Orchestrate built-in reviews, then fix |
+| Ship | `commit`, `ship` | Conventional commit, then a focused PR |
 
 ## Development Workflow
 
 1. Work on a feature branch. Never commit directly to `master`.
-2. Open a PR for every change, even small ones.
-3. Keep PRs focused. One concern per PR.
-4. Run `ruff` and `black --check` before pushing. (TODO: no pyproject.toml yet)
-5. Run `pytest` before pushing. (TODO: no pyproject.toml yet)
-6. Update `CHANGELOG.md` when behavior changes.
-
-### Branch naming for config presets
-
-Stack-specific preset branches follow `spark/<type>`:
-
-```
-spark/python-uv
-spark/typescript
-spark/monorepo
-```
-
-Never add project-specific content to these branches. They are Spark-owned
-presets that downstream projects fork — not project workspaces.
+2. Open a PR for every change, even small ones. One concern per PR.
+3. Run `spark doctor` before pushing — it validates the plugin layout, the
+   manifest/hook JSON, and every skill's frontmatter.
+4. Syntax-check shell scripts (`bash -n <file>`) before pushing.
+5. Update `CHANGELOG.md` when behavior changes.
 
 ## Coding Standards
 
-- Runtime language is not implemented yet. Future runtime defaults should be documented in stack-specific branches such as `spark/python-uv`.
-- Formatter: Black (line length 88).
-- Linter: Ruff. Fix all warnings before committing.
-- Type hints required on all public functions.
-- Docstrings on all public functions and classes (one-line summary minimum).
+- Scripts are POSIX-friendly Bash, zero runtime dependencies — they must work in
+  any forked project regardless of stack. JSON parsing degrades gracefully when
+  `jq`/`python3` are absent.
+- `set -euo pipefail` in every script.
 - No commented-out code. Delete it.
-- No `print()` in library code. Use `logging`.
-
-## Documentation Standards
-
-- Every skill must have a companion `README.md` inside its directory.
-- Keep docs close to code. If the code moves, the doc moves.
-- Write in plain, direct English. Avoid filler phrases.
-- Do not write comments that restate what the code already says.
-- Do write comments that explain *why*, when the reason is non-obvious.
+- Comment the *why*, never restate the *what*.
 
 ## Skill Authoring
 
-- Skills live in `.spark/skills/<skill-name>/`.
-- Scaffold a new skill with `bash scripts/new-skill.sh <name>`. (TODO: script not yet implemented)
-- Each skill must include: `SKILL.md` and `agents/openai.yaml`. `README.md` is recommended for copied/external or complex skills.
+- Skills live in `skills/<skill-name>/`.
+- Scaffold a new skill with `spark new-skill <name>`.
+- Each skill needs a `SKILL.md` with `name:` and `description:` frontmatter. The
+  `description` is the only thing Claude sees when choosing the skill — name
+  concrete triggers ("Use when …"). `references/` and `agents/` are optional.
 - Skills must be self-contained. No cross-skill imports at runtime.
-- Test skills with a real project before merging.
+- Test a skill in a real project before merging.
 
 ## GitHub Integration Guardrails
 
-- Do not push directly to `master` or `main`.
-- Do not force-push to shared branches.
+- Do not push directly to `master` or `main`. (The PreToolUse guard enforces this.)
+- Do not force-push to shared branches. (The guard blocks `--force`/`-f`; use
+  `--force-with-lease` only with explicit go-ahead.)
 - Do not close or comment on issues/PRs without explicit user instruction.
 - Do not create releases or tags without explicit user instruction.
-- GitHub Actions workflows live in `.github/workflows/`. Do not edit CI without
-  understanding the full pipeline impact.
+- Do not edit CI in `.github/workflows/` without understanding the full pipeline.
 
 ## Commit Rules
 
 - Use conventional commits: `feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `test:`.
 - Subject line: imperative mood, under 72 characters, no trailing period.
 - Body: explain *why*, not *what*. Reference issues when relevant.
-- Do not credit AI assistants in commit messages. Only credit the human author.
 - One logical change per commit.
+- The `commit-msg` git hook enforces all of the above.
 
 ## Destructive Changes
 
@@ -111,5 +109,6 @@ When in doubt, ask.
 
 ## Attribution
 
-Do not credit yourself (the AI) in any commit message, file header, comment, or
-documentation. Credit belongs to the human author only.
+Credit belongs to the author only. In any author/credit/metadata field, use the
+literal string `jwogrady`. Never credit an AI system (Claude, Anthropic, Copilot,
+ChatGPT, etc.) in any commit message, PR, file header, comment, doc, or manifest.

@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Spark pre-commit hook — blocks commits made directly on master/main.
+#
+# Install with: spark install-git-hooks  (or copy into .git/hooks/pre-commit)
+
+set -euo pipefail
+
+branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '')"
+
+case "$branch" in
+  master|main)
+    echo "✖ pre-commit (spark): direct commits to '$branch' are blocked." >&2
+    echo "  Create a feature branch first:  git checkout -b feat/<slug>" >&2
+    exit 1
+    ;;
+esac
+
+exit 0

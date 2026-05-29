@@ -5,12 +5,12 @@ body:
   - type: markdown
     attributes:
       value: |
-        Skills live in `.spark/skills/<name>/`. Each skill requires `SKILL.md`
-        and `agents/openai.yaml`. `README.md` is recommended. Long schemas,
-        prompts, or examples go in `references/`.
+        Skills live in `skills/<name>/`. Scaffold with `spark new-skill <name>`.
+        Each skill requires a `SKILL.md` with `name` + `description` frontmatter.
+        `references/` and `agents/` are optional.
 
-        Do not propose a skill that implements runtime automation unless runtime
-        is explicitly in scope. Document-only skills are preferred at this stage.
+        The `description` is the only thing Claude sees when choosing the skill —
+        name concrete triggers ("Use when …").
 
   - type: input
     id: skill_name
@@ -49,10 +49,9 @@ body:
     attributes:
       label: Acceptance Criteria
       value: |
-        - [ ] Add `.spark/skills/<name>/SKILL.md`
-        - [ ] Add `.spark/skills/<name>/agents/openai.yaml`
-        - [ ] Add `.spark/skills/<name>/README.md` (recommended)
-        - [ ] Skill does not implement runtime automation
+        - [ ] Add `skills/<name>/SKILL.md` with `name` + `description` frontmatter
+        - [ ] `spark doctor` reports the skill as well-formed
+        - [ ] Maps to a clear use case (and a lifecycle stage, if applicable)
         - [ ] No invented commands or fake integrations
         - [ ] No AI attribution in any file
     validations:
