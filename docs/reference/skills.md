@@ -21,6 +21,7 @@ All skills are invoked namespaced under the plugin: `/spark:<name>`.
 
 | Skill | Purpose |
 |---|---|
+| `bootstrap` | Scaffold a project runtime — Bun (TypeScript) or uv (Python) — via the official scaffolder, then wire it into Spark. |
 | `connect` | Bootstrap service connectivity + secrets (GitHub/GCP/Vultr/Linode) via 1Password (`op`). Capture → ingest → shred → inject. |
 
 ## Carried-over skills

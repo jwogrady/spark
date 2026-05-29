@@ -29,6 +29,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
   (conventional + no-AI-attribution + subject rules) and `pre-commit`
   (no commit on trunk).
 - `bin/spark` CLI: `doctor`, `new-skill`, `install-git-hooks`.
+- Skill `bootstrap` — runtime scaffold for new projects via the official
+  scaffolder, defaulting to Bun for TypeScript and uv for Python; verifies the
+  scaffold runs, then wires it into Spark (CLAUDE.md, git hooks, connect, ideate).
 - Skill `connect` — connectivity & secrets bootstrap for GitHub/GCP/Vultr/Linode
   via 1Password (`op`): capture → ingest (propose-confirm `op item create`) →
   verify → shred → `op run` injection. Encourages per-project keys.
