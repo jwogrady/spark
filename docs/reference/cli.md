@@ -30,6 +30,14 @@ Copies `scripts/hooks/{commit-msg,pre-commit}` into the current repo's
 Spark hook, it is left untouched and a warning is printed — move it aside first
 if you want Spark's.
 
+## `spark shred-env <file>`
+
+Securely deletes a transient secrets file (e.g. `.env`) once its keys are stored
+in 1Password: overwrites the bytes (via `shred`/`gshred`, or an overwrite-then-
+remove fallback), then verifies the file is gone. Refuses to touch `*.tmpl` files
+(those hold only `op://` references and are meant to be kept). Used by the
+`connect` skill at the shred step. Never prints file contents.
+
 ## `spark help`
 
 Prints usage.

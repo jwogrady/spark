@@ -5,6 +5,7 @@
 #   spark doctor             Validate the Spark plugin layout and report health.
 #   spark new-skill <name>   Scaffold a new skill under skills/<name>/.
 #   spark install-git-hooks  Install Spark's git hooks into the current repo.
+#   spark shred-env <file>   Securely delete a transient secrets file (e.g. .env).
 #   spark help               Show this help.
 
 set -euo pipefail
@@ -25,7 +26,8 @@ green() { printf '\033[32m%s\033[0m\n' "$1"; }
 yellow(){ printf '\033[33m%s\033[0m\n' "$1"; }
 
 usage() {
-  sed -n '2,11p' "$self" | sed 's/^# \{0,1\}//'
+  # Print the contiguous leading comment block (after the shebang) as help.
+  sed -n '2,8p' "$self" | sed 's/^# \{0,1\}//'
 }
 
 cmd_doctor() {
@@ -141,6 +143,10 @@ EOF
   echo "Next: edit the description (it's the only thing Claude sees when choosing the skill)."
 }
 
+cmd_shred_env() {
+  "$SPARK_ROOT/scripts/shred-env.sh" "$@"
+}
+
 cmd_install_git_hooks() {
   git rev-parse --git-dir >/dev/null 2>&1 || { red "not inside a git repo"; return 1; }
   local hooksdir; hooksdir="$(git rev-parse --git-path hooks)"
@@ -162,6 +168,7 @@ case "${1:-help}" in
   doctor)            shift; cmd_doctor "$@" ;;
   new-skill)         shift; cmd_new_skill "$@" ;;
   install-git-hooks) shift; cmd_install_git_hooks "$@" ;;
+  shred-env)         shift; cmd_shred_env "$@" ;;
   help|-h|--help)    usage ;;
   *) red "unknown command: $1"; echo; usage; exit 1 ;;
 esac
