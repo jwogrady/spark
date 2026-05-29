@@ -17,6 +17,12 @@ All skills are invoked namespaced under the plugin: `/spark:<name>`.
 | `commit` | Ship | Committing; writing a commit message |
 | `ship` | Ship | Pushing; opening a PR |
 
+## Setup skills
+
+| Skill | Purpose |
+|---|---|
+| `connect` | Bootstrap service connectivity + secrets (GitHub/GCP/Vultr/Linode) via 1Password (`op`). Capture → ingest → shred → inject. |
+
 ## Carried-over skills
 
 | Skill | Purpose |
