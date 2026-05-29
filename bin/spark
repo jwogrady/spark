@@ -1,0 +1,167 @@
+#!/usr/bin/env bash
+# spark — the Spark toolkit dispatcher.
+#
+# When the Spark plugin is active, this lives on $PATH. Subcommands:
+#   spark doctor             Validate the Spark plugin layout and report health.
+#   spark new-skill <name>   Scaffold a new skill under skills/<name>/.
+#   spark install-git-hooks  Install Spark's git hooks into the current repo.
+#   spark help               Show this help.
+
+set -euo pipefail
+
+# Resolve the Spark repo root (the directory that contains this bin/ script),
+# following symlinks so it works when installed on $PATH.
+self="${BASH_SOURCE[0]}"
+while [ -L "$self" ]; do
+  dir="$(cd -P "$(dirname "$self")" && pwd)"
+  self="$(readlink "$self")"
+  case "$self" in /*) ;; *) self="$dir/$self" ;; esac
+done
+BIN_DIR="$(cd -P "$(dirname "$self")" && pwd)"
+SPARK_ROOT="$(cd "$BIN_DIR/.." && pwd)"
+
+red()   { printf '\033[31m%s\033[0m\n' "$1"; }
+green() { printf '\033[32m%s\033[0m\n' "$1"; }
+yellow(){ printf '\033[33m%s\033[0m\n' "$1"; }
+
+usage() {
+  sed -n '2,11p' "$self" | sed 's/^# \{0,1\}//'
+}
+
+cmd_doctor() {
+  local errors=0 warnings=0
+
+  check_json() {
+    if command -v jq >/dev/null 2>&1; then
+      jq empty "$1" >/dev/null 2>&1
+    elif command -v python3 >/dev/null 2>&1; then
+      python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$1" >/dev/null 2>&1
+    else
+      return 0  # no validator available; skip
+    fi
+  }
+
+  echo "Spark doctor — $SPARK_ROOT"
+  echo
+
+  # Plugin manifest.
+  if [ -f "$SPARK_ROOT/.claude-plugin/plugin.json" ]; then
+    if check_json "$SPARK_ROOT/.claude-plugin/plugin.json"; then
+      green "✓ .claude-plugin/plugin.json is valid JSON"
+    else
+      red "✗ .claude-plugin/plugin.json is not valid JSON"; errors=$((errors+1))
+    fi
+  else
+    red "✗ .claude-plugin/plugin.json is missing"; errors=$((errors+1))
+  fi
+
+  # Marketplace.
+  if [ -f "$SPARK_ROOT/.claude-plugin/marketplace.json" ]; then
+    check_json "$SPARK_ROOT/.claude-plugin/marketplace.json" \
+      && green "✓ .claude-plugin/marketplace.json is valid JSON" \
+      || { red "✗ marketplace.json is not valid JSON"; errors=$((errors+1)); }
+  else
+    yellow "! .claude-plugin/marketplace.json is missing (not git-installable)"; warnings=$((warnings+1))
+  fi
+
+  # Hooks.
+  if [ -f "$SPARK_ROOT/hooks/hooks.json" ]; then
+    check_json "$SPARK_ROOT/hooks/hooks.json" \
+      && green "✓ hooks/hooks.json is valid JSON" \
+      || { red "✗ hooks/hooks.json is not valid JSON"; errors=$((errors+1)); }
+    [ -x "$SPARK_ROOT/hooks/guard-bash.sh" ] \
+      && green "✓ hooks/guard-bash.sh is executable" \
+      || { red "✗ hooks/guard-bash.sh is not executable"; errors=$((errors+1)); }
+  fi
+
+  # Skills: each must have a SKILL.md with name + description frontmatter.
+  echo
+  echo "Skills:"
+  if [ -d "$SPARK_ROOT/skills" ]; then
+    for d in "$SPARK_ROOT"/skills/*/; do
+      [ -d "$d" ] || continue
+      name="$(basename "$d")"
+      if [ ! -f "$d/SKILL.md" ]; then
+        red "  ✗ $name: missing SKILL.md"; errors=$((errors+1)); continue
+      fi
+      if ! grep -q '^name:' "$d/SKILL.md"; then
+        red "  ✗ $name: SKILL.md missing 'name:' frontmatter"; errors=$((errors+1)); continue
+      fi
+      if ! grep -q '^description:' "$d/SKILL.md"; then
+        red "  ✗ $name: SKILL.md missing 'description:' frontmatter"; errors=$((errors+1)); continue
+      fi
+      green "  ✓ $name"
+    done
+  else
+    red "  ✗ skills/ directory missing"; errors=$((errors+1))
+  fi
+
+  # Git hooks installed in the current repo?
+  echo
+  if git rev-parse --git-dir >/dev/null 2>&1; then
+    local hooksdir; hooksdir="$(git rev-parse --git-path hooks)"
+    if [ -f "$hooksdir/commit-msg" ] && [ -f "$hooksdir/pre-commit" ]; then
+      green "✓ Spark git hooks are installed in this repo"
+    else
+      yellow "! Spark git hooks not installed here — run: spark install-git-hooks"; warnings=$((warnings+1))
+    fi
+  fi
+
+  echo
+  if [ "$errors" -gt 0 ]; then
+    red "$errors error(s), $warnings warning(s)"; return 1
+  fi
+  green "Healthy — 0 errors, $warnings warning(s)"
+}
+
+cmd_new_skill() {
+  local name="${1:-}"
+  [ -n "$name" ] || { red "usage: spark new-skill <name>"; return 1; }
+  local dir="$SPARK_ROOT/skills/$name"
+  [ -e "$dir" ] && { red "skill '$name' already exists at $dir"; return 1; }
+  mkdir -p "$dir"
+  cat > "$dir/SKILL.md" <<EOF
+---
+name: $name
+description: One sentence on what this does. Use when [specific triggers].
+---
+
+# $name
+
+## Do this
+
+1. Step one.
+2. Step two.
+
+## Guardrails
+
+- Keep it focused.
+EOF
+  green "Created $dir/SKILL.md"
+  echo "Next: edit the description (it's the only thing Claude sees when choosing the skill)."
+}
+
+cmd_install_git_hooks() {
+  git rev-parse --git-dir >/dev/null 2>&1 || { red "not inside a git repo"; return 1; }
+  local hooksdir; hooksdir="$(git rev-parse --git-path hooks)"
+  mkdir -p "$hooksdir"
+  for h in commit-msg pre-commit; do
+    local src="$SPARK_ROOT/scripts/hooks/$h"
+    [ -f "$src" ] || { yellow "! $h not found in Spark, skipping"; continue; }
+    if [ -f "$hooksdir/$h" ] && ! grep -q 'spark' "$hooksdir/$h" 2>/dev/null; then
+      yellow "! $hooksdir/$h exists and isn't a Spark hook — leaving it. Move it aside first if you want Spark's."
+      continue
+    fi
+    cp "$src" "$hooksdir/$h"
+    chmod +x "$hooksdir/$h"
+    green "✓ installed $h"
+  done
+}
+
+case "${1:-help}" in
+  doctor)            shift; cmd_doctor "$@" ;;
+  new-skill)         shift; cmd_new_skill "$@" ;;
+  install-git-hooks) shift; cmd_install_git_hooks "$@" ;;
+  help|-h|--help)    usage ;;
+  *) red "unknown command: $1"; echo; usage; exit 1 ;;
+esac

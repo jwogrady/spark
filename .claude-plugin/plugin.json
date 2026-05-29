@@ -1,0 +1,11 @@
+{
+  "name": "spark",
+  "description": "A portable, GitHub-native software-development toolkit for Claude Code. Carries one opinionated lifecycle into every project: ideate, plan, generate, solve, ship.",
+  "version": "0.2.0",
+  "author": {
+    "name": "jwogrady"
+  },
+  "homepage": "https://github.com/jwogrady/spark",
+  "repository": "https://github.com/jwogrady/spark",
+  "license": "MIT"
+}

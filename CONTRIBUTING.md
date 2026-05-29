@@ -3,8 +3,8 @@
 ## How work is tracked
 
 GitHub issues are the work ledger. Every feature, bug, and skill addition
-starts as an issue before any code is written. Issue drafts for planned work
-live in `.spark/issues/` until they are opened on GitHub.
+starts as an issue before any code is written. Use the `plan` skill to draft
+issues from a problem statement, and the templates in `.github/ISSUE_TEMPLATE/`.
 
 ## Branches
 
@@ -44,14 +44,14 @@ To add a new skill:
 
 1. Open a GitHub issue using the **Skill** issue template.
 2. Get feedback before writing anything.
-3. Create the skill in `.spark/skills/<name>/`:
-   - `SKILL.md` — required
-   - `agents/openai.yaml` — required
-   - `README.md` — recommended
+3. Scaffold the skill with `spark new-skill <name>` (creates `skills/<name>/`):
+   - `SKILL.md` — required (`name` + `description` frontmatter)
    - `references/` — optional, for long schemas or prompts
-4. Open a PR referencing the issue.
+   - `agents/` — optional, for agent definitions
+4. Run `spark doctor` to confirm it's well-formed.
+5. Open a PR referencing the issue.
 
-Imported skills must include their source URL in `README.md`.
+Imported skills must include their source URL in a `README.md`.
 
 ## Attribution
 

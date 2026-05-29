@@ -1,0 +1,13 @@
+{
+  "name": "spark",
+  "owner": {
+    "name": "jwogrady"
+  },
+  "plugins": [
+    {
+      "name": "spark",
+      "source": "./",
+      "description": "Portable GitHub-native SDLC toolkit for Claude Code: ideate, plan, generate, solve, ship."
+    }
+  ]
+}
