@@ -14,6 +14,7 @@ All skills are invoked namespaced under the plugin: `/spark:<name>`.
 | `plan` | Plan | Breaking work into features/issues; scoping a milestone |
 | `build` | Generate | Implementing an issue; writing the code for planned work |
 | `fix-issue` | Solve | Reviewing/hardening a change; resolving review findings |
+| `review` | Solve | Quality control audit; pre-release checkpoint; multi-agent codebase assessment |
 | `commit` | Ship | Committing; writing a commit message |
 | `ship` | Ship | Pushing; opening a PR |
 
@@ -33,6 +34,7 @@ All skills are invoked namespaced under the plugin: `/spark:<name>`.
 | `agents-md` | Generate and maintain a project's `AGENTS.md`. |
 | `write-a-skill` | Author a new skill with correct structure. |
 | `fork-init` | Scaffold a brand-new project from Spark as a seed. |
+| `review` | Multi-agent project audit — 8 specialist agents collaborate to assess codebase health and produce a consolidated report. |
 
 ## Skill layout
 

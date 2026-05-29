@@ -23,7 +23,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 ### Added
 
 - Lifecycle skills organized as `Ideate → Plan → Generate → Solve → Ship`:
-  `ideate`, `plan`, `build`, `fix-issue`, `commit`, `ship`.
+  `ideate`, `plan`, `build`, `fix-issue`, `review`, `commit`, `ship`.
 - Enforcement: `hooks/hooks.json` PreToolUse guard (`hooks/guard-bash.sh`) that
   blocks force-pushes and pushes to trunk; git hooks `scripts/hooks/commit-msg`
   (conventional + no-AI-attribution + subject rules) and `pre-commit`
@@ -35,6 +35,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 - Skill `connect` — connectivity & secrets bootstrap for GitHub/GCP/Vultr/Linode
   via 1Password (`op`): capture → ingest (propose-confirm `op item create`) →
   verify → shred → `op run` injection. Encourages per-project keys.
+- Skill `review` — multi-agent project audit. 8 specialist agents (Project Mapper,
+  Documentation Reviewer, Architecture Reviewer, Code Quality Reviewer, Testing &
+  Reliability Reviewer, Security & Configuration Reviewer, Product Readiness
+  Reviewer, Synthesis Lead) collaborate via shared `.review-notes/` directory,
+  read each other's findings, and produce a consolidated final report with
+  executive summary, scores, critical risks, and top 20 actions. Harsh but fair
+  1–10 scoring rubric. Use for quality control, pre-release checkpoints, or
+  comprehensive codebase assessment.
 - `bin/spark shred-env <file>` + `scripts/shred-env.sh` — secure-delete of
   transient secrets files, with verification; refuses to touch `*.tmpl`.
 
@@ -45,5 +53,5 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ### Kept
 
-- Skills `grill-me`, `claude-md`, `agents-md`, `write-a-skill`, `fork-init`.
+- Skills `grill-me`, `claude-md`, `agents-md`, `write-a-skill`, `fork-init`, `review`.
 - `.vscode/`, `.gitignore`, GitHub PR/issue templates, repo health files.
