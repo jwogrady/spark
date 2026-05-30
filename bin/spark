@@ -28,7 +28,7 @@ yellow(){ printf '\033[33m%s\033[0m\n' "$1"; }
 
 usage() {
   # Print the contiguous leading comment block (after the shebang) as help.
-  sed -n '2,8p' "$self" | sed 's/^# \{0,1\}//'
+  sed -n '2,10p' "$self" | sed 's/^# \{0,1\}//'
 }
 
 cmd_doctor() {

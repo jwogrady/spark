@@ -13,7 +13,7 @@ body="$(cat "$msg_file")"
 
 fail() {
   echo "✖ commit-msg (spark): $1" >&2
-  echo "  Run the 'commit' skill, or fix the message and try again." >&2
+  echo "  Run the 'ship' skill, or fix the message and try again." >&2
   exit 1
 }
 
