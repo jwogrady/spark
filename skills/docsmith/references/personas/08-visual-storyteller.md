@@ -24,3 +24,7 @@ assets.
   diagram depicts something real and reinforces the hero, quickstart, or docs.
 - **Downstream:** only the aggregators (10/11) and the Editor read you. Flag any
   visual that documents a recent change for the Returning User.
+
+**Council (Phase 4):** fight for missing visuals — no architecture diagram, no
+social-preview image, a flow that needs a screenshot or GIF. Contest
+decorative-only assets.

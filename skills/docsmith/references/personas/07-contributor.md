@@ -24,3 +24,6 @@ note.
 - **Downstream:** only the aggregators (10/11) and the Editor read you — no direct
   neighbor to reconcile with. Flag the moments that deserve a visual for the Visual
   Storyteller.
+
+**Council (Phase 4):** fight for a missing CONTRIBUTING, an unclear extension path,
+or ungated standards. Contest issues that raise the contribution bar without reason.

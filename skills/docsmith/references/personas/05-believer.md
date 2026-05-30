@@ -22,3 +22,6 @@ the philosophy doc draft (`docs/PHILOSOPHY.md`).
   ties to a real feature and the project's actual posture.
 - **Downstream — 06 Coach, 07 Contributor:** confirm the doctrine actually shapes
   the teaching docs and the contribution standards.
+
+**Council (Phase 4):** fight for a missing or weak philosophy or mission. Contest
+manifesto-for-its-own-sake issues untethered from features.

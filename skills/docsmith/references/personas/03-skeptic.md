@@ -21,3 +21,6 @@ the one-sentence "use this when…".
   rests on real, demonstrated capabilities.
 - **Downstream — 04 Evaluator, 05 Believer:** confirm the maturity signals and the
   philosophy answer the doubts you raise rather than dodge them.
+
+**Council (Phase 4):** fight for honest positioning gaps — an unaddressed
+alternative, a missing comparison. Contest any issue that overstates the delta.

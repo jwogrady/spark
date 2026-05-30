@@ -44,12 +44,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
   draft in parallel, cross-evaluate their dependency-graph neighbors, and revise
   before an Editor-in-Chief pass assembles `README.md`, `docs/PHILOSOPHY.md`, the
   [Diátaxis](https://diataxis.fr/) docs tree (tutorials/how-to/reference/
-  explanation), `CHANGELOG.md`, and `docs/launch-copy.md`. As team leader, the
-  Editor-in-Chief also files the gaps the team found as prioritized, annotated
-  `proposed`-labeled GitHub issues (recorded in `13-proposed-issues.md`) for the
-  human to triage — kept issues flow to `plan`, closing the loop back to the Plan
-  stage. The leader files but never closes or comments. Enforces an honest-hype
-  contract: no claim ships without a citation to ground truth. Ship-stage amplifier.
+  explanation), `CHANGELOG.md`, and `docs/launch-copy.md`. In a Phase-4 **Issue
+  Council** the personas nominate, debate, and vote (admission + priority) on the
+  gaps the team found; the Cartographer can veto anything that would overclaim and
+  the human breaks every deadlock. As chair, the Editor-in-Chief tallies the ranked
+  slate and files it as `proposed`-labeled GitHub issues (recorded in
+  `13-proposed-issues.md`) for the human to triage — kept issues flow to `plan`,
+  closing the loop back to the Plan stage. The leader files but never closes or
+  comments. Enforces an honest-hype contract: no claim ships without a citation to
+  ground truth. Ship-stage amplifier.
 
 ### Removed
 

@@ -20,3 +20,7 @@ SEO note into `docs/launch-copy.md`.
   10 Discoverability:** confirm every load-bearing claim in the launch copy traces
   to ground truth and matches the hero, positioning, and headline change.
 - Flag any claim that can't be verified before posting.
+
+**Council (Phase 4):** fight for launch-readiness gaps — no demo, no launch copy,
+no proof to point at. Contest any issue that would have you promote something
+unverified.

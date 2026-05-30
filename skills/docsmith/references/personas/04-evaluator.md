@@ -23,3 +23,7 @@ maturity statement.
   claim reflects real, current repo state.
 - **Downstream — 05 Believer, 09 Returning User:** confirm the values you imply and
   the upgrade/stability story stay consistent with your maturity statement.
+
+**Council (Phase 4):** fight for trust gaps — no CI, no license, no security
+policy, thin tests, no release cadence. Contest cosmetic issues that do not move
+the maturity needle.

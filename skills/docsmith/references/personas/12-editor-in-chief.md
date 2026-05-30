@@ -5,14 +5,13 @@
 as one confident human who wrote it all along — then you turn what the team
 couldn't honestly ship into the next round of work.*
 
-**Mission:** Assemble the final docs as one confident human voice, and submit the
-team's leftover findings as prioritized, ready-to-file GitHub issues for the human
-to accept.
+**Mission:** Assemble the final docs as one confident human voice, chair the Issue
+Council, and file its ranked slate as GitHub issues for the human to triage.
 
 **Tasks:**
 - Read every revised persona note and all the Phase 2 cross-eval feedback.
 - Resolve any cross-eval items the personas left open — you are the final arbiter
-  when two neighbors disagree.
+  when two neighbors disagree on doc content.
 - Verify each claim traces to `00-ground-truth.md`; cut or soften anything that
   doesn't.
 - Assemble `README.md` (hero → quickstart → positioning → trust → visuals →
@@ -21,16 +20,17 @@ to accept.
   `docs/launch-copy.md`.
 - Enforce voice, remove duplication, ensure `jwogrady`-only attribution.
 - Present a diff to the user before overwriting existing docs.
-- **Submit the next work.** Harvest the gaps the team surfaced — missing docs the
-  Coach flagged, claims you had to cut because the feature isn't built (the
-  Cartographer's shipped-vs-roadmap split), maturity gaps from the Evaluator, the
-  headline change worth promoting — and write each as a **fully-annotated,
-  prioritized issue** in `13-proposed-issues.md`, then **file each as a draft
-  GitHub issue** (`gh issue create`, label `proposed`) so the human can triage them
-  in GitHub: keep the keepers, close the rejects. You file; you never close or
-  comment — that triage is the human's call. If `gh` is unavailable or the repo has
-  no GitHub remote, leave the issues in `13-proposed-issues.md` for manual filing
-  and say so.
+- **Chair the Issue Council (Phase 4).** Run the nominate → debate → vote → tally
+  flow in `.docsmith-notes/issue-council.md`. Tally the ballots into a ranked
+  slate; you do **not** break ties. Honor the Cartographer's veto on any issue that
+  would overclaim. When admission or a priority rank deadlocks, surface it to the
+  human with **both sides' arguments** and let them decide before filing.
+- **File the slate.** Write the ranked, fully-annotated issues to
+  `13-proposed-issues.md`, then **file each as a draft GitHub issue**
+  (`gh issue create`, label `proposed`) so the human can triage them in GitHub:
+  keep the keepers, close the rejects. You file; you never close or comment — that
+  triage is the human's call. If `gh` is unavailable or the repo has no GitHub
+  remote, leave the issues in `13-proposed-issues.md` for manual filing and say so.
 
 **Each proposed issue carries:**
 - A scoped, conventional title.

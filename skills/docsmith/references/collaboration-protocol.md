@@ -61,16 +61,22 @@ Phase 3 — Revise in place (parallel)
   marks the note resolved. Repeat Phase 2–3 once more if a round surfaced
   contradictions; stop when a round produces no new feedback.
 
-Phase 1b — Aggregators
+Phase 3b — Aggregators
   10 Discoverer then 11 Amplifier draft from the revised set (11 reads 10).
   They run after 01–09 are stable because they summarize everything.
 
-Phase 4 — Synthesis + submit the next work (barrier)
-  12 The Editor-in-Chief — the team leader — reads every revised note and
-  all cross-eval feedback, resolves any remaining conflict, enforces one
-  voice, writes the final artifacts, and harvests the team's leftover gaps
-  into prioritized, annotated issues — filed as `proposed`-labeled GitHub
-  issues for the human to triage (keep or close).
+Phase 4 — Issue Council (the personas debate and fight for issues)
+  Every persona nominates the gaps it found, argues for them, contests the
+  others', and votes. The outcome is a ranked slate of issues — see "The
+  Issue Council" below. Deadlocks go to the human.
+        ↓ .docsmith-notes/issue-council.md (nominations, debate, tally)
+
+Phase 5 — Synthesis + file the slate (barrier)
+  12 The Editor-in-Chief — the team leader — reads every revised note, all
+  cross-eval feedback, and the council outcome; resolves any remaining
+  conflict; enforces one voice; writes the final artifacts; and files the
+  council's ranked slate as `proposed`-labeled GitHub issues for the human
+  to triage (keep or close).
         ↓ README.md, docs/PHILOSOPHY.md, docs/ Diátaxis tree,
           CHANGELOG.md, docs/launch-copy.md, 12-editor-log.md,
           13-proposed-issues.md
@@ -78,7 +84,8 @@ Phase 4 — Synthesis + submit the next work (barrier)
 
 The Cartographer's cross-evaluation role is special: in Phase 2 it fact-checks
 **every** draft against ground truth (it is upstream to all), flagging any claim
-that lacks a citation. That is the enforcement arm of the honest-hype contract.
+that lacks a citation. That is the enforcement arm of the honest-hype contract —
+and in Phase 4 it carries a veto (below).
 
 ---
 
@@ -119,15 +126,58 @@ a feature that doesn't exist is not.
 
 ---
 
+## The Issue Council (Phase 4)
+
+The personas don't just hand gaps to the leader — they **debate and fight for**
+which gaps become issues and how high they rank. The whole council happens in one
+file, `.docsmith-notes/issue-council.md`, in four steps:
+
+1. **Nominate.** Any persona may nominate an issue from its domain — a gap it
+   found, the Coach's missing how-to, the Evaluator's absent CI, a claim the
+   Cartographer made the team cut. Each nomination carries a one-paragraph case,
+   provenance (which note/finding raised it, cited to ground truth), and a
+   proposed priority.
+
+2. **Debate.** Other personas respond: **co-sign** (add weight), **contest**
+   (duplicate, out of scope, low value, or unsafe under honest-hype), or
+   **counter** (reframe / merge / split). Argue from your perspective — the
+   Skimmer fights for what wins a star, the Adopter for what unblocks a newcomer,
+   the Evaluator for what earns trust. The debate is recorded, not erased.
+
+3. **Vote.** Two ballots per nomination:
+   - **Admission** — in or out. A contested nomination needs more in-votes than
+     out-votes to survive.
+   - **Priority** — each persona scores survivors (P1=3, P2=2, P3=1); the mean
+     sets the proposed rank.
+
+4. **Tally.** The Editor-in-Chief, as chair, tallies the votes into a ranked slate
+   and records the result. The chair does **not** break ties.
+
+**Two overrides:**
+- **Cartographer veto.** Any issue that asserts an unbuilt feature as real, or
+  would push the docs to overclaim, is vetoed regardless of the vote. Honest-hype
+  is not up for election.
+- **Human breaks ties.** When admission splits evenly, or two issues tie for a
+  priority rank that matters, the chair surfaces the deadlock to the human with
+  **both sides' arguments** and the human decides before anything is filed. The
+  team debates; the human rules.
+
+The human is still the final authority after filing, too: the slate is *proposed*,
+and triage on GitHub (keep/close) remains theirs.
+
+---
+
 ## Output and handoff
 
 - Final artifacts land in the repo (`README.md`, `docs/`), not in `.docsmith-notes/`.
 - The Editor-in-Chief presents a diff and waits for go-ahead before overwriting
   existing public docs.
-- **The leader submits the next work, the human decides.** The Editor-in-Chief
-  writes `13-proposed-issues.md` — a prioritized, fully-annotated set — and files
-  each as a `proposed`-labeled GitHub issue (`gh issue create`). The human triages
-  in GitHub: keep the keepers, close the rejects; accepted issues flow on to `plan`.
+- **The leader files the council's slate, the human decides.** From the Issue
+  Council outcome the Editor-in-Chief writes `13-proposed-issues.md` — the ranked,
+  fully-annotated slate — and files each as a `proposed`-labeled GitHub issue
+  (`gh issue create`). Any deadlock was already resolved by the human in Phase 4.
+  The human then triages in GitHub: keep the keepers, close the rejects; accepted
+  issues flow on to `plan`.
   The leader **files** but never **closes or comments** — that triage is the
   human's, per Spark's GitHub guardrails. If `gh`/remote is unavailable, the issues
   stay in `13-proposed-issues.md` for manual filing.

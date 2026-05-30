@@ -49,21 +49,27 @@ go in the README. Excitement is earned by what the project does, not invented.
 5. **Revise in place** — each persona folds the feedback into its own draft.
    Run another cross-eval/revise round if contradictions surfaced; stop when a
    round produces no new feedback.
-6. **Editor-in-Chief synthesizes** — persona 12, the team leader, reads every
-   revised note and all feedback, enforces one voice, removes duplication, verifies
-   every claim traces back to ground truth, and writes the final artifacts.
-7. **The leader submits the next work** — the Editor-in-Chief harvests the gaps the
-   team surfaced (missing docs, claims cut because the feature isn't built, maturity
-   gaps, the headline worth promoting) into `13-proposed-issues.md` and files each
-   as a `proposed`-labeled GitHub issue (`gh issue create`). You triage them in
-   GitHub — keep the keepers, close the rejects; kept issues flow on to
-   [`plan`](../plan/SKILL.md). The leader files but never closes or comments.
-8. **Review the diff before it lands** — public docs are outward-facing. Show the
+6. **The team holds the Issue Council** — every persona nominates the gaps it found,
+   argues for them, contests the others', and votes on two ballots: **admission**
+   (in or out) and **priority** (P1/P2/P3). The Cartographer can veto anything that
+   would overclaim. The Editor-in-Chief chairs and tallies but does **not** break
+   ties — deadlocks are surfaced to you with both sides' arguments, and you decide.
+   The result is a ranked slate in `.docsmith-notes/issue-council.md`.
+7. **Editor-in-Chief synthesizes** — persona 12, the team leader, reads every
+   revised note, all feedback, and the council outcome, enforces one voice, removes
+   duplication, verifies every claim traces back to ground truth, and writes the
+   final artifacts.
+8. **The leader files the slate** — the Editor-in-Chief writes the council's ranked
+   issues to `13-proposed-issues.md` and files each as a `proposed`-labeled GitHub
+   issue (`gh issue create`). You triage them in GitHub — keep the keepers, close
+   the rejects; kept issues flow on to [`plan`](../plan/SKILL.md). The leader files
+   but never closes or comments.
+9. **Review the diff before it lands** — public docs are outward-facing. Show the
    user the proposed `README.md` and companion docs (or a diff against existing
    ones) and get a go-ahead before overwriting anything.
-9. **Commit through the lifecycle** — hand the result to [`commit`](../commit/SKILL.md)
-   and [`ship`](../ship/SKILL.md). Archive `.docsmith-notes/` so the reasoning is
-   recoverable.
+10. **Commit through the lifecycle** — hand the result to [`commit`](../commit/SKILL.md)
+    and [`ship`](../ship/SKILL.md). Archive `.docsmith-notes/` so the reasoning is
+    recoverable.
 
 ## The author personas
 
@@ -121,9 +127,11 @@ its own file under [`references/personas/`](references/personas/).
 - `docs/launch-copy.md` — repo description, topics/keywords, social-preview copy,
   and post-ready hype (SEO + Amplifier).
 - Visual assets / social-preview image (Visual Storyteller).
-- `.docsmith-notes/13-proposed-issues.md` — prioritized, annotated issues for the
-  next round of work (Editor-in-Chief), also filed as `proposed`-labeled GitHub
-  issues for the human to triage; kept ones flow to [`plan`](../plan/SKILL.md).
+- `.docsmith-notes/issue-council.md` — the nominations, debate, and vote tally for
+  the next round of work (whole team, Phase 4).
+- `.docsmith-notes/13-proposed-issues.md` — the council's ranked, annotated slate
+  (Editor-in-Chief), also filed as `proposed`-labeled GitHub issues for the human
+  to triage; kept ones flow to [`plan`](../plan/SKILL.md).
 - `.docsmith-notes/` — the per-persona working notes (archive, don't ship to users).
 
 ## Guardrails
@@ -145,6 +153,11 @@ its own file under [`references/personas/`](references/personas/).
 - **Parallel with one barrier** — only ground truth blocks; the rest of the team
   drafts and reviews concurrently, and the cross-evaluation round (not strict
   sequencing) is what keeps parallel drafts consistent.
+- **The council decides issues, not the leader** — what gets proposed and how high
+  it ranks comes from the personas' debate and vote, not a unilateral call. Two
+  things sit above the vote: the Cartographer's honest-hype veto, and the human,
+  who breaks every deadlock and makes the final triage. The chair tallies; it does
+  not overrule.
 - **File proposals, never triage them** — the leader files its prioritized issues
   as `proposed`-labeled GitHub issues (`gh issue create`) so the human can evaluate
   them in GitHub. This is the one place `docsmith` creates issues, and it is its

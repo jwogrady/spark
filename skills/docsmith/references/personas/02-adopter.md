@@ -22,3 +22,7 @@ walk-through, prerequisites.
 - **Downstream — 03 Skeptic, 06 Coach, 08 Visual Storyteller:** confirm what the
   reader can now do lines up with the positioning, the tutorials, and any
   walkthrough visual. Close gaps they raise.
+
+**Council (Phase 4):** fight for what blocks a newcomer from a first win — broken
+or missing install and quickstart steps, undocumented prerequisites. Contest issues
+that complicate the happy path.

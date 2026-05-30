@@ -22,3 +22,6 @@ topics, awesome-list targets, social-preview metadata.
   invented terms.
 - **Pair with — 11 Amplifier:** hand over the strongest hook phrases and keep the
   description and launch copy consistent.
+
+**Council (Phase 4):** fight for discoverability gaps — no repo topics, a weak
+description, absence from the obvious awesome-lists. Contest keyword-stuffing.

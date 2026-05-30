@@ -37,3 +37,6 @@ drafts/outlines → files under `docs/tutorials|how-to|reference|explanation/`.
   philosophy.
 - **Downstream — 07 Contributor, 08 Visual Storyteller:** confirm the extension
   surface has its how-to and any diagram matches the docs structure.
+
+**Council (Phase 4):** fight for missing Diátaxis docs — no tutorial, no how-to, a
+stale reference. Contest any issue that blurs the four modes.

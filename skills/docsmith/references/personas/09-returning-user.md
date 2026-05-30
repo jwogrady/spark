@@ -21,3 +21,6 @@ upgrade notes.
   and the upgrade/stability story matches the maturity statement.
 - **Downstream:** only the aggregators (10/11) and the Editor read you. Surface the
   headline change worth promoting for the Discoverer and Amplifier.
+
+**Council (Phase 4):** fight for changelog and upgrade gaps — undocumented
+breaking changes, no migration notes. Contest churn that adds no user value.

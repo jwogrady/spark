@@ -23,3 +23,7 @@ their feedback.
 - **Downstream — 02 Adopter, 03 Skeptic, 08 Visual Storyteller:** confirm the
   promise the hero makes is one they can deliver on (a fast quickstart, honest
   positioning, a visual that fits). Fix any over-promise they flag.
+
+**Council (Phase 4):** fight for what wins or loses the first 10 seconds — a weak
+tagline, a buried value prop, a missing hook. Contest anything that adds noise
+above the fold.
