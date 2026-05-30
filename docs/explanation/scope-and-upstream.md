@@ -1,4 +1,4 @@
-# Spark's scope, and the role of fork-init
+# Spark's scope vs. upstream
 
 > Explanation — understanding-oriented.
 
@@ -22,11 +22,12 @@ Two different needs that used to be tangled together:
 
 - **Distribution** — "I want my toolkit available in this project." This is now
   the plugin's job: install once, available everywhere.
-- **Inception** — "I want to scaffold a brand-new project." This is `fork-init`'s
-  job: clone Spark as a seed, wire the new repo, run project setup.
+- **Inception** — "I want to start a brand-new project." This is just
+  `/plugin install spark` followed by the `bootstrap` skill, which scaffolds the
+  project runtime and wires it into Spark.
 
-They no longer compete. You can use the plugin in any existing project without
-forking anything; you use `fork-init` only when you're starting a project from
-scratch and want Spark's templates as the seed.
+They no longer compete. You use the plugin in any existing project without
+forking anything; and you start a fresh project the same way — install the
+plugin, then run `bootstrap`.
 
 See also the dated decision record: [../adr/0002-additive-to-anthropic-spec.md](../adr/0002-additive-to-anthropic-spec.md).

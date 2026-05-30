@@ -40,7 +40,8 @@ second copy of primitives Anthropic already maintains. Narrative in
 - Spark stays small: it carries doctrine and orchestration, not
   re-implementations.
 - Clean split with ADR 0001's *distribution* concern: distribution is the
-  plugin's job; *inception* is `fork-init`'s; neither reinvents upstream.
+  plugin's job; *inception* is `/plugin install spark` plus `bootstrap`; neither
+  reinvents upstream.
 
 ## Open Questions
 

@@ -12,7 +12,7 @@ All skills are invoked namespaced under the plugin: `/spark:<name>`.
 |---|---|---|
 | `ideate` | Ideate | Starting something new; "I want to build X"; fuzzy scope |
 | `plan` | Plan | Breaking work into features/issues; scoping a milestone |
-| `build` | Generate | Implementing an issue; writing the code for planned work |
+| `codify` | Generate | Implementing one issue; writing the code for planned work |
 | `fix-issue` | Solve | Reviewing/hardening a change; resolving review findings |
 | `commit` | Ship | Committing; writing a commit message |
 | `ship` | Ship | Pushing; opening a PR |
@@ -30,15 +30,18 @@ All skills are invoked namespaced under the plugin: `/spark:<name>`.
 |---|---|
 | `review` | Multi-agent project audit by specialist agents collaborating via shared notes; used in the Solve stage. |
 
-## Carried-over skills
+## Authorship & knowledge skills
 
 | Skill | Purpose |
 |---|---|
-| `grill-me` | Interview-style stress-testing of a plan/design. Used by `ideate`. |
-| `claude-md` | Generate and maintain a project's `CLAUDE.md`. |
-| `agents-md` | Generate and maintain a project's `AGENTS.md`. |
-| `write-a-skill` | Author a new skill with correct structure. |
-| `fork-init` | Scaffold a brand-new project from Spark as a seed. |
+| `docit` | Multi-persona crew that glows up the public docs after shipping. |
+| `knowledge` | Internal-knowledge crew that captures decisions, architecture, and processes through specialist agents. |
+
+## Supporting skills
+
+| Skill | Purpose |
+|---|---|
+| `agents-md` | Maintains and audits a project's `CLAUDE.md` and `AGENTS.md`, keeping the two in sync. |
 
 ## Skill layout
 
@@ -55,3 +58,6 @@ description: <what it does>. Use when <specific triggers>.
 The `description` is the only thing Claude sees when deciding whether to invoke
 the skill, so it must name concrete triggers. Optional `references/` and
 `agents/` subdirectories hold supporting material loaded on demand.
+
+To author a new skill, scaffold it with `spark new-skill <name>` and follow the
+"Skill Authoring" section of [`CLAUDE.md`](../../CLAUDE.md).

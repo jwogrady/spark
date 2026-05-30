@@ -2,7 +2,7 @@
 
 > How-to — task-oriented.
 
-Use this after `build`, before committing.
+Use this after `codify`, before committing.
 
 1. Invoke `/spark:fix-issue`.
 2. Run the built-in reviews — Spark orchestrates them, it doesn't replace them:

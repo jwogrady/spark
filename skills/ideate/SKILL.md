@@ -15,7 +15,7 @@ the `plan` skill can decompose.
 
 1. **Restate the idea in one sentence.** If you can't, the idea isn't ready —
    keep asking until you can.
-2. **Pressure-test it.** Invoke the [`grill-me`](../grill-me/SKILL.md) skill to
+2. **Pressure-test it.** Invoke the **`grill-me`** skill (Claude-native) to
    interview the user down the decision tree. Resolve the load-bearing unknowns
    before writing anything.
 3. **Write the problem statement.** Keep it to one screen:

@@ -162,6 +162,8 @@ description: One sentence on what this does. Use when [specific triggers].
 EOF
   green "Created $dir/SKILL.md"
   echo "Next: edit the description (it's the only thing Claude sees when choosing the skill)."
+  echo "Authoring rules (description format, 100-line cap, when to split): see the"
+  echo "'Skill Authoring' section of CLAUDE.md."
 }
 
 cmd_list_skills() {

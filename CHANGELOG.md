@@ -13,12 +13,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ### Added
 
-- **`codify` crew — internal-knowledge capture.** New skill `skills/codify/SKILL.md`
-  runs 6 specialist agents (`agents/codify/00-intake` through `05-editor`) to
+- **`knowledge` crew — internal-knowledge capture.** New skill `skills/knowledge/SKILL.md`
+  runs 6 specialist agents (`agents/knowledge/00-intake` through `05-editor`) to
   capture architectural decisions, processes, and a glossary. It is the inward-facing
   counterpart to `docit`: real plugin subagents with tiered models and scoped tools,
-  coordinating through a dedicated `.codify-notes/` scratch directory (separate from
-  `docit`'s `.docit-notes/`, and kept out of the repo). `codify` runs alongside
+  coordinating through a dedicated `.knowledge-notes/` scratch directory (separate from
+  `docit`'s `.docit-notes/`, and kept out of the repo). `knowledge` runs alongside
   `docit`; it does not replace it.
 - **`review` skill — multi-agent project audit.** `skills/review/SKILL.md` runs 8
   specialist agents plus a Synthesis Lead to audit a project, for use in the Solve
@@ -54,7 +54,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 ### Added (earlier in the unreleased window)
 
 - Lifecycle skills organized as `Ideate → Plan → Generate → Solve → Ship`:
-  `ideate`, `plan`, `build`, `fix-issue`, `commit`, `ship`.
+  `ideate`, `plan`, `codify`, `fix-issue`, `commit`, `ship`.
 - Enforcement: `hooks/hooks.json` PreToolUse guard (`hooks/guard-bash.sh`) that
   blocks force-pushes and pushes to trunk; git hooks `scripts/hooks/commit-msg`
   (conventional + no-AI-attribution + subject rules) and `pre-commit`
@@ -76,5 +76,5 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ### Kept
 
-- Skills `grill-me`, `claude-md`, `agents-md`, `write-a-skill`, `fork-init`.
+- Skill `agents-md` (now owns both `CLAUDE.md` and `AGENTS.md`).
 - `.vscode/`, `.gitignore`, GitHub PR/issue templates, repo health files.

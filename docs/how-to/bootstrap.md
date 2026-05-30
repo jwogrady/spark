@@ -44,7 +44,7 @@ If it fails, report the output — don't proceed on a broken scaffold.
 
 ## 5. Layer Spark on top
 
-- Generate `CLAUDE.md` + `AGENTS.md` (the `claude-md` / `agents-md` skills).
+- Generate `CLAUDE.md` + `AGENTS.md` (the `agents-md` skill).
 - `spark install-git-hooks`.
 - Connect services + secrets with `/spark:connect`.
 - Start the lifecycle at `/spark:ideate`.

@@ -1,7 +1,7 @@
 # Spark — Claude Code Guide
 
-> This file is maintained using the Spark `claude-md` skill.
-> See `skills/claude-md/SKILL.md` for authoring rules.
+> This file is maintained using the Spark `agents-md` skill.
+> See `skills/agents-md/SKILL.md` for authoring rules.
 
 ## Mission
 
@@ -42,7 +42,7 @@ scripts/hooks/          # git hook sources (commit-msg, pre-commit)
 bin/spark               # the CLI (doctor, new-skill, install-git-hooks)
 docs/                   # documentation, organized by Diátaxis
 .github/                # PR + issue templates (the plan skill uses these)
-CLAUDE.md               # this file (maintained by the claude-md skill)
+CLAUDE.md               # this file (maintained by the agents-md skill)
 AGENTS.md               # tool-agnostic agent guide (maintained by agents-md skill)
 ```
 
@@ -50,13 +50,13 @@ AGENTS.md               # tool-agnostic agent guide (maintained by agents-md ski
 
 | Stage | Skill | Job |
 |---|---|---|
-| Ideate | `ideate` | Frame the problem in writing (uses `grill-me`) |
+| Ideate | `ideate` | Frame the problem in writing (uses the native `grill-me`) |
 | Plan | `plan` | Decompose into GitHub issues + milestone |
-| Generate | `build` | Implement one issue on a feature branch |
+| Generate | `codify` | Implement one issue on a feature branch |
 | Solve | `fix-issue` | Orchestrate built-in reviews, then fix |
 | Ship | `commit`, `ship` | Conventional commit, then a focused PR |
 | Ship+ | `docit` | Glow up the public docs through author personas |
-| Knowledge | `codify` | Capture internal knowledge (decisions, systems, processes) through an author crew |
+| Knowledge | `knowledge` | Capture internal knowledge (decisions, systems, processes) through an author crew |
 
 ## Development Workflow
 
@@ -81,8 +81,17 @@ AGENTS.md               # tool-agnostic agent guide (maintained by agents-md ski
 - Skills live in `skills/<skill-name>/`.
 - Scaffold a new skill with `spark new-skill <name>`.
 - Each skill needs a `SKILL.md` with `name:` and `description:` frontmatter. The
-  `description` is the only thing Claude sees when choosing the skill — name
-  concrete triggers ("Use when …"). `references/` and `agents/` are optional.
+  `description` is the only thing Claude sees when choosing the skill, so make it
+  earn its place: write in the third person, keep it under 1024 characters, lead
+  with what the skill does, then name concrete triggers ("Use when …"). A vague
+  description ("helps with docs") gives Claude no way to pick it over its peers.
+- Keep `SKILL.md` tight — aim for under ~100 lines. When it outgrows that, or has
+  distinct domains, or carries rarely-needed depth, split the overflow into
+  `references/` (and put real subagents under `agents/`). Both are optional; they
+  are the canonical layout — do not invent `REFERENCE.md`/`EXAMPLES.md` files.
+- Keep references one level deep; don't make Claude chase a chain of links.
+- Add a deterministic helper script only when the operation is mechanical
+  (validation, formatting) and would otherwise be regenerated each run.
 - Skills must be self-contained. No cross-skill imports at runtime.
 - Test a skill in a real project before merging.
 

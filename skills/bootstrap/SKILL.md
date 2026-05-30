@@ -44,7 +44,7 @@ Concrete per-framework commands and quality-gate defaults live in
   the framework.
 - **Commit the lockfile** (`bun.lock`, `uv.lock`) so the runtime is reproducible.
 - **One concern.** bootstrap stands up the runtime; it does not start
-  implementing features — that's `build`, after planning.
+  implementing features — that's `codify`, after planning.
 - Don't add dependencies the chosen profile doesn't need.
 
 ## Fits the lifecycle

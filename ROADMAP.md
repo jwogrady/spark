@@ -13,8 +13,8 @@ Spark becomes a Claude Code plugin organized around the
 `Ideate → Plan → Generate → Solve → Ship` lifecycle.
 
 - [x] Plugin packaging: `.claude-plugin/plugin.json` + `marketplace.json`
-- [x] Lifecycle skills: `ideate`, `plan`, `build`, `fix-issue`, `commit`, `ship`
-- [x] Carried-over skills: `grill-me`, `claude-md`, `agents-md`, `write-a-skill`, `fork-init`
+- [x] Lifecycle skills: `ideate`, `plan`, `codify`, `fix-issue`, `commit`, `ship`
+- [x] Supporting skills: `agents-md`, `bootstrap`, `connect`, `review`, `docit`, `knowledge`
 - [x] Enforcement: PreToolUse guard (force-push / push-to-trunk) + git hooks
       (`commit-msg`, `pre-commit`)
 - [x] `spark` CLI: `doctor`, `new-skill`, `install-git-hooks`
@@ -55,5 +55,6 @@ Tighten the Plan stage's GitHub integration:
 
 ## Later — Project inception
 
-`fork-init` graduates into a guided "scaffold a new project from Spark" flow,
-distinct from the plugin (which distributes the toolkit into existing projects).
+Project inception — `/plugin install spark` plus the `bootstrap` skill —
+graduates into a guided "scaffold a new project from Spark" flow, distinct from
+plain distribution (which carries the toolkit into existing projects).

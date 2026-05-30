@@ -55,7 +55,7 @@ Spark is layered:
 |---|---|---|---|
 | Plugin manifest + marketplace | `.claude-plugin/plugin.json`, `marketplace.json` | Make the repo git-installable as a versioned plugin | [../reference/plugin-manifest.md](../reference/plugin-manifest.md) |
 | Skills | `skills/<name>/SKILL.md` | The lifecycle stages + carried-over authoring skills, exposed as `/spark:<name>` | [../reference/skills.md](../reference/skills.md) |
-| Agent crews | `agents/<crew>/*.md` | Multi-role subagents the skills dispatch (codify, docit) | — |
+| Agent crews | `agents/<crew>/*.md` | Multi-role subagents the skills dispatch (knowledge, docit) | — |
 | PreToolUse hook | `hooks/hooks.json`, `hooks/guard-bash.sh` | Enforce git hygiene on the **Claude-driven** path | [../reference/hooks.md](../reference/hooks.md) |
 | CLI | `bin/spark` | Validate the layout, scaffold skills, install git hooks, manage secrets | [../reference/cli.md](../reference/cli.md) |
 | Git hooks | `scripts/hooks/{commit-msg,pre-commit}` | Enforce the **same** rules on the **human-driven** path | [../reference/hooks.md](../reference/hooks.md) |
@@ -69,7 +69,7 @@ flowchart TB
   M --> S["skills/&lt;name&gt;/SKILL.md<br/>(/spark:&lt;name&gt;)"]
   M --> H["hooks/hooks.json → guard-bash.sh<br/>(PreToolUse: Claude door)"]
   M --> C["bin/spark CLI<br/>(on $PATH)"]
-  S --> A["agents/&lt;crew&gt;/*.md<br/>codify (6) · docit (13)"]
+  S --> A["agents/&lt;crew&gt;/*.md<br/>knowledge (6) · docit (13)"]
   C -->|install-git-hooks| G["scripts/hooks/<br/>commit-msg + pre-commit<br/>(human door)"]
   H -. same rules .- G
 ```
@@ -83,7 +83,7 @@ Two flows run through Spark:
    written problem statement feeds issue decomposition, which feeds a branch,
    which feeds review, which feeds a commit and PR. See
    [../explanation/sdlc-doctrine.md](../explanation/sdlc-doctrine.md) for the
-   doctrine and the per-stage "done when". The knowledge skills (`codify` inward,
+   doctrine and the per-stage "done when". The knowledge skills (`knowledge` inward,
    `docit` outward) hang off the Ship+ end of the loop.
 
 2. **Enforcement flow** (the two doors — see below). Every git operation passes
@@ -109,19 +109,19 @@ the decision and its scope in
 
 ## The subagent-orchestration pattern
 
-The knowledge/docs skills (`codify`, `docit`) and the `review` audit are
+The knowledge/docs skills (`knowledge`, `docit`) and the `review` audit are
 multi-agent. They share one pattern:
 
 - **The main loop is the sole orchestrator.** Subagents do not dispatch each
   other; the skill running in the main conversation dispatches each role and
   decides the phase sequence.
 - **Roles coordinate through shared notes**, not direct messaging. Each role
-  reads the prior phase's notes (e.g. `.codify-notes/00-intake.md`) and writes
-  its own (e.g. `.codify-notes/architecture.md`); the next role reads those.
-- **codify = 6 inward-facing roles** (`00-intake`, `01-architect`, `02-product`,
+  reads the prior phase's notes (e.g. `.knowledge-notes/00-intake.md`) and writes
+  its own (e.g. `.knowledge-notes/architecture.md`); the next role reads those.
+- **knowledge = 6 inward-facing roles** (`00-intake`, `01-architect`, `02-product`,
   `03-ops`, `04-librarian`, `05-editor`) for internal-knowledge capture.
   **docit = 13 outward-facing roles** (cartographer + author personas +
-  editor-in-chief) for public docs. They are mirror crews: codify documents *for
+  editor-in-chief) for public docs. They are mirror crews: knowledge documents *for
   the team*, docit documents *for the world*.
 
 ## External Dependencies
@@ -151,7 +151,7 @@ multi-agent. They share one pattern:
   registry. Treated as an assumption until confirmed; do not promote to fact.
 - **Documented-map vs actual-tree drift.** `CLAUDE.md`'s Repo Map omits `agents/`,
   `scripts/shred-env.sh`, and `docs/` subtree detail — route the fix to the
-  `claude-md` skill; out of scope for this map.
+  `agents-md` skill; out of scope for this map.
 - **Two enforcement layers, one intent.** The two-doors model expresses the same
   rule twice (hook script + git hook). Deliberate redundancy for coverage, but a
   maintenance point: a rule change must land in both places. See ADR 0003.
