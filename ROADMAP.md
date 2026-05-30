@@ -13,7 +13,7 @@ Spark becomes a Claude Code plugin organized around the
 `Ideate → Plan → Generate → Solve → Ship` lifecycle.
 
 - [x] Plugin packaging: `.claude-plugin/plugin.json` + `marketplace.json`
-- [x] Lifecycle skills: `ideate`, `plan`, `codify`, `fix-issue`, `commit`, `ship`
+- [x] Lifecycle skills: `ideate`, `plan`, `codify`, `fix-issue`, `ship`
 - [x] Supporting skills: `agents-md`, `bootstrap`, `connect`, `review`, `docit`, `knowledge`
 - [x] Enforcement: PreToolUse guard (force-push / push-to-trunk) + git hooks
       (`commit-msg`, `pre-commit`)

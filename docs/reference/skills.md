@@ -14,8 +14,7 @@ All skills are invoked namespaced under the plugin: `/spark:<name>`.
 | `plan` | Plan | Breaking work into features/issues; scoping a milestone |
 | `codify` | Generate | Implementing one issue; writing the code for planned work |
 | `fix-issue` | Solve | Reviewing/hardening a change; resolving review findings |
-| `commit` | Ship | Committing; writing a commit message |
-| `ship` | Ship | Pushing; opening a PR |
+| `ship` | Ship | Committing; writing a commit message; pushing; opening a PR |
 
 ## Setup skills
 

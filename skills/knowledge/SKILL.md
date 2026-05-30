@@ -45,8 +45,8 @@ that hides an unknown is worse than a rough one that names it.
    glossary/index so it's findable.
 7. **Show the diff first** — for any overwrite of an existing doc, present the diff
    and get a go-ahead before writing.
-8. **Commit through the lifecycle** — hand the result to [`commit`](../commit/SKILL.md)
-   and [`ship`](../ship/SKILL.md). Commit only the published docs; keep
+8. **Ship through the lifecycle** — hand the result to [`ship`](../ship/SKILL.md)
+   to commit and open a PR. Commit only the published docs; keep
    `.knowledge-notes/` out of the repo (gitignore it). The scratch is process exhaust —
    the docs and their git history are the durable record of the reasoning.
 

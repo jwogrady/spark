@@ -40,4 +40,4 @@ lane (Generate, stage 3).
 ## Next
 
 Send the change to [`fix-issue`](../fix-issue/SKILL.md) to review and harden,
-then to [`commit`](../commit/SKILL.md) and [`ship`](../ship/SKILL.md).
+then to [`ship`](../ship/SKILL.md) to commit and open a PR.

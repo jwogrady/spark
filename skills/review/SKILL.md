@@ -1,6 +1,6 @@
 ---
 name: review
-description: Conduct a thorough multi-agent project audit using 8 specialist agents who share findings before the Synthesis Lead produces a final report. Use when performing quality control on a codebase, preparing for a major release, preparing for external review, or need structured assessment across all dimensions of project health.
+description: Audit a whole project — not a single diff — with 8 specialist agents who share findings before a Synthesis Lead produces one consolidated report. Use for codebase-wide quality control: preparing for a major release or external review, or assessing overall project health across documentation, architecture, code quality, testing, and security. To review one change or branch instead, use fix-issue.
 ---
 
 # review — multi-agent project audit

@@ -5,7 +5,7 @@
 ```
 Portable SDLC plugin for Claude Code. Enforces Ideate→Plan→Generate→Solve→Ship
 lifecycle with mechanical guardrails: git hooks block force-push/trunk commits,
-conventional commits enforced, 12 lifecycle skills, multi-agent doc crews (docit,
+conventional commits enforced, 11 skills, multi-agent doc crews (docit,
 knowledge). Install once, carry into every project. Zero dependencies, MIT licensed.
 ```
 
@@ -85,7 +85,7 @@ Spark accent color; `jwogrady/spark` in small monospace; no AI attribution;
 > spark install-git-hooks
 > spark doctor
 >
-> 12 lifecycle skills. Multi-agent doc crews. Zero runtime deps.
+> 11 skills. Multi-agent doc crews. Zero runtime deps.
 > https://github.com/jwogrady/spark
 
 ---
@@ -97,7 +97,7 @@ Spark accent color; `jwogrady/spark` in small monospace; no AI attribution;
 **Blurb:**
 
 Spark is a Claude Code plugin I built to carry one opinionated AI-assisted
-development lifecycle into every project. Install it once, get the same 12 skills,
+development lifecycle into every project. Install it once, get the same 11 skills,
 enforcement hooks, and CLI everywhere.
 
 What's mechanical (not advisory):
@@ -143,9 +143,9 @@ scoped issues, focused PRs — are easy to state and easy to skip. Spark makes t
 mechanical rather than advisory.
 
 **What's shipped in v0.2.0:**
-- 12 lifecycle skills wired to slash commands: `/spark:ideate`, `/spark:plan`,
-  `/spark:codify`, `/spark:fix-issue`, `/spark:commit`, `/spark:ship` (plus setup
-  and knowledge skills)
+- 11 skills wired to slash commands: `/spark:ideate`, `/spark:plan`,
+  `/spark:codify`, `/spark:fix-issue`, `/spark:ship` (plus setup and knowledge
+  skills)
 - Mechanical guardrails: a PreToolUse Bash hook that blocks force-pushes and trunk
   commits before Claude executes them; a `commit-msg` git hook that rejects
   non-conventional commits and strips AI co-author trailers; a `pre-commit` hook

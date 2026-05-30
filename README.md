@@ -30,8 +30,8 @@ flowchart LR
 
 > Stage names map to skills: Ideate → `/spark:ideate`, Plan → `/spark:plan`,
 > Generate → `/spark:codify`, Solve → `/spark:fix-issue`,
-> Ship → `/spark:commit` + `/spark:ship`. You run `/spark:codify` (not
-> `/spark:generate`) for the Generate stage.
+> Ship → `/spark:ship`. You run `/spark:codify` (not `/spark:generate`) for the
+> Generate stage.
 
 ## Quickstart
 
@@ -68,8 +68,7 @@ agent file. It prints a `✓ <name>` line per item and ends with
 3. `/spark:codify` — implement one item on a feature branch.
 4. `/spark:fix-issue` — invoke `/code-review` and `/security-review`, then fix to
    acceptance criteria.
-5. `/spark:commit` + `/spark:ship` — write a conventional commit, then open a
-   focused PR.
+5. `/spark:ship` — write a conventional commit, then open a focused PR.
 
 > *GitHub-issue creation from a problem statement is planned for v0.3; the current
 > version generates scoped work items and milestone scaffolds.
@@ -134,7 +133,7 @@ built-ins, reusing the built-in reviewers rather than reinventing them.
 ├──────────────────────────────────────────────────────────────┤
 │                Spark plugin (you install once)               │
 │  skills/            hooks/              bin/spark            │
-│  12 SKILL.md        PreToolUse          doctor               │
+│  11 SKILL.md        PreToolUse          doctor               │
 │  files              guard-bash.sh       list-skills          │
 │                                         new-skill            │
 │  scripts/hooks/                         install-git-hooks    │

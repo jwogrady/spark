@@ -15,7 +15,7 @@ Ideate → Plan → Generate → Solve → Ship
 | **Plan** | `/spark:plan` | Decompose the problem into features as GitHub issues | Each issue has verifiable acceptance criteria |
 | **Generate** | `/spark:codify` | Implement one issue on a feature branch | The issue's criteria are met in code |
 | **Solve** | `/spark:fix-issue` | Review and harden the change | Reviews pass and the app/tests verify |
-| **Ship** | `/spark:commit` + `/spark:ship` | Commit cleanly and open a focused PR | PR is open and links the issue |
+| **Ship** | `/spark:ship` | Commit cleanly and open a focused PR | PR is open and links the issue |
 
 ## Why these five, in this order
 
