@@ -11,11 +11,10 @@ each serving a different need. Find what you need by what you're trying to do:
 | Understand why Spark is built this way | [Understanding Spark](#understanding-spark) | Explanation (understanding) |
 | See how the pieces fit together, or trace a past decision | [Architecture & decisions](#architecture--decisions) | Architecture & decisions |
 
-## The shape of Spark
+## The shape of the rig
 
-Spark is a Claude Code **plugin**: one portable, opinionated toolkit you install
-once and carry into every project. It organizes work around a single GitHub-native
-software-development lifecycle:
+One portable, opinionated toolkit — boot it once, carry it into every repo.
+Everything orbits a single GitHub-native lifecycle:
 
 ```
 Ideate → Plan → Generate → Solve → Ship
