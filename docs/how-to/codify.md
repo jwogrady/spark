@@ -1,10 +1,10 @@
-# How to build an issue
+# How to implement an issue with codify
 
 > How-to — task-oriented.
 
-Use this to implement one planned issue.
+Use this to implement one planned issue — the Generate stage.
 
-1. Invoke `/spark:build` with the issue (number or text) in context.
+1. Invoke `/spark:codify` with the issue (number or text) in context.
 2. The skill creates a focused branch (`feat/<slug>`, etc.) — never work on
    `master`/`main`.
 3. It reads neighboring code first and implements to the acceptance criteria,

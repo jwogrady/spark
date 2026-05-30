@@ -5,8 +5,8 @@
 ```
 Portable SDLC plugin for Claude Code. Enforces Ideate→Plan→Generate→Solve→Ship
 lifecycle with mechanical guardrails: git hooks block force-push/trunk commits,
-conventional commits enforced, 16 lifecycle skills, multi-agent doc crews (docit,
-codify). Install once, carry into every project. Zero dependencies, MIT licensed.
+conventional commits enforced, 12 lifecycle skills, multi-agent doc crews (docit,
+knowledge). Install once, carry into every project. Zero dependencies, MIT licensed.
 ```
 
 ## GitHub topics (8–10 primary)
@@ -34,7 +34,7 @@ Spark accent color; `jwogrady/spark` in small monospace; no AI attribution;
 
 1. Awesome Claude Code — exact fit.
 2. Awesome AI-Assisted Development — high fit.
-3. Awesome Multi-Agent Systems — moderate fit (docit 13 agents, codify 6 agents).
+3. Awesome Multi-Agent Systems — moderate fit (docit 13 agents, knowledge 6 agents).
 
 ---
 
@@ -58,11 +58,11 @@ Spark accent color; `jwogrady/spark` in small monospace; no AI attribution;
 >
 > `spark install-git-hooks` — done.
 
-**3 (headline change — codify)**
-> New: `codify` crew.
+**3 (headline change — knowledge)**
+> New: `knowledge` crew.
 >
 > 13 docit personas already glow up your public docs.
-> Now 6 codify agents capture the internal layer: decisions, architecture, processes
+> Now 6 knowledge agents capture the internal layer: decisions, architecture, processes
 > — as real plugin subagents coordinating through a dedicated scratch directory.
 >
 > Inward-facing. Separate from docit. Same plugin.
@@ -85,7 +85,7 @@ Spark accent color; `jwogrady/spark` in small monospace; no AI attribution;
 > spark install-git-hooks
 > spark doctor
 >
-> 16 lifecycle skills. Multi-agent doc crews. Zero runtime deps.
+> 12 lifecycle skills. Multi-agent doc crews. Zero runtime deps.
 > https://github.com/jwogrady/spark
 
 ---
@@ -97,7 +97,7 @@ Spark accent color; `jwogrady/spark` in small monospace; no AI attribution;
 **Blurb:**
 
 Spark is a Claude Code plugin I built to carry one opinionated AI-assisted
-development lifecycle into every project. Install it once, get the same 16 skills,
+development lifecycle into every project. Install it once, get the same 12 skills,
 enforcement hooks, and CLI everywhere.
 
 What's mechanical (not advisory):
@@ -107,7 +107,7 @@ What's mechanical (not advisory):
   trailers (`scripts/hooks/commit-msg`)
 - `pre-commit` blocks direct commits to `master`/`main`
 
-The headline addition in the current HEAD: a `codify` crew — 6 specialist agents
+The headline addition in the current HEAD: a `knowledge` crew — 6 specialist agents
 (intake, architect, product, ops, librarian, editor) that capture internal
 knowledge as real plugin subagents. It runs alongside the 13-persona `docit` crew
 for public docs, each coordinating through a separate scratch directory.
@@ -143,8 +143,8 @@ scoped issues, focused PRs — are easy to state and easy to skip. Spark makes t
 mechanical rather than advisory.
 
 **What's shipped in v0.2.0:**
-- 16 lifecycle skills wired to slash commands: `/spark:ideate`, `/spark:plan`,
-  `/spark:build`, `/spark:fix-issue`, `/spark:commit`, `/spark:ship` (plus setup
+- 12 lifecycle skills wired to slash commands: `/spark:ideate`, `/spark:plan`,
+  `/spark:codify`, `/spark:fix-issue`, `/spark:commit`, `/spark:ship` (plus setup
   and knowledge skills)
 - Mechanical guardrails: a PreToolUse Bash hook that blocks force-pushes and trunk
   commits before Claude executes them; a `commit-msg` git hook that rejects
@@ -152,11 +152,11 @@ mechanical rather than advisory.
   that blocks direct commits to trunk
 - `spark` CLI: `doctor`, `list-skills`, `new-skill`, `install-git-hooks`,
   `shred-env`, `help`
-- Two authorship crews: `docit` (13 personas, public docs) and `codify` (6 agents,
+- Two authorship crews: `docit` (13 personas, public docs) and `knowledge` (6 agents,
   internal knowledge) — real plugin subagents, each coordinating through its own
   scratch directory
 
-**Headline change in current HEAD (unreleased):** `codify`, the inward-facing
+**Headline change in current HEAD (unreleased):** `knowledge`, the inward-facing
 counterpart to `docit`. Six specialists — intake, architect, product, ops,
 librarian, editor — capture decisions, architecture, and processes.
 

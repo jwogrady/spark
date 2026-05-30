@@ -82,7 +82,7 @@ documented.
 
 - [`enforcement-model.md`](enforcement-model.md) — *why* mechanical enforcement was
   chosen over advisory rules (the rationale behind Principle 1).
-- `docs/explanation/authorship-crews.md` — the multi-persona `docit`/`codify`
+- `docs/explanation/authorship-crews.md` — the multi-persona `docit`/`knowledge`
   subagent design behind Principle 6. *(Planned — see the proposed issue slate.)*
 - [`sdlc-doctrine.md`](sdlc-doctrine.md), [`scope-and-upstream.md`](scope-and-upstream.md),
   [`why-a-plugin.md`](why-a-plugin.md), and the ADRs under `docs/adr/`.

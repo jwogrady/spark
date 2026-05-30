@@ -1,7 +1,7 @@
 # Spark — Claude Code Guide
 
-> This file is maintained using the Spark `claude-md` skill.
-> See `skills/claude-md/SKILL.md` for authoring rules.
+> This file is maintained using the Spark `agents-md` skill.
+> See `skills/agents-md/SKILL.md` for authoring rules.
 
 ## Mission
 
@@ -42,7 +42,7 @@ scripts/hooks/          # git hook sources (commit-msg, pre-commit)
 bin/spark               # the CLI (doctor, new-skill, install-git-hooks)
 docs/                   # documentation, organized by Diátaxis
 .github/                # PR + issue templates (the plan skill uses these)
-CLAUDE.md               # this file (maintained by the claude-md skill)
+CLAUDE.md               # this file (maintained by the agents-md skill)
 AGENTS.md               # tool-agnostic agent guide (maintained by agents-md skill)
 ```
 
@@ -50,13 +50,13 @@ AGENTS.md               # tool-agnostic agent guide (maintained by agents-md ski
 
 | Stage | Skill | Job |
 |---|---|---|
-| Ideate | `ideate` | Frame the problem in writing (uses `grill-me`) |
+| Ideate | `ideate` | Frame the problem in writing (uses the native `grill-me`) |
 | Plan | `plan` | Decompose into GitHub issues + milestone |
-| Generate | `build` | Implement one issue on a feature branch |
+| Generate | `codify` | Implement one issue on a feature branch |
 | Solve | `fix-issue` | Orchestrate built-in reviews, then fix |
 | Ship | `commit`, `ship` | Conventional commit, then a focused PR |
 | Ship+ | `docit` | Glow up the public docs through author personas |
-| Knowledge | `codify` | Capture internal knowledge (decisions, systems, processes) through an author crew |
+| Knowledge | `knowledge` | Capture internal knowledge (decisions, systems, processes) through an author crew |
 
 ## Development Workflow
 

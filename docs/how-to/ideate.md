@@ -6,7 +6,7 @@ Use this when you have an idea but the scope is still fuzzy.
 
 1. Invoke `/spark:ideate`.
 2. State the idea in one sentence. If you can't, let the skill pull you through
-   `grill-me` until you can.
+   the native `grill-me` skill until you can.
 3. Answer the interview honestly — the goal is to surface the *problem*, not to
    defend a solution.
 4. Review the generated problem statement. Check it has: problem, outcome, 2–5

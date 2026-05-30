@@ -51,8 +51,9 @@ CLI, and agent crews, versioned in one place. The narrative reasoning is in
   [../explanation/why-a-plugin.md](../explanation/why-a-plugin.md). Practical
   consequence: git hooks ship via `spark install-git-hooks` and the permission
   baseline is applied separately.
-- `fork-init` survives but its job narrows to *project inception* (scaffold a new
-  repo from Spark as a seed), not toolkit distribution — see ADR 0002 and
+- *Project inception* (scaffold a new repo) is no longer a separate skill — it is
+  `/plugin install spark` plus the `bootstrap` skill, not toolkit distribution —
+  see ADR 0002 and
   [../explanation/scope-and-upstream.md](../explanation/scope-and-upstream.md).
 
 ## Open Questions

@@ -7,7 +7,7 @@
 > Spark is domain- and stack-neutral by design. This glossary holds only
 > Spark-internal mechanism terms — not project- or product-specific vocabulary. A
 > fork captures its own domain terms in its own project-local glossary, which
-> wins over the seed in `skills/codify/references/glossary.md`.
+> wins over the seed in `skills/knowledge/references/glossary.md`.
 
 ### two-doors enforcement model
 
@@ -38,7 +38,7 @@ tool; runs `hooks/guard-bash.sh`, which blocks force-push and trunk pushes (exit
 ### subagent crew
 
 A multi-role set of subagents (`agents/<crew>/*.md`) that a Spark skill
-dispatches to produce a complex artifact. Spark ships two mirror crews: **codify**
+dispatches to produce a complex artifact. Spark ships two mirror crews: **knowledge**
 (6 inward-facing roles — internal-knowledge capture) and **docit** (13
 outward-facing roles — public docs). See
 [architecture/spark-internals.md](architecture/spark-internals.md).
@@ -48,15 +48,16 @@ outward-facing roles — public docs). See
 How a subagent crew coordinates: the skill in the main conversation is the **sole
 orchestrator** and dispatches each role; roles never dispatch each other. Roles
 coordinate by reading the prior phase's notes and writing their own (e.g. the
-`.codify-notes/` files), not by direct messaging. See
+`.knowledge-notes/` files), not by direct messaging. See
 [architecture/spark-internals.md](architecture/spark-internals.md).
 
 ### distribution vs inception
 
 Two cleanly separated needs that the old `.spark/`-folder design tangled together.
 **Distribution** — "make my toolkit available in this project" — is the plugin's
-job (`/plugin install spark`); it forks nothing. **Inception** — "scaffold a
-brand-new project" — is the `fork-init` skill's job. See
+job (`/plugin install spark`); it forks nothing. **Inception** — "start a
+brand-new project" — is `/plugin install spark` followed by the `bootstrap`
+skill. See
 [explanation/scope-and-upstream.md](explanation/scope-and-upstream.md) and
 [adr/0001-plugin-not-framework.md](adr/0001-plugin-not-framework.md).
 

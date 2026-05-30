@@ -38,8 +38,8 @@ both doors covered.
 
 ## What this replaced
 
-`fork-init` survives, but its job narrowed: it's for *scaffolding a brand-new
-project*, not for distributing the toolkit. Distribution is the plugin's job now.
-See [scope-and-upstream.md](scope-and-upstream.md).
+Project inception is no longer a separate skill: scaffolding a brand-new project
+is just `/plugin install spark` followed by the `bootstrap` skill. Distribution
+is the plugin's job. See [scope-and-upstream.md](scope-and-upstream.md).
 
 See also the dated decision record: [../adr/0001-plugin-not-framework.md](../adr/0001-plugin-not-framework.md).

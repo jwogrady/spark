@@ -28,7 +28,7 @@ Use [conventional commits](https://www.conventionalcommits.org/):
 
 ```
 feat: add typescript stack preset
-fix: correct remote URL in fork-init step 3
+fix: correct remote URL in connect recipe
 docs: update AGENTS.md skill authoring section
 chore: add .editorconfig
 ```

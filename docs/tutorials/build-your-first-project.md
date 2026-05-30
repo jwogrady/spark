@@ -32,7 +32,7 @@ issue for each, with acceptance criteria. Approve, and let it create one issue.
 
 ## 3. Generate
 
-Type `/spark:build` and point it at the issue. It opens a `feat/…` branch and
+Type `/spark:codify` and point it at the issue. It opens a `feat/…` branch and
 writes code to the criteria — and stops there.
 
 > You learned: one issue, one branch, no scope creep.

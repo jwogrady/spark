@@ -10,7 +10,7 @@
 ```
 
 After install, the lifecycle skills are available everywhere as `/spark:ideate`,
-`/spark:plan`, `/spark:build`, `/spark:fix-issue`, `/spark:commit`, `/spark:ship`,
+`/spark:plan`, `/spark:codify`, `/spark:fix-issue`, `/spark:commit`, `/spark:ship`,
 and the `spark` CLI is on your `$PATH`.
 
 Verify:
