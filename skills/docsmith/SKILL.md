@@ -31,10 +31,10 @@ go in the README. Excitement is earned by what the project does, not invented.
    writes the verified facts (what it is, the lifecycle, install steps, real
    differentiators) to `.docsmith-notes/00-ground-truth.md`. Every later lens
    cites this file. Nothing is claimed that isn't here.
-3. **Audience lenses run in order** — agents 01–06 each write their section to
+3. **Audience lenses run in order** — agents 01–11 each write their section to
    their own file in `.docsmith-notes/`, reading the ground truth and all prior
    lenses so the docs stay consistent and non-repetitive.
-4. **Editor-in-Chief assembles** — agent 07 reads every lens, enforces one voice,
+4. **Editor-in-Chief assembles** — agent 12 reads every lens, enforces one voice,
    removes duplication, verifies every claim traces back to ground truth, and
    writes the final artifacts.
 5. **Review the diff before it lands** — public docs are outward-facing. Show the
@@ -57,24 +57,43 @@ go in the README. Excitement is earned by what the project does, not invented.
 - **03 The Skeptic** — a dev who asks "why not just use the raw tool / something
   I already have?" Owns positioning and comparison. Names the alternative honestly
   and shows the delta.
-- **04 The Believer** — a dev who wants to know what the project *stands for*. Owns
+- **04 The Evaluator** — a senior dev or tech lead deciding whether to bet a team
+  on it. Owns trust and maturity signals: license, CI status, release cadence,
+  maintenance posture, security — "is this alive and safe to depend on?"
+- **05 The Believer** — a dev who wants to know what the project *stands for*. Owns
   motivation and philosophy (e.g. `docs/PHILOSOPHY.md`) — the worldview, the
   problem it refuses to accept, the doctrine.
-- **05 The Contributor** — a dev who wants to extend it. Owns the contributing
+- **06 The Coach** — a dev learning the tool in depth. Owns the
+  [Diátaxis](https://diataxis.fr/) docs: **tutorials** (learning-oriented),
+  **how-to guides** (task-oriented), **reference** (information-oriented), and
+  **explanation** (understanding-oriented), under `docs/`.
+- **07 The Contributor** — a dev who wants to extend it. Owns the contributing
   path: how to add to the project, the standards, where to start.
-- **06 The Amplifier** — the launch. Owns short-form hype: the GitHub repo
-  description, topics/tags, and ready-to-post copy (tweet thread, HN/Reddit/Show
-  HN). Constrained by the one rule above.
-- **07 Editor-in-Chief** — reads all lenses, enforces a single confident voice,
+- **08 The Visual Storyteller** — show, don't tell. Owns diagrams, the architecture
+  visual, screenshots/GIFs, and the social-preview image — the README's visual layer.
+- **09 The Returning User** — an existing user upgrading. Owns the `CHANGELOG.md` /
+  release notes: what changed, the upgrade path, what keeps them engaged.
+- **10 The SEO / Discoverability** — a dev who hasn't found the repo yet. Owns
+  GitHub topics, the keywords in the repo description, search terms, awesome-list
+  fit, and social-preview metadata.
+- **11 The Amplifier** — the launch. Owns short-form hype: ready-to-post copy
+  (tweet thread, HN/Show HN/Reddit). Constrained by the one rule above.
+- **12 Editor-in-Chief** — reads all lenses, enforces a single confident voice,
   dedupes, verifies every claim against ground truth, and writes the final
   `README.md` plus companion docs.
 
 ## Artifacts produced
 
 - `README.md` — hero (Skimmer), quickstart (Adopter), positioning (Skeptic),
-  contributing (Contributor), with a link out to philosophy.
+  trust badges (Evaluator), visuals (Visual Storyteller), contributing
+  (Contributor), with links out to philosophy and the Diátaxis docs.
 - `docs/PHILOSOPHY.md` — motivation and doctrine (Believer).
-- `docs/launch-copy.md` — repo description, topics, and post-ready hype (Amplifier).
+- `docs/tutorials/`, `docs/how-to/`, `docs/reference/`, `docs/explanation/` — the
+  four Diátaxis modes (Coach).
+- `CHANGELOG.md` / release notes (Returning User).
+- `docs/launch-copy.md` — repo description, topics/keywords, social-preview copy,
+  and post-ready hype (SEO + Amplifier).
+- Visual assets / social-preview image (Visual Storyteller).
 - `.docsmith-notes/` — the per-lens working notes (archive, don't ship to users).
 
 ## Guardrails

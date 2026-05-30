@@ -11,22 +11,33 @@ not an audit.
 Lenses run sequentially, not in parallel, so each reads current notes:
 
 ```
-00 Cartographer    (reads: nothing yet)
+00 Cartographer        (reads: nothing yet)
    ↓ .docsmith-notes/00-ground-truth.md   ← the factual substrate
-01 The Skimmer     (reads: 00)
+01 The Skimmer         (reads: 00)
    ↓ .docsmith-notes/01-hero.md
-02 The Adopter     (reads: 00, 01)
+02 The Adopter         (reads: 00, 01)
    ↓ .docsmith-notes/02-quickstart.md
-03 The Skeptic     (reads: 00, 01, 02)
+03 The Skeptic         (reads: 00, 01, 02)
    ↓ .docsmith-notes/03-positioning.md
-04 The Believer    (reads: 00, 03)
-   ↓ .docsmith-notes/04-philosophy.md
-05 The Contributor (reads: 00, 04)
-   ↓ .docsmith-notes/05-contributing.md
-06 The Amplifier   (reads: 00, all prior)
-   ↓ .docsmith-notes/06-launch.md
-07 Editor-in-Chief (reads: 00–06)
-   ↓ README.md, docs/PHILOSOPHY.md, docs/launch-copy.md, 07-editor-log.md
+04 The Evaluator       (reads: 00, 03)
+   ↓ .docsmith-notes/04-trust.md
+05 The Believer        (reads: 00, 03, 04)
+   ↓ .docsmith-notes/05-philosophy.md
+06 The Coach           (reads: 00, 02, 05)
+   ↓ .docsmith-notes/06-diataxis.md  → docs/{tutorials,how-to,reference,explanation}/
+07 The Contributor     (reads: 00, 05, 06)
+   ↓ .docsmith-notes/07-contributing.md
+08 The Visual Storyteller (reads: 00, 01, 02, 06)
+   ↓ .docsmith-notes/08-visuals.md
+09 The Returning User  (reads: 00, 04)
+   ↓ .docsmith-notes/09-changelog.md
+10 The SEO/Discoverability (reads: 00, all prior)
+   ↓ .docsmith-notes/10-discoverability.md
+11 The Amplifier       (reads: 00, all prior)
+   ↓ .docsmith-notes/11-launch.md
+12 Editor-in-Chief     (reads: 00–11)
+   ↓ README.md, docs/PHILOSOPHY.md, docs/ Diátaxis tree,
+     CHANGELOG.md, docs/launch-copy.md, 12-editor-log.md
 ```
 
 ---
