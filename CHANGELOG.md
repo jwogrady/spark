@@ -73,6 +73,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 - Skills `caveman` and `handoff` — general productivity, outside the SDLC spine.
 - `.spark/configs/` and `.spark/issues/` — superseded by the plugin refactor.
+- **Committed skill scratch directories.** Untracked the 108 process-exhaust
+  files under `.audit-notes/`, `.docit-notes/`, and `.review-notes/`, and added
+  all skill scratch dirs (incl. `.knowledge-notes/`) to `.gitignore` alongside
+  `.codify-notes/`. Skills recreate these dirs at runtime; they no longer ship
+  with the plugin.
 
 ### Kept
 
