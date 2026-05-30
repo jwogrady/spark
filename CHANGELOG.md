@@ -28,7 +28,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
   blocks force-pushes and pushes to trunk; git hooks `scripts/hooks/commit-msg`
   (conventional + no-AI-attribution + subject rules) and `pre-commit`
   (no commit on trunk).
-- `bin/spark` CLI: `doctor`, `new-skill`, `install-git-hooks`.
+- `bin/spark` CLI: `doctor`, `new-skill`, `install-git-hooks`. `doctor` validates
+  the plugin layout, skill frontmatter, and every agent definition under `agents/`.
 - Skill `bootstrap` — runtime scaffold for new projects via the official
   scaffolder, defaulting to Bun for TypeScript and uv for Python; verifies the
   scaffold runs, then wires it into Spark (CLAUDE.md, git hooks, connect, ideate).
@@ -37,10 +38,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
   verify → shred → `op run` injection. Encourages per-project keys.
 - `bin/spark shred-env <file>` + `scripts/shred-env.sh` — secure-delete of
   transient secrets files, with verification; refuses to touch `*.tmpl`.
-- Skill `docsmith` — multi-persona docs glow-up. One author writes through a cast
-  of author personas (Cartographer, Skimmer, Adopter, Skeptic, Evaluator, Believer,
-  Coach, Contributor, Visual Storyteller, Returning User, Discoverer/SEO, Amplifier,
-  Editor-in-Chief), each with its own spec under `references/personas/`. Personas
+- Skill `docit` — multi-persona docs glow-up. The author personas (Cartographer,
+  Skimmer, Adopter, Skeptic, Evaluator, Believer, Coach, Contributor, Visual
+  Storyteller, Returning User, Discoverer/SEO, Amplifier, Editor-in-Chief) run as
+  **real plugin subagents** defined under `agents/docit/` (`spark:docit:<name>`,
+  with tiered models and scoped tools). The `docit` skill orchestrates them:
+  because a subagent can't spawn another, the main loop does every dispatch and
+  barrier, and the agents coordinate only through `.docit-notes/`. Personas
   draft in parallel, cross-evaluate their dependency-graph neighbors, and revise
   before an Editor-in-Chief pass assembles `README.md`, `docs/PHILOSOPHY.md`, the
   [Diátaxis](https://diataxis.fr/) docs tree (tutorials/how-to/reference/

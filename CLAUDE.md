@@ -55,7 +55,7 @@ AGENTS.md               # tool-agnostic agent guide (maintained by agents-md ski
 | Generate | `build` | Implement one issue on a feature branch |
 | Solve | `fix-issue` | Orchestrate built-in reviews, then fix |
 | Ship | `commit`, `ship` | Conventional commit, then a focused PR |
-| Ship+ | `docsmith` | Glow up the public docs through author personas |
+| Ship+ | `docit` | Glow up the public docs through author personas |
 
 ## Development Workflow
 

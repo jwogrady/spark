@@ -99,6 +99,26 @@ cmd_doctor() {
     red "  ✗ skills/ directory missing"; errors=$((errors+1))
   fi
 
+  # Agents: optional. Each .md under agents/ (any depth, e.g. agents/docit/01-skimmer.md)
+  # must carry name + description frontmatter. Absent agents/ is fine — forks may ship none.
+  if [ -d "$SPARK_ROOT/agents" ]; then
+    echo
+    echo "Agents:"
+    local found_agent=0
+    while IFS= read -r f; do
+      found_agent=1
+      rel="${f#"$SPARK_ROOT"/agents/}"
+      if ! grep -q '^name:' "$f"; then
+        red "  ✗ $rel: missing 'name:' frontmatter"; errors=$((errors+1)); continue
+      fi
+      if ! grep -q '^description:' "$f"; then
+        red "  ✗ $rel: missing 'description:' frontmatter"; errors=$((errors+1)); continue
+      fi
+      green "  ✓ $rel"
+    done < <(find "$SPARK_ROOT/agents" -type f -name '*.md' | sort)
+    [ "$found_agent" -eq 0 ] && { yellow "  ! agents/ exists but has no agent .md files"; warnings=$((warnings+1)); }
+  fi
+
   # Git hooks installed in the current repo?
   echo
   if git rev-parse --git-dir >/dev/null 2>&1; then
