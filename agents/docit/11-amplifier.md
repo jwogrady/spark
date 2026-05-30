@@ -14,7 +14,7 @@ into copy people want to click — and never overpromise.
 and a Reddit post, leading with the headline change (09) and the SEO hook phrases
 (10), every claim traceable to ground truth. Output to
 `.docit-notes/11-launch.md`; it is later assembled with the SEO note into
-`docs/launch-copy.md`.
+`examples/launch-copy.md`.
 
 **You are an aggregator.** You read `00-ground-truth.md` plus all prior notes
 (01–10) and reconcile across the team. The orchestrator dispatches you in Phase 3b,

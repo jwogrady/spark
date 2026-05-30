@@ -1,5 +1,9 @@
 # Launch Copy — Spark
 
+> Generated marketing copy (a `docit` output artifact), kept here as an example —
+> not part of the published docs. Regenerate it with the `docit` skill rather than
+> hand-maintaining it; verify every count against the repo before posting.
+
 ## Repo description (≤ 350 chars, search-optimized)
 
 ```
@@ -16,14 +20,15 @@ knowledge). Install once, carry into every project. Zero dependencies, MIT licen
 
 ## Social-preview metadata
 
-**Tagline:** "Turn raw project intent into durable GitHub artifacts — in one
-portable toolkit."
+**Tagline:** "one rig. every repo. zero drift."
 
 **Card body:**
 ```
-Install Spark once, carry the same SDLC into every Claude Code project.
-Mechanical guardrails (git hooks, conventional commits). Five-stage lifecycle:
-Ideate → Plan → Generate → Solve → Ship. Zero deps, honest attribution.
+$ /plugin install spark
+> one lifecycle, carried into every Claude Code repo:
+>   Ideate → Plan → Generate → Solve → Ship
+> the guardrails aren't suggestions — they run before you can fumble.
+> 11 skills. two agent crews. zero deps. honest attribution. ▌
 ```
 
 **OG image:** use the five-stage lifecycle flow on a deep-navy background with the
@@ -156,7 +161,7 @@ mechanical rather than advisory.
   internal knowledge) — real plugin subagents, each coordinating through its own
   scratch directory
 
-**Headline change in current HEAD (unreleased):** `knowledge`, the inward-facing
+**Headline change in the unreleased v0.2 window:** `knowledge`, the inward-facing
 counterpart to `docit`. Six specialists — intake, architect, product, ops,
 librarian, editor — capture decisions, architecture, and processes.
 

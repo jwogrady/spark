@@ -137,8 +137,9 @@ neighbors, per-phase behavior, model, and tools — lives in its own definition 
 - `docs/tutorials/`, `docs/how-to/`, `docs/reference/`, `docs/explanation/` — the
   four Diátaxis modes (Coach).
 - `CHANGELOG.md` / release notes (Returning User).
-- `docs/launch-copy.md` — repo description, topics/keywords, social-preview copy,
-  and post-ready hype (SEO + Amplifier).
+- `examples/launch-copy.md` — repo description, topics/keywords, social-preview
+  copy, and post-ready hype (SEO + Amplifier). Lives in `examples/`, not the
+  published docs tree.
 - Visual assets / social-preview image (Visual Storyteller).
 - `.docit-notes/issue-council.md` — the nominations, debate, and vote tally for
   the next round of work (whole team, Phase 4).

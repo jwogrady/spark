@@ -36,7 +36,7 @@ The orchestrator runs every prior phase before dispatching you. You read all of
   - `README.md` — hero (01) → quickstart (02) → positioning (03) → trust (04) →
     visuals (08) → contributing (07) → links to philosophy and the Diátaxis docs.
   - `docs/PHILOSOPHY.md` (05), the `docs/` Diátaxis tree (06), `CHANGELOG.md` (09),
-    and `docs/launch-copy.md` (10 + 11).
+    and `examples/launch-copy.md` (10 + 11).
   Enforce one voice, remove duplication, ensure `jwogrady`-only attribution. Log
   what you cut or softened and why to `.docit-notes/12-editor-log.md`. **Present
   a diff to the human and wait for go-ahead before overwriting any existing docs.**

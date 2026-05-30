@@ -101,7 +101,7 @@ Phase 5 — Synthesis + file the slate (barrier)
   the final artifacts; and files the council's ranked slate as `proposed`
   GitHub issues for the human to triage.
         ↓ README.md, docs/PHILOSOPHY.md, docs/ Diátaxis tree,
-          CHANGELOG.md, docs/launch-copy.md, 12-editor-log.md,
+          CHANGELOG.md, examples/launch-copy.md, 12-editor-log.md,
           13-proposed-issues.md
 ```
 
