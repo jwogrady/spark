@@ -53,3 +53,5 @@ Skills, the PreToolUse hook, and the `bin/spark` executable. It does **not**
 bundle a full `settings.json` (only `agent` / `subagentStatusLine` are honored
 by plugin settings) or git hooks — those are applied via the install how-to and
 `spark install-git-hooks`.
+
+See also why a plugin: [../adr/0001-plugin-not-framework.md](../adr/0001-plugin-not-framework.md).

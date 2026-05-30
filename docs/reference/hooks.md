@@ -43,3 +43,8 @@ Rejects a commit made directly on `master` or `main`.
 A plugin cannot bundle a full `settings.json`. The PreToolUse guard ships *in*
 the plugin; the permission baseline is applied separately (see
 [../how-to/install.md](../how-to/install.md)).
+
+## See also
+
+- Why two doors — the decision and its scope: [../adr/0003-zero-dependency-bash-and-enforcement-hooks.md](../adr/0003-zero-dependency-bash-and-enforcement-hooks.md)
+- The architectural view of the two-doors model: [../architecture/spark-internals.md](../architecture/spark-internals.md)
