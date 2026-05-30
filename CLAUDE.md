@@ -7,9 +7,10 @@
 
 Spark is a portable project-inception and software-delivery system for
 AI-assisted development. It turns raw project intent into durable repo artifacts,
-scoped GitHub issues, implementation branches, reviews, commits, and pull
-requests. The methodology is portable; the current implementation ships as a
-Claude Code plugin you install once and carry into every project. It puts one
+implementation branches, reviews, commits, and pull requests (scoped GitHub
+issue generation is a v0.3 goal). The methodology is portable; the current
+implementation ships as a Claude Code plugin you install once and carry into
+every project. It puts one
 opinionated lifecycle at your fingertips and enforces the guardrails that keep
 work clean:
 
@@ -123,8 +124,11 @@ Always ask before:
 - Deleting files or directories.
 - Dropping or truncating data.
 - Resetting or hard-reverting git history.
+- Force-pushing to a shared branch.
 - Removing dependencies that other code may rely on.
+- Editing CI/CD pipelines.
 
+Force-push and CI specifics live under *GitHub Integration Guardrails* above.
 When in doubt, ask.
 
 ## Attribution
