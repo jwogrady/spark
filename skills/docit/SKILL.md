@@ -85,48 +85,27 @@ go in the README. Excitement is earned by what the project does, not invented.
 
 ## The author personas
 
-The team works each of these perspectives, drafting in parallel and cross-evaluating
-neighbors. Each is a real subagent; the full spec for each — mission, domain,
-neighbors, per-phase behavior, model, and tools — lives in its own definition under
-[`agents/docit/`](../../agents/docit/) (registered as `spark:docit:<name>`).
+Each persona is a real subagent under [`agents/docit/`](../../agents/docit/)
+(registered as `spark:docit:<name>`); its full spec — mission, domain, neighbors,
+per-phase behavior, model, and tools — lives in that definition, and the dependency
+graph that pairs them for cross-eval is in
+[`references/collaboration-protocol.md`](references/collaboration-protocol.md).
+Each owns one section through a distinct perspective:
 
-- **00 The Cartographer** — ground truth. Reads the repo (README, CLAUDE.md, skills,
-  CLI, manifests) and records *only what is real*: purpose, capabilities, the
-  lifecycle, install/usage, genuine differentiators. Foundation for every persona.
-- **01 The Skimmer** — gives the repo 10 seconds. Owns the hero: project
-  name, one-line tagline, the hook, the "what is this and why care" above the fold.
-- **02 The Adopter** — ready to try it. Owns install + quickstart. Can a
-  newcomer go from zero to first value in minutes? Every command must be copy-paste
-  real.
-- **03 The Skeptic** — asks "why not just use the raw tool / something
-  I already have?" Owns positioning and comparison. Names the alternative honestly
-  and shows the delta.
-- **04 The Evaluator** — a senior dev or tech lead deciding whether to bet a team
-  on it. Owns trust and maturity signals: license, CI status, release cadence,
-  maintenance posture, security — "is this alive and safe to depend on?"
-- **05 The Believer** — wants to know what the project *stands for*. Owns
-  motivation and philosophy (e.g. `docs/PHILOSOPHY.md`) — the worldview, the
-  problem it refuses to accept, the doctrine.
-- **06 The Coach** — teaches the tool in depth. Owns the
-  [Diátaxis](https://diataxis.fr/) docs: **tutorials** (learning-oriented),
-  **how-to guides** (task-oriented), **reference** (information-oriented), and
-  **explanation** (understanding-oriented), under `docs/`.
-- **07 The Contributor** — wants to extend it. Owns the contributing
-  path: how to add to the project, the standards, where to start.
-- **08 The Visual Storyteller** — show, don't tell. Owns diagrams, the architecture
-  visual, screenshots/GIFs, and the social-preview image — the README's visual layer.
-- **09 The Returning User** — an existing user upgrading. Owns the `CHANGELOG.md` /
-  release notes: what changed, the upgrade path, what keeps them engaged.
-- **10 The Discoverer (SEO)** — a dev who hasn't found the repo yet. Owns
-  GitHub topics, the keywords in the repo description, search terms, awesome-list
-  fit, and social-preview metadata.
-- **11 The Amplifier** — the launch. Owns short-form hype: ready-to-post copy
-  (tweet thread, HN/Show HN/Reddit). Constrained by the one rule above.
-- **12 The Editor-in-Chief** — the team leader and final pass: reads all the notes,
-  enforces a single confident voice, dedupes, verifies every claim against ground
-  truth, writes the final `README.md` plus companion docs, and files the team's
-  leftover gaps as prioritized, annotated `proposed`-labeled GitHub issues for the
-  human to triage.
+- **00 Cartographer** — ground truth: *only what is real* in the repo. Foundation for all. *Barrier.*
+- **01 Skimmer** — the hero: name, tagline, hook, the above-the-fold "why care."
+- **02 Adopter** — install + quickstart; zero to first value, every command copy-paste real.
+- **03 Skeptic** — positioning vs the raw tool / alternatives; names them honestly, shows the delta.
+- **04 Evaluator** — trust/maturity signals: license, CI, release cadence, security.
+- **05 Believer** — motivation and philosophy (`docs/PHILOSOPHY.md`): the worldview and doctrine.
+- **06 Coach** — the [Diátaxis](https://diataxis.fr/) docs under `docs/` (tutorials, how-to, reference, explanation).
+- **07 Contributor** — the contributing path: standards, where to start.
+- **08 Visual Storyteller** — diagrams, screenshots/GIFs, social-preview image.
+- **09 Returning User** — `CHANGELOG.md` / release notes and the upgrade path.
+- **10 Discoverer (SEO)** — GitHub topics, description keywords, awesome-list fit, preview metadata.
+- **11 Amplifier** — launch copy (tweet thread, HN/Reddit), constrained by the one rule.
+- **12 Editor-in-Chief** — the lead: fuses every note into one voice, verifies every claim
+  against ground truth, writes the final artifacts, files the council's leftover gaps as issues.
 
 ## Artifacts produced
 
@@ -151,47 +130,34 @@ neighbors, per-phase behavior, model, and tools — lives in its own definition 
 ## Guardrails
 
 - **Honest hype** — see "The one rule." No claim survives that the Cartographer
-  didn't verify. Aspirations go in a clearly-labeled roadmap, never the feature list.
-- **Author attribution** — every doc is authored by `jwogrady`. Never credit
-  Claude or any AI system in any doc, manifest, commit, or launch post.
+  didn't verify; aspirations go in a clearly-labeled roadmap, never the feature list.
+- **Author attribution** — the author field is the literal string `jwogrady`. Never
+  credit Claude or any AI system in any doc, manifest, commit, or launch post.
 - **Don't clobber silently** — show the diff and get explicit go-ahead before
   overwriting existing `README.md` or docs.
-- **Match the docs system** — companion docs follow the repo's existing
-  organization (here, Diátaxis under `docs/`).
-- **One voice** — the personas are a team that gathers and stress-tests the
-  material; the Editor-in-Chief makes the result read as written by one confident
-  human, not stitched from a dozen drafts.
-- **Cross-evaluate, don't just hand off** — every persona reviews its
-  dependency-graph neighbors and the feedback is folded back in before synthesis.
-  A draft is not done until its neighbors have signed off (no open cross-eval items).
-- **Parallel with one barrier** — only ground truth blocks; the rest of the team
-  drafts and reviews concurrently, and the cross-evaluation round (not strict
-  sequencing) is what keeps parallel drafts consistent.
-- **The skill orchestrates; agents don't self-coordinate** — a subagent can't spawn
-  another subagent, so the main loop does every dispatch and every barrier. Agents
-  communicate only through `.docit-notes/`, and each persona is dispatched fresh
-  per phase. Never expect one agent to wait on or call another directly.
-- **The council decides issues, not the leader** — what gets proposed and how high
-  it ranks comes from the personas' debate and vote, not a unilateral call. Two
-  things sit above the vote: the Cartographer's honest-hype veto, and the human,
-  who breaks every deadlock and makes the final triage. The chair tallies; it does
-  not overrule.
-- **File proposals, never triage them** — the leader files its prioritized issues
-  as `proposed`-labeled GitHub issues (`gh issue create`) so the human can evaluate
-  them in GitHub. This is the one place `docit` creates issues, and it is its
-  documented contract. It never **closes or comments** — keeping, closing, and
-  routing rejects is the human's call, per Spark's GitHub guardrails. No GitHub
-  remote or `gh`? The issues stay in `13-proposed-issues.md` for manual filing.
+- **Match the docs system** — companion docs follow the repo's existing organization
+  (here, Diátaxis under `docs/`).
+- **One voice** — the personas gather and stress-test the material; the
+  Editor-in-Chief makes the result read as written by one confident human.
+- **A draft isn't done until its neighbors sign off** — no open cross-eval items
+  survive into synthesis (the cross-evaluation round, not strict sequencing, is what
+  keeps parallel drafts consistent).
+- **The skill orchestrates; agents don't self-coordinate** — the main loop does every
+  dispatch and barrier; personas communicate only through `.docit-notes/`, dispatched
+  fresh per phase. Never expect one agent to wait on or call another.
+- **The council decides issues, not the leader** — proposals and ranking come from the
+  personas' vote. Above it sit two things only: the Cartographer's honest-hype veto and
+  the human, who breaks every deadlock and makes the final triage. The chair tallies; it
+  does not overrule.
+- **File proposals, never triage them** — the leader files `proposed`-labeled issues
+  (`gh issue create`) and never closes or comments; keeping/closing rejects is the
+  human's call. No `gh`/remote? They stay in `13-proposed-issues.md` for manual filing.
 
 ## Fits the lifecycle
 
 `docit` is a **Ship**-stage amplifier: once something real exists and works,
 it makes the world want to use it. It also runs standalone whenever the README has
 drifted from reality or a launch is coming. Pair it with [`review`](../review/SKILL.md)
-first — audit the substance, then sell it.
-
-It also **closes the loop back to Plan**: the leader files the gaps it found —
-missing docs, unbuilt features it couldn't honestly claim, maturity work — as
-`proposed`-labeled GitHub issues; the ones you keep flow into
-[`plan`](../plan/SKILL.md), so a glow-up seeds the next milestone instead of
-dead-ending.
+first — audit the substance, then sell it. And it **closes the loop back to Plan**:
+the gaps it files as `proposed` issues (step 8) flow into [`plan`](../plan/SKILL.md),
+so a glow-up seeds the next milestone instead of dead-ending.
