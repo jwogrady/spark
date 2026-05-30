@@ -29,7 +29,12 @@ extract_command() {
 cmd="$(extract_command)"
 
 block() {
-  echo "Spark guard: $1" >&2
+  msg="Spark guard: $1"
+  echo "$msg" >&2
+  # Log to audit trail if available (non-blocking)
+  if [ -w "${SPARK_AUDIT_LOG:-/dev/null}" ]; then
+    printf '[%s] blocked: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$msg" >> "$SPARK_AUDIT_LOG"
+  fi
   exit 2
 }
 
