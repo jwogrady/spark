@@ -1,6 +1,6 @@
 ---
 name: fix-issue
-description: Drive the solve loop on a change — run Claude Code's built-in reviews, triage the findings, and fix them until the acceptance criteria hold. Use after build, when the user wants to review/harden a change, resolve review findings, or get a diff ready to ship.
+description: Drive the solve loop on a change — run Claude Code's built-in reviews, triage the findings, and fix them until the acceptance criteria hold. Use after codify, when the user wants to review/harden a change, resolve review findings, or get a diff ready to ship.
 ---
 
 # fix-issue — Stage 4 of the Spark lifecycle

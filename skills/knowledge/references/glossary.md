@@ -1,16 +1,16 @@
-# codify — project glossary (configurable)
+# knowledge — project glossary (configurable)
 
-This is the **vocabulary the crew must preserve verbatim**. Codify reads it before
+This is the **vocabulary the crew must preserve verbatim**. Knowledge reads it before
 writing and never normalizes, expands, or "corrects" a term on this list into
 generic corporate language. Domain language carries meaning; flattening it loses
 the meaning.
 
 ## How this file is used
 
-- Every codify agent consults a glossary before writing. **Resolution order:**
+- Every knowledge agent consults a glossary before writing. **Resolution order:**
   1. A project-local glossary if one exists — `docs/glossary.md`, anything under
-     `docs/glossary/`, or `.codify/glossary.md`. This is the source of truth for
-     the repo codify runs in.
+     `docs/glossary/`, or `.knowledge/glossary.md`. This is the source of truth for
+     the repo knowledge runs in.
   2. This shipped seed (the default) when no project glossary is found.
 - **Forks replace the seed.** Spark is portable; the terms below are *Status26's*
   defaults. In another project, edit this file (or add a project-local glossary)
@@ -27,7 +27,7 @@ the meaning.
   or "the system" to sound neutral.
 - **First use in a doc** may gloss an internal term once (`Zonedock (zd)`), then
   use it bare. Don't re-gloss on every mention.
-- If a term looks wrong or stale, **flag it** in the doc's `## Codify Notes` — do
+- If a term looks wrong or stale, **flag it** in the doc's `## Knowledge Notes` — do
   not silently change canonical vocabulary.
 
 ## Glossary entry format

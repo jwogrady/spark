@@ -8,7 +8,7 @@ description: Turn a framed problem into a feature breakdown and a set of GitHub-
 `Ideate → Plan → Generate → Solve → Ship`
 
 Plan converts a confirmed problem statement into a small set of features, each
-expressed as a GitHub issue that `build` can pick up. The unit of work is a
+expressed as a GitHub issue that `codify` can pick up. The unit of work is a
 feature, not a task list.
 
 ## Do this
@@ -47,4 +47,4 @@ feature, not a task list.
 
 ## Next
 
-Pick an issue and hand it to [`build`](../build/SKILL.md).
+Pick an issue and hand it to [`codify`](../codify/SKILL.md).

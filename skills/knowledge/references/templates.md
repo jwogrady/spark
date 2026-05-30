@@ -1,4 +1,4 @@
-# codify — default doc templates
+# knowledge — default doc templates
 
 The crew writes into these shapes unless the target repo already has a house
 template for that doc type (then match the repo). Every template is markdown.
@@ -130,13 +130,13 @@ An **onboarding** or **role guide** is an SOP whose audience is a new team membe
 
 ---
 
-## Codify Notes (appended to any output, when useful)
+## Knowledge Notes (appended to any output, when useful)
 
 Not a standalone template — a trailer the writing role adds to its doc when there's
 something the reader or the next agent should know:
 
 ```markdown
-## Codify Notes
+## Knowledge Notes
 - **Uncertainty:** <claims that need verification>
 - **Missing context:** <what would make this doc complete>
 - **Suggested location:** <path/filename the librarian recommends>
