@@ -60,11 +60,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 - **Sharpened `review` and `fix-issue` descriptions** so they disambiguate by
   scope — `fix-issue` reviews one change/branch, `review` audits a whole project —
   and cross-reference each other.
+- **Fixed factual drift across docs/meta.** `SECURITY.md` no longer claims a
+  zero attack surface (it ships a Bash CLI + a 1Password secrets path); the
+  `review` how-to no longer tells you to commit the gitignored `.review-notes/`;
+  `reference/cli.md` now documents `list-skills`; and the CLI subcommand list,
+  skill inventory, repo map, and Plan/Generate capability claims are reconciled
+  across `CLAUDE.md`, `ROADMAP.md`, and `CHANGELOG.md`.
 
 ### Added (earlier in the unreleased window)
 
 - Lifecycle skills organized as `Ideate → Plan → Generate → Solve → Ship`:
-  `ideate`, `plan`, `codify`, `fix-issue`, `commit`, `ship`.
+  `ideate`, `plan`, `codify`, `fix-issue`, `ship`.
 - Enforcement: `hooks/hooks.json` PreToolUse guard (`hooks/guard-bash.sh`) that
   blocks force-pushes and pushes to trunk; git hooks `scripts/hooks/commit-msg`
   (conventional + no-AI-attribution + subject rules) and `pre-commit`

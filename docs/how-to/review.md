@@ -59,15 +59,12 @@ Create GitHub issues for:
 
 File out-of-scope findings as backlog items.
 
-## 6. Archive the review
+## 6. Capture what's durable
 
-Commit `.review-notes/` to git. This creates a milestone snapshot: you can compare
-audits over time to track project evolution.
+`.review-notes/` is disposable process exhaust — it is gitignored and never
+committed. Before moving on, capture anything worth keeping: file the critical
+risks as GitHub issues and fold durable findings into committed docs. The notes
+themselves are regenerated on the next audit.
 
-```bash
-git add .review-notes/
-git commit -m "review: comprehensive audit [date]"
-```
-
-**Done when** the final report is committed, critical risks are triaged into issues,
-and the team has reviewed and discussed findings.
+**Done when** the critical risks are triaged into issues, and the team has
+reviewed and discussed the findings.

@@ -18,6 +18,12 @@ Validates the Spark layout and reports health. Checks:
 Exit code is non-zero if any error is found. JSON validation uses `jq` or
 `python3` if present, and is skipped (not failed) if neither is available.
 
+## `spark list-skills`
+
+Lists every available skill with its one-line description, read from each
+`skills/<name>/SKILL.md` frontmatter — a quick inventory of what the plugin
+provides.
+
 ## `spark new-skill <name>`
 
 Scaffolds `skills/<name>/SKILL.md` with a frontmatter stub. Refuses to overwrite
