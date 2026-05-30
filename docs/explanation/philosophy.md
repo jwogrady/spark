@@ -1,9 +1,11 @@
 # Philosophy
 
-This is the *values* layer for Spark. The ADRs (`docs/adr/0001..0003`) are the
-*decisions* layer; this document explains what Spark stands for and the future it
-argues for. Every principle below ties back to a shipped feature — no untethered
-manifesto.
+**AI-assisted dev is fast and loose by default. Spark calls that a bug, not a
+feature — and answers it with a mechanical system that makes the right thing easy
+and the wrong thing hard.**
+
+> *The values layer. The ADRs (`docs/adr/0001..0003`) are the decisions layer;
+> every principle below ties back to a shipped feature — no untethered manifesto.*
 
 ## The problem Spark refuses to accept
 
