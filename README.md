@@ -1,18 +1,19 @@
 # Spark
 
-**Turn raw project intent into durable GitHub artifacts — in one portable toolkit.**
+> **`$ spark` — one rig. every repo. zero drift. ▌**
 
 ![version](https://img.shields.io/badge/version-0.2.0-blue)
 ![maintained](https://img.shields.io/badge/maintained-yes-brightgreen)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
-Spark is a portable project-inception and software-delivery system built on Claude
-Code, shipped as a plugin. Install it once and every project gets the same
-versioned lifecycle — Ideate → Plan → Generate → Solve → Ship — plus enforcement
-hooks that keep your work clean: mechanical guardrails block force-pushes and trunk
-commits, a `spark` CLI validates your artifacts, and real agent personas collaborate
-through shared notes to glow up your docs. No runtime dependencies, no reinvention,
-one versioned toolkit with less drift.
+Raw idea in, durable GitHub artifacts out. Spark is a Claude Code plugin that
+carries one lifecycle — **Ideate → Plan → Generate → Solve → Ship** — into every
+repo you crack open.
+
+Install it once and the rails come with you: a PreToolUse guard kills force-pushes
+and trunk commits *before* Claude can fumble, a `commit-msg` hook rejects sloppy
+commits, and `spark doctor` audits the whole rig. Eleven skills, two agent crews,
+zero runtime deps. No reinvention, no drift.
 
 ```mermaid
 flowchart LR
