@@ -29,7 +29,7 @@ A plugin cannot bundle a full `settings.json` (only `agent` and
 `subagentStatusLine` keys are honored), and git hooks are not a plugin primitive.
 So two pieces ship differently:
 
-- **Permission baseline** → a `setup` how-to that merges into your own settings.
+- **Permission baseline** → [the install how-to](../how-to/install.md) merges it into your own settings.
 - **Git hooks** (`commit-msg`, `pre-commit`) → installed by `spark install-git-hooks`.
 
 This split is deliberate: the plugin enforces the *Claude-driven* path

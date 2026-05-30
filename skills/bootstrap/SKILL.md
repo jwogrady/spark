@@ -30,8 +30,7 @@ Concrete per-framework commands and quality-gate defaults live in
    `uv run …`) and confirm it works before moving on. If it fails, report the
    output plainly; don't paper over it.
 6. **Layer Spark on top:**
-   - Generate `CLAUDE.md` and `AGENTS.md` ([`claude-md`](../claude-md/SKILL.md),
-     [`agents-md`](../agents-md/SKILL.md)).
+   - Generate `CLAUDE.md` and `AGENTS.md` with [`agents-md`](../agents-md/SKILL.md).
    - Install the git hooks: `spark install-git-hooks`.
    - Connect services and secrets with [`connect`](../connect/SKILL.md).
    - Land at [`ideate`](../ideate/SKILL.md).
