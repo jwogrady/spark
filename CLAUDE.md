@@ -56,6 +56,7 @@ AGENTS.md               # tool-agnostic agent guide (maintained by agents-md ski
 | Solve | `fix-issue` | Orchestrate built-in reviews, then fix |
 | Ship | `commit`, `ship` | Conventional commit, then a focused PR |
 | Ship+ | `docit` | Glow up the public docs through author personas |
+| Knowledge | `codify` | Capture internal knowledge (decisions, systems, processes) through an author crew |
 
 ## Development Workflow
 
