@@ -28,3 +28,5 @@ Two different needs that used to be tangled together:
 They no longer compete. You can use the plugin in any existing project without
 forking anything; you use `fork-init` only when you're starting a project from
 scratch and want Spark's templates as the seed.
+
+See also the dated decision record: [../adr/0002-additive-to-anthropic-spec.md](../adr/0002-additive-to-anthropic-spec.md).

@@ -39,3 +39,5 @@ silent addition.
 Shipped work that reveals a new problem doesn't get bolted onto the current PR —
 it starts again at Ideate. That's what makes this a lifecycle and not a
 checklist.
+
+See also the architecture map: [../architecture/spark-internals.md](../architecture/spark-internals.md).

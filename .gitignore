@@ -12,6 +12,10 @@ dist/
 # Claude Code local settings (intentionally not committed)
 .claude/settings.local.json
 
+# codify scratch — per-role working notes and editor log. Process exhaust, not
+# product; the published docs and their git history are the durable record.
+.codify-notes/
+
 # Override global gitignore — VS Code workspace config is intentionally tracked
 # in this repo as a template for downstream projects.
 !.vscode/

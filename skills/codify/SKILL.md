@@ -46,8 +46,9 @@ that hides an unknown is worse than a rough one that names it.
 7. **Show the diff first** — for any overwrite of an existing doc, present the diff
    and get a go-ahead before writing.
 8. **Commit through the lifecycle** — hand the result to [`commit`](../commit/SKILL.md)
-   and [`ship`](../ship/SKILL.md). Archive `.codify-notes/` so the reasoning is
-   recoverable.
+   and [`ship`](../ship/SKILL.md). Commit only the published docs; keep
+   `.codify-notes/` out of the repo (gitignore it). The scratch is process exhaust —
+   the docs and their git history are the durable record of the reasoning.
 
 The full phase-by-phase orchestration — which agents run in each phase, the
 routing table, and the barriers — is in
@@ -84,8 +85,9 @@ Each role is a real subagent; its full spec lives in its definition under
 - **Glossary entries** and a **knowledge map** of cross-links (Librarian).
 - **"What we learned" summaries, implementation notes, README/section rewrites,
   release/changelog notes** (Editor, from any of the above).
-- `.codify-notes/` — the per-role working notes and editor log (archive, don't
-  treat as the published doc).
+- `.codify-notes/` — the per-role working notes and editor log. Scratch, not
+  product: gitignore it, never commit it. The published docs and their change
+  history are the durable record.
 
 Default templates for each live in
 [`references/templates.md`](references/templates.md).
