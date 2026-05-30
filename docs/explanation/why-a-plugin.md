@@ -20,7 +20,7 @@ single plugin can bundle nearly the whole toolkit:
 
 You install once (`/plugin marketplace add jwogrady/spark` → `/plugin install spark`)
 and every project gets the same versioned toolkit. Commands are namespaced
-(`/spark:commit`), which is a feature: it never collides with a project's own
+(`/spark:ship`), which is a feature: it never collides with a project's own
 skills and it's obvious where the command came from.
 
 ## What a plugin can't carry — and how Spark handles it

@@ -22,7 +22,7 @@ Ideate → Plan → Generate → Solve → Ship
 ```
 
 Each stage is a skill (`/spark:ideate`, `/spark:plan`, `/spark:codify`,
-`/spark:fix-issue`, `/spark:commit`, `/spark:ship`), backed by enforcement hooks
+`/spark:fix-issue`, `/spark:ship`), backed by enforcement hooks
 and a small `spark` CLI. See [explanation/sdlc-doctrine.md](explanation/sdlc-doctrine.md)
 for why this is the spine.
 

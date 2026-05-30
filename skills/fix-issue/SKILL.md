@@ -1,6 +1,6 @@
 ---
 name: fix-issue
-description: Drive the solve loop on a change — run Claude Code's built-in reviews, triage the findings, and fix them until the acceptance criteria hold. Use after codify, when the user wants to review/harden a change, resolve review findings, or get a diff ready to ship.
+description: Review and harden one change — run Claude Code's built-in /code-review and /security-review on the current branch's diff, triage the findings, and fix them until the issue's acceptance criteria hold. Use after codify to harden a single change/branch/PR, resolve review findings, or get a diff ready to ship. For a whole-codebase audit rather than one diff, use review instead.
 ---
 
 # fix-issue — Stage 4 of the Spark lifecycle
@@ -36,4 +36,4 @@ ones, then drives the fixes.
 
 ## Next
 
-When the criteria hold, go to [`commit`](../commit/SKILL.md).
+When the criteria hold, go to [`ship`](../ship/SKILL.md).

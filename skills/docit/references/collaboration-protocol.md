@@ -12,11 +12,12 @@ of the team runs concurrently and reconciles through a cross-evaluation round.
 
 ## Who orchestrates
 
-**The skill — the main loop — is the sole orchestrator.** A subagent cannot spawn
-another subagent, so every dispatch and every barrier is the main loop's job. It
-launches each phase's agents (in parallel where the phase allows), waits for them
-to return, then launches the next phase. The agents never call each other; they
-coordinate only through the shared notes on disk.
+The skill — the main loop — is the sole orchestrator: a subagent cannot spawn
+another, so every dispatch and barrier is the main loop's job, and the agents
+coordinate only through shared notes on disk, never by calling each other. That
+general pattern is documented once in
+[the architecture map](../../../docs/architecture/spark-internals.md#the-subagent-orchestration-pattern);
+below is what's specific to `docit`.
 
 A persona is **dispatched fresh once per phase it takes part in** — there is no
 long-lived agent that drafts, waits, then cross-evals. The agent *definition* under
@@ -210,7 +211,7 @@ and triage on GitHub (keep/close) remains theirs.
   The leader **files** but never **closes or comments** — that triage is the
   human's, per Spark's GitHub guardrails. If `gh`/remote is unavailable, the issues
   stay in `13-proposed-issues.md` for manual filing.
-- Archive `.docit-notes/` (commit it) so the reasoning behind the docs — drafts,
-  cross-eval feedback, revisions, and the issue proposals — is recoverable and the
-  next glow-up can build on it.
-- Hand the docs change to `commit` and `ship` to land it through the lifecycle.
+- `.docit-notes/` is scratch — gitignored, not committed. It holds the reasoning
+  behind the docs (drafts, cross-eval feedback, revisions, issue proposals) for the
+  duration of a run; the published docs and their git history are the durable record.
+- Hand the docs change to [`ship`](../../ship/SKILL.md) to commit and open a PR.

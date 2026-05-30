@@ -54,7 +54,7 @@ AGENTS.md               # tool-agnostic agent guide (maintained by agents-md ski
 | Plan | `plan` | Decompose into GitHub issues + milestone |
 | Generate | `codify` | Implement one issue on a feature branch |
 | Solve | `fix-issue` | Orchestrate built-in reviews, then fix |
-| Ship | `commit`, `ship` | Conventional commit, then a focused PR |
+| Ship | `ship` | Conventional commit, then a focused PR |
 | Ship+ | `docit` | Glow up the public docs through author personas |
 | Knowledge | `knowledge` | Capture internal knowledge (decisions, systems, processes) through an author crew |
 

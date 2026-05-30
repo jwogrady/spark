@@ -10,13 +10,17 @@ dispatches only the specialists that doc type needs, and the editor synthesizes.
 
 ## Who orchestrates
 
-**The skill — the main loop — is the sole orchestrator.** A subagent cannot spawn
-another subagent, so every dispatch and every barrier is the main loop's job. The
-agents never call each other; they coordinate only through shared notes in
-`.knowledge-notes/`. A role is **dispatched fresh once per phase it takes part in** —
-the agent definition under `agents/knowledge/` holds the durable identity; the
-orchestrator's per-dispatch brief names the phase and (for the editor) whether the
-doc is internal or external.
+The skill — the main loop — is the sole orchestrator: a subagent cannot spawn
+another, so every dispatch and barrier is the main loop's job, and the agents
+coordinate only through shared notes in `.knowledge-notes/`, never by calling each
+other. That general pattern is documented once in
+[the architecture map](../../../docs/architecture/spark-internals.md#the-subagent-orchestration-pattern);
+below is what's specific to `knowledge`.
+
+A role is **dispatched fresh once per phase it takes part in** — the agent
+definition under `agents/knowledge/` holds the durable identity; the orchestrator's
+per-dispatch brief names the phase and (for the editor) whether the doc is internal
+or external.
 
 ---
 
@@ -126,7 +130,7 @@ that hides an unknown is worse than a slightly rough one that names it.
 - Final docs land in the repo (`docs/…`), not in `.knowledge-notes/`.
 - The editor presents a diff and waits for go-ahead before overwriting an existing
   doc.
-- Archive `.knowledge-notes/` (commit it) so the reasoning — intake, drafts,
-  feedback, the editor log — is recoverable and the next capture builds on it.
-- Hand the change to [`commit`](../../commit/SKILL.md) and
-  [`ship`](../../ship/SKILL.md) to land it through the lifecycle.
+- `.knowledge-notes/` is scratch — gitignored, not committed. It holds the
+  reasoning (intake, drafts, feedback, the editor log) for the duration of a run;
+  the published docs and their git history are the durable record.
+- Hand the change to [`ship`](../../ship/SKILL.md) to commit and open a PR.

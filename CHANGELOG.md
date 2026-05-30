@@ -50,6 +50,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
   Editor-in-Chief tallies the ranked slate and files it for the human to triage,
   but never closes or comments. Enforces an honest-hype contract: no claim ships
   without a citation to ground truth.
+- **De-duplicated the multi-agent orchestration pattern.** The "main loop is the
+  sole orchestrator; agents coordinate only through shared notes" mechanics were
+  stated in three places (`docit` + `knowledge` collaboration protocols and the
+  architecture map). The architecture map is now the single source; the protocol
+  files keep a brief self-contained summary and point to it. Fixed the protocols'
+  stale "archive (commit it)" guidance for `.docit-notes/` / `.knowledge-notes/`,
+  which contradicted the new gitignore.
+- **Sharpened `review` and `fix-issue` descriptions** so they disambiguate by
+  scope — `fix-issue` reviews one change/branch, `review` audits a whole project —
+  and cross-reference each other.
 
 ### Added (earlier in the unreleased window)
 
@@ -78,6 +88,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
   all skill scratch dirs (incl. `.knowledge-notes/`) to `.gitignore` alongside
   `.codify-notes/`. Skills recreate these dirs at runtime; they no longer ship
   with the plugin.
+- **`commit` skill — folded into `ship`.** The Ship stage was split across two
+  tiny skills (`commit` = 5a, `ship` = 5b); they are now one `ship` skill that
+  owns commit + push + PR. Removes a selection ambiguity and drops the lifecycle
+  skill count from 12 to 11. All references updated across skills and docs.
 
 ### Kept
 

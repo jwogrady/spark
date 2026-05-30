@@ -78,9 +78,10 @@ go in the README. Excitement is earned by what the project does, not invented.
 9. **Review the diff before it lands** — public docs are outward-facing. Show the
    user the proposed `README.md` and companion docs (or a diff against existing
    ones) and get a go-ahead before overwriting anything.
-10. **Commit through the lifecycle** — hand the result to [`commit`](../commit/SKILL.md)
-    and [`ship`](../ship/SKILL.md). Archive `.docit-notes/` so the reasoning is
-    recoverable.
+10. **Ship through the lifecycle** — hand the result to [`ship`](../ship/SKILL.md)
+    to commit and open a PR. Commit only the published docs; keep `.docit-notes/`
+    out of the repo (gitignore it). The scratch is process exhaust — the docs and
+    their git history are the durable record of the reasoning.
 
 ## The author personas
 

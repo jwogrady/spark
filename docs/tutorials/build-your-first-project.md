@@ -47,8 +47,8 @@ relevant), then `verify` to actually run the thing. Fix what it finds.
 
 ## 5. Ship
 
-Type `/spark:commit` — write a conventional message (no AI attribution; the hook
-enforces it). Then `/spark:ship` — it pushes and opens the PR linking your issue.
+Type `/spark:ship` — write a conventional message (no AI attribution; the hook
+enforces it), then push and open the PR linking your issue.
 
 > You learned: the guardrails are mechanical. Try `git push --force` and watch
 > the guard stop you.
