@@ -7,10 +7,13 @@ This guide applies to any AI coding agent working in this repo, regardless of to
 
 ## What This Repo Is
 
-Spark is a Claude Code **plugin** — a portable, GitHub-native software-development
-toolkit. It bundles lifecycle skills, enforcement hooks, and a `spark` CLI that
-ship to every project where the plugin is installed. It is additive: it reuses
-Claude Code's built-in tools rather than reinventing them.
+Spark is a portable project-inception and software-delivery system for
+AI-assisted development. It turns raw project intent into durable repo artifacts,
+scoped GitHub issues, implementation branches, reviews, commits, and pull
+requests. The methodology is portable; the current implementation ships as a
+Claude Code plugin that bundles lifecycle skills, enforcement hooks, and a
+`spark` CLI. It is additive: it reuses Claude Code's built-in tools rather than
+reinventing them.
 
 ## Core Rules
 
