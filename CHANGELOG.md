@@ -8,19 +8,50 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+> Plugin version remains `0.2.0`; these changes are unreleased on the current
+> branch. No version bump has been made.
+
+### Added
+
+- **`codify` crew — internal-knowledge capture.** New skill `skills/codify/SKILL.md`
+  runs 6 specialist agents (`agents/codify/00-intake` through `05-editor`) to
+  capture architectural decisions, processes, and a glossary. It is the inward-facing
+  counterpart to `docit`: real plugin subagents with tiered models and scoped tools,
+  coordinating through a dedicated `.codify-notes/` scratch directory (separate from
+  `docit`'s `.docit-notes/`, and kept out of the repo). `codify` runs alongside
+  `docit`; it does not replace it.
+- **`review` skill — multi-agent project audit.** `skills/review/SKILL.md` runs 8
+  specialist agents plus a Synthesis Lead to audit a project, for use in the Solve
+  stage.
+- **MIT license adopted.** `LICENSE` now carries the full MIT License text
+  (Copyright © 2026 `jwogrady`), matching the `plugin.json` manifest. Resolves the
+  prior `LICENSE` ↔ manifest mismatch.
+
 ### Changed
 
 - **Spark is now a Claude Code plugin.** The document-only `.spark/` layer is
   replaced by a plugin packaged at the repo root (`.claude-plugin/plugin.json` +
   `marketplace.json`). Install via `/plugin marketplace add jwogrady/spark` →
-  `/plugin install spark`.
+  `/plugin install spark` (verified today from a local clone or Git URL; the
+  published-marketplace listing is a v0.2 open item — see `ROADMAP.md`).
 - Skills moved from `.spark/skills/` to `skills/` and are now namespaced
   `/spark:<name>`.
 - Documentation reorganized to Diátaxis under `docs/`.
 - `CLAUDE.md`, `AGENTS.md`, `README.md`, `ROADMAP.md` rewritten for the plugin +
-  lifecycle model (no longer "runtime not implemented").
+  lifecycle model.
+- Skill `docit` — multi-persona public-docs glow-up. The author personas run as
+  **real plugin subagents** under `agents/docit/` with tiered models and scoped
+  tools. Because a subagent cannot spawn another, the skill orchestrates every
+  dispatch and barrier, and the agents coordinate only through `.docit-notes/`.
+  Personas draft in parallel, cross-evaluate their dependency-graph neighbors, and
+  revise before an Editor-in-Chief assembles the docs. In a Phase-4 Issue Council
+  the personas nominate, debate, and vote on the gaps they found; the Cartographer
+  can veto anything that would overclaim and the human breaks every deadlock. The
+  Editor-in-Chief tallies the ranked slate and files it for the human to triage,
+  but never closes or comments. Enforces an honest-hype contract: no claim ships
+  without a citation to ground truth.
 
-### Added
+### Added (earlier in the unreleased window)
 
 - Lifecycle skills organized as `Ideate → Plan → Generate → Solve → Ship`:
   `ideate`, `plan`, `build`, `fix-issue`, `commit`, `ship`.
@@ -28,35 +59,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
   blocks force-pushes and pushes to trunk; git hooks `scripts/hooks/commit-msg`
   (conventional + no-AI-attribution + subject rules) and `pre-commit`
   (no commit on trunk).
-- `bin/spark` CLI: `doctor`, `new-skill`, `install-git-hooks`. `doctor` validates
-  the plugin layout, skill frontmatter, and every agent definition under `agents/`.
-- Skill `bootstrap` — runtime scaffold for new projects via the official
-  scaffolder, defaulting to Bun for TypeScript and uv for Python; verifies the
-  scaffold runs, then wires it into Spark (CLAUDE.md, git hooks, connect, ideate).
-- Skill `connect` — connectivity & secrets bootstrap for GitHub/GCP/Vultr/Linode
-  via 1Password (`op`): capture → ingest (propose-confirm `op item create`) →
-  verify → shred → `op run` injection. Encourages per-project keys.
+- `bin/spark` CLI: `doctor`, `list-skills`, `new-skill`, `install-git-hooks`,
+  `shred-env`, `help`. `doctor` validates plugin layout, skill frontmatter, and
+  every agent definition under `agents/`.
+- Skill `bootstrap` — runtime scaffold for new projects, defaulting to Bun for
+  TypeScript and uv for Python; verifies the scaffold runs, then wires it into Spark.
+- Skill `connect` — connectivity & secrets bootstrap via 1Password (`op`):
+  capture → ingest → verify → shred → `op run` injection.
 - `bin/spark shred-env <file>` + `scripts/shred-env.sh` — secure-delete of
   transient secrets files, with verification; refuses to touch `*.tmpl`.
-- Skill `docit` — multi-persona docs glow-up. The author personas (Cartographer,
-  Skimmer, Adopter, Skeptic, Evaluator, Believer, Coach, Contributor, Visual
-  Storyteller, Returning User, Discoverer/SEO, Amplifier, Editor-in-Chief) run as
-  **real plugin subagents** defined under `agents/docit/` (`spark:docit:<name>`,
-  with tiered models and scoped tools). The `docit` skill orchestrates them:
-  because a subagent can't spawn another, the main loop does every dispatch and
-  barrier, and the agents coordinate only through `.docit-notes/`. Personas
-  draft in parallel, cross-evaluate their dependency-graph neighbors, and revise
-  before an Editor-in-Chief pass assembles `README.md`, `docs/PHILOSOPHY.md`, the
-  [Diátaxis](https://diataxis.fr/) docs tree (tutorials/how-to/reference/
-  explanation), `CHANGELOG.md`, and `docs/launch-copy.md`. In a Phase-4 **Issue
-  Council** the personas nominate, debate, and vote (admission + priority) on the
-  gaps the team found; the Cartographer can veto anything that would overclaim and
-  the human breaks every deadlock. As chair, the Editor-in-Chief tallies the ranked
-  slate and files it as `proposed`-labeled GitHub issues (recorded in
-  `13-proposed-issues.md`) for the human to triage — kept issues flow to `plan`,
-  closing the loop back to the Plan stage. The leader files but never closes or
-  comments. Enforces an honest-hype contract: no claim ships without a citation to
-  ground truth. Ship-stage amplifier.
 
 ### Removed
 

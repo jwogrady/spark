@@ -26,6 +26,17 @@ Each stage is a skill (`/spark:ideate`, `/spark:plan`, `/spark:build`,
 and a small `spark` CLI. See [explanation/sdlc-doctrine.md](explanation/sdlc-doctrine.md)
 for why this is the spine.
 
+## Understanding Spark
+
+The *why* behind the build — read these to grasp the worldview and the design
+choices (Explanation mode):
+
+- [explanation/philosophy.md](explanation/philosophy.md) — what Spark stands for and the doctrine behind the rules
+- [explanation/enforcement-model.md](explanation/enforcement-model.md) — why enforcement is mechanical, not advisory
+- [explanation/sdlc-doctrine.md](explanation/sdlc-doctrine.md) — why the five-stage lifecycle is the spine
+- [explanation/scope-and-upstream.md](explanation/scope-and-upstream.md) — what Spark adds and what it leaves to Anthropic's spec
+- [explanation/why-a-plugin.md](explanation/why-a-plugin.md) — why Spark ships as a plugin, not a framework
+
 ## Architecture & decisions
 
 How the layers fit together, and the dated record of why Spark is built this way:

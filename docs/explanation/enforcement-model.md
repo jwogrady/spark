@@ -1,0 +1,85 @@
+# The enforcement model
+
+*Why Spark enforces its rules mechanically instead of writing them down and hoping.*
+
+This is the rationale behind [Principle 1 of the philosophy](philosophy.md) —
+"enforcement over aspiration." It explains a design choice, not a procedure; for
+the exact hook wiring and exit codes, see the
+[hooks reference](../reference/hooks.md) and
+[ADR 0003](../adr/0003-zero-dependency-bash-and-enforcement-hooks.md).
+
+## The problem with advisory rules
+
+Every team already knows the rules: write conventional commits, don't push to
+trunk, don't force-push a shared branch, keep AI ghostwriting out of the
+attribution. These live in a `CONTRIBUTING.md` or a wiki page, and they are
+*advisory* — they describe what you should do and rely on memory, discipline, and
+review to make it happen.
+
+Advisory rules fail in a predictable way: they are easy to state and easy to skip,
+and they get skipped exactly when it matters most — late at night, mid-incident,
+or when an AI agent is moving faster than the human reviewing it. A rule that is
+only written down is a rule that is optional under pressure. The cost of breaking
+it is paid later, by someone else, in a messy history or a license violation that
+nobody chose on purpose.
+
+AI-assisted development makes this worse, not better. The model will happily
+force-push, commit to `main`, or sign a commit "Co-Authored-By: an AI" if asked —
+it has no standing intent to uphold your conventions. The faster the loop, the more
+a purely advisory rule leaks.
+
+## The choice: make the wrong thing hard
+
+Spark's answer is to move the rules from prose into code that runs at the moment
+the rule would be broken, and refuses. The rule is no longer a thing you remember;
+it is a thing the system enforces. Two distinct mechanisms cover two distinct
+surfaces:
+
+**1. A PreToolUse guard, for AI-mediated git actions.** `hooks/guard-bash.sh` runs
+*before* Claude Code executes a Bash command. It inspects the command and exits
+non-zero — blocking the action before it happens — for two cases: a force-push
+without `--force-with-lease`, and a push to `master`/`main`. The safer
+`--force-with-lease` is deliberately allowed. This catches the agent before it
+acts, not after.
+
+**2. Git hooks, for every commit regardless of who makes it.** Installed per repo
+via `spark install-git-hooks`:
+- `commit-msg` rejects a message that isn't a conventional commit, violates the
+  subject rules, or carries an AI co-author trailer — before the commit lands in
+  history.
+- `pre-commit` blocks a direct commit to `master`/`main`.
+
+These run for *any* commit in the repo — human, agent, or script — because they
+live in git itself, below the level of whoever invoked the commit.
+
+**3. `spark doctor`, for the artifacts themselves.** Where the hooks gate actions,
+`spark doctor` validates state on demand: plugin layout, manifest and hook JSON,
+and every skill's and agent's frontmatter. It is the check you can run before you
+push to know the plugin is well-formed.
+
+## Why this is the right trade, and where it stops
+
+Mechanical enforcement costs more up front — you write and test a hook instead of a
+bullet point — and it buys something prose cannot: the guarantee holds even when
+discipline doesn't. "Aspiration lives in READMEs; enforcement lives in `hooks/` and
+`scripts/hooks/`."
+
+Two honest boundaries:
+
+- **Enforcement is not the same as quality assurance.** The hooks cover commit
+  conventions, trunk discipline, force-push safety, attribution honesty, and
+  artifact well-formedness. They do **not** test that a skill behaves correctly.
+  CI and automated regression on skill behavior are a known gap at v0.2.0; the
+  mechanical model is the intentional quality mechanism for a Bash/Markdown
+  project, not a complete one.
+- **The git hooks are opt-in per repo.** The PreToolUse guard works as soon as the
+  plugin is installed, but the `commit-msg`/`pre-commit` hooks only protect a repo
+  after `spark install-git-hooks` has run there. Enforcement you didn't install is
+  back to being advisory.
+
+## See also
+
+- [Philosophy](philosophy.md) — the values layer this rationale supports.
+- [Hooks reference](../reference/hooks.md) — exact wiring, exit codes, and behavior.
+- [ADR 0003](../adr/0003-zero-dependency-bash-and-enforcement-hooks.md) — the
+  decision to implement enforcement as zero-dependency Bash hooks.
