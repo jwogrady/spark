@@ -35,11 +35,12 @@ reuses Claude Code's built-in tools (`/code-review`, `/security-review`,
 ├── plugin.json         # plugin manifest
 └── marketplace.json    # makes this repo git-installable as a marketplace
 skills/<name>/SKILL.md  # lifecycle skills + carried-over skills
+agents/<crew>/*.md      # real subagents for the docit + knowledge crews
 hooks/
 ├── hooks.json          # PreToolUse wiring
 └── guard-bash.sh       # blocks force-push and pushes to trunk
 scripts/hooks/          # git hook sources (commit-msg, pre-commit)
-bin/spark               # the CLI (doctor, new-skill, install-git-hooks)
+bin/spark               # the CLI (doctor, list-skills, new-skill, install-git-hooks, shred-env)
 docs/                   # documentation, organized by Diátaxis
 .github/                # PR + issue templates (the plan skill uses these)
 CLAUDE.md               # this file (maintained by the agents-md skill)
@@ -51,12 +52,16 @@ AGENTS.md               # tool-agnostic agent guide (maintained by agents-md ski
 | Stage | Skill | Job |
 |---|---|---|
 | Ideate | `ideate` | Frame the problem in writing (uses the native `grill-me`) |
-| Plan | `plan` | Decompose into GitHub issues + milestone |
-| Generate | `codify` | Implement one issue on a feature branch |
+| Plan | `plan` | Decompose into scoped work items + a milestone scaffold (issue generation is a v0.3 goal) |
+| Generate | `codify` | Implement one work item on a feature branch |
 | Solve | `fix-issue` | Orchestrate built-in reviews, then fix |
 | Ship | `ship` | Conventional commit, then a focused PR |
 | Ship+ | `docit` | Glow up the public docs through author personas |
 | Knowledge | `knowledge` | Capture internal knowledge (decisions, systems, processes) through an author crew |
+
+Four supporting skills round out the set (11 total): `agents-md` (maintains
+`CLAUDE.md` + `AGENTS.md`), `bootstrap` (scaffold a project runtime), `connect`
+(services + secrets via 1Password), and `review` (multi-agent project audit).
 
 ## Development Workflow
 

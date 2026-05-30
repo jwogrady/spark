@@ -17,7 +17,7 @@ Spark becomes a Claude Code plugin organized around the
 - [x] Supporting skills: `agents-md`, `bootstrap`, `connect`, `review`, `docit`, `knowledge`
 - [x] Enforcement: PreToolUse guard (force-push / push-to-trunk) + git hooks
       (`commit-msg`, `pre-commit`)
-- [x] `spark` CLI: `doctor`, `new-skill`, `install-git-hooks`
+- [x] `spark` CLI: `doctor`, `list-skills`, `new-skill`, `install-git-hooks`, `shred-env`
 - [x] Documentation reorganized to Diátaxis
 - [ ] Validate install end-to-end from a published marketplace
 
