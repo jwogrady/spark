@@ -112,9 +112,14 @@ Detailed mission, tasks, required reads, outputs, and handoff notes for each age
 
 ## Agent 03 — Code Quality Reviewer
 
-**Mission:** Inspect code readability, style consistency, and maintainability.
+**Mission:** Inspect code readability, style consistency, and maintainability —
+*on top of* Claude Code's native `/code-review`, never re-running its analysis.
 
 **Tasks:**
+- **Delegate to native first.** Run Claude Code's built-in `/code-review` for
+  correctness bugs and reuse/simplification/efficiency findings, and carry its
+  results into your report rather than re-deriving them by hand. Then add only the
+  dimensions native review does not focus on (below).
 - Run linter (ESLint, Ruff, Clippy, etc.) and document violations.
 - Assess code formatting (consistent indentation, naming conventions).
 - Check complexity metrics (cyclomatic, cognitive; flag high-complexity functions).
@@ -186,9 +191,14 @@ Detailed mission, tasks, required reads, outputs, and handoff notes for each age
 
 ## Agent 05 — Security & Configuration Reviewer
 
-**Mission:** Protect user data, secrets, and system integrity.
+**Mission:** Protect user data, secrets, and system integrity — *on top of* Claude
+Code's native `/security-review`, never re-running its analysis.
 
 **Tasks:**
+- **Delegate to native first.** Run Claude Code's built-in `/security-review` for
+  the core vulnerability pass (injection, auth, input validation, CVEs), and carry
+  its results into your report rather than re-deriving them. Then add the
+  configuration and secrets-lifecycle dimensions it does not cover (below).
 - Check for secrets in code or config (API keys, passwords, tokens).
 - Review authentication/authorization (is access controlled?).
 - Assess input validation (are user inputs sanitized?).
