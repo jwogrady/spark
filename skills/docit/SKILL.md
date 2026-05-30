@@ -1,18 +1,27 @@
 ---
-name: docsmith
+name: docit
 description: Generate or refresh a repo's public-facing docs (README, philosophy/motivation, positioning, launch copy) by writing through a cast of author personas, then assembling them with an Editor-in-Chief. Use when you want to "glow up" a repo to attract GitHub stars, write or rewrite the README, articulate the project's philosophy, or produce launch/marketing copy aimed at developers.
 ---
 
-# docsmith — multi-persona docs & glow-up
+# docit — multi-persona docs & glow-up
 
-`docsmith` writes the documents that decide whether a developer stars a repo or
+`docit` writes the documents that decide whether a developer stars a repo or
 scrolls past. It treats the README and its companion docs as a marketing surface
 with a job: turn a curious dev into an adopter. To do that it runs a **team of
-author personas** — each persona owns one section through a distinct perspective
-(the Skimmer's first impression, the Adopter's zero-to-value run, the Skeptic's
-"why not the raw tool") — who draft in parallel, **evaluate each other's related
-work**, fold the feedback back in, and hand a single **Editor-in-Chief** the job
-of fusing it all into honest, high-energy docs in one voice.
+author personas** — each a **real subagent** that owns one section through a
+distinct perspective (the Skimmer's first impression, the Adopter's zero-to-value
+run, the Skeptic's "why not the raw tool") — who draft in parallel, **evaluate
+each other's related work**, fold the feedback back in, and hand a single
+**Editor-in-Chief** the job of fusing it all into honest, high-energy docs in one
+voice.
+
+The personas are plugin agents under
+[`agents/docit/`](../../agents/docit/) (registered as
+`spark:docit:<name>`). **This skill is their orchestrator:** because a subagent
+can't spawn another subagent, the main loop does every dispatch and enforces every
+barrier, while the agents coordinate only through shared notes in `.docit-notes/`.
+A persona is dispatched **fresh once per phase** it takes part in — its agent
+definition holds the durable identity, the orchestrator's brief names the phase.
 
 The pattern borrows [`review`](../review/SKILL.md)'s shared-notes mechanism but
 is **not strictly sequential**. Only the Cartographer's ground truth is a hard
@@ -20,9 +29,9 @@ barrier; after that the team works as a multi-phase process — parallel drafts 
 cross-evaluation against each persona's dependency-graph neighbors → revise in
 place → synthesis. The dependency graph is what keeps parallel drafts consistent:
 each persona reconciles with the personas it reads and the personas that read it.
-Each persona's spec lives in its own file under
-[`references/personas/`](references/personas/); the full phase-by-phase mechanics
-are in [`references/collaboration-protocol.md`](references/collaboration-protocol.md).
+The full phase-by-phase orchestration — which agents to dispatch in each phase, in
+parallel, with barriers between — is in
+[`references/collaboration-protocol.md`](references/collaboration-protocol.md).
 
 ## The one rule
 
@@ -32,16 +41,18 @@ go in the README. Excitement is earned by what the project does, not invented.
 
 ## Do this
 
-1. **Trigger the glow-up** — invoke `/spark:docsmith` from the repo root when you
+1. **Trigger the glow-up** — invoke `/spark:docit` from the repo root when you
    need to write or refresh public docs.
-2. **Ground truth first (barrier)** — the Cartographer (00) reads the repo and
-   writes the verified facts (what it is, the lifecycle, install steps, real
-   differentiators) to `.docsmith-notes/00-ground-truth.md`. Nothing else starts
-   until this exists; every persona cites it.
-3. **Personas draft in parallel** — personas 01–09 draft their sections
-   concurrently into their own files in `.docsmith-notes/`, each working from
-   ground truth plus whatever neighbor drafts already exist. Aggregators 10
-   (Discoverer) and 11 (Amplifier) draft once 01–09 are stable.
+2. **Ground truth first (barrier)** — dispatch the `spark:docit:cartographer`
+   agent alone. It reads the repo and writes the verified facts (what it is, the
+   lifecycle, install steps, real differentiators) to
+   `.docit-notes/00-ground-truth.md`. Nothing else starts until this exists;
+   every persona cites it.
+3. **Personas draft in parallel** — dispatch agents 01–09 concurrently (multiple
+   Agent calls in one turn) with a "Phase 1 — Draft" brief; each writes its section
+   to `.docit-notes/`, working from ground truth plus whatever neighbor drafts
+   already exist. Then dispatch the aggregators 10 (Discoverer) and 11 (Amplifier)
+   once 01–09 are stable.
 4. **Cross-evaluate related work** — each persona reviews its dependency-graph
    **neighbors** (the notes it reads and the personas that read it) and leaves
    targeted feedback on each. The Cartographer fact-checks every draft against
@@ -54,7 +65,7 @@ go in the README. Excitement is earned by what the project does, not invented.
    (in or out) and **priority** (P1/P2/P3). The Cartographer can veto anything that
    would overclaim. The Editor-in-Chief chairs and tallies but does **not** break
    ties — deadlocks are surfaced to you with both sides' arguments, and you decide.
-   The result is a ranked slate in `.docsmith-notes/issue-council.md`.
+   The result is a ranked slate in `.docit-notes/issue-council.md`.
 7. **Editor-in-Chief synthesizes** — persona 12, the team leader, reads every
    revised note, all feedback, and the council outcome, enforces one voice, removes
    duplication, verifies every claim traces back to ground truth, and writes the
@@ -68,14 +79,15 @@ go in the README. Excitement is earned by what the project does, not invented.
    user the proposed `README.md` and companion docs (or a diff against existing
    ones) and get a go-ahead before overwriting anything.
 10. **Commit through the lifecycle** — hand the result to [`commit`](../commit/SKILL.md)
-    and [`ship`](../ship/SKILL.md). Archive `.docsmith-notes/` so the reasoning is
+    and [`ship`](../ship/SKILL.md). Archive `.docit-notes/` so the reasoning is
     recoverable.
 
 ## The author personas
 
 The team works each of these perspectives, drafting in parallel and cross-evaluating
-neighbors. The full spec for each — mission, tasks, neighbors, outputs — lives in
-its own file under [`references/personas/`](references/personas/).
+neighbors. Each is a real subagent; the full spec for each — mission, domain,
+neighbors, per-phase behavior, model, and tools — lives in its own definition under
+[`agents/docit/`](../../agents/docit/) (registered as `spark:docit:<name>`).
 
 - **00 The Cartographer** — ground truth. Reads the repo (README, CLAUDE.md, skills,
   CLI, manifests) and records *only what is real*: purpose, capabilities, the
@@ -127,12 +139,12 @@ its own file under [`references/personas/`](references/personas/).
 - `docs/launch-copy.md` — repo description, topics/keywords, social-preview copy,
   and post-ready hype (SEO + Amplifier).
 - Visual assets / social-preview image (Visual Storyteller).
-- `.docsmith-notes/issue-council.md` — the nominations, debate, and vote tally for
+- `.docit-notes/issue-council.md` — the nominations, debate, and vote tally for
   the next round of work (whole team, Phase 4).
-- `.docsmith-notes/13-proposed-issues.md` — the council's ranked, annotated slate
+- `.docit-notes/13-proposed-issues.md` — the council's ranked, annotated slate
   (Editor-in-Chief), also filed as `proposed`-labeled GitHub issues for the human
   to triage; kept ones flow to [`plan`](../plan/SKILL.md).
-- `.docsmith-notes/` — the per-persona working notes (archive, don't ship to users).
+- `.docit-notes/` — the per-persona working notes (archive, don't ship to users).
 
 ## Guardrails
 
@@ -153,6 +165,10 @@ its own file under [`references/personas/`](references/personas/).
 - **Parallel with one barrier** — only ground truth blocks; the rest of the team
   drafts and reviews concurrently, and the cross-evaluation round (not strict
   sequencing) is what keeps parallel drafts consistent.
+- **The skill orchestrates; agents don't self-coordinate** — a subagent can't spawn
+  another subagent, so the main loop does every dispatch and every barrier. Agents
+  communicate only through `.docit-notes/`, and each persona is dispatched fresh
+  per phase. Never expect one agent to wait on or call another directly.
 - **The council decides issues, not the leader** — what gets proposed and how high
   it ranks comes from the personas' debate and vote, not a unilateral call. Two
   things sit above the vote: the Cartographer's honest-hype veto, and the human,
@@ -160,14 +176,14 @@ its own file under [`references/personas/`](references/personas/).
   not overrule.
 - **File proposals, never triage them** — the leader files its prioritized issues
   as `proposed`-labeled GitHub issues (`gh issue create`) so the human can evaluate
-  them in GitHub. This is the one place `docsmith` creates issues, and it is its
+  them in GitHub. This is the one place `docit` creates issues, and it is its
   documented contract. It never **closes or comments** — keeping, closing, and
   routing rejects is the human's call, per Spark's GitHub guardrails. No GitHub
   remote or `gh`? The issues stay in `13-proposed-issues.md` for manual filing.
 
 ## Fits the lifecycle
 
-`docsmith` is a **Ship**-stage amplifier: once something real exists and works,
+`docit` is a **Ship**-stage amplifier: once something real exists and works,
 it makes the world want to use it. It also runs standalone whenever the README has
 drifted from reality or a launch is coming. Pair it with [`review`](../review/SKILL.md)
 first — audit the substance, then sell it.
