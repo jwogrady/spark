@@ -3,6 +3,9 @@
   "owner": {
     "name": "jwogrady"
   },
+  "metadata": {
+    "description": "Spark — a portable, GitHub-native SDLC toolkit for Claude Code that carries one opinionated lifecycle (ideate, plan, generate, solve, ship) into every project."
+  },
   "plugins": [
     {
       "name": "spark",
