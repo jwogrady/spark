@@ -81,8 +81,17 @@ AGENTS.md               # tool-agnostic agent guide (maintained by agents-md ski
 - Skills live in `skills/<skill-name>/`.
 - Scaffold a new skill with `spark new-skill <name>`.
 - Each skill needs a `SKILL.md` with `name:` and `description:` frontmatter. The
-  `description` is the only thing Claude sees when choosing the skill — name
-  concrete triggers ("Use when …"). `references/` and `agents/` are optional.
+  `description` is the only thing Claude sees when choosing the skill, so make it
+  earn its place: write in the third person, keep it under 1024 characters, lead
+  with what the skill does, then name concrete triggers ("Use when …"). A vague
+  description ("helps with docs") gives Claude no way to pick it over its peers.
+- Keep `SKILL.md` tight — aim for under ~100 lines. When it outgrows that, or has
+  distinct domains, or carries rarely-needed depth, split the overflow into
+  `references/` (and put real subagents under `agents/`). Both are optional; they
+  are the canonical layout — do not invent `REFERENCE.md`/`EXAMPLES.md` files.
+- Keep references one level deep; don't make Claude chase a chain of links.
+- Add a deterministic helper script only when the operation is mechanical
+  (validation, formatting) and would otherwise be regenerated each run.
 - Skills must be self-contained. No cross-skill imports at runtime.
 - Test a skill in a real project before merging.
 
