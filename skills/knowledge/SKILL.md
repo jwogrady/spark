@@ -56,40 +56,24 @@ routing table, and the barriers — is in
 
 ## The crew
 
-Each role is a real subagent; its full spec lives in its definition under
-[`agents/knowledge/`](../../agents/knowledge/).
+Each role is a real subagent under [`agents/knowledge/`](../../agents/knowledge/)
+(its full spec lives in that definition); the routing table that decides which run
+is in [`references/collaboration-protocol.md`](references/collaboration-protocol.md).
 
-- **00 Intake** — turns messy input into structured source material: topic, facts,
-  assumptions, open questions, decisions, action items, and a recommended doc type.
-  Preserves raw terms; flags contradictions; doesn't over-polish.
-- **01 Architect** — technical docs: system docs, ADRs, service maps, data-model
-  notes, integration/deployment guides. Captures tradeoffs and rejected
-  alternatives, and connects design to product/business intent.
-- **02 Product** — product specs: customer problem, target user, workflow, required
-  data objects, MVP vs later scope, acceptance criteria, launch checklist. Ties
-  features to Status26 brands/modules by their glossary names.
-- **03 Ops** — operational docs: SOPs, checklists, runbooks, escalation guides,
-  onboarding and role guides. Every process doc carries owner, trigger, access,
-  steps, output, and escalation.
-- **04 Librarian** — knowledge organization: where a doc lives, its filename,
-  dedup against existing docs, cross-links and tags, and the canonical glossary.
-- **05 Editor** — the lead: polishes drafts into a publish-ready doc without
-  flattening voice or vocabulary, enforces internal-vs-external tone, files the
-  doc, and reports what changed and what's still open.
+- **00 Intake** — structures raw input and recommends a doc type. *Barrier.*
+- **01 Architect** — ADRs, system docs, service maps, data-model/integration notes.
+- **02 Product** — product specs, feature briefs, acceptance criteria, launch checklists.
+- **03 Ops** — SOPs, runbooks, escalation, onboarding and role guides.
+- **04 Librarian** — placement, filenames, dedup, cross-links, the canonical glossary. *Every run.*
+- **05 Editor** — the lead: polishes to one voice, enforces internal-vs-external tone,
+  files the doc, reports what changed. *Every run.*
 
 ## Output types
 
-- **Decision records (ADRs)** and **technical system docs** (Architect).
-- **Product specs / PRD-lite / feature briefs** with acceptance criteria (Product).
-- **SOPs, runbooks, onboarding and role guides** (Ops).
-- **Glossary entries** and a **knowledge map** of cross-links (Librarian).
-- **"What we learned" summaries, implementation notes, README/section rewrites,
-  release/changelog notes** (Editor, from any of the above).
-- `.knowledge-notes/` — the per-role working notes and editor log. Scratch, not
-  product: gitignore it, never commit it. The published docs and their change
-  history are the durable record.
-
-Default templates for each live in
+The crew above names each role's primary output (ADRs, system docs, product specs,
+SOPs/runbooks, glossary entries). From any of those the Editor can also derive
+**"what we learned" summaries, implementation notes, README/section rewrites, and
+release/changelog notes**. Default shapes for every type live in
 [`references/templates.md`](references/templates.md).
 
 ## Voice
@@ -102,10 +86,8 @@ on dispatch.
 
 ## Operating rules
 
-- **Never invent company facts.** Cut or flag anything unsourced.
-- **Separate facts from assumptions**, and **current state from intended/future
-  state.**
-- **Mark uncertainty** instead of smoothing it over.
+The fact/assumption/uncertainty discipline is "The one rule" above. Beyond it:
+
 - **Prefer markdown** and durable documentation over chatty explanation; concise
   but complete.
 - **Diagrams only when they help** — never decoration.
@@ -124,7 +106,7 @@ on dispatch.
 ## Guardrails
 
 - **Capture truth; mark uncertainty** — see "The one rule."
-- **Author attribution** — every doc is authored by `jwogrady` / Status26. Never
+- **Author attribution** — the author field is the literal string `jwogrady`. Never
   credit Claude or any AI system in any doc, manifest, commit, or post.
 - **Don't clobber silently** — show the diff and get go-ahead before overwriting an
   existing doc; prefer updating an existing doc over creating a near-duplicate.
