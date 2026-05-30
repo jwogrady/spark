@@ -37,6 +37,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
   verify → shred → `op run` injection. Encourages per-project keys.
 - `bin/spark shred-env <file>` + `scripts/shred-env.sh` — secure-delete of
   transient secrets files, with verification; refuses to touch `*.tmpl`.
+- Skill `docsmith` — multi-lens docs glow-up. Six audience lenses (Skimmer,
+  Adopter, Skeptic, Believer, Contributor, Amplifier) write against a verified
+  ground truth, and an Editor-in-Chief assembles `README.md`, `docs/PHILOSOPHY.md`,
+  and `docs/launch-copy.md`. Enforces an honest-hype contract: no claim ships
+  without a citation to ground truth. Ship-stage amplifier.
 
 ### Removed
 
