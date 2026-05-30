@@ -3,6 +3,7 @@
 #
 # When the Spark plugin is active, this lives on $PATH. Subcommands:
 #   spark doctor             Validate the Spark plugin layout and report health.
+#   spark list-skills        List all available skills with descriptions.
 #   spark new-skill <name>   Scaffold a new skill under skills/<name>/.
 #   spark install-git-hooks  Install Spark's git hooks into the current repo.
 #   spark shred-env <file>   Securely delete a transient secrets file (e.g. .env).
@@ -143,6 +144,20 @@ EOF
   echo "Next: edit the description (it's the only thing Claude sees when choosing the skill)."
 }
 
+cmd_list_skills() {
+  [ -d "$SPARK_ROOT/skills" ] || { red "skills/ directory not found"; return 1; }
+  echo "Available Spark skills:"
+  echo
+  for d in "$SPARK_ROOT"/skills/*/; do
+    [ -d "$d" ] || continue
+    name="$(basename "$d")"
+    if [ -f "$d/SKILL.md" ]; then
+      desc="$(grep '^description:' "$d/SKILL.md" | sed 's/^description: //' | head -1)"
+      printf "  %-20s %s\n" "/$name" "${desc:-(no description)}"
+    fi
+  done
+}
+
 cmd_shred_env() {
   "$SPARK_ROOT/scripts/shred-env.sh" "$@"
 }
@@ -166,6 +181,7 @@ cmd_install_git_hooks() {
 
 case "${1:-help}" in
   doctor)            shift; cmd_doctor "$@" ;;
+  list-skills)       shift; cmd_list_skills "$@" ;;
   new-skill)         shift; cmd_new_skill "$@" ;;
   install-git-hooks) shift; cmd_install_git_hooks "$@" ;;
   shred-env)         shift; cmd_shred_env "$@" ;;
