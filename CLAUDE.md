@@ -5,9 +5,13 @@
 
 ## Mission
 
-Spark is a Claude Code **plugin**: a portable, GitHub-native software-development
-toolkit you install once and carry into every project. It puts one opinionated
-lifecycle at your fingertips and enforces the guardrails that keep work clean:
+Spark is a portable project-inception and software-delivery system for
+AI-assisted development. It turns raw project intent into durable repo artifacts,
+scoped GitHub issues, implementation branches, reviews, commits, and pull
+requests. The methodology is portable; the current implementation ships as a
+Claude Code plugin you install once and carry into every project. It puts one
+opinionated lifecycle at your fingertips and enforces the guardrails that keep
+work clean:
 
 ```
 Ideate → Plan → Generate → Solve → Ship
