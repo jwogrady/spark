@@ -1,140 +1,184 @@
-![status](https://img.shields.io/badge/status-active-purple)
-![type](https://img.shields.io/badge/type-project%20delivery%20system-black)
-![lifecycle](https://img.shields.io/badge/lifecycle-ideate→plan→generate→solve→ship-blue)
-![runtime](https://img.shields.io/badge/runtime-claude%20code%20plugin-lightgrey)
-![license](https://img.shields.io/badge/license-MIT-green)
-
 # Spark
 
-Spark is a portable project-inception and software-delivery system for AI-assisted development.
+**Turn raw project intent into durable GitHub artifacts — in one portable toolkit.**
 
-It turns raw project intent into durable repo artifacts, scoped GitHub issues, implementation branches, reviews, commits, and pull requests. The methodology is portable; the current implementation ships as a Claude Code plugin.
+![version](https://img.shields.io/badge/version-0.2.0-blue)
+![maintained](https://img.shields.io/badge/maintained-yes-brightgreen)
+![license](https://img.shields.io/badge/license-MIT-green)
 
-Spark's loop is:
+Spark is a portable project-inception and software-delivery system built on Claude
+Code, shipped as a plugin. Install it once and every project gets the same
+versioned lifecycle — Ideate → Plan → Generate → Solve → Ship — plus enforcement
+hooks that keep your work clean: mechanical guardrails block force-pushes and trunk
+commits, a `spark` CLI validates your artifacts, and real agent personas collaborate
+through shared notes to glow up your docs. No runtime dependencies, no reinvention,
+one versioned toolkit with less drift.
 
-```text
-Ideate → Plan → Generate → Solve → Ship
+```mermaid
+flowchart LR
+    A([Ideate]) --> B([Plan])
+    B --> C([Generate])
+    C --> D([Solve])
+    D --> E([Ship])
+    A:::stage
+    B:::stage
+    C:::stage
+    D:::stage
+    E:::stage
+    classDef stage fill:#1a1a2e,stroke:#e94560,color:#eaeaea,rx:6
 ```
 
-Use Spark when you want every repo to start with clear intent, keep its doctrine
-close to the code, and move work through the same disciplined path from idea to PR.
+> Stage names map to skills: Ideate → `/spark:ideate`, Plan → `/spark:plan`,
+> Generate → `/spark:build`, Solve → `/spark:fix-issue`,
+> Ship → `/spark:commit` + `/spark:ship`. You run `/spark:build` (not
+> `/spark:generate`) for the Generate stage.
 
----
+## Quickstart
 
-## How Spark is built
-
-The product is the methodology. The plugin is how it's delivered today.
-
-```text
-Spark
-  └─ Methodology   Ideate → Plan → Generate → Solve → Ship
-  └─ Product       a project-inception and software-delivery system
-  └─ Runtime       a Claude Code plugin
-  └─ Interface     /spark:* commands + the `spark` CLI
-  └─ Enforcement   hooks, templates, docs, and git guardrails
-```
-
-The methodology outlives any one runtime. Claude Code is the surface it runs on
-now, and the plugin is the package that installs it — not the whole identity.
-
----
-
-## The lifecycle
-
-| Stage | Command | What it does |
-|---|---|---|
-| **Ideate** | `/spark:ideate` | Turn a fuzzy idea into a written problem statement |
-| **Plan** | `/spark:plan` | Decompose the problem into GitHub issues + a milestone |
-| **Generate** | `/spark:build` | Implement one issue on a feature branch |
-| **Solve** | `/spark:fix-issue` · `/spark:review` | Run `/code-review`, `/security-review`, `verify`, then fix |
-| **Ship** | `/spark:commit` · `/spark:ship` | Conventional commit, then a focused PR |
-
-Each stage hands its output to the next, and each has a crisp definition of done.
-See [docs/explanation/sdlc-doctrine.md](docs/explanation/sdlc-doctrine.md).
-
----
-
-## Install
+**1 — Install once.** Open Claude Code and run:
 
 ```text
 /plugin marketplace add jwogrady/spark
 /plugin install spark
 ```
 
-Then, in any repo where you want the git-level guardrails:
+> **Install path:** The verified path today is a local clone or Git URL. The
+> one-click published-marketplace listing is a v0.2 open item (see `ROADMAP.md`);
+> if the marketplace command is not yet reachable, install from a Git URL or local
+> path. Spark is then available globally — every project you open gets the
+> lifecycle skills (`/spark:ideate`, `/spark:plan`, …) and the `spark` CLI.
+
+**2 — Wire the git guardrails into a repo.** The PreToolUse guard (force-push and
+trunk-push block) works automatically once the plugin is installed. The git-level
+hooks (conventional commits, block direct trunk commits) activate per repo:
 
 ```bash
 spark install-git-hooks
+spark doctor
 ```
 
-Verify everything: `spark doctor`. Full steps: [docs/how-to/install.md](docs/how-to/install.md).
+`spark doctor` validates manifests, hooks, every skill's frontmatter, and every
+agent file. It prints a `✓ <name>` line per item and ends with
+`Healthy — 0 errors, N warning(s)`, exiting non-zero if any error is found.
 
----
+**3 — Run the lifecycle.**
 
-## What's in the box
+1. `/spark:ideate` — frame the problem into a written problem statement.
+2. `/spark:plan` — decompose it into scoped work items with acceptance criteria.*
+3. `/spark:build` — implement one item on a feature branch.
+4. `/spark:fix-issue` — invoke `/code-review` and `/security-review`, then fix to
+   acceptance criteria.
+5. `/spark:commit` + `/spark:ship` — write a conventional commit, then open a
+   focused PR.
 
-- **Lifecycle skills** — `ideate`, `plan`, `build`, `fix-issue`, `commit`, `ship`.
-- **Setup skills** — `bootstrap` for runtime scaffolding (Bun / uv) and `connect`
-  for service connectivity + secrets setup.
-- **Project-inception skills** — `fork-init`, `claude-md`, `agents-md`, and
-  `write-a-skill` for making a repo legible to humans and agents.
-- **Review pressure** — `review` for a multi-agent project audit and `grill-me`
-  for stress-testing ideas before they become expensive.
-- **Enforcement** — a PreToolUse guard that blocks force-pushes and pushes to
-  trunk, plus `commit-msg`/`pre-commit` git hooks that enforce conventional
-  commits, no-AI-attribution, and no-commit-to-trunk.
-- **A `spark` CLI** — `doctor`, `new-skill`, `install-git-hooks`, `shred-env`,
-  and `help` — on `$PATH` whenever the plugin is active.
+> *GitHub-issue creation from a problem statement is planned for v0.3; the current
+> version generates scoped work items and milestone scaffolds.
 
----
+Ready for a deeper walkthrough? See
+[Build your first project](docs/tutorials/build-your-first-project.md).
 
-## Design principles
+**Prerequisites:** a git repo (`git init` first); for PR creation, the GitHub CLI
+(`gh`) installed and authenticated (`gh auth login`) — without it, `/spark:ship`
+fails at the push step.
 
-- **Project intent comes first.** Spark exists to preserve the *why* before it
-  generates the *what*.
-- **Additive, not competing.** Spark builds on Anthropic's skill/plugin spec and
-  reuses Claude Code's built-in reviewers. It documents *when and why* you reach
-  for a tool — it doesn't reinvent the tools. See
-  [docs/explanation/scope-and-upstream.md](docs/explanation/scope-and-upstream.md).
-- **One concern per unit.** One problem per ideate, one feature per issue, one
-  issue per branch, one concern per PR.
-- **Guardrails are mechanical.** Doctrine you can't enforce is just a brochure.
-  The hooks make the rules real.
+## Why Spark, not raw Claude Code?
 
----
+You can use Claude Code directly: it already ships `/code-review`,
+`/security-review`, and `verify`, and you can hand-write a `CLAUDE.md`. If that is
+your whole situation, Spark adds friction. The honest delta is **portability and
+enforcement, not capability**: Spark is one install carried into every repo, with a
+fixed lifecycle, mechanical guardrails, and a consistent CLI everywhere.
 
-## Repository layout
+| Alternative | Where Spark wins | Where the alternative is fine |
+|---|---|---|
+| Raw Claude Code | Adds guardrails + a repeatable lifecycle in every repo | Solo work on one project where you impose your own discipline |
+| A project `CLAUDE.md` | Version-controls the *process*, not just instructions; travels with you | When each project's needs differ enough that a shared process fights you |
+| Custom hooks per project | Ships tested, composable hook scripts you don't write from scratch | When you already have mature scripts and don't want the plugin layer |
+| Convention + team agreement | The `commit-msg` hook *rejects* non-conforming commits; agreement only asks | A disciplined team that never deviates |
+| Workflow tools (Linear, Jira bots) | Lives entirely inside Claude Code — no new SaaS seat, no webhooks | When you already have PM tooling and want it separate |
 
-```text
-.claude-plugin/
-  plugin.json            # plugin manifest
-  marketplace.json       # makes this repo git-installable as a marketplace
-skills/<name>/SKILL.md   # lifecycle, setup, inception, and review skills
-hooks/
-  hooks.json             # PreToolUse wiring
-  guard-bash.sh          # the guard it runs
-scripts/hooks/           # git hook sources (commit-msg, pre-commit)
-bin/spark                # the CLI
-docs/                    # documentation, organized by Diátaxis
-.github/ISSUE_TEMPLATE/  # templates the plan skill uses
-CLAUDE.md                # in-repo doctrine for Claude Code
-AGENTS.md                # tool-agnostic guide for any coding agent
+**Use Spark when** you run multiple projects inside Claude Code and want the same
+guardrails and lifecycle in every one. **Skip it when** you have a single project,
+prefer raw flexibility, or your repos differ enough that a shared lifecycle adds
+friction.
+
+## Maturity and trust
+
+Spark is pre-1.0, at `v0.2.0`. That is the honest contract, not a caveat. The
+`v0.2` milestone shipped its full scope — plugin packaging, the lifecycle skills,
+enforcement hooks, the Diátaxis docs tree — with one open item: end-to-end install
+validation from a published marketplace (tracked in `ROADMAP.md` and the
+`CHANGELOG.md` `[Unreleased]` block). No breaking-change policy is documented yet;
+treat any `v0.x` release as potentially breaking.
+
+- **Scope: single-developer tool.** Git handles repository concurrency; the plugin
+  itself has no team-coordination layer, shared-state sync, or dashboard.
+- **License: MIT.** Spark is released under the MIT License (`LICENSE`,
+  Copyright © 2026 `jwogrady`), matching the `plugin.json` manifest. You are free
+  to use, fork, and redistribute it under those terms.
+- **CI / automated tests:** none yet. For a project whose risk surface is malformed
+  Markdown frontmatter and mis-wired hooks, the mechanical enforcement model
+  (`spark doctor`, the PreToolUse guard, the git hooks) is the intentional quality
+  mechanism — but there is no automated regression on skill behavior. A
+  `SECURITY.md` is present; the `connect` skill handles secrets via 1Password and
+  `shred-env` destroys transient credential files.
+
+## How it fits together
+
+Spark is **additive by design**: it sits between your project and Claude Code's
+built-ins, reusing the built-in reviewers rather than reinventing them.
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                        your project                          │
+├──────────────────────────────────────────────────────────────┤
+│                Spark plugin (you install once)               │
+│  skills/            hooks/              bin/spark            │
+│  16 SKILL.md        PreToolUse          doctor               │
+│  files              guard-bash.sh       list-skills          │
+│                                         new-skill            │
+│  scripts/hooks/                         install-git-hooks    │
+│  commit-msg                             shred-env            │
+│  pre-commit                             help                 │
+├──────────────────────────────────────────────────────────────┤
+│              Claude Code (Anthropic built-ins)               │
+│      /code-review   /security-review   verify                │
+└──────────────────────────────────────────────────────────────┘
 ```
 
----
+`guard-bash.sh` lives under `hooks/`; `commit-msg` and `pre-commit` live under
+`scripts/hooks/` — two distinct directories, two distinct enforcement mechanisms
+(a PreToolUse hook vs. git hooks).
 
-## Documentation
-
-Organized by [Diátaxis](https://diataxis.fr/):
-
-- **[Tutorial](docs/tutorials/build-your-first-project.md)** — build your first feature, all five stages.
-- **[How-to guides](docs/how-to/)** — install, and one guide per stage.
-- **[Reference](docs/reference/)** — skills, hooks, CLI, plugin manifest.
-- **[Explanation](docs/explanation/)** — why a plugin, the lifecycle doctrine, scope.
-
----
+**The `spark` CLI:** `doctor`, `list-skills`, `new-skill`, `install-git-hooks`,
+`shred-env`, `help`. Pure POSIX-friendly Bash, zero runtime dependencies, graceful
+degradation when `jq`/`python3` are absent.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Feature branch → focused PR → review.
-Conventional commits. No AI attribution — credit belongs to the author.
+Contributing means adding to the plugin itself — skills, agents, enforcement
+scripts, CLI subcommands, or docs — so every downstream project that installs it
+gets the improvement. The path has four legs: scaffold, implement, validate, open a
+PR on a feature branch.
+
+```bash
+spark new-skill <your-skill-name>   # scaffold skills/<name>/SKILL.md
+# implement: SKILL.md needs name: + description: frontmatter; keep it focused
+spark doctor                        # validate manifests, hooks, skill + agent frontmatter
+bash -n <any-script-you-touched>    # syntax-check shell
+spark install-git-hooks             # once, to wire commit-msg + pre-commit locally
+```
+
+Standards: valid skill frontmatter; POSIX-friendly Bash with `set -euo pipefail`;
+conventional commits (subject ≤ 72 chars, no trailing period, no AI-attribution
+trailers); one concern per branch and per PR; never commit directly to
+`master`/`main`. Attribution in every author/credit field is the literal string
+`jwogrady`. See `CONTRIBUTING.md` and [`docs/explanation/philosophy.md`](docs/explanation/philosophy.md) (the *why* behind the
+rules).
+
+## Documentation
+
+- **[Philosophy](docs/explanation/philosophy.md)** — what Spark stands for and the
+  doctrine behind the rules.
+- **[Documentation index](docs/README.md)** — the full Diátaxis tree: tutorials,
+  how-to guides, reference, and explanation, plus ADRs and architecture notes.
