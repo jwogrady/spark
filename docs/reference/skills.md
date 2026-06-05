@@ -10,6 +10,46 @@ This page is the **canonical skill taxonomy** — four categories: Lifecycle,
 Setup, Authorship, Supporting. `CLAUDE.md` and `README.md` use the same grouping;
 if they ever disagree, this page wins.
 
+## Which skill do I use?
+
+Start from what you want to do — not from the skill names. Follow the arrows:
+
+```mermaid
+flowchart TD
+    Q{What do you<br/>need to do?}
+    Q -->|Shape a fuzzy idea| I([ideate])
+    Q -->|Break work into issues| P([plan])
+    Q -->|Write the code| C([codify])
+    Q -->|Check a change| R{How much<br/>are you checking?}
+    R -->|One diff / branch / PR| FI([fix-issue<br/>wraps /code-review + /security-review])
+    R -->|The whole project| RV([review])
+    Q -->|Commit & open a PR| S([ship])
+    Q -->|Write docs| D{Who reads them?}
+    D -->|The public| DO([docit])
+    D -->|Your team| K([knowledge])
+    Q -->|Set up a project| SU{Runtime or<br/>services?}
+    SU -->|Runtime / stack| B([bootstrap])
+    SU -->|Services & secrets| CN([connect])
+    Q -->|CLAUDE.md / AGENTS.md| AM([agents-md])
+```
+
+Or scan by intent:
+
+| I want to… | Reach for | Not… |
+|---|---|---|
+| Turn a fuzzy idea into a written problem statement | `ideate` | — |
+| Break a problem into issues + a milestone | `plan` | — |
+| Write the code for one planned issue | `codify` | — |
+| Harden **one** diff/branch/PR before shipping | `fix-issue` | not `review` (that's whole-project) |
+| Review just one diff with no orchestration | native `/code-review`, `/security-review` | not `review` |
+| Audit the **whole** project (release readiness) | `review` | not `fix-issue` (one diff) |
+| Commit a finished change + open a PR | `ship` | — |
+| Write/refresh **public** docs (README, positioning) | `docit` | not `knowledge` |
+| Capture **internal** knowledge (ADRs, SOPs, specs) | `knowledge` | not `docit` |
+| Scaffold a new project's runtime/stack | `bootstrap` | not `connect` |
+| Wire services + secrets via 1Password | `connect` | not `bootstrap` |
+| Create or maintain `CLAUDE.md` / `AGENTS.md` | `agents-md` (net-new `CLAUDE.md` → native `/init` first) | — |
+
 ## Lifecycle skills
 
 | Skill | Stage | Triggers on |

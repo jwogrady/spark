@@ -91,6 +91,10 @@ Spark's 11 skills fall into four categories (canonical list:
 - **Authorship** — `docit` (public docs), `knowledge` (internal knowledge).
 - **Supporting** — `agents-md` (`CLAUDE.md` + `AGENTS.md`), `review` (whole-project audit).
 
+Not sure which one? Follow the
+**[skill chooser](docs/reference/skills.md#which-skill-do-i-use)** — a flowchart
+and intent table that pick the right skill in one read.
+
 ## Why Spark, not raw Claude Code?
 
 You can use Claude Code directly: it already ships `/code-review`,
