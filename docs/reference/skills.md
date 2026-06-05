@@ -6,6 +6,10 @@
 
 All skills are invoked namespaced under the plugin: `/spark:<name>`.
 
+This page is the **canonical skill taxonomy** — four categories: Lifecycle,
+Setup, Authorship, Supporting. `CLAUDE.md` and `README.md` use the same grouping;
+if they ever disagree, this page wins.
+
 ## Lifecycle skills
 
 | Skill | Stage | Triggers on |
@@ -23,13 +27,7 @@ All skills are invoked namespaced under the plugin: `/spark:<name>`.
 | `bootstrap` | Scaffold a project runtime — Bun (TypeScript) or uv (Python) — via the official scaffolder, then wire it into Spark. |
 | `connect` | Bootstrap service connectivity + secrets (GitHub/GCP/Vultr/Linode) via 1Password (`op`). Capture → ingest → shred → inject. |
 
-## Review skills
-
-| Skill | Purpose |
-|---|---|
-| `review` | Multi-agent project audit by specialist agents collaborating via shared notes; used in the Solve stage. |
-
-## Authorship & knowledge skills
+## Authorship skills
 
 | Skill | Purpose |
 |---|---|
@@ -41,6 +39,7 @@ All skills are invoked namespaced under the plugin: `/spark:<name>`.
 | Skill | Purpose |
 |---|---|
 | `agents-md` | Maintains and audits a project's `CLAUDE.md` and `AGENTS.md`, keeping the two in sync. |
+| `review` | Multi-agent **whole-project** audit by specialist agents collaborating via shared notes. Not a single-diff reviewer — for one diff/PR use the native `/code-review` + `/security-review`, or `fix-issue` to orchestrate them. |
 
 ## Skill layout
 

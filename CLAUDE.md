@@ -48,7 +48,12 @@ CLAUDE.md               # this file (maintained by the agents-md skill)
 AGENTS.md               # tool-agnostic agent guide (maintained by agents-md skill)
 ```
 
-## The Lifecycle Skills
+## The Skills
+
+The 11 skills group into four categories. The canonical taxonomy lives in
+[`docs/reference/skills.md`](docs/reference/skills.md); this list mirrors it.
+
+**Lifecycle** — the five stages:
 
 | Stage | Skill | Job |
 |---|---|---|
@@ -57,12 +62,12 @@ AGENTS.md               # tool-agnostic agent guide (maintained by agents-md ski
 | Generate | `codify` | Implement one work item on a feature branch |
 | Solve | `fix-issue` | Orchestrate built-in reviews, then fix |
 | Ship | `ship` | Conventional commit, then a focused PR |
-| Ship+ | `docit` | Glow up the public docs through author personas |
-| Knowledge | `knowledge` | Capture internal knowledge (decisions, systems, processes) through an author crew |
 
-Four supporting skills round out the set (11 total): `agents-md` (maintains
-`CLAUDE.md` + `AGENTS.md`), `bootstrap` (scaffold a project runtime), `connect`
-(services + secrets via 1Password), and `review` (multi-agent project audit).
+The remaining six:
+
+- **Setup** — `bootstrap` (scaffold a project runtime), `connect` (services + secrets via 1Password).
+- **Authorship** — `docit` (glow up public docs through author personas), `knowledge` (capture internal knowledge through an author crew).
+- **Supporting** — `agents-md` (maintains `CLAUDE.md` + `AGENTS.md`), `review` (multi-agent whole-project audit).
 
 ## Development Workflow
 
