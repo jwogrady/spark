@@ -93,6 +93,18 @@ cmd_doctor() {
       if ! grep -q '^description:' "$d/SKILL.md"; then
         red "  ✗ $name: SKILL.md missing 'description:' frontmatter"; errors=$((errors+1)); continue
       fi
+      # The description is the only thing Claude sees when choosing a skill, so
+      # lint its quality: it must name a trigger and a boundary, and fit the cap.
+      desc="$(grep '^description:' "$d/SKILL.md" | sed 's/^description: *//' | head -1)"
+      if [ "${#desc}" -gt 1024 ]; then
+        yellow "  ! $name: description is ${#desc} chars (over the 1024 limit)"; warnings=$((warnings+1))
+      fi
+      if ! printf '%s' "$desc" | grep -qiE 'use (when|after|for|to)'; then
+        yellow "  ! $name: description names no trigger (\"Use when …\")"; warnings=$((warnings+1))
+      fi
+      if ! printf '%s' "$desc" | grep -qiE 'not for|instead|rather than|use the native|/init'; then
+        yellow "  ! $name: description has no boundary clause (\"not for X — use Y\")"; warnings=$((warnings+1))
+      fi
       green "  ✓ $name"
     done
   else
