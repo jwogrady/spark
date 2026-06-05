@@ -1,6 +1,6 @@
 ---
 name: plan
-description: Turn a framed problem into a feature breakdown and a set of GitHub-ready issues plus a milestone. Use after ideate, when the user wants to plan features, break work into issues, or scope a milestone.
+description: Turn a framed problem into a feature breakdown and a set of GitHub-ready issues plus a milestone. Use after ideate, when the user wants to plan features, break work into issues, or scope a milestone. Not for framing the problem first (`ideate`) or implementing the work (`codify`).
 ---
 
 # plan — Stage 2 of the Spark lifecycle

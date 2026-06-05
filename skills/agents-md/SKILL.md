@@ -1,6 +1,6 @@
 ---
 name: agents-md
-description: Create, maintain, audit, and sync a repo's AI-agent behavioral-contract files — AGENTS.md (any agent) and CLAUDE.md (Claude Code). Use when the user wants to write, update, audit, or drift-check AGENTS.md or CLAUDE.md. Defers net-new CLAUDE.md creation to native /init.
+description: Create, maintain, audit, and sync a repo's AI-agent behavioral-contract files — AGENTS.md (any agent) and CLAUDE.md (Claude Code). Use when the user wants to write, update, audit, or drift-check AGENTS.md or CLAUDE.md. Defers net-new CLAUDE.md creation to native /init. Not for prose docs — use `docit` (public) or `knowledge` (internal); this owns the agent-contract files only.
 ---
 
 # agents-md — the agent behavioral-contract skill

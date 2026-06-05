@@ -1,6 +1,6 @@
 ---
 name: ideate
-description: Frame a problem before any code is written — turn a vague idea into a sharp, written problem statement with success criteria and constraints. Use when starting something new, when the user says "I want to build X", or when scope is still fuzzy.
+description: Frame a problem before any code is written — turn a vague idea into a sharp, written problem statement with success criteria and constraints. Use when starting something new, when the user says "I want to build X", or when scope is still fuzzy. Not for breaking the problem into issues (that's `plan`) or writing code (`codify`).
 ---
 
 # ideate — Stage 1 of the Spark lifecycle

@@ -1,6 +1,6 @@
 ---
 name: codify
-description: Implement one planned GitHub issue on a feature branch, scoped tightly to that issue's acceptance criteria. Use when the user wants to start coding an issue, implement a feature, or generate the code for planned work.
+description: Implement one planned GitHub issue on a feature branch, scoped tightly to that issue's acceptance criteria. Use when the user wants to start coding an issue, implement a feature, or generate the code for planned work. Not for reviewing/hardening the result (`fix-issue`) or committing and opening the PR (`ship`).
 ---
 
 # codify — Stage 3 of the Spark lifecycle

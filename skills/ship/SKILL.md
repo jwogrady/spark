@@ -1,6 +1,6 @@
 ---
 name: ship
-description: Land a reviewed change — write a conventional commit (imperative subject under 72 chars, why-not-what body, no AI attribution), push the branch, and open one focused pull request. Use when the user wants to commit, write a commit message, push, or open a PR for finished work.
+description: Land a reviewed change — write a conventional commit (imperative subject under 72 chars, why-not-what body, no AI attribution), push the branch, and open one focused pull request. Use when the user wants to commit, write a commit message, push, or open a PR for finished work. Not for writing the code (`codify`) or running the reviews (`fix-issue`) — it assumes an already-reviewed change.
 ---
 
 # ship — Stage 5 of the Spark lifecycle
