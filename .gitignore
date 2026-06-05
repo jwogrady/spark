@@ -11,6 +11,8 @@ dist/
 
 # Claude Code local settings (intentionally not committed)
 .claude/settings.local.json
+# Claude Code runtime locks (e.g. the scheduled-task loop); transient state
+.claude/*.lock
 
 # Skill scratch — per-role working notes, debate logs, audit slates. Process
 # exhaust, not product; the published artifacts and their git history are the
