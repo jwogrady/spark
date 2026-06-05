@@ -66,12 +66,16 @@ Four supporting skills round out the set (11 total): `agents-md` (maintains
 
 ## Development Workflow
 
-1. Work on a feature branch. Never commit directly to `master`.
+1. Work on a feature branch. Never commit directly to `master`. Name it by
+   type: `feat/…`, `fix/…`, `docs/…`, or `chore/…`.
 2. Open a PR for every change, even small ones. One concern per PR.
 3. Run `spark doctor` before pushing — it validates the plugin layout, the
    manifest/hook JSON, and every skill's frontmatter.
 4. Syntax-check shell scripts (`bash -n <file>`) before pushing.
 5. Update `CHANGELOG.md` when behavior changes.
+
+There is no test suite, build step, or package manager — this repo is Bash plus
+Markdown. `spark doctor` and `bash -n` are the only validation gates.
 
 ## Coding Standards
 
