@@ -26,6 +26,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 - **MIT license adopted.** `LICENSE` now carries the full MIT License text
   (Copyright © 2026 `jwogrady`), matching the `plugin.json` manifest. Resolves the
   prior `LICENSE` ↔ manifest mismatch.
+- **Skill clarity & native delegation (v0.2.1 milestone).** New
+  `docs/reference/native-overlap.md` audits every skill against the Claude Code
+  built-ins it touches (delegates-to / stays-out-of-lane / none), proving none are
+  reimplemented. `docs/reference/skills.md` gains a "Which skill do I use?" chooser
+  (decision flowchart + intent table), linked one hop from the README. `spark
+  doctor` now lints each skill description — warning (never erroring) when it lacks
+  a trigger or boundary clause, or exceeds the 1024-char cap.
 
 ### Changed
 
@@ -37,6 +44,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 - Skills moved from `.spark/skills/` to `skills/` and are now namespaced
   `/spark:<name>`.
 - Documentation reorganized to Diátaxis under `docs/`.
+- Skill taxonomy unified across `CLAUDE.md`, `README.md`, and
+  `docs/reference/skills.md` into four categories (Lifecycle / Setup / Authorship /
+  Supporting), with the reference page as the canonical source. All 11 skill
+  descriptions gained a "not for X — use Y" boundary clause; the `review` vs native
+  `/code-review` collision is resolved by sending single-diff users to the built-ins.
 - `CLAUDE.md`, `AGENTS.md`, `README.md`, `ROADMAP.md` rewritten for the plugin +
   lifecycle model.
 - Skill `docit` — multi-persona public-docs glow-up. The author personas run as

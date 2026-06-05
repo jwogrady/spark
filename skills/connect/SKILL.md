@@ -1,6 +1,6 @@
 ---
 name: connect
-description: Bootstrap a project's external service connectivity and secrets — capture API keys, load them into 1Password, verify each connection, and shred the plaintext. Use when setting up GitHub/Google Cloud/Vultr/Linode access, wiring API keys, configuring 1Password (op), or connecting a new project to its providers.
+description: Bootstrap a project's external service connectivity and secrets — capture API keys, load them into 1Password, verify each connection, and shred the plaintext. Use when setting up GitHub/Google Cloud/Vultr/Linode access, wiring API keys, configuring 1Password (op), or connecting a new project to its providers. Not for scaffolding the project runtime — use `bootstrap` for that.
 ---
 
 # connect — connectivity & secrets bootstrap

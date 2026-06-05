@@ -81,6 +81,20 @@ Ready for a deeper walkthrough? See
 (`gh`) installed and authenticated (`gh auth login`) — without it, `/spark:ship`
 fails at the push step.
 
+## The skills, grouped
+
+Spark's 11 skills fall into four categories (canonical list:
+[`docs/reference/skills.md`](docs/reference/skills.md)):
+
+- **Lifecycle** — `ideate`, `plan`, `codify`, `fix-issue`, `ship` (the five steps above).
+- **Setup** — `bootstrap` (scaffold a runtime), `connect` (services + secrets via 1Password).
+- **Authorship** — `docit` (public docs), `knowledge` (internal knowledge).
+- **Supporting** — `agents-md` (`CLAUDE.md` + `AGENTS.md`), `review` (whole-project audit).
+
+Not sure which one? Follow the
+**[skill chooser](docs/reference/skills.md#which-skill-do-i-use)** — a flowchart
+and intent table that pick the right skill in one read.
+
 ## Why Spark, not raw Claude Code?
 
 You can use Claude Code directly: it already ships `/code-review`,
