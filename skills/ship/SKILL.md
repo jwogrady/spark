@@ -37,6 +37,29 @@ rules mechanically; this skill produces a commit and PR that pass the first time
    - Anything reviewers should look at closely.
 6. **Report the PR URL** back to the user.
 
+## Cut the release (version-bumping ships)
+
+Spark projects follow the version ladder in
+[`docs/explanation/sdlc-doctrine.md`](../../docs/explanation/sdlc-doctrine.md):
+each coding contribution bumps the patch (`0.0.x`); `0.1.0` is the first usable
+product; after `0.1.0` the bump follows the commit type (`feat:` → minor,
+`fix:` → patch, `!` → major).
+
+When a ship crosses a version boundary **and the user has approved the release**
+(never cut a tag or Release without explicit go-ahead), do this in order:
+
+1. Roll `CHANGELOG.md` `[Unreleased]` into a dated `vX.Y.Z` section
+   (Keep a Changelog).
+2. Bump the project's version file (`plugin.json`, `package.json`,
+   `pyproject.toml`, …) to match.
+3. Annotated tag: `git tag -a vX.Y.Z -m vX.Y.Z` — never a lightweight tag.
+4. GitHub Release from that tag (`gh release create vX.Y.Z`) using the CHANGELOG
+   section as the notes.
+5. Open a fresh empty `[Unreleased]` section.
+
+Non-version-bumping ships skip 2–4 but still update `[Unreleased]` when behavior
+changed.
+
 ## Hard rules (the hook will reject violations)
 
 - **No AI attribution anywhere** — no `Co-Authored-By` for AI tools, no mention
@@ -51,6 +74,7 @@ rules mechanically; this skill produces a commit and PR that pass the first time
   go-ahead.
 - **Never push directly to `master`/`main`.**
 - One concern per PR — if the branch grew two concerns, split it.
+- **Never cut a tag or GitHub Release without explicit user go-ahead.**
 - Do **not** merge, close, or comment on PRs/issues without explicit instruction.
   Opening the PR is the end of `ship`; the human decides the rest.
 
