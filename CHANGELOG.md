@@ -36,6 +36,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ### Changed
 
+- **`ship` release flow — mechanical commit-type → bump mapping (#43).** The
+  release section now derives the post-`0.1.0` bump from the commit types in the
+  range (`feat:` → minor; `fix:`/`docs:`/`chore:`/`refactor:`/`test:` → patch;
+  `!` or `BREAKING CHANGE:` → major, highest wins), completing the release step
+  added in #46 so versioning is mechanical rather than a judgment call.
 - **Methodology stays in Spark — skills link it, don't paste it (#38).**
   `ideate` and `plan` gain a guardrail against writing project-local copies of
   the Spark process, and `agents-md` now carries a "Link the methodology, don't
