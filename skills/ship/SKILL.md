@@ -66,6 +66,13 @@ When a ship crosses a version boundary **and the user has approved the release**
 Non-version-bumping ships skip 2–4 but still update `[Unreleased]` when behavior
 changed.
 
+**A changelog records what changed in the product, not how it was built.** Every
+`[Unreleased]` entry describes a user-facing change — a feature, fix, or
+behavior. It is not a process journal: never log phase transitions ("Completed
+Phase 1 — Plan"), grill reviews, QC passes, planning bookkeeping, or `/spark:`
+stage activity. If an entry only makes sense to someone running the Spark
+lifecycle, it does not belong in the changelog.
+
 ## Hard rules (the hook will reject violations)
 
 - **No AI attribution anywhere** — no `Co-Authored-By` for AI tools, no mention

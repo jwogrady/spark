@@ -72,6 +72,13 @@ instead of restating it.** Never generate a project-local copy of the process
 (no `*-workflow.md`, `planning-overview.md`, or constitution restatement in the
 project's `docs/`); that creates a second source of truth to maintain.
 
+The leak runs deeper than whole files: even after the methodology files are
+gone, Spark's process vocabulary survives in the *framing* of the docs that
+remain. When maintaining or auditing a contract file, strip Spark-internal
+process framing — `Phase N` / `Prompt NNN` status headers, `/spark:` stage
+references, "deferred to later Spark stages." A status or scope line describes
+the file's own authority, not the lifecycle stage that produced it.
+
 The canonical pointer for a project's `CLAUDE.md` / `AGENTS.md`:
 
 ```markdown
