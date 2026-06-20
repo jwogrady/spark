@@ -13,7 +13,7 @@ stack. This gate closes that gap.
 A change is **Codify-ready** when all of these hold:
 
 - [ ] Problem statement exists and is confirmed (`ideate`).
-- [ ] Prior art / existing assets surveyed.
+- [ ] Prior art / existing assets surveyed (`ideate`).
 - [ ] Stack / architecture recorded as ADRs under `docs/adr/` (`plan`).
 - [ ] Each issue has verifiable acceptance criteria (`plan`).
 - [ ] A scaffold exists, or `bootstrap` is queued.
