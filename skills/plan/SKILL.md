@@ -5,7 +5,7 @@ description: Turn a framed problem into a feature breakdown and a set of GitHub-
 
 # plan — Stage 2 of the Spark lifecycle
 
-`Ideate → Plan → Generate → Solve → Ship`
+`Ideate → Plan → Codify → Validate → Ship`
 
 Plan converts a confirmed problem statement into a small set of features, each
 expressed as a GitHub issue that `codify` can pick up. The unit of work is a
@@ -41,7 +41,7 @@ feature, not a task list.
 
 ## Guardrails
 
-- Acceptance criteria must be verifiable — they become the `Solve` stage's
+- Acceptance criteria must be verifiable — they become the `Validate` stage's
   definition of done.
 - Do not create issues, milestones, labels, or projects without explicit
   instruction.

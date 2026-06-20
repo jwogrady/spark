@@ -5,7 +5,7 @@ description: Frame a problem before any code is written — turn a vague idea in
 
 # ideate — Stage 1 of the Spark lifecycle
 
-`Ideate → Plan → Generate → Solve → Ship`
+`Ideate → Plan → Codify → Validate → Ship`
 
 Ideate is where a fuzzy idea becomes a problem worth solving, written down. No
 code, no file layout, no tickets yet. The output is a short problem statement

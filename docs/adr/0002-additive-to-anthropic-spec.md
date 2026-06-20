@@ -34,7 +34,7 @@ second copy of primitives Anthropic already maintains. Narrative in
 
 ## Consequences
 
-- The Solve stage's `fix-issue` orchestrates the built-in review tools; it does
+- The Validate stage's `validate` orchestrates the built-in review tools; it does
   not contain a reviewer.
 - When Anthropic's Claude Code docs change, that is the signal to update Spark.
 - Spark stays small: it carries doctrine and orchestration, not

@@ -29,7 +29,7 @@ Relationship vocabulary:
 | `ideate` | `grill-me` | delegates-to | Invokes `grill-me` to pressure-test the problem statement; owns the framing, not the interview. |
 | `plan` | — | none | Wraps `gh` to draft issues + a milestone. No built-in covers issue decomposition. |
 | `codify` | `verify`, `run` | stays-out-of-lane | Owns implementing one issue; `verify`/`run` confirm behavior afterward. Complementary, not overlapping. |
-| `fix-issue` | `/code-review`, `/security-review` | delegates-to | Orchestrates both built-ins on the branch diff, then triages and fixes. Ships no reviewer of its own. |
+| `validate` | `/code-review`, `/security-review` | delegates-to | Orchestrates both built-ins on the branch diff, then triages and fixes. Ships no reviewer of its own. |
 | `ship` | — | none | Wraps `git` (conventional commit) + `gh` (one PR). No built-in covers this. |
 | `docit` | — | none | Multi-persona crew for public docs. No built-in generates docs. |
 | `knowledge` | — | none | Internal-knowledge crew (ADRs, SOPs, specs). No built-in generates docs. |
@@ -48,7 +48,7 @@ resolved by clarifying descriptions in **#29**, not by changing behavior.
   with native `/review` and `/code-review`. The scope differs cleanly
   (whole codebase across 8 dimensions vs. a single diff/PR), but a user picking
   a skill can't see that. Resolution: the `review` description must point
-  single-diff/PR users to the native review tools (and to `fix-issue` for one
+  single-diff/PR users to the native review tools (and to `validate` for one
   branch). No rename (per the clarify-only constraint).
 - **F2 — `codify` under-leverage (opportunity, not overlap).** `codify` does not
   currently invoke `verify`/`run` to confirm the change behaves. This is a

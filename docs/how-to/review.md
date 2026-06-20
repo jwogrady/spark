@@ -3,7 +3,7 @@
 > How-to — task-oriented.
 
 Use this to perform a comprehensive quality audit of a project's codebase. Run this
-during the **Solve** stage (after major changes) or as a milestone checkpoint.
+during the **Validate** stage (after major changes) or as a milestone checkpoint.
 
 ## 1. Invoke the review
 

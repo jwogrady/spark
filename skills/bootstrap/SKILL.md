@@ -50,4 +50,4 @@ Concrete per-framework commands and quality-gate defaults live in
 
 `bootstrap` and [`connect`](../connect/SKILL.md) are the two project-setup skills:
 runtime + connectivity. Run them first, then enter
-`Ideate → Plan → Generate → Solve → Ship`.
+`Ideate → Plan → Codify → Validate → Ship`.

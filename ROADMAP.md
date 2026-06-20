@@ -10,10 +10,10 @@ Priorities may shift as the project evolves.
 **Status:** In progress
 
 Spark becomes a Claude Code plugin organized around the
-`Ideate → Plan → Generate → Solve → Ship` lifecycle.
+`Ideate → Plan → Codify → Validate → Ship` lifecycle.
 
 - [x] Plugin packaging: `.claude-plugin/plugin.json` + `marketplace.json`
-- [x] Lifecycle skills: `ideate`, `plan`, `codify`, `fix-issue`, `ship`
+- [x] Lifecycle skills: `ideate`, `plan`, `codify`, `validate`, `ship`
 - [x] Supporting skills: `agents-md`, `bootstrap`, `connect`, `review`, `docit`, `knowledge`
 - [x] Enforcement: PreToolUse guard (force-push / push-to-trunk) + git hooks
       (`commit-msg`, `pre-commit`)
@@ -31,7 +31,7 @@ Tighten the Plan stage's GitHub integration:
 
 - Generate issues and a milestone directly from a problem statement
 - Keep issue drafts and GitHub state in sync
-- Wire acceptance criteria through to the Solve stage's definition of done
+- Wire acceptance criteria through to the Validate stage's definition of done
 
 ---
 

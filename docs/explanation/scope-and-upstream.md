@@ -12,7 +12,7 @@ do I use it in a real GitHub workflow, what problem does it solve.
 Practically, that means:
 
 - Spark **references** the skill/plugin spec; it does not invent a competing one.
-- The Solve stage **uses** `/code-review` and `/security-review`; it does not
+- The Validate stage **uses** `/code-review` and `/security-review`; it does not
   ship its own.
 - When Anthropic's Claude Code docs change, that's the signal to update Spark.
 

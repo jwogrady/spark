@@ -21,7 +21,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
   `docit`'s `.docit-notes/`, and kept out of the repo). `knowledge` runs alongside
   `docit`; it does not replace it.
 - **`review` skill — multi-agent project audit.** `skills/review/SKILL.md` runs 8
-  specialist agents plus a Synthesis Lead to audit a project, for use in the Solve
+  specialist agents plus a Synthesis Lead to audit a project, for use in the Validate
   stage.
 - **MIT license adopted.** `LICENSE` now carries the full MIT License text
   (Copyright © 2026 `jwogrady`), matching the `plugin.json` manifest. Resolves the
@@ -36,6 +36,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ### Changed
 
+- **Aligned lifecycle phase names with skill names (#41).** The two mismatched
+  stages were renamed so every phase equals its like-named skill/command:
+  `Generate → Codify` and `Solve → Validate`. The `fix-issue` skill is now
+  `validate` (`skills/fix-issue/` → `skills/validate/`, invoked as
+  `/spark:validate`). The lifecycle slogan is now
+  `Ideate → Plan → Codify → Validate → Ship`, removing the
+  Generate↔codify / Solve↔fix-issue translation step.
 - **Spark is now a Claude Code plugin.** The document-only `.spark/` layer is
   replaced by a plugin packaged at the repo root (`.claude-plugin/plugin.json` +
   `marketplace.json`). Install via `/plugin marketplace add jwogrady/spark` →
@@ -69,20 +76,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
   files keep a brief self-contained summary and point to it. Fixed the protocols'
   stale "archive (commit it)" guidance for `.docit-notes/` / `.knowledge-notes/`,
   which contradicted the new gitignore.
-- **Sharpened `review` and `fix-issue` descriptions** so they disambiguate by
-  scope — `fix-issue` reviews one change/branch, `review` audits a whole project —
+- **Sharpened `review` and `validate` descriptions** so they disambiguate by
+  scope — `validate` reviews one change/branch, `review` audits a whole project —
   and cross-reference each other.
 - **Fixed factual drift across docs/meta.** `SECURITY.md` no longer claims a
   zero attack surface (it ships a Bash CLI + a 1Password secrets path); the
   `review` how-to no longer tells you to commit the gitignored `.review-notes/`;
   `reference/cli.md` now documents `list-skills`; and the CLI subcommand list,
-  skill inventory, repo map, and Plan/Generate capability claims are reconciled
+  skill inventory, repo map, and Plan/Codify capability claims are reconciled
   across `CLAUDE.md`, `ROADMAP.md`, and `CHANGELOG.md`.
 
 ### Added (earlier in the unreleased window)
 
-- Lifecycle skills organized as `Ideate → Plan → Generate → Solve → Ship`:
-  `ideate`, `plan`, `codify`, `fix-issue`, `ship`.
+- Lifecycle skills organized as `Ideate → Plan → Codify → Validate → Ship`:
+  `ideate`, `plan`, `codify`, `validate`, `ship`.
 - Enforcement: `hooks/hooks.json` PreToolUse guard (`hooks/guard-bash.sh`) that
   blocks force-pushes and pushes to trunk; git hooks `scripts/hooks/commit-msg`
   (conventional + no-AI-attribution + subject rules) and `pre-commit`

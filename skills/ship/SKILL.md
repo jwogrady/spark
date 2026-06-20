@@ -1,11 +1,11 @@
 ---
 name: ship
-description: Land a reviewed change — write a conventional commit (imperative subject under 72 chars, why-not-what body, no AI attribution), push the branch, and open one focused pull request. Use when the user wants to commit, write a commit message, push, or open a PR for finished work. Not for writing the code (`codify`) or running the reviews (`fix-issue`) — it assumes an already-reviewed change.
+description: Land a reviewed change — write a conventional commit (imperative subject under 72 chars, why-not-what body, no AI attribution), push the branch, and open one focused pull request. Use when the user wants to commit, write a commit message, push, or open a PR for finished work. Not for writing the code (`codify`) or running the reviews (`validate`) — it assumes an already-reviewed change.
 ---
 
 # ship — Stage 5 of the Spark lifecycle
 
-`Ideate → Plan → Generate → Solve → Ship`
+`Ideate → Plan → Codify → Validate → Ship`
 
 Ship turns a reviewed branch into landed work: one logical commit that explains
 *why*, then one focused PR. Spark's `commit-msg` git hook enforces the message
@@ -14,7 +14,7 @@ rules mechanically; this skill produces a commit and PR that pass the first time
 ## Do this
 
 1. **Confirm the branch.** Never commit or push on `master`/`main` — if you're on
-   it, branch first. Confirm the change passed [`fix-issue`](../fix-issue/SKILL.md).
+   it, branch first. Confirm the change passed [`validate`](../validate/SKILL.md).
 2. **Review what's staged.** `git status`, then `git diff --staged`. Stage only
    what belongs in this one logical change.
 3. **Commit** with a conventional message:
