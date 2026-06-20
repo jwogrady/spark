@@ -50,6 +50,7 @@ Task-oriented recipes — the lifecycle stages in order, then setup and audit:
 Information-oriented — what each piece is and how it behaves:
 
 - [reference/skills.md](reference/skills.md) — every skill, its stage, and what triggers it.
+- [reference/codify-readiness.md](reference/codify-readiness.md) — the Plan→Codify readiness gate: the checklist and the health signal.
 - [reference/cli.md](reference/cli.md) — the `spark` CLI and its subcommands.
 - [reference/hooks.md](reference/hooks.md) — the enforcement hooks and what each blocks.
 - [reference/plugin-manifest.md](reference/plugin-manifest.md) — the plugin manifest and marketplace files.

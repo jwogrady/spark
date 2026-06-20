@@ -57,6 +57,20 @@ live in git itself, below the level of whoever invoked the commit.
 and every skill's and agent's frontmatter. It is the check you can run before you
 push to know the plugin is well-formed.
 
+## Form vs. readiness
+
+The hooks above all verify *form* — the shape of a commit, the branch it lands
+on, the trailer it carries. Form is necessary but not sufficient: a plan can
+satisfy every form check and still be unbuildable, with crisp acceptance criteria
+but no stack decided. That is a failure of *readiness*, not form.
+
+Spark verifies readiness with the [Codify-readiness gate](../reference/codify-readiness.md)
+— a checklist `plan` produces and `codify` preflights against at the Plan→Codify
+boundary. It is enforced by skill behavior (`codify` refuses to start an unready
+plan) rather than a git hook, because readiness is about the substance of the
+plan, not the syntax of a commit. Form lives in `hooks/`; readiness lives in the
+lifecycle skills.
+
 ## Why this is the right trade, and where it stops
 
 Mechanical enforcement costs more up front — you write and test a hook instead of a

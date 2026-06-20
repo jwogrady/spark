@@ -17,7 +17,8 @@ lane (Codify, stage 3).
    implementation approach is recorded (stack/runtime, layout, key deps — the
    ADRs [`plan`](../plan/SKILL.md) produced) and that a scaffold exists (or run
    [`bootstrap`](../bootstrap/SKILL.md)). If the stack is undecided, the plan is
-   not Codify-ready — resolve it in `plan`, don't guess a stack mid-implementation.
+   not [Codify-ready](../../docs/reference/codify-readiness.md) — resolve it in
+   `plan`, don't guess a stack mid-implementation.
 2. **Read the issue.** The acceptance criteria are the contract. If they're
    missing or vague, go back to [`plan`](../plan/SKILL.md) — don't guess.
 3. **Branch.** Never work on `master`/`main`. Create a focused branch:
