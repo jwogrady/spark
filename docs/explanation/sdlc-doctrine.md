@@ -34,6 +34,26 @@ the when/why*, not a competing reviewer.
 issue per branch, one concern per PR. Scope creep becomes a new issue, never a
 silent addition.
 
+## Versioning
+
+Projects built with Spark follow one version ladder. It is a Spark
+**convention**, not stock SemVer — whose own guidance for early development is
+"start at `0.1.0`, bump minor each release." The ladder layers on top of
+SemVer's "anything MAY change in `0.y.z`" allowance:
+
+| Version | Meaning |
+|---|---|
+| `0.0.0` | Ideate + Plan complete — formation, no code. A *phase marker*, not a released artifact. |
+| `0.0.1 → 0.0.x` | Each discrete coding contribution (one issue / one PR = one patch bump). The first Release lands at the first `0.0.x` with code. |
+| `0.1.0` | First **usable** product — earned when it's usable, not at the first feature. |
+
+After `0.1.0`, the bump is derived from the conventional-commit types Spark
+already enforces: `feat:` → minor, `fix:`/`docs:`/`chore:`/`refactor:` → patch,
+`!` or `BREAKING CHANGE` → major.
+
+This ladder governs the project being built. Spark's own version is a separate
+line (already past `0.1.0`).
+
 ## The loop closes
 
 Shipped work that reveals a new problem doesn't get bolted onto the current PR —

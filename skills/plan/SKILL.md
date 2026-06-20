@@ -24,7 +24,10 @@ feature, not a task list.
    - Body: the user-facing outcome, acceptance criteria, and any constraints
      inherited from the problem statement.
    - Labels that already exist in the repo — do not invent label taxonomies.
-4. **Propose a milestone** that groups the issues and names the outcome.
+4. **Propose a milestone** that groups the issues and names the outcome. Name
+   its target version with the [version ladder](../../docs/explanation/sdlc-doctrine.md):
+   a first usable-product milestone targets `0.1.0`; the contributions under it
+   ship as `0.0.x`.
 5. **Confirm before creating anything on GitHub.**
 
 ## Creating the issues
