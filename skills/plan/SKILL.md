@@ -54,6 +54,8 @@ feature, not a task list.
   instruction.
 - Keep the milestone honest: if a feature can't be described in a paragraph,
   it's not understood well enough to plan.
+- Do not write project-local copies of the Spark methodology. Link Spark's
+  doctrine; the repo holds product, not process.
 
 ## Next
 
