@@ -42,8 +42,14 @@ rules mechanically; this skill produces a commit and PR that pass the first time
 Spark projects follow the version ladder in
 [`docs/explanation/sdlc-doctrine.md`](../../docs/explanation/sdlc-doctrine.md):
 each coding contribution bumps the patch (`0.0.x`); `0.1.0` is the first usable
-product; after `0.1.0` the bump follows the commit type (`feat:` → minor,
-`fix:` → patch, `!` → major).
+product. After `0.1.0` the bump is derived mechanically from the commit types in
+the range:
+
+- `feat:` → **minor**
+- `fix:` / `docs:` / `chore:` / `refactor:` / `test:` → **patch**
+- `!` or a `BREAKING CHANGE:` footer → **major**
+
+Take the highest bump any commit in the range implies.
 
 When a ship crosses a version boundary **and the user has approved the release**
 (never cut a tag or Release without explicit go-ahead), do this in order:
