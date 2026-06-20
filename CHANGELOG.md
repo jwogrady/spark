@@ -8,7 +8,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
-Nothing yet.
+### Changed
+
+- **Strip residual process framing from generated project docs.** Doc-writing
+  skills (`ideate`, `plan`, `agents-md`) now forbid stamping product docs with
+  Spark-internal process framing — `Phase N` / `Prompt NNN` status headers,
+  `/spark:` stage references, "later Spark stages" phrasing; a status line
+  describes a doc's own authority, not the stage that produced it. `ship` now
+  enforces CHANGELOG discipline: entries record product changes, never phase
+  transitions or planning bookkeeping. `cleanup`'s Docs Auditor flags the
+  residue mechanically (`rg 'Phase [0-9]|Prompt 0|/spark:|later Spark stage'`).
+  Extends the #38 rule from whole files to the framing inside the files that
+  remain. (#55)
 
 ## [0.3.0] - 2026-06-19
 

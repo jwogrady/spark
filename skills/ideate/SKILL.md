@@ -46,6 +46,12 @@ planning docs (e.g. `docs/` or an issue), or to pass it straight to `plan`.
 - One problem per statement. If two problems surface, split them.
 - Do not write project-local copies of the Spark methodology. Link Spark's
   doctrine; the repo holds product, not process.
+- Do not stamp the problem statement with Spark-internal process framing —
+  no `Phase N` / `Prompt NNN` status headers, no `/spark:` stage references,
+  no "deferred to later Spark stages." A status line describes the doc's own
+  authority and scope ("Authoritative — the problem this project solves"), never
+  the lifecycle stage that produced it. The framing leaks the build process into
+  a product artifact; strip it.
 
 ## Next
 

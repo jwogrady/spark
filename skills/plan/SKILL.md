@@ -56,6 +56,11 @@ feature, not a task list.
   it's not understood well enough to plan.
 - Do not write project-local copies of the Spark methodology. Link Spark's
   doctrine; the repo holds product, not process.
+- Do not stamp issues, ADRs, or any doc with Spark-internal process framing —
+  no `Phase N` / `Prompt NNN` status headers, no `/spark:` stage references, no
+  "deferred to later Spark stages" as the way to say "not built yet." Status
+  lines describe a doc's own authority and scope, not the lifecycle stage that
+  produced it. Say "planned" or "not yet implemented," not "later Spark stages."
 
 ## Next
 

@@ -41,7 +41,7 @@ Include these unless the user customizes the team:
 - **Historian** — git history, branch age, merge status, release tags, TODO age, old migration/context clues.
 - **Static Analyst** — imports, exports, type errors, unused symbols, dependency graph, scripts, build config, lint failures.
 - **Test Sentinel** — runs tests/builds, finds coverage gaps and broken/untested paths, validates cleanup changes.
-- **Docs Auditor** — verifies README/docs/comments against actual behavior; fixes or deletes misleading documentation.
+- **Docs Auditor** — verifies README/docs/comments against actual behavior; fixes or deletes misleading documentation. In a project built with Spark, also flags **residual process framing** in product docs — phase/prompt status headers, `/spark:` stage references, and "later Spark stages" phrasing — caught mechanically with `rg -n 'Phase [0-9]|Prompt 0|/spark:|later Spark stage'` across docs and CHANGELOG. The build process belongs in Spark, not in the project's product docs.
 - **Dead Code Reaper** — proposes removals with evidence, separates safe from risky, prepares small reversible patches.
 - **Branch Janitor** — identifies stale/merged/abandoned/protected branches and the exact cleanup commands.
 - **Dependency Medic** — finds unused, duplicated, vulnerable, deprecated, or mis-pinned dependencies.
@@ -65,6 +65,8 @@ Confidence levels:
 Example row:
 
 `Deps | "lodash unused" | rg "lodash" src/ -> no hits; not in package.json scripts | High | Remove from package.json | Low | Build + test pass after removal`
+
+`Docs | "process framing in product docs" | rg "Phase [0-9]|Prompt 0|/spark:|later Spark stage" docs/ CHANGELOG.md -> 6 hits | High | Strip framing; keep content | Low | Links still resolve; content unchanged`
 
 ## Deletion categories
 
