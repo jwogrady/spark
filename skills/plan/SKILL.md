@@ -48,7 +48,8 @@ feature, not a task list.
 - Acceptance criteria must be verifiable — they become the `Validate` stage's
   definition of done.
 - The implementation approach must be decided and recorded as ADRs — an issue
-  with crisp acceptance criteria but no stack is not Codify-ready.
+  with crisp acceptance criteria but no stack is not
+  [Codify-ready](../../docs/reference/codify-readiness.md).
 - Do not create issues, milestones, labels, or projects without explicit
   instruction.
 - Keep the milestone honest: if a feature can't be described in a paragraph,

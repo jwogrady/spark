@@ -36,6 +36,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ### Changed
 
+- **Codify-readiness gate — verify substance, not just form (#39).** New
+  `docs/reference/codify-readiness.md` defines the Plan→Codify gate: a checklist
+  (problem statement, prior art, stack-as-ADRs, verifiable criteria, scaffold)
+  and an optional health signal (commits-to-first-code, doc:code ratio, deferral
+  density). `plan` and `codify` now link "Codify-ready" to this single source of
+  truth, and `explanation/enforcement-model.md` draws the form-vs-readiness line —
+  form lives in `hooks/`, readiness lives in the lifecycle skills.
 - **`codify` now preflights for Codify-readiness (#36).** Before touching code,
   `codify` confirms the implementation approach is recorded as ADRs (from `plan`)
   and that a scaffold exists (or runs `bootstrap`). If the stack is undecided it
