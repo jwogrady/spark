@@ -36,6 +36,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ### Changed
 
+- **Methodology stays in Spark — skills link it, don't paste it (#38).**
+  `ideate` and `plan` gain a guardrail against writing project-local copies of
+  the Spark process, and `agents-md` now carries a "Link the methodology, don't
+  paste it" section with the canonical "How this project is built" pointer for a
+  project's `CLAUDE.md` / `AGENTS.md`. One source of truth for the process,
+  edited once; the project repo holds product, not process.
 - **`ideate` now surveys prior art and existing assets (#37).** Before framing a
   problem as new, `ideate` checks for a predecessor repo, prototype, captured
   data, or abandoned branch, and the problem statement gains a "Prior art &

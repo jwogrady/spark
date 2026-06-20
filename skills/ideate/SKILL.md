@@ -44,6 +44,8 @@ planning docs (e.g. `docs/` or an issue), or to pass it straight to `plan`.
   the stack as ADRs). Surface the problem, not the implementation.
 - Capture *why*, not just *what*.
 - One problem per statement. If two problems surface, split them.
+- Do not write project-local copies of the Spark methodology. Link Spark's
+  doctrine; the repo holds product, not process.
 
 ## Next
 

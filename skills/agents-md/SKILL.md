@@ -62,6 +62,26 @@ GitHub API and Automation · Scope Discipline · Skill Authoring Quick Reference
 
 Omit a section only when genuinely not applicable, and note why.
 
+## Link the methodology, don't paste it
+
+The Spark methodology — the lifecycle, the one-issue-per-branch rule, the
+loop-closes principle — lives in Spark and is edited once. A project repo carries
+only its own product: problem statement, decisions, glossary, plan. When a
+contract file needs to say *how* the project is built, **link Spark's doctrine
+instead of restating it.** Never generate a project-local copy of the process
+(no `*-workflow.md`, `planning-overview.md`, or constitution restatement in the
+project's `docs/`); that creates a second source of truth to maintain.
+
+The canonical pointer for a project's `CLAUDE.md` / `AGENTS.md`:
+
+```markdown
+## How this project is built
+
+Built with the [Spark lifecycle](https://github.com/jwogrady/spark)
+(`Ideate → Plan → Codify → Validate → Ship`). The process and standards live in
+Spark; this repo carries only <project>'s problem, decisions, and plan.
+```
+
 ## How the skill behaves
 
 1. **Read both files first.** Never overwrite blindly.
