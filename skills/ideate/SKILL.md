@@ -34,7 +34,8 @@ planning docs (e.g. `docs/` or an issue), or to pass it straight to `plan`.
 ## Guardrails
 
 - Do not jump to a solution, file tree, or tech choice during ideate — that's
-  `plan`'s job. Surface the problem, not the implementation.
+  **decided in `plan`** (its "Decide the implementation approach" step records
+  the stack as ADRs). Surface the problem, not the implementation.
 - Capture *why*, not just *what*.
 - One problem per statement. If two problems surface, split them.
 

@@ -36,6 +36,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ### Changed
 
+- **`plan` now decides the implementation approach (#35).** Plan picks up the
+  tech choice `ideate` defers — language/runtime, top-level layout, key
+  dependencies — and records it as ADRs under `docs/adr/`. A new guardrail makes
+  it explicit: an issue with crisp acceptance criteria but no stack is not
+  Codify-ready. `ideate` now states the tech choice is *decided in* `plan`, so
+  the baton is caught rather than dropped. Closes the ideate→plan tech-choice gap
+  that produced all-docs, zero-code plans.
 - **Aligned lifecycle phase names with skill names (#41).** The two mismatched
   stages were renamed so every phase equals its like-named skill/command:
   `Generate → Codify` and `Solve → Validate`. The `fix-issue` skill is now
