@@ -17,11 +17,11 @@ One portable, opinionated toolkit — boot it once, carry it into every repo.
 Everything orbits a single GitHub-native lifecycle:
 
 ```
-Ideate → Plan → Generate → Solve → Ship
+Ideate → Plan → Codify → Validate → Ship
 ```
 
 Each stage is a skill (`/spark:ideate`, `/spark:plan`, `/spark:codify`,
-`/spark:fix-issue`, `/spark:ship`), backed by enforcement hooks
+`/spark:validate`, `/spark:ship`), backed by enforcement hooks
 and a small `spark` CLI. See [explanation/sdlc-doctrine.md](explanation/sdlc-doctrine.md)
 for why this is the spine.
 
@@ -38,7 +38,7 @@ Task-oriented recipes — the lifecycle stages in order, then setup and audit:
 - [how-to/ideate.md](how-to/ideate.md) — `/spark:ideate` · frame a fuzzy idea into a written problem statement.
 - [how-to/plan.md](how-to/plan.md) — `/spark:plan` · decompose the problem into scoped work items.
 - [how-to/codify.md](how-to/codify.md) — `/spark:codify` · implement one work item on a feature branch.
-- [how-to/solve.md](how-to/solve.md) — `/spark:fix-issue` · review and harden the change until it's ready.
+- [how-to/validate.md](how-to/validate.md) — `/spark:validate` · review and harden the change until it's ready.
 - [how-to/ship.md](how-to/ship.md) — `/spark:ship` · commit, push, and open a focused PR.
 - [how-to/install.md](how-to/install.md) — install the plugin and apply the permission baseline.
 - [how-to/bootstrap.md](how-to/bootstrap.md) — `/spark:bootstrap` · scaffold a project runtime (Bun / uv).

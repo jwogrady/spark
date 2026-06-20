@@ -21,7 +21,7 @@ flowchart TD
     Q -->|Break work into issues| P([plan])
     Q -->|Write the code| C([codify])
     Q -->|Check a change| R{How much<br/>are you checking?}
-    R -->|One diff / branch / PR| FI([fix-issue<br/>wraps /code-review + /security-review])
+    R -->|One diff / branch / PR| FI([validate<br/>wraps /code-review + /security-review])
     R -->|The whole project| RV([review])
     Q -->|Commit & open a PR| S([ship])
     Q -->|Write docs| D{Who reads them?}
@@ -40,9 +40,9 @@ Or scan by intent:
 | Turn a fuzzy idea into a written problem statement | `ideate` | — |
 | Break a problem into issues + a milestone | `plan` | — |
 | Write the code for one planned issue | `codify` | — |
-| Harden **one** diff/branch/PR before shipping | `fix-issue` | not `review` (that's whole-project) |
+| Harden **one** diff/branch/PR before shipping | `validate` | not `review` (that's whole-project) |
 | Review just one diff with no orchestration | native `/code-review`, `/security-review` | not `review` |
-| Audit the **whole** project (release readiness) | `review` | not `fix-issue` (one diff) |
+| Audit the **whole** project (release readiness) | `review` | not `validate` (one diff) |
 | Commit a finished change + open a PR | `ship` | — |
 | Write/refresh **public** docs (README, positioning) | `docit` | not `knowledge` |
 | Capture **internal** knowledge (ADRs, SOPs, specs) | `knowledge` | not `docit` |
@@ -56,8 +56,8 @@ Or scan by intent:
 |---|---|---|
 | `ideate` | Ideate | Starting something new; "I want to build X"; fuzzy scope |
 | `plan` | Plan | Breaking work into features/issues; scoping a milestone |
-| `codify` | Generate | Implementing one issue; writing the code for planned work |
-| `fix-issue` | Solve | Reviewing/hardening a change; resolving review findings |
+| `codify` | Codify | Implementing one issue; writing the code for planned work |
+| `validate` | Validate | Reviewing/hardening a change; resolving review findings |
 | `ship` | Ship | Committing; writing a commit message; pushing; opening a PR |
 
 ## Setup skills
@@ -79,7 +79,7 @@ Or scan by intent:
 | Skill | Purpose |
 |---|---|
 | `agents-md` | Maintains and audits a project's `CLAUDE.md` and `AGENTS.md`, keeping the two in sync. |
-| `review` | Multi-agent **whole-project** audit by specialist agents collaborating via shared notes. Not a single-diff reviewer — for one diff/PR use the native `/code-review` + `/security-review`, or `fix-issue` to orchestrate them. |
+| `review` | Multi-agent **whole-project** audit by specialist agents collaborating via shared notes. Not a single-diff reviewer — for one diff/PR use the native `/code-review` + `/security-review`, or `validate` to orchestrate them. |
 
 ## Skill layout
 

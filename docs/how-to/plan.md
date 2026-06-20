@@ -8,7 +8,7 @@ Use this after `ideate`, when you have a confirmed problem statement.
 2. Review the proposed feature breakdown. Aim for 3–7 features in a first
    milestone; if there are more, cut scope.
 3. Check each drafted issue: imperative title, user-facing outcome, and
-   **verifiable acceptance criteria** (these become the Solve stage's definition
+   **verifiable acceptance criteria** (these become the Validate stage's definition
    of done).
 4. Confirm before anything is created on GitHub.
 5. On approval, let the skill create the issues (`gh issue create` using

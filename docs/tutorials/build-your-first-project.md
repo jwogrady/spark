@@ -30,16 +30,16 @@ issue for each, with acceptance criteria. Approve, and let it create one issue.
 
 > You learned: features map to issues, and acceptance criteria are the contract.
 
-## 3. Generate
+## 3. Codify
 
 Type `/spark:codify` and point it at the issue. It opens a `feat/…` branch and
 writes code to the criteria — and stops there.
 
 > You learned: one issue, one branch, no scope creep.
 
-## 4. Solve
+## 4. Validate
 
-Type `/spark:fix-issue`. It runs `/code-review` (and `/security-review` if
+Type `/spark:validate`. It runs `/code-review` (and `/security-review` if
 relevant), then `verify` to actually run the thing. Fix what it finds.
 
 > You learned: Spark orchestrates Claude's built-in reviewers rather than

@@ -1,15 +1,15 @@
 ---
 name: codify
-description: Implement one planned GitHub issue on a feature branch, scoped tightly to that issue's acceptance criteria. Use when the user wants to start coding an issue, implement a feature, or generate the code for planned work. Not for reviewing/hardening the result (`fix-issue`) or committing and opening the PR (`ship`).
+description: Implement one planned GitHub issue on a feature branch, scoped tightly to that issue's acceptance criteria. Use when the user wants to start coding an issue, implement a feature, or generate the code for planned work. Not for reviewing/hardening the result (`validate`) or committing and opening the PR (`ship`).
 ---
 
 # codify — Stage 3 of the Spark lifecycle
 
-`Ideate → Plan → Generate → Solve → Ship`
+`Ideate → Plan → Codify → Validate → Ship`
 
 The `codify` skill implements exactly one issue. Its job is to turn acceptance
 criteria into working code on a branch — nothing wider. It owns the **coding**
-lane (Generate, stage 3).
+lane (Codify, stage 3).
 
 ## Do this
 
@@ -39,5 +39,5 @@ lane (Generate, stage 3).
 
 ## Next
 
-Send the change to [`fix-issue`](../fix-issue/SKILL.md) to review and harden,
+Send the change to [`validate`](../validate/SKILL.md) to review and harden,
 then to [`ship`](../ship/SKILL.md) to commit and open a PR.

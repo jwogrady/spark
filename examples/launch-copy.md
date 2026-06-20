@@ -7,7 +7,7 @@
 ## Repo description (≤ 350 chars, search-optimized)
 
 ```
-Portable SDLC plugin for Claude Code. Enforces Ideate→Plan→Generate→Solve→Ship
+Portable SDLC plugin for Claude Code. Enforces Ideate→Plan→Codify→Validate→Ship
 lifecycle with mechanical guardrails: git hooks block force-push/trunk commits,
 conventional commits enforced, 11 skills, multi-agent doc crews (docit,
 knowledge). Install once, carry into every project. Zero dependencies, MIT licensed.
@@ -26,7 +26,7 @@ knowledge). Install once, carry into every project. Zero dependencies, MIT licen
 ```
 $ /plugin install spark
 > one lifecycle, carried into every Claude Code repo:
->   Ideate → Plan → Generate → Solve → Ship
+>   Ideate → Plan → Codify → Validate → Ship
 > the guardrails aren't suggestions — they run before you can fumble.
 > 11 skills. two agent crews. zero deps. honest attribution. ▌
 ```
@@ -50,7 +50,7 @@ Spark accent color; `jwogrady/spark` in small monospace; no AI attribution;
 > Code plugin.
 >
 > Spark carries the same lifecycle into every repo you open:
-> Ideate → Plan → Generate → Solve → Ship
+> Ideate → Plan → Codify → Validate → Ship
 >
 > One install, less drift.
 > https://github.com/jwogrady/spark
@@ -97,7 +97,7 @@ Spark accent color; `jwogrady/spark` in small monospace; no AI attribution;
 
 ## Show HN
 
-**Title:** Show HN: Spark – portable SDLC plugin for Claude Code (Ideate→Plan→Generate→Solve→Ship)
+**Title:** Show HN: Spark – portable SDLC plugin for Claude Code (Ideate→Plan→Codify→Validate→Ship)
 
 **Blurb:**
 
@@ -135,7 +135,7 @@ Repo: https://github.com/jwogrady/spark
 
 **Target subreddits:** r/programming, r/devtools, r/AIAssisted, r/ClaudeAI
 
-**Title:** I built a portable SDLC plugin for Claude Code that enforces Ideate→Plan→Generate→Solve→Ship with mechanical guardrails — show and tell
+**Title:** I built a portable SDLC plugin for Claude Code that enforces Ideate→Plan→Codify→Validate→Ship with mechanical guardrails — show and tell
 
 **Body:**
 
@@ -149,7 +149,7 @@ mechanical rather than advisory.
 
 **What's shipped in v0.2.0:**
 - 11 skills wired to slash commands: `/spark:ideate`, `/spark:plan`,
-  `/spark:codify`, `/spark:fix-issue`, `/spark:ship` (plus setup and knowledge
+  `/spark:codify`, `/spark:validate`, `/spark:ship` (plus setup and knowledge
   skills)
 - Mechanical guardrails: a PreToolUse Bash hook that blocks force-pushes and trunk
   commits before Claude executes them; a `commit-msg` git hook that rejects

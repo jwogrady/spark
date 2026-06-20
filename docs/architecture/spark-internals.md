@@ -78,7 +78,7 @@ flowchart TB
 
 Two flows run through Spark:
 
-1. **Lifecycle flow** (`Ideate → Plan → Generate → Solve → Ship`). A skill is
+1. **Lifecycle flow** (`Ideate → Plan → Codify → Validate → Ship`). A skill is
    invoked as a `/spark:` command; its output is the next stage's input — a
    written problem statement feeds issue decomposition, which feeds a branch,
    which feeds review, which feeds a commit and PR. See

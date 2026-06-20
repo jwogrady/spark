@@ -4,13 +4,13 @@
     "name": "jwogrady"
   },
   "metadata": {
-    "description": "Spark — a portable, GitHub-native SDLC toolkit for Claude Code that carries one opinionated lifecycle (ideate, plan, generate, solve, ship) into every project."
+    "description": "Spark — a portable, GitHub-native SDLC toolkit for Claude Code that carries one opinionated lifecycle (ideate, plan, codify, validate, ship) into every project."
   },
   "plugins": [
     {
       "name": "spark",
       "source": "./",
-      "description": "Portable GitHub-native SDLC toolkit for Claude Code: ideate, plan, generate, solve, ship."
+      "description": "Portable GitHub-native SDLC toolkit for Claude Code: ideate, plan, codify, validate, ship."
     }
   ]
 }

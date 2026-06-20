@@ -1,6 +1,6 @@
 ---
 name: review
-description: Audit a whole project — not a single diff — with 8 specialist agents who share findings before a Synthesis Lead produces one consolidated report. Use for codebase-wide quality control: preparing for a major release or external review, or assessing overall project health across documentation, architecture, code quality, testing, and security. Not for a single diff or PR — use the native /code-review and /security-review (or `fix-issue` to orchestrate them on one branch); to remove proven-dead code, false docs, or stale branches rather than assess health, use `cleanup`.
+description: Audit a whole project — not a single diff — with 8 specialist agents who share findings before a Synthesis Lead produces one consolidated report. Use for codebase-wide quality control: preparing for a major release or external review, or assessing overall project health across documentation, architecture, code quality, testing, and security. Not for a single diff or PR — use the native /code-review and /security-review (or `validate` to orchestrate them on one branch); to remove proven-dead code, false docs, or stale branches rather than assess health, use `cleanup`.
 ---
 
 # review — multi-agent project audit
@@ -88,6 +88,6 @@ Each file includes:
 
 ## Fits the lifecycle
 
-`review` is used in the **Solve** stage — after code is written and tests pass, before
+`review` is used in the **Validate** stage — after code is written and tests pass, before
 shipping. It can also run standalone as a pre-release quality gate or milestone
 checkpoint. Use it to uncover hidden debt before it accumulates.

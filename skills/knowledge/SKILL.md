@@ -123,7 +123,7 @@ The fact/assumption/uncertainty discipline is "The one rule" above. Beyond it:
 
 `knowledge` is a **cross-cutting knowledge tool**, not a single lifecycle stage. It
 runs whenever a decision, system, process, or product idea is worth keeping —
-often right after [`codify`](../codify/SKILL.md) or [`fix-issue`](../fix-issue/SKILL.md)
+often right after [`codify`](../codify/SKILL.md) or [`validate`](../validate/SKILL.md)
 turns up something worth recording, or alongside [`ideate`](../ideate/SKILL.md)
 when raw intent needs structure. It is the inward counterpart to
 [`docit`](../docit/SKILL.md): docit makes the world want to use the project;

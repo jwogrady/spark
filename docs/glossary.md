@@ -20,7 +20,7 @@ same intent. Prefer "two doors" over "two layers" / "two gates". See
 [reference/hooks.md](reference/hooks.md) and
 [adr/0003-zero-dependency-bash-and-enforcement-hooks.md](adr/0003-zero-dependency-bash-and-enforcement-hooks.md).
 
-### Ideate → Plan → Generate → Solve → Ship
+### Ideate → Plan → Codify → Validate → Ship
 
 The Spark lifecycle spine — the single GitHub-native software-development
 lifecycle every Spark project runs. Each stage is owned by one skill. Always

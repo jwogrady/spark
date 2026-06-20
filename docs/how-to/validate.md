@@ -1,10 +1,10 @@
-# How to solve (review and harden) a change
+# How to validate (review and harden) a change
 
 > How-to — task-oriented.
 
 Use this after `codify`, before committing.
 
-1. Invoke `/spark:fix-issue`.
+1. Invoke `/spark:validate`.
 2. Run the built-in reviews — Spark orchestrates them, it doesn't replace them:
    - `/code-review` for correctness and quality.
    - `/security-review` if the change touches auth, input handling, secrets, or

@@ -7,7 +7,7 @@
 ![license](https://img.shields.io/badge/license-MIT-green)
 
 Raw idea in, durable GitHub artifacts out. Spark is a Claude Code plugin that
-carries one lifecycle — **Ideate → Plan → Generate → Solve → Ship** — into every
+carries one lifecycle — **Ideate → Plan → Codify → Validate → Ship** — into every
 repo you crack open.
 
 Install it once and the rails come with you: a PreToolUse guard kills force-pushes
@@ -18,8 +18,8 @@ zero runtime deps. No reinvention, no drift.
 ```mermaid
 flowchart LR
     A([Ideate]) --> B([Plan])
-    B --> C([Generate])
-    C --> D([Solve])
+    B --> C([Codify])
+    C --> D([Validate])
     D --> E([Ship])
     A:::stage
     B:::stage
@@ -29,10 +29,8 @@ flowchart LR
     classDef stage fill:#1a1a2e,stroke:#e94560,color:#eaeaea,rx:6
 ```
 
-> Stage names map to skills: Ideate → `/spark:ideate`, Plan → `/spark:plan`,
-> Generate → `/spark:codify`, Solve → `/spark:fix-issue`,
-> Ship → `/spark:ship`. You run `/spark:codify` (not `/spark:generate`) for the
-> Generate stage.
+> Each stage is a skill of the same name: `/spark:ideate`, `/spark:plan`,
+> `/spark:codify`, `/spark:validate`, `/spark:ship`.
 
 ## Quickstart
 
@@ -67,7 +65,7 @@ agent file. It prints a `✓ <name>` line per item and ends with
 1. `/spark:ideate` — frame the problem into a written problem statement.
 2. `/spark:plan` — decompose it into scoped work items with acceptance criteria.*
 3. `/spark:codify` — implement one item on a feature branch.
-4. `/spark:fix-issue` — invoke `/code-review` and `/security-review`, then fix to
+4. `/spark:validate` — invoke `/code-review` and `/security-review`, then fix to
    acceptance criteria.
 5. `/spark:ship` — write a conventional commit, then open a focused PR.
 
@@ -86,7 +84,7 @@ fails at the push step.
 Spark's 11 skills fall into four categories (canonical list:
 [`docs/reference/skills.md`](docs/reference/skills.md)):
 
-- **Lifecycle** — `ideate`, `plan`, `codify`, `fix-issue`, `ship` (the five steps above).
+- **Lifecycle** — `ideate`, `plan`, `codify`, `validate`, `ship` (the five steps above).
 - **Setup** — `bootstrap` (scaffold a runtime), `connect` (services + secrets via 1Password).
 - **Authorship** — `docit` (public docs), `knowledge` (internal knowledge).
 - **Supporting** — `agents-md` (`CLAUDE.md` + `AGENTS.md`), `review` (whole-project audit).

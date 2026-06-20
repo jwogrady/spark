@@ -2,7 +2,7 @@
 
 > How-to — task-oriented.
 
-Use this to implement one planned issue — the Generate stage.
+Use this to implement one planned issue — the Codify stage.
 
 1. Invoke `/spark:codify` with the issue (number or text) in context.
 2. The skill creates a focused branch (`feat/<slug>`, etc.) — never work on

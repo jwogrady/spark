@@ -15,7 +15,7 @@ opinionated lifecycle at your fingertips and enforces the guardrails that keep
 work clean:
 
 ```
-Ideate → Plan → Generate → Solve → Ship
+Ideate → Plan → Codify → Validate → Ship
 ```
 
 You install it (`/plugin marketplace add jwogrady/spark` → `/plugin install spark`)
@@ -59,8 +59,8 @@ The 11 skills group into four categories. The canonical taxonomy lives in
 |---|---|---|
 | Ideate | `ideate` | Frame the problem in writing (uses the native `grill-me`) |
 | Plan | `plan` | Decompose into scoped work items + a milestone scaffold (issue generation is a v0.3 goal) |
-| Generate | `codify` | Implement one work item on a feature branch |
-| Solve | `fix-issue` | Orchestrate built-in reviews, then fix |
+| Codify | `codify` | Implement one work item on a feature branch |
+| Validate | `validate` | Orchestrate built-in reviews, then fix |
 | Ship | `ship` | Conventional commit, then a focused PR |
 
 The remaining six:
