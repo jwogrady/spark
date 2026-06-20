@@ -7,7 +7,7 @@ Priorities may shift as the project evolves.
 
 ## v0.2 — Plugin + lifecycle
 
-**Status:** In progress
+**Status:** Shipped (`v0.2.0`)
 
 Spark becomes a Claude Code plugin organized around the
 `Ideate → Plan → Codify → Validate → Ship` lifecycle.
@@ -23,7 +23,24 @@ Spark becomes a Claude Code plugin organized around the
 
 ---
 
-## v0.3 — Plan ↔ GitHub
+## v0.3 — Lifecycle readiness & naming
+
+**Status:** Shipped (`v0.3.0`)
+
+Harden the lifecycle so a plan is provably buildable before coding starts, and
+make the phase vocabulary 1:1 with the skills.
+
+- [x] Phase names aligned with skills (`Ideate → Plan → Codify → Validate → Ship`;
+      `fix-issue` → `validate`)
+- [x] `plan` decides the implementation stack and records ADRs
+- [x] `codify` Codify-readiness preflight + the shared readiness gate / checklist
+- [x] `ideate` prior-art / existing-assets survey
+- [x] Methodology stays in Spark — skills link the doctrine, don't paste it
+- [x] `ship` release flow with mechanical, commit-type-driven version bumping
+
+---
+
+## v0.4 — Plan ↔ GitHub
 
 **Status:** Planned
 
@@ -35,7 +52,7 @@ Tighten the Plan stage's GitHub integration:
 
 ---
 
-## v0.4 — Subagents and MCP
+## v0.5 — Subagents and MCP
 
 **Status:** Planned
 
@@ -44,7 +61,7 @@ Tighten the Plan stage's GitHub integration:
 
 ---
 
-## v0.5 — Stack-aware setup
+## v0.6 — Stack-aware setup
 
 **Status:** Planned
 

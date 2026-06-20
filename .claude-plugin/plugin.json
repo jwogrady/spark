@@ -1,7 +1,7 @@
 {
   "name": "spark",
   "description": "A portable project-inception and software-delivery system for AI-assisted development, delivered as a Claude Code plugin. Carries one opinionated lifecycle into every project: ideate, plan, codify, validate, ship.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "author": {
     "name": "jwogrady"
   },
