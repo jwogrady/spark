@@ -69,7 +69,7 @@ agent file. It prints a `✓ <name>` line per item and ends with
    acceptance criteria.
 5. `/spark:ship` — write a conventional commit, then open a focused PR.
 
-> *GitHub-issue creation from a problem statement is planned for v0.3; the current
+> *GitHub-issue creation from a problem statement is planned for v0.4; the current
 > version generates scoped work items and milestone scaffolds.
 
 Ready for a deeper walkthrough? See

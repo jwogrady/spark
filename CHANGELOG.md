@@ -8,8 +8,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
-> Plugin version remains `0.2.0`; these changes are unreleased on the current
-> branch. No version bump has been made.
+Nothing yet.
+
+## [0.3.0] - 2026-06-19
 
 ### Added
 
