@@ -36,6 +36,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ### Changed
 
+- **`codify` now preflights for Codify-readiness (#36).** Before touching code,
+  `codify` confirms the implementation approach is recorded as ADRs (from `plan`)
+  and that a scaffold exists (or runs `bootstrap`). If the stack is undecided it
+  refuses to start and sends you back to `plan`, rather than silently inventing a
+  stack mid-implementation. Mirrors the existing "missing criteria → go back to
+  plan" reflex for the other precondition `codify` had been assuming.
 - **`plan` now decides the implementation approach (#35).** Plan picks up the
   tech choice `ideate` defers — language/runtime, top-level layout, key
   dependencies — and records it as ADRs under `docs/adr/`. A new guardrail makes
