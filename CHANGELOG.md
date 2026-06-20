@@ -36,6 +36,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ### Changed
 
+- **`ideate` now surveys prior art and existing assets (#37).** Before framing a
+  problem as new, `ideate` checks for a predecessor repo, prototype, captured
+  data, or abandoned branch, and the problem statement gains a "Prior art &
+  reusable assets" section. Turns "greenfield by default" into "greenfield only
+  when it's actually green," and satisfies the prior-art line of the
+  Codify-readiness checklist (#39).
 - **Codify-readiness gate — verify substance, not just form (#39).** New
   `docs/reference/codify-readiness.md` defines the Plan→Codify gate: a checklist
   (problem statement, prior art, stack-as-ADRs, verifiable criteria, scaffold)

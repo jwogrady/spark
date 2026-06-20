@@ -1,6 +1,6 @@
 ---
 name: ideate
-description: Frame a problem before any code is written — turn a vague idea into a sharp, written problem statement with success criteria and constraints. Use when starting something new, when the user says "I want to build X", or when scope is still fuzzy. Not for breaking the problem into issues (that's `plan`) or writing code (`codify`).
+description: Frame a problem before any code is written — turn a vague idea into a sharp, written problem statement with success criteria, constraints, and a survey of prior art / existing assets. Use when starting something new, when the user says "I want to build X", when scope is still fuzzy, or when re-planning a rewrite. Not for breaking the problem into issues (that's `plan`) or writing code (`codify`).
 ---
 
 # ideate — Stage 1 of the Spark lifecycle
@@ -15,16 +15,22 @@ the `plan` skill can decompose.
 
 1. **Restate the idea in one sentence.** If you can't, the idea isn't ready —
    keep asking until you can.
-2. **Pressure-test it.** Invoke the **`grill-me`** skill (Claude-native) to
+2. **Survey prior art and existing assets.** Before framing the problem as new,
+   check for a predecessor repo, a prototype, captured data, or an abandoned
+   branch. Record what exists, what's reusable, and how it relates to this
+   effort. For a rewrite, this is the highest-leverage question you can ask.
+3. **Pressure-test it.** Invoke the **`grill-me`** skill (Claude-native) to
    interview the user down the decision tree. Resolve the load-bearing unknowns
    before writing anything.
-3. **Write the problem statement.** Keep it to one screen:
+4. **Write the problem statement.** Keep it to one screen:
    - **Problem** — what hurts today, for whom.
    - **Outcome** — what "solved" looks like, in observable terms.
    - **Success criteria** — 2–5 checks you could actually verify.
+   - **Prior art & reusable assets** — what already exists, what carries over,
+     what's deliberately left behind.
    - **Constraints** — stack, deadline, must-use / must-avoid.
    - **Non-goals** — what this explicitly will not do.
-4. **Confirm.** Read it back. Get a yes before handing off to `plan`.
+5. **Confirm.** Read it back. Get a yes before handing off to `plan`.
 
 ## Output
 
