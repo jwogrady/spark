@@ -8,6 +8,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.3.1] - 2026-06-20
+
 ### Changed
 
 - **Strip residual process framing from generated project docs.** Doc-writing
