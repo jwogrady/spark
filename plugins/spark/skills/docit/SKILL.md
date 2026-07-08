@@ -125,7 +125,7 @@ Each owns one section through a distinct perspective:
 - `.docit-notes/13-proposed-issues.md` — the council's ranked, annotated slate
   (Editor-in-Chief), also filed as `proposed`-labeled GitHub issues for the human
   to triage; kept ones flow to [`plan`](../plan/SKILL.md).
-- `.docit-notes/` — the per-persona working notes (archive, don't ship to users).
+- `.docit-notes/` — the per-persona working notes (gitignored scratch, never committed).
 
 ## Guardrails
 

@@ -17,8 +17,6 @@ dist/
 # Skill scratch — per-role working notes, debate logs, audit slates. Process
 # exhaust, not product; the published artifacts and their git history are the
 # durable record. Skills recreate these dirs at runtime.
-.codify-notes/
-.audit-notes/
 .docit-notes/
 .review-notes/
 .knowledge-notes/

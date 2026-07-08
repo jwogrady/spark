@@ -53,7 +53,8 @@ Open `.review-notes/08-final-report.md`. Look for:
 
 Create GitHub issues for:
 
-- Each critical risk (link to `.review-notes/` evidence).
+- Each critical risk (paste the evidence — file paths, line numbers — into the
+  issue; `.review-notes/` is never committed, so links into it won't survive).
 - Each architectural debt item.
 - Top 10–20 actions (depending on team capacity).
 
