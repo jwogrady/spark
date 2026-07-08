@@ -2,8 +2,8 @@
 
 > Reference — information-oriented.
 
-Spark enforces its guardrails through two independent layers, because the
-Claude-driven path and the human-driven path are different doors.
+Spark enforces its guardrails through two independent doors, because the
+Claude-driven path and the human-driven path need separate gates.
 
 ## Plugin hook (Claude-driven path)
 

@@ -50,7 +50,7 @@ AGENTS.md               # tool-agnostic agent guide (maintained by agents-md ski
 
 ## The Skills
 
-The 11 skills group into four categories. The canonical taxonomy lives in
+The 12 skills group into four categories. The canonical taxonomy lives in
 [`docs/reference/skills.md`](docs/reference/skills.md); this list mirrors it.
 
 **Lifecycle** — the five stages:
@@ -63,11 +63,11 @@ The 11 skills group into four categories. The canonical taxonomy lives in
 | Validate | `validate` | Orchestrate built-in reviews, then fix |
 | Ship | `ship` | Conventional commit, then a focused PR |
 
-The remaining six:
+The remaining seven:
 
 - **Setup** — `bootstrap` (scaffold a project runtime), `connect` (services + secrets via 1Password).
 - **Authorship** — `docit` (glow up public docs through author personas), `knowledge` (capture internal knowledge through an author crew).
-- **Supporting** — `agents-md` (maintains `CLAUDE.md` + `AGENTS.md`), `review` (multi-agent whole-project audit).
+- **Supporting** — `agents-md` (maintains `CLAUDE.md` + `AGENTS.md`), `review` (multi-agent whole-project audit), `cleanup` (purge proven-dead code and false docs; emits an orchestrator prompt).
 
 ## Development Workflow
 

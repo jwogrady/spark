@@ -54,6 +54,7 @@ Information-oriented — what each piece is and how it behaves:
 - [reference/cli.md](reference/cli.md) — the `spark` CLI and its subcommands.
 - [reference/hooks.md](reference/hooks.md) — the enforcement hooks and what each blocks.
 - [reference/plugin-manifest.md](reference/plugin-manifest.md) — the plugin manifest and marketplace files.
+- [reference/native-overlap.md](reference/native-overlap.md) — proof that no Spark skill reimplements a Claude Code built-in.
 
 ## Understanding Spark
 

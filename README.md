@@ -2,7 +2,7 @@
 
 > **`$ spark` — one rig. every repo. zero drift. ▌**
 
-![version](https://img.shields.io/badge/version-0.2.0-blue)
+![version](https://img.shields.io/badge/version-0.3.1-blue)
 ![maintained](https://img.shields.io/badge/maintained-yes-brightgreen)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
@@ -12,7 +12,7 @@ repo you crack open.
 
 Install it once and the rails come with you: a PreToolUse guard kills force-pushes
 and trunk commits *before* Claude can fumble, a `commit-msg` hook rejects sloppy
-commits, and `spark doctor` audits the whole rig. Eleven skills, two agent crews,
+commits, and `spark doctor` audits the whole rig. Twelve skills, two agent crews,
 zero runtime deps. No reinvention, no drift.
 
 ```mermaid
@@ -42,7 +42,7 @@ flowchart LR
 ```
 
 > **Install path:** The verified path today is a local clone or Git URL. The
-> one-click published-marketplace listing is a v0.2 open item (see `ROADMAP.md`);
+> one-click published-marketplace listing is still an open item (see `ROADMAP.md`);
 > if the marketplace command is not yet reachable, install from a Git URL or local
 > path. Spark is then available globally — every project you open gets the
 > lifecycle skills (`/spark:ideate`, `/spark:plan`, …) and the `spark` CLI.
@@ -81,13 +81,13 @@ fails at the push step.
 
 ## The skills, grouped
 
-Spark's 11 skills fall into four categories (canonical list:
+Spark's 12 skills fall into four categories (canonical list:
 [`docs/reference/skills.md`](docs/reference/skills.md)):
 
 - **Lifecycle** — `ideate`, `plan`, `codify`, `validate`, `ship` (the five steps above).
 - **Setup** — `bootstrap` (scaffold a runtime), `connect` (services + secrets via 1Password).
 - **Authorship** — `docit` (public docs), `knowledge` (internal knowledge).
-- **Supporting** — `agents-md` (`CLAUDE.md` + `AGENTS.md`), `review` (whole-project audit).
+- **Supporting** — `agents-md` (`CLAUDE.md` + `AGENTS.md`), `review` (whole-project audit), `cleanup` (stale-code + doc-truth hygiene).
 
 Not sure which one? Follow the
 **[skill chooser](docs/reference/skills.md#which-skill-do-i-use)** — a flowchart
@@ -116,11 +116,10 @@ friction.
 
 ## Maturity and trust
 
-Spark is pre-1.0, at `v0.2.0`. That is the honest contract, not a caveat. The
-`v0.2` milestone shipped its full scope — plugin packaging, the lifecycle skills,
-enforcement hooks, the Diátaxis docs tree — with one open item: end-to-end install
-validation from a published marketplace (tracked in `ROADMAP.md` and the
-`CHANGELOG.md` `[Unreleased]` block). No breaking-change policy is documented yet;
+Spark is pre-1.0, at `v0.3.1`. That is the honest contract, not a caveat. Plugin
+packaging, the lifecycle skills, enforcement hooks, and the Diátaxis docs tree are
+in place; one item is still open — end-to-end install validation from a published
+marketplace (tracked in `ROADMAP.md`). No breaking-change policy is documented yet;
 treat any `v0.x` release as potentially breaking.
 
 - **Scope: single-developer tool.** Git handles repository concurrency; the plugin
@@ -146,7 +145,7 @@ built-ins, reusing the built-in reviewers rather than reinventing them.
 ├──────────────────────────────────────────────────────────────┤
 │                Spark plugin (you install once)               │
 │  skills/            hooks/              bin/spark            │
-│  11 SKILL.md        PreToolUse          doctor               │
+│  12 SKILL.md        PreToolUse          doctor               │
 │  files              guard-bash.sh       list-skills          │
 │                                         new-skill            │
 │  scripts/hooks/                         install-git-hooks    │

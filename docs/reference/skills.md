@@ -31,6 +31,7 @@ flowchart TD
     SU -->|Runtime / stack| B([bootstrap])
     SU -->|Services & secrets| CN([connect])
     Q -->|CLAUDE.md / AGENTS.md| AM([agents-md])
+    Q -->|Purge dead code / stale docs| CL([cleanup])
 ```
 
 Or scan by intent:
@@ -49,6 +50,7 @@ Or scan by intent:
 | Scaffold a new project's runtime/stack | `bootstrap` | not `connect` |
 | Wire services + secrets via 1Password | `connect` | not `bootstrap` |
 | Create or maintain `CLAUDE.md` / `AGENTS.md` | `agents-md` (net-new `CLAUDE.md` → native `/init` first) | — |
+| Purge proven-dead code, false docs, or stale branches | `cleanup` | not `review` (that assesses, doesn't remove) |
 
 ## Lifecycle skills
 
@@ -80,6 +82,7 @@ Or scan by intent:
 |---|---|
 | `agents-md` | Maintains and audits a project's `CLAUDE.md` and `AGENTS.md`, keeping the two in sync. |
 | `review` | Multi-agent **whole-project** audit by specialist agents collaborating via shared notes. Not a single-diff reviewer — for one diff/PR use the native `/code-review` + `/security-review`, or `validate` to orchestrate them. |
+| `cleanup` | Repo hygiene pass — removes what's proven dead or false (stale code, stale branches, untrue docs) and emits a copy-paste orchestrator prompt. Removes rather than assesses; for a health report use `review`. |
 
 ## Skill layout
 

@@ -9,10 +9,10 @@
 
 Spark is a portable project-inception and software-delivery system for
 AI-assisted development: it turns raw project intent into durable repo artifacts,
-scoped GitHub issues, branches, reviews, commits, and PRs. The methodology is
-portable; the current implementation ships as a **Claude Code plugin** (manifest
-version 0.2.0, author `jwogrady`, MIT) you install once and carry into every
-project.
+branches, reviews, commits, and PRs (scoped GitHub issue generation is a v0.4
+goal). The methodology is portable; the current implementation ships as a
+**Claude Code plugin** (manifest version 0.3.1, author `jwogrady`, MIT) you install
+once and carry into every project.
 
 Who it is for: the operator running many projects under one disciplined Claude
 Code workflow — `jwogrady` / Status26 is the originating instance. The portable
