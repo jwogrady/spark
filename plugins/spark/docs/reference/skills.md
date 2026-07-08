@@ -101,4 +101,4 @@ the skill, so it must name concrete triggers. Optional `references/` and
 `agents/` subdirectories hold supporting material loaded on demand.
 
 To author a new skill, scaffold it with `spark new-skill <name>` and follow the
-"Skill Authoring" section of [`CLAUDE.md`](../../CLAUDE.md).
+"Skill Authoring" section of `CLAUDE.md`.

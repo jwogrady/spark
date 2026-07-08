@@ -3,7 +3,7 @@
 How the 8 agents share findings, coordinate reads, and produce a coherent final report.
 Like Spark's other crews, the main loop is the sole orchestrator and the agents
 coordinate only through shared notes — the general pattern lives in
-[the architecture map](../../../docs/architecture/spark-internals.md#the-subagent-orchestration-pattern);
+the architecture map;
 this file covers what's specific to `review`.
 
 ---

@@ -9,7 +9,7 @@
   "plugins": [
     {
       "name": "spark",
-      "source": "./",
+      "source": "./plugins/spark",
       "description": "Portable GitHub-native SDLC toolkit for Claude Code: ideate, plan, codify, validate, ship."
     }
   ]

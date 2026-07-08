@@ -1,7 +1,7 @@
 # Spark — Claude Code Guide
 
 > This file is maintained using the Spark `agents-md` skill.
-> See `skills/agents-md/SKILL.md` for authoring rules.
+> See `plugins/spark/skills/agents-md/SKILL.md` for authoring rules.
 
 ## Mission
 
@@ -33,16 +33,18 @@ reuses Claude Code's built-in tools (`/code-review`, `/security-review`,
 
 ```
 .claude-plugin/
-├── plugin.json         # plugin manifest
-└── marketplace.json    # makes this repo git-installable as a marketplace
-skills/<name>/SKILL.md  # lifecycle skills + carried-over skills
-agents/<crew>/*.md      # real subagents for the docit + knowledge crews
-hooks/
-├── hooks.json          # PreToolUse wiring
-└── guard-bash.sh       # blocks force-push and pushes to trunk
-scripts/hooks/          # git hook sources (commit-msg, pre-commit)
-bin/spark               # the CLI (doctor, list-skills, new-skill, install-git-hooks, shred-env)
-docs/                   # documentation, organized by Diátaxis
+└── marketplace.json    # marketplace catalog — points at ./plugins/spark
+plugins/spark/          # the installable plugin (everything that ships to users)
+├── .claude-plugin/plugin.json  # plugin manifest
+├── skills/<name>/SKILL.md      # lifecycle + carried-over skills, run as /spark:<name>
+├── agents/<crew>/*.md          # real subagents for the docit + knowledge crews
+├── hooks/
+│   ├── hooks.json              # PreToolUse wiring
+│   └── guard-bash.sh           # blocks force-push and pushes to trunk
+├── scripts/hooks/              # git hook sources (commit-msg, pre-commit)
+├── bin/spark                   # the CLI (doctor, list-skills, new-skill, install-git-hooks, shred-env)
+└── docs/                       # USER docs (ship with the plugin), organized by Diátaxis
+docs/                   # DEV docs (repo root, never shipped): ADRs, architecture, packaging reference
 .github/                # PR + issue templates (the plan skill uses these)
 CLAUDE.md               # this file (maintained by the agents-md skill)
 AGENTS.md               # tool-agnostic agent guide (maintained by agents-md skill)
@@ -51,7 +53,7 @@ AGENTS.md               # tool-agnostic agent guide (maintained by agents-md ski
 ## The Skills
 
 The 12 skills group into four categories. The canonical taxonomy lives in
-[`docs/reference/skills.md`](docs/reference/skills.md); this list mirrors it.
+[`plugins/spark/docs/reference/skills.md`](plugins/spark/docs/reference/skills.md); this list mirrors it.
 
 **Lifecycle** — the five stages:
 
@@ -93,7 +95,7 @@ Markdown. `spark doctor` and `bash -n` are the only validation gates.
 
 ## Skill Authoring
 
-- Skills live in `skills/<skill-name>/`.
+- Skills live in `plugins/spark/skills/<skill-name>/`.
 - Scaffold a new skill with `spark new-skill <name>`.
 - Each skill needs a `SKILL.md` with `name:` and `description:` frontmatter. The
   `description` is the only thing Claude sees when choosing the skill, so make it

@@ -1,7 +1,7 @@
 # Reference — native built-in overlap audit
 
 > Reference — information-oriented. Proves the claim in
-> [../explanation/scope-and-upstream.md](../explanation/scope-and-upstream.md):
+> [../explanation/scope-and-upstream.md](../../plugins/spark/docs/explanation/scope-and-upstream.md):
 > no Spark skill reimplements a Claude Code built-in. It either **delegates to**
 > one, deliberately **stays out of** its lane, or has **no** relationship.
 

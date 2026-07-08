@@ -73,7 +73,7 @@ agent file. It prints a `✓ <name>` line per item and ends with
 > version generates scoped work items and milestone scaffolds.
 
 Ready for a deeper walkthrough? See
-[Build your first project](docs/tutorials/build-your-first-project.md).
+[Build your first project](plugins/spark/docs/tutorials/build-your-first-project.md).
 
 **Prerequisites:** a git repo (`git init` first); for PR creation, the GitHub CLI
 (`gh`) installed and authenticated (`gh auth login`) — without it, `/spark:ship`
@@ -82,7 +82,7 @@ fails at the push step.
 ## The skills, grouped
 
 Spark's 12 skills fall into four categories (canonical list:
-[`docs/reference/skills.md`](docs/reference/skills.md)):
+[`plugins/spark/docs/reference/skills.md`](plugins/spark/docs/reference/skills.md)):
 
 - **Lifecycle** — `ideate`, `plan`, `codify`, `validate`, `ship` (the five steps above).
 - **Setup** — `bootstrap` (scaffold a runtime), `connect` (services + secrets via 1Password).
@@ -90,7 +90,7 @@ Spark's 12 skills fall into four categories (canonical list:
 - **Supporting** — `agents-md` (`CLAUDE.md` + `AGENTS.md`), `review` (whole-project audit), `cleanup` (stale-code + doc-truth hygiene).
 
 Not sure which one? Follow the
-**[skill chooser](docs/reference/skills.md#which-skill-do-i-use)** — a flowchart
+**[skill chooser](plugins/spark/docs/reference/skills.md#which-skill-do-i-use)** — a flowchart
 and intent table that pick the right skill in one read.
 
 ## Why Spark, not raw Claude Code?
@@ -157,9 +157,9 @@ built-ins, reusing the built-in reviewers rather than reinventing them.
 └──────────────────────────────────────────────────────────────┘
 ```
 
-`guard-bash.sh` lives under `hooks/`; `commit-msg` and `pre-commit` live under
-`scripts/hooks/` — two distinct directories, two distinct enforcement mechanisms
-(a PreToolUse hook vs. git hooks).
+`guard-bash.sh` lives under `plugins/spark/hooks/`; `commit-msg` and `pre-commit`
+live under `plugins/spark/scripts/hooks/` — two distinct directories, two distinct
+enforcement mechanisms (a PreToolUse hook vs. git hooks).
 
 **The `spark` CLI:** `doctor`, `list-skills`, `new-skill`, `install-git-hooks`,
 `shred-env`, `help`. Pure POSIX-friendly Bash, zero runtime dependencies, graceful
@@ -173,7 +173,7 @@ gets the improvement. The path has four legs: scaffold, implement, validate, ope
 PR on a feature branch.
 
 ```bash
-spark new-skill <your-skill-name>   # scaffold skills/<name>/SKILL.md
+spark new-skill <your-skill-name>   # scaffold plugins/spark/skills/<name>/SKILL.md
 # implement: SKILL.md needs name: + description: frontmatter; keep it focused
 spark doctor                        # validate manifests, hooks, skill + agent frontmatter
 bash -n <any-script-you-touched>    # syntax-check shell
@@ -184,12 +184,12 @@ Standards: valid skill frontmatter; POSIX-friendly Bash with `set -euo pipefail`
 conventional commits (subject ≤ 72 chars, no trailing period, no AI-attribution
 trailers); one concern per branch and per PR; never commit directly to
 `master`/`main`. Attribution in every author/credit field is the literal string
-`jwogrady`. See `CONTRIBUTING.md` and [`docs/explanation/philosophy.md`](docs/explanation/philosophy.md) (the *why* behind the
+`jwogrady`. See `CONTRIBUTING.md` and [`docs/explanation/philosophy.md`](plugins/spark/docs/explanation/philosophy.md) (the *why* behind the
 rules).
 
 ## Documentation
 
-- **[Philosophy](docs/explanation/philosophy.md)** — what Spark stands for and the
+- **[Philosophy](plugins/spark/docs/explanation/philosophy.md)** — what Spark stands for and the
   doctrine behind the rules.
 - **[Documentation index](docs/README.md)** — the full Diátaxis tree: tutorials,
   how-to guides, reference, and explanation, plus ADRs and architecture notes.
