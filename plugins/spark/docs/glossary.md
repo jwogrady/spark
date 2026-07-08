@@ -9,6 +9,32 @@
 > fork captures its own domain terms in its own project-local glossary, which
 > wins over the seed in `skills/knowledge/references/glossary.md`.
 
+### the three layers (Operator / Project / Session)
+
+Every artifact Spark reads or writes belongs to exactly one layer. **Operator**
+— travels with the person across all projects (preferences, permission
+baseline, portable knowledge); canonical home is the plugin plus operator
+overrides. **Project** — belongs to one repo/Cosmic and is committed to it
+(config, ADRs, problem statement, backlog, work state). **Session** — belongs
+to one working conversation and is ephemeral unless explicitly promoted
+(scratch, unpromoted review notes). Promotion between layers is always
+explicit: commit/PR/issue moves Session → Project; the `knowledge` skill's
+deliberate promotion moves Project → Operator. See
+adr/0008-information-architecture.md. *(Proposed — canonical once ADR-0008 is
+accepted.)*
+
+### carry-in / carry-through / carry-forward
+
+The three motions of information across the layers, and the architecture's
+organizing verbs. **Carry-in** — Operator → Project: the standard bag is
+applied to a repo (`bootstrap` at generation, `spark preferences` on demand,
+the brief's `load` step on entry). **Carry-through** — within the Project
+layer: the lifecycle (Ideate → Plan → Codify → Validate → Ship) moves work
+between stages. **Carry-forward** — Session → Project (work state survives the
+session) and Project → Operator (knowledge promotion). Prefer these exact
+terms; do not coin near-synonyms. See adr/0008-information-architecture.md.
+*(Proposed — canonical once ADR-0008 is accepted.)*
+
 ### two-doors enforcement model
 
 Spark enforces the same git-hygiene rules through two independent doors, because
