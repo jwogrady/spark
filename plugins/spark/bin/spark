@@ -1,13 +1,8 @@
 #!/usr/bin/env bash
 # spark — the Spark toolkit dispatcher.
 #
-# When the Spark plugin is active, this lives on $PATH. Subcommands:
-#   spark doctor             Validate the Spark plugin layout and report health.
-#   spark list-skills        List all available skills with descriptions.
-#   spark new-skill <name>   Scaffold a new skill under skills/<name>/.
-#   spark install-git-hooks  Install Spark's git hooks into the current repo.
-#   spark shred-env <file>   Securely delete a transient secrets file (e.g. .env).
-#   spark help               Show this help.
+# When the Spark plugin is active, this lives on $PATH. Run 'spark help' for
+# the verb list — it is generated from the same table that drives dispatch.
 
 set -euo pipefail
 
@@ -26,9 +21,44 @@ red()   { printf '\033[31m%s\033[0m\n' "$1"; }
 green() { printf '\033[32m%s\033[0m\n' "$1"; }
 yellow(){ printf '\033[33m%s\033[0m\n' "$1"; }
 
+# Verb table — the single source for both usage() and dispatch, so the help
+# text cannot drift from what is implemented. Rows: verb|handler|description.
+VERBS='doctor|cmd_doctor|Validate the Spark plugin layout and report health
+list-skills|cmd_list_skills|List all available skills with descriptions
+new-skill|cmd_new_skill|Scaffold a new skill under skills/<name>/
+install-git-hooks|cmd_install_git_hooks|Install Spark'\''s git hooks into the current repo
+shred-env|cmd_shred_env|Securely delete a transient secrets file (e.g. .env)
+version|cmd_version|Print the Spark plugin version
+help|usage|Show this help'
+
 usage() {
-  # Print the contiguous leading comment block (after the shebang) as help.
-  sed -n '2,10p' "$self" | sed 's/^# \{0,1\}//'
+  echo "spark — the Spark toolkit dispatcher."
+  echo
+  echo "Usage: spark <verb> [args]"
+  echo
+  local verb _ desc
+  while IFS='|' read -r verb _ desc; do
+    printf '  spark %-18s %s\n' "$verb" "$desc"
+  done <<EOF
+$VERBS
+EOF
+}
+
+cmd_version() {
+  local manifest="$SPARK_ROOT/.claude-plugin/plugin.json" v=""
+  [ -f "$manifest" ] || { red "plugin manifest not found: $manifest"; return 1; }
+  if command -v jq >/dev/null 2>&1; then
+    v="$(jq -r '.version // empty' "$manifest" 2>/dev/null || true)"
+  elif command -v python3 >/dev/null 2>&1; then
+    v="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("version",""))' "$manifest" 2>/dev/null || true)"
+  fi
+  if [ -z "$v" ]; then
+    # No JSON parser available: pattern-match the manifest. Good enough for
+    # the flat plugin.json Spark ships.
+    v="$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "$manifest" | head -n1 | sed 's/.*"\([^"]*\)"$/\1/')"
+  fi
+  [ -n "$v" ] || { red "could not read version from $manifest"; return 1; }
+  echo "spark $v"
 }
 
 cmd_doctor() {
@@ -276,12 +306,14 @@ cmd_install_git_hooks() {
   done
 }
 
-case "${1:-help}" in
-  doctor)            shift; cmd_doctor "$@" ;;
-  list-skills)       shift; cmd_list_skills "$@" ;;
-  new-skill)         shift; cmd_new_skill "$@" ;;
-  install-git-hooks) shift; cmd_install_git_hooks "$@" ;;
-  shred-env)         shift; cmd_shred_env "$@" ;;
-  help|-h|--help)    usage ;;
-  *) red "unknown command: $1"; echo; usage; exit 1 ;;
-esac
+verb="${1:-help}"
+case "$verb" in -h|--help) verb=help ;; esac
+handler=""
+while IFS='|' read -r v h _; do
+  [ "$v" = "$verb" ] && { handler="$h"; break; }
+done <<EOF
+$VERBS
+EOF
+[ -n "$handler" ] || { red "unknown command: $verb"; echo; usage; exit 1; }
+if [ "$#" -gt 0 ]; then shift; fi
+"$handler" "$@"
