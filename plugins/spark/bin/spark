@@ -137,6 +137,52 @@ cmd_doctor() {
     [ "$found_agent" -eq 0 ] && { yellow "  ! agents/ exists but has no agent .md files"; warnings=$((warnings+1)); }
   fi
 
+  # Shell syntax: every shipped script must parse. A script is anything with a
+  # .sh suffix or a sh/bash shebang — location-independent, so new scripts are
+  # covered without touching this list.
+  echo
+  echo "Shell syntax (bash -n):"
+  local script
+  while IFS= read -r script; do
+    case "$script" in
+      *.sh) ;;
+      *) head -n1 "$script" 2>/dev/null | grep -qE '^#!.*\b(ba)?sh\b' || continue ;;
+    esac
+    if bash -n "$script" 2>/dev/null; then
+      green "  ✓ ${script#"$SPARK_ROOT"/}"
+    else
+      red "  ✗ ${script#"$SPARK_ROOT"/}: syntax error (bash -n)"; errors=$((errors+1))
+    fi
+  done < <(find "$SPARK_ROOT" -type f ! -name '*.md' ! -name '*.json' | sort)
+
+  # Doc links: broken relative links rot silently, so scan every inline
+  # [text](target) link. External URLs and pure in-page anchors are out of
+  # scope — only paths that should resolve on disk are checked. Inside the
+  # Spark repo the scan covers all repo docs; a standalone plugin install
+  # scans only what it ships.
+  echo
+  echo "Doc links:"
+  local doc_root="$SPARK_ROOT" md dir link target broken=0
+  if [ -f "$SPARK_ROOT/../../.claude-plugin/marketplace.json" ]; then
+    doc_root="$(cd "$SPARK_ROOT/../.." && pwd)"
+  fi
+  while IFS= read -r md; do
+    dir="$(dirname "$md")"
+    while IFS= read -r link; do
+      target="${link#\](}"
+      target="${target%)}"
+      case "$target" in
+        http://*|https://*|mailto:*|\#*|/*) continue ;;
+      esac
+      target="${target%%#*}"
+      [ -n "$target" ] || continue
+      if [ ! -e "$dir/$target" ]; then
+        red "  ✗ ${md#"$doc_root"/}: broken link → $target"; errors=$((errors+1)); broken=1
+      fi
+    done < <(grep -oE '\]\([^)]+\)' "$md" 2>/dev/null || true)
+  done < <(find "$doc_root" -type f -name '*.md' ! -path '*/.git/*' ! -path '*/node_modules/*' | sort)
+  [ "$broken" -eq 0 ] && green "  ✓ no broken relative links"
+
   # Git hooks installed in the current repo?
   echo
   if git rev-parse --git-dir >/dev/null 2>&1; then
