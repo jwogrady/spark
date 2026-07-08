@@ -18,7 +18,7 @@ Claude-driven path. **Door 2 — the git hooks** (`commit-msg`, `pre-commit`,
 installed via `spark install-git-hooks`) cover the human-driven path. Both doors,
 same intent. Prefer "two doors" over "two layers" / "two gates". See
 [reference/hooks.md](reference/hooks.md) and
-[adr/0003-zero-dependency-bash-and-enforcement-hooks.md](adr/0003-zero-dependency-bash-and-enforcement-hooks.md).
+adr/0003-zero-dependency-bash-and-enforcement-hooks.md.
 
 ### Ideate → Plan → Codify → Validate → Ship
 
@@ -41,7 +41,7 @@ A multi-role set of subagents (`agents/<crew>/*.md`) that a Spark skill
 dispatches to produce a complex artifact. Spark ships two mirror crews: **knowledge**
 (6 inward-facing roles — internal-knowledge capture) and **docit** (13
 outward-facing roles — public docs). See
-[architecture/spark-internals.md](architecture/spark-internals.md).
+architecture/spark-internals.md.
 
 ### shared-notes orchestration
 
@@ -49,7 +49,7 @@ How a subagent crew coordinates: the skill in the main conversation is the **sol
 orchestrator** and dispatches each role; roles never dispatch each other. Roles
 coordinate by reading the prior phase's notes and writing their own (e.g. the
 `.knowledge-notes/` files), not by direct messaging. See
-[architecture/spark-internals.md](architecture/spark-internals.md).
+architecture/spark-internals.md.
 
 ### distribution vs inception
 
@@ -59,7 +59,7 @@ job (`/plugin install spark`); it forks nothing. **Inception** — "start a
 brand-new project" — is `/plugin install spark` followed by the `bootstrap`
 skill. See
 [explanation/scope-and-upstream.md](explanation/scope-and-upstream.md) and
-[adr/0001-plugin-not-framework.md](adr/0001-plugin-not-framework.md).
+adr/0001-plugin-not-framework.md.
 
 ### additive (to Anthropic's spec)
 
@@ -68,4 +68,4 @@ Spark's governing scope rule: it *references* Anthropic's skill/plugin spec and
 inventing competing versions. Spark adds only the human-facing usage/doctrine
 layer. See
 [explanation/scope-and-upstream.md](explanation/scope-and-upstream.md) and
-[adr/0002-additive-to-anthropic-spec.md](adr/0002-additive-to-anthropic-spec.md).
+adr/0002-additive-to-anthropic-spec.md.

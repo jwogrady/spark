@@ -42,4 +42,4 @@ Project inception is no longer a separate skill: scaffolding a brand-new project
 is just `/plugin install spark` followed by the `bootstrap` skill. Distribution
 is the plugin's job. See [scope-and-upstream.md](scope-and-upstream.md).
 
-See also the dated decision record: [../adr/0001-plugin-not-framework.md](../adr/0001-plugin-not-framework.md).
+See also the dated decision record: ../adr/0001-plugin-not-framework.md.

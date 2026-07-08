@@ -3,16 +3,16 @@
 > Architecture map — how the layers fit together. The *why* lives in the linked
 > ADRs and explanation docs; this doc ties the layers together and shows how they
 > interact. For the reasoning behind individual decisions, follow the cross-links
-> to [../explanation/](../explanation/) and [../adr/](../adr/).
+> to [../explanation/](../../plugins/spark/docs/explanation/) and [../adr/](../adr/).
 
 ## Purpose
 
 Spark is a portable project-inception and software-delivery system for
 AI-assisted development: it turns raw project intent into durable repo artifacts,
-scoped GitHub issues, branches, reviews, commits, and PRs. The methodology is
-portable; the current implementation ships as a **Claude Code plugin** (manifest
-version 0.2.0, author `jwogrady`, MIT) you install once and carry into every
-project.
+branches, reviews, commits, and PRs (scoped GitHub issue generation is a v0.4
+goal). The methodology is portable; the current implementation ships as a
+**Claude Code plugin** (manifest version 0.3.1, author `jwogrady`, MIT) you install
+once and carry into every project.
 
 Who it is for: the operator running many projects under one disciplined Claude
 Code workflow — `jwogrady` / Status26 is the originating instance. The portable
@@ -21,7 +21,7 @@ pitched; outward positioning is `docit`'s job, not this map's.
 
 For *why* a plugin rather than a framework, see
 [../adr/0001-plugin-not-framework.md](../adr/0001-plugin-not-framework.md) and
-[../explanation/why-a-plugin.md](../explanation/why-a-plugin.md). This doc is the
+[../explanation/why-a-plugin.md](../../plugins/spark/docs/explanation/why-a-plugin.md). This doc is the
 *map*; those are the *narrative*.
 
 ## Current State
@@ -44,7 +44,7 @@ Two things are documented as intended/future, **not** current:
   planned, not implemented. The portable core is stack-neutral today, and its
   neutrality does not depend on that branch mechanism.
 - **A bundled `.mcp.json`** is a capability a plugin *can* carry when needed (see
-  [../explanation/why-a-plugin.md](../explanation/why-a-plugin.md)), but Spark
+  [../explanation/why-a-plugin.md](../../plugins/spark/docs/explanation/why-a-plugin.md)), but Spark
   ships **no** `.mcp.json` at present.
 
 ## Components
@@ -54,11 +54,11 @@ Spark is layered:
 | Layer | Lives in | Job | Reference |
 |---|---|---|---|
 | Plugin manifest + marketplace | `.claude-plugin/plugin.json`, `marketplace.json` | Make the repo git-installable as a versioned plugin | [../reference/plugin-manifest.md](../reference/plugin-manifest.md) |
-| Skills | `skills/<name>/SKILL.md` | The lifecycle stages + carried-over authoring skills, exposed as `/spark:<name>` | [../reference/skills.md](../reference/skills.md) |
+| Skills | `skills/<name>/SKILL.md` | The lifecycle stages + carried-over authoring skills, exposed as `/spark:<name>` | [../reference/skills.md](../../plugins/spark/docs/reference/skills.md) |
 | Agent crews | `agents/<crew>/*.md` | Multi-role subagents the skills dispatch (knowledge, docit) | — |
-| PreToolUse hook | `hooks/hooks.json`, `hooks/guard-bash.sh` | Enforce git hygiene on the **Claude-driven** path | [../reference/hooks.md](../reference/hooks.md) |
-| CLI | `bin/spark` | Validate the layout, scaffold skills, install git hooks, manage secrets | [../reference/cli.md](../reference/cli.md) |
-| Git hooks | `scripts/hooks/{commit-msg,pre-commit}` | Enforce the **same** rules on the **human-driven** path | [../reference/hooks.md](../reference/hooks.md) |
+| PreToolUse hook | `hooks/hooks.json`, `hooks/guard-bash.sh` | Enforce git hygiene on the **Claude-driven** path | [../reference/hooks.md](../../plugins/spark/docs/reference/hooks.md) |
+| CLI | `bin/spark` | Validate the layout, scaffold skills, install git hooks, manage secrets | [../reference/cli.md](../../plugins/spark/docs/reference/cli.md) |
+| Git hooks | `scripts/hooks/{commit-msg,pre-commit}` | Enforce the **same** rules on the **human-driven** path | [../reference/hooks.md](../../plugins/spark/docs/reference/hooks.md) |
 | Docs | `docs/` | Diátaxis-organized: tutorials / how-to / reference / explanation | — |
 
 ```mermaid
@@ -82,7 +82,7 @@ Two flows run through Spark:
    invoked as a `/spark:` command; its output is the next stage's input — a
    written problem statement feeds issue decomposition, which feeds a branch,
    which feeds review, which feeds a commit and PR. See
-   [../explanation/sdlc-doctrine.md](../explanation/sdlc-doctrine.md) for the
+   [../explanation/sdlc-doctrine.md](../../plugins/spark/docs/explanation/sdlc-doctrine.md) for the
    doctrine and the per-stage "done when". The knowledge skills (`knowledge` inward,
    `docit` outward) hang off the Ship+ end of the loop.
 
@@ -103,7 +103,7 @@ of them:
 
 Both doors enforce the same intent — blocks force-push and trunk pushes/commits;
 allows `--force-with-lease`. The per-rule detail (what each blocks, exit codes,
-fail-safe behavior) lives in [../reference/hooks.md](../reference/hooks.md), and
+fail-safe behavior) lives in [../reference/hooks.md](../../plugins/spark/docs/reference/hooks.md), and
 the decision and its scope in
 [../adr/0003-zero-dependency-bash-and-enforcement-hooks.md](../adr/0003-zero-dependency-bash-and-enforcement-hooks.md).
 
@@ -130,7 +130,7 @@ multi-agent. They share one pattern:
   built-in `/code-review`, `/security-review`, and `verify` rather than shipping
   its own. See
   [../adr/0002-additive-to-anthropic-spec.md](../adr/0002-additive-to-anthropic-spec.md)
-  and [../explanation/scope-and-upstream.md](../explanation/scope-and-upstream.md).
+  and [../explanation/scope-and-upstream.md](../../plugins/spark/docs/explanation/scope-and-upstream.md).
 - **Git / GitHub** — the lifecycle is GitHub-native (issues, branches, PRs).
 - **No runtime dependencies in scripts.** `jq`/`python3` are used opportunistically
   for JSON parsing and degrade gracefully when absent.
@@ -140,7 +140,7 @@ multi-agent. They share one pattern:
 - `spark doctor` validates the whole layout (manifest/hook JSON, executable guard,
   skill + agent frontmatter, git-hook install state). Run it before pushing — this
   is a human convention, not a CI gate; there is no `.github/workflows/` that
-  enforces it. See [../reference/cli.md](../reference/cli.md).
+  enforces it. See [../reference/cli.md](../../plugins/spark/docs/reference/cli.md).
 - Git hooks are per-repo and must be installed with `spark install-git-hooks`; the
   plugin's PreToolUse guard travels with the plugin automatically.
 
@@ -160,10 +160,10 @@ multi-agent. They share one pattern:
 
 ## Related Docs
 
-- [../explanation/sdlc-doctrine.md](../explanation/sdlc-doctrine.md) — the lifecycle doctrine
-- [../explanation/why-a-plugin.md](../explanation/why-a-plugin.md) — why a plugin
-- [../explanation/scope-and-upstream.md](../explanation/scope-and-upstream.md) — scope vs upstream
+- [../explanation/sdlc-doctrine.md](../../plugins/spark/docs/explanation/sdlc-doctrine.md) — the lifecycle doctrine
+- [../explanation/why-a-plugin.md](../../plugins/spark/docs/explanation/why-a-plugin.md) — why a plugin
+- [../explanation/scope-and-upstream.md](../../plugins/spark/docs/explanation/scope-and-upstream.md) — scope vs upstream
 - [../adr/0001-plugin-not-framework.md](../adr/0001-plugin-not-framework.md)
 - [../adr/0002-additive-to-anthropic-spec.md](../adr/0002-additive-to-anthropic-spec.md)
 - [../adr/0003-zero-dependency-bash-and-enforcement-hooks.md](../adr/0003-zero-dependency-bash-and-enforcement-hooks.md)
-- [../glossary.md](../glossary.md) — Spark-internal vocabulary
+- [../glossary.md](../../plugins/spark/docs/glossary.md) — Spark-internal vocabulary

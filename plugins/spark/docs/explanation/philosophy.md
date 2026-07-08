@@ -31,13 +31,13 @@ pushes before they execute, covering AI-mediated git actions. The `commit-msg` h
 rejects non-conforming messages before they land in history, covering all commits
 once the hooks are installed via `spark install-git-hooks`. Aspiration lives in
 READMEs; enforcement lives in `hooks/` and `scripts/hooks/`. CI and automated
-testing are a known gap at v0.2.0 — the mechanical enforcement today covers commit
+testing are a known gap at v0.3.1 — the mechanical enforcement today covers commit
 conventions, trunk discipline, and docs honesty, not the full quality surface.
 
 **2. One lifecycle, portable.** Every project deserves the same discipline — not a
 copy-paste of conventions that drift per repo, but one versioned toolkit installed
-once and carried everywhere. At v0.2.0, install via Git URL is verified; one-click
-public marketplace install is an open v0.2 item. The portability principle is
+once and carried everywhere. Install via Git URL is verified; one-click
+public marketplace install is still an open item. The portability principle is
 architecturally realized; the marketplace listing is in progress. This is a
 single-developer toolkit today; team coordination is on the roadmap.
 
@@ -76,8 +76,8 @@ The future Spark is building toward is one where AI-assisted development is
 *indistinguishable from disciplined development* — where the speed and the rigor
 are the same thing, not alternatives. The lifecycle does not slow you down; it is
 the track that makes the speed safe. That future is not guaranteed by capability
-alone. It requires tooling that encodes the right habits mechanically. The v0.2
-release is the first proof of concept; the architecture is set, the gaps are
+alone. It requires tooling that encodes the right habits mechanically. The v0.3
+release line is the current proof of concept; the architecture is set, the gaps are
 documented.
 
 ## See also

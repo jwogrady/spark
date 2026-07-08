@@ -24,7 +24,7 @@ docs/                  # this documentation (Diátaxis)
 {
   "name": "spark",
   "description": "…",
-  "version": "0.2.0",
+  "version": "0.3.1",
   "author": { "name": "jwogrady" },
   "homepage": "https://github.com/jwogrady/spark",
   "repository": "https://github.com/jwogrady/spark",
@@ -38,6 +38,7 @@ docs/                  # this documentation (Diátaxis)
 {
   "name": "spark",
   "owner": { "name": "jwogrady" },
+  "metadata": { "description": "…" },
   "plugins": [
     { "name": "spark", "source": "./", "description": "…" }
   ]

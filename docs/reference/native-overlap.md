@@ -1,7 +1,7 @@
 # Reference — native built-in overlap audit
 
 > Reference — information-oriented. Proves the claim in
-> [../explanation/scope-and-upstream.md](../explanation/scope-and-upstream.md):
+> [../explanation/scope-and-upstream.md](../../plugins/spark/docs/explanation/scope-and-upstream.md):
 > no Spark skill reimplements a Claude Code built-in. It either **delegates to**
 > one, deliberately **stays out of** its lane, or has **no** relationship.
 
@@ -37,6 +37,7 @@ Relationship vocabulary:
 | `connect` | — | none | Secrets + service connectivity via `op` (1Password). No built-in covers this. |
 | `agents-md` | `/init` | delegates-to | Defers net-new `CLAUDE.md` creation to `/init`; owns maintenance, audit, drift-check, and `AGENTS.md` (which `/init` never writes). |
 | `review` | `/review`, `/code-review`, `/security-review` | stays-out-of-lane | Whole-**project** audit by specialist agents. The built-ins review **one diff/PR**. Different unit of work — see finding F1. |
+| `cleanup` | `simplify` | stays-out-of-lane | Removes what's proven dead or false across the **whole repo** (stale code, branches, untrue docs) and emits an orchestrator prompt. `simplify` improves quality on the **changed diff**. Different unit of work; neither reviews for bugs. |
 
 ## Findings to resolve
 

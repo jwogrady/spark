@@ -3,8 +3,11 @@
 ## How work is tracked
 
 GitHub issues are the work ledger. Every feature, bug, and skill addition
-starts as an issue before any code is written. Use the `plan` skill to draft
-issues from a problem statement, and the templates in `.github/ISSUE_TEMPLATE/`.
+starts as an issue before any code is written. Use the `plan` skill to break a
+problem statement into scoped work items and a milestone scaffold, and the
+templates in `.github/ISSUE_TEMPLATE/` to file the issues (generating the GitHub
+issues directly from `plan` is a v0.4 goal; today you create them from its
+output).
 
 ## Branches
 

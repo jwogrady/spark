@@ -3,7 +3,9 @@
 > Explanation — understanding-oriented.
 
 Spark has one organizing spine: a software-development lifecycle for building
-projects on GitHub. Every skill maps to exactly one stage.
+projects on GitHub. The five lifecycle skills each map to exactly one stage; the
+other seven skills (setup, authorship, supporting) serve that spine without being
+stages of it — see [`../reference/skills.md`](../reference/skills.md).
 
 ```
 Ideate → Plan → Codify → Validate → Ship
@@ -60,4 +62,4 @@ Shipped work that reveals a new problem doesn't get bolted onto the current PR �
 it starts again at Ideate. That's what makes this a lifecycle and not a
 checklist.
 
-See also the architecture map: [../architecture/spark-internals.md](../architecture/spark-internals.md).
+See also the architecture map: ../architecture/spark-internals.md.
