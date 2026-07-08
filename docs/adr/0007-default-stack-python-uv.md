@@ -42,4 +42,4 @@ profiles.
 ## Related Docs
 
 - [0002-additive-to-anthropic-spec.md](0002-additive-to-anthropic-spec.md) — Spark's stack-neutral, additive stance
-- [../../skills/bootstrap/references/profiles.md](../../skills/bootstrap/references/profiles.md) — the per-stack scaffold profiles
+- [../../skills/bootstrap/references/profiles.md](../../plugins/spark/skills/bootstrap/references/profiles.md) — the per-stack scaffold profiles

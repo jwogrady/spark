@@ -48,4 +48,4 @@ and hand off. Less bespoke logic to maintain; releases become mechanical.
 ## Related Docs
 
 - [0005-cosmics-ship-ci-spark-stays-ci-free.md](0005-cosmics-ship-ci-spark-stays-ci-free.md) — the CI wiring Release Please runs on
-- [../reference/skills.md](../reference/skills.md) — where `ship` sits
+- [../reference/skills.md](../../plugins/spark/docs/reference/skills.md) — where `ship` sits

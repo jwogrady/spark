@@ -41,4 +41,4 @@ Spark-self obligation — dissolves the apparent conflict.
 ## Related Docs
 
 - [0003-zero-dependency-bash-and-enforcement-hooks.md](0003-zero-dependency-bash-and-enforcement-hooks.md) — why Spark's own enforcement is hook-based, not CI
-- [../explanation/enforcement-model.md](../explanation/enforcement-model.md) — the mechanical-enforcement rationale
+- [../explanation/enforcement-model.md](../../plugins/spark/docs/explanation/enforcement-model.md) — the mechanical-enforcement rationale

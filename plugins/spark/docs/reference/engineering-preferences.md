@@ -26,7 +26,7 @@ You never re-state these — Spark already holds them.
 | Semantic Versioning · bump from commit type | [`ship`](../reference/skills.md) |
 | Design before code · acceptance criteria before dev | [`ideate`](../reference/skills.md) · [`plan`](../reference/skills.md) · [codify-readiness](../reference/codify-readiness.md) |
 | One problem / one issue / one PR | [scope doctrine](../explanation/philosophy.md) |
-| ADRs · decisions explicit and traceable | [`docs/adr/`](../adr/) |
+| ADRs · decisions explicit and traceable | `docs/adr/` |
 | Documentation describes reality | [honesty principle](../explanation/philosophy.md) · `docit` · `cleanup` |
 | README says *what* before *how* · standard doc set | `docit` · this repo's own layout |
 | Minimize dependencies · secrets via `op`, never committed | [zero-dependency principle](../explanation/philosophy.md) · [`connect`](../reference/skills.md) · `SECURITY.md` |
@@ -112,5 +112,5 @@ Please config — so a new project starts already conforming.
 
 ## Related docs
 
-- ADRs [0004](../adr/0004-cosmic-is-the-generated-unit.md) · [0005](../adr/0005-cosmics-ship-ci-spark-stays-ci-free.md) · [0006](../adr/0006-cosmics-use-release-please.md) · [0007](../adr/0007-default-stack-python-uv.md)
+- ADRs 0004 · 0005 · 0006 · 0007
 - [philosophy](../explanation/philosophy.md) · [sdlc-doctrine](../explanation/sdlc-doctrine.md) · [hooks](../reference/hooks.md) · [codify-readiness](../reference/codify-readiness.md)

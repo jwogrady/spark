@@ -68,4 +68,4 @@ new surface, consistent with the additive principle (ADR-0002).
 
 - [../architecture/spark-internals.md](../architecture/spark-internals.md) — the architecture map
 - [0002-additive-to-anthropic-spec.md](0002-additive-to-anthropic-spec.md) — the additive principle this reuses
-- [../reference/skills.md](../reference/skills.md) — where `bootstrap` sits in the skill taxonomy
+- [../reference/skills.md](../../plugins/spark/docs/reference/skills.md) — where `bootstrap` sits in the skill taxonomy
