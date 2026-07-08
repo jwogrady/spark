@@ -9,7 +9,7 @@
 ```
 Portable SDLC plugin for Claude Code. Enforces Ideate→Plan→Codify→Validate→Ship
 lifecycle with mechanical guardrails: git hooks block force-push/trunk commits,
-conventional commits enforced, 11 skills, multi-agent doc crews (docit,
+conventional commits enforced, 12 skills, multi-agent doc crews (docit,
 knowledge). Install once, carry into every project. Zero dependencies, MIT licensed.
 ```
 
@@ -28,7 +28,7 @@ $ /plugin install spark
 > one lifecycle, carried into every Claude Code repo:
 >   Ideate → Plan → Codify → Validate → Ship
 > the guardrails aren't suggestions — they run before you can fumble.
-> 11 skills. two agent crews. zero deps. honest attribution. ▌
+> 12 skills. two agent crews. zero deps. honest attribution. ▌
 ```
 
 **OG image:** use the five-stage lifecycle flow on a deep-navy background with the
@@ -76,7 +76,7 @@ Spark accent color; `jwogrady/spark` in small monospace; no AI attribution;
 > What it isn't:
 > - Not a team platform (solo tool today; Git handles repo concurrency)
 > - Not a one-click marketplace install yet (Git URL / local clone; published
->   listing is a v0.2 open item)
+>   listing is still an open item)
 > - Not zero lock-in (Claude Code dependency is total)
 >
 > The value is portability and enforcement, not capability.
@@ -90,7 +90,7 @@ Spark accent color; `jwogrady/spark` in small monospace; no AI attribution;
 > spark install-git-hooks
 > spark doctor
 >
-> 11 skills. Multi-agent doc crews. Zero runtime deps.
+> 12 skills. Multi-agent doc crews. Zero runtime deps.
 > https://github.com/jwogrady/spark
 
 ---
@@ -102,7 +102,7 @@ Spark accent color; `jwogrady/spark` in small monospace; no AI attribution;
 **Blurb:**
 
 Spark is a Claude Code plugin I built to carry one opinionated AI-assisted
-development lifecycle into every project. Install it once, get the same 11 skills,
+development lifecycle into every project. Install it once, get the same 12 skills,
 enforcement hooks, and CLI everywhere.
 
 What's mechanical (not advisory):
@@ -118,8 +118,8 @@ knowledge as real plugin subagents. It runs alongside the 13-persona `docit` cre
 for public docs, each coordinating through a separate scratch directory.
 
 Honest caveats:
-- v0.2.0 is a solo tool (no team-coordination layer)
-- Marketplace one-click install is an open v0.2 item; install via local clone or
+- Spark is a solo tool today (no team-coordination layer)
+- Marketplace one-click install is an open item; install via local clone or
   Git URL today
 - No CI yet (the enforcement model is the intentional quality mechanism for a
   Bash/Markdown project, but there's no automated regression suite)
@@ -147,8 +147,8 @@ The conventions that keep work clean — conventional commits, trunk discipline,
 scoped issues, focused PRs — are easy to state and easy to skip. Spark makes them
 mechanical rather than advisory.
 
-**What's shipped in v0.2.0:**
-- 11 skills wired to slash commands: `/spark:ideate`, `/spark:plan`,
+**What's shipped (v0.3.1):**
+- 12 skills wired to slash commands: `/spark:ideate`, `/spark:plan`,
   `/spark:codify`, `/spark:validate`, `/spark:ship` (plus setup and knowledge
   skills)
 - Mechanical guardrails: a PreToolUse Bash hook that blocks force-pushes and trunk
@@ -161,13 +161,13 @@ mechanical rather than advisory.
   internal knowledge) — real plugin subagents, each coordinating through its own
   scratch directory
 
-**Headline change in the unreleased v0.2 window:** `knowledge`, the inward-facing
+**A recent addition:** `knowledge`, the inward-facing
 counterpart to `docit`. Six specialists — intake, architect, product, ops,
 librarian, editor — capture decisions, architecture, and processes.
 
 **Honest caveats:**
 - Solo tool today. No team dashboard or shared-state sync; that's roadmap.
-- Marketplace one-click install is a v0.2 open item. Install from a local clone or
+- Marketplace one-click install is an open item. Install from a local clone or
   Git URL for now.
 - No CI. The quality mechanism is the enforcement model itself; automated
   regression on skill behavior isn't there yet.
