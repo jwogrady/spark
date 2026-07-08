@@ -4,7 +4,8 @@
 
 Use this after `ideate`, when you have a confirmed problem statement.
 
-1. Invoke `/spark:plan` with the problem statement in context.
+1. Invoke `/spark:plan` — it reads `docs/problem-statement.md` (where `ideate`
+   saved the statement) without being told where to look.
 2. Review the **implementation approach** — language/runtime, top-level layout,
    and key dependencies — recorded as ADRs under `docs/adr/`. A plan with no
    stack is not one `codify` can start from.
