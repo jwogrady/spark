@@ -59,6 +59,7 @@ Information-oriented — what each piece is and how it behaves:
 The *why* behind the build — read these to grasp the worldview and the design
 choices (Explanation mode):
 
+- [explanation/identity.md](explanation/identity.md) — **what Spark is**: the layer between your intent and Claude's tools (start here)
 - [explanation/philosophy.md](explanation/philosophy.md) — what Spark stands for and the doctrine behind the rules
 - [explanation/enforcement-model.md](explanation/enforcement-model.md) — why enforcement is mechanical, not advisory
 - [explanation/sdlc-doctrine.md](explanation/sdlc-doctrine.md) — why the five-stage lifecycle is the spine

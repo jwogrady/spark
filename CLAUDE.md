@@ -5,14 +5,18 @@
 
 ## Mission
 
-Spark is a portable project-inception and software-delivery system for
-AI-assisted development. It turns raw project intent into durable repo artifacts,
+**Spark is the layer between your intent and Claude's tools** — you bring the
+judgment (definitions, priorities, preferences), Claude brings the tools, and
+Spark owns the sequence, the gaps, and your standards. The full identity lives in
+[`plugins/spark/docs/explanation/identity.md`](plugins/spark/docs/explanation/identity.md).
+
+In practice it is a portable project-inception and software-delivery system for
+AI-assisted development: it turns raw project intent into durable repo artifacts,
 implementation branches, reviews, commits, and pull requests (scoped GitHub
 issue generation is a v0.4 goal). The methodology is portable; the current
 implementation ships as a Claude Code plugin you install once and carry into
-every project. It puts one
-opinionated lifecycle at your fingertips and enforces the guardrails that keep
-work clean:
+every project. It puts one opinionated lifecycle at your fingertips and enforces
+the guardrails that keep work clean:
 
 ```
 Ideate → Plan → Codify → Validate → Ship

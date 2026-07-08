@@ -10,6 +10,10 @@ Raw idea in, durable GitHub artifacts out. Spark is a Claude Code plugin that
 carries one lifecycle — **Ideate → Plan → Codify → Validate → Ship** — into every
 repo you crack open.
 
+At heart, Spark is the **layer between your intent and Claude's tools**: you bring
+the judgment, Claude brings the tools, Spark owns the sequence, the gaps, and your
+standards — [what Spark is](plugins/spark/docs/explanation/identity.md).
+
 Install it once and the rails come with you: a PreToolUse guard kills force-pushes
 and trunk commits *before* Claude can fumble, a `commit-msg` hook rejects sloppy
 commits, and `spark doctor` audits the whole rig. Twelve skills, two agent crews,
