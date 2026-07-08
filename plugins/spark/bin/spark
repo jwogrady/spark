@@ -183,14 +183,25 @@ cmd_doctor() {
   done < <(find "$doc_root" -type f -name '*.md' ! -path '*/.git/*' ! -path '*/node_modules/*' | sort)
   [ "$broken" -eq 0 ] && green "  ✓ no broken relative links"
 
-  # Git hooks installed in the current repo?
+  # Git hooks installed in the current repo? In an arbitrary project this is
+  # advice (warning). Inside the Spark repo itself the hooks *are* the
+  # enforcement door, so their absence is an error — except in CI, where a
+  # fresh checkout never has hooks and no commits are made anyway.
   echo
   if git rev-parse --git-dir >/dev/null 2>&1; then
     local hooksdir; hooksdir="$(git rev-parse --git-path hooks)"
     if [ -f "$hooksdir/commit-msg" ] && [ -f "$hooksdir/pre-commit" ]; then
       green "✓ Spark git hooks are installed in this repo"
     else
-      yellow "! Spark git hooks not installed here — run: spark install-git-hooks"; warnings=$((warnings+1))
+      local toplevel spark_repo=""
+      toplevel="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+      [ -f "$SPARK_ROOT/../../.claude-plugin/marketplace.json" ] \
+        && spark_repo="$(cd "$SPARK_ROOT/../.." && pwd)"
+      if [ -n "$spark_repo" ] && [ "$toplevel" = "$spark_repo" ] && [ -z "${CI:-}" ]; then
+        red "✗ Spark git hooks not installed in the Spark repo — run: spark install-git-hooks (see CONTRIBUTING.md)"; errors=$((errors+1))
+      else
+        yellow "! Spark git hooks not installed here — run: spark install-git-hooks"; warnings=$((warnings+1))
+      fi
     fi
   fi
 
