@@ -61,6 +61,17 @@ skill. See
 [explanation/scope-and-upstream.md](explanation/scope-and-upstream.md) and
 adr/0001-plugin-not-framework.md.
 
+### Cosmic
+
+The unit Spark generates: a per-client instance container, produced by the
+`bootstrap` skill and conforming to the operator's engineering-preferences
+standard. Today a Cosmic is a standardized GitHub repository; the containerized
+per-client environment (infra, runtime, telemetry) is the planned destination,
+not the current rung. Every Cosmic inherits the standard from the single
+in-plugin source of truth, so projects stop drifting from each other. See
+adr/0004-cosmic-is-the-generated-unit.md (and ADR-0005 through ADR-0007 for the
+CI, release, and stack defaults a Cosmic carries).
+
 ### additive (to Anthropic's spec)
 
 Spark's governing scope rule: it *references* Anthropic's skill/plugin spec and
