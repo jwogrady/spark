@@ -1,7 +1,7 @@
 ---
 name: intake
 description: knowledge crew — Intake. Turns messy founder notes, transcripts, repo findings, and session summaries into structured source material, then classifies the doc type so the orchestrator can route. Dispatched per-phase by the knowledge skill orchestrator; not a standalone agent.
-model: opus
+model: sonnet
 tools: Read, Write, Edit, Grep, Glob, Bash
 ---
 
