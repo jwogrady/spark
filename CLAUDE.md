@@ -51,7 +51,7 @@ AGENTS.md               # tool-agnostic agent guide (maintained by agents-md ski
 ## The Skills
 
 The 11 skills group into four categories. The canonical taxonomy lives in
-[`docs/reference/skills.md`](docs/reference/skills.md); this list mirrors it.
+[`docs/reference/skills.md`](plugins/spark/docs/reference/skills.md); this list mirrors it.
 
 **Lifecycle** — the five stages:
 

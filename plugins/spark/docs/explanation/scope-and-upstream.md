@@ -30,4 +30,4 @@ They no longer compete. You use the plugin in any existing project without
 forking anything; and you start a fresh project the same way — install the
 plugin, then run `bootstrap`.
 
-See also the dated decision record: [../adr/0002-additive-to-anthropic-spec.md](../adr/0002-additive-to-anthropic-spec.md).
+See also the dated decision record: ../adr/0002-additive-to-anthropic-spec.md.

@@ -6,7 +6,7 @@ This is the rationale behind [Principle 1 of the philosophy](philosophy.md) —
 "enforcement over aspiration." It explains a design choice, not a procedure; for
 the exact hook wiring and exit codes, see the
 [hooks reference](../reference/hooks.md) and
-[ADR 0003](../adr/0003-zero-dependency-bash-and-enforcement-hooks.md).
+ADR 0003.
 
 ## The problem with advisory rules
 
@@ -95,5 +95,5 @@ Two honest boundaries:
 
 - [Philosophy](philosophy.md) — the values layer this rationale supports.
 - [Hooks reference](../reference/hooks.md) — exact wiring, exit codes, and behavior.
-- [ADR 0003](../adr/0003-zero-dependency-bash-and-enforcement-hooks.md) — the
+- ADR 0003 — the
   decision to implement enforcement as zero-dependency Bash hooks.

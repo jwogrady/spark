@@ -46,5 +46,5 @@ the plugin; the permission baseline is applied separately (see
 
 ## See also
 
-- Why two doors — the decision and its scope: [../adr/0003-zero-dependency-bash-and-enforcement-hooks.md](../adr/0003-zero-dependency-bash-and-enforcement-hooks.md)
-- The architectural view of the two-doors model: [../architecture/spark-internals.md](../architecture/spark-internals.md)
+- Why two doors — the decision and its scope: ../adr/0003-zero-dependency-bash-and-enforcement-hooks.md
+- The architectural view of the two-doors model: ../architecture/spark-internals.md

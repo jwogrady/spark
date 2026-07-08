@@ -73,7 +73,7 @@ agent file. It prints a `✓ <name>` line per item and ends with
 > version generates scoped work items and milestone scaffolds.
 
 Ready for a deeper walkthrough? See
-[Build your first project](docs/tutorials/build-your-first-project.md).
+[Build your first project](plugins/spark/docs/tutorials/build-your-first-project.md).
 
 **Prerequisites:** a git repo (`git init` first); for PR creation, the GitHub CLI
 (`gh`) installed and authenticated (`gh auth login`) — without it, `/spark:ship`
@@ -82,7 +82,7 @@ fails at the push step.
 ## The skills, grouped
 
 Spark's 11 skills fall into four categories (canonical list:
-[`docs/reference/skills.md`](docs/reference/skills.md)):
+[`docs/reference/skills.md`](plugins/spark/docs/reference/skills.md)):
 
 - **Lifecycle** — `ideate`, `plan`, `codify`, `validate`, `ship` (the five steps above).
 - **Setup** — `bootstrap` (scaffold a runtime), `connect` (services + secrets via 1Password).
@@ -90,7 +90,7 @@ Spark's 11 skills fall into four categories (canonical list:
 - **Supporting** — `agents-md` (`CLAUDE.md` + `AGENTS.md`), `review` (whole-project audit).
 
 Not sure which one? Follow the
-**[skill chooser](docs/reference/skills.md#which-skill-do-i-use)** — a flowchart
+**[skill chooser](plugins/spark/docs/reference/skills.md#which-skill-do-i-use)** — a flowchart
 and intent table that pick the right skill in one read.
 
 ## Why Spark, not raw Claude Code?
@@ -185,12 +185,12 @@ Standards: valid skill frontmatter; POSIX-friendly Bash with `set -euo pipefail`
 conventional commits (subject ≤ 72 chars, no trailing period, no AI-attribution
 trailers); one concern per branch and per PR; never commit directly to
 `master`/`main`. Attribution in every author/credit field is the literal string
-`jwogrady`. See `CONTRIBUTING.md` and [`docs/explanation/philosophy.md`](docs/explanation/philosophy.md) (the *why* behind the
+`jwogrady`. See `CONTRIBUTING.md` and [`docs/explanation/philosophy.md`](plugins/spark/docs/explanation/philosophy.md) (the *why* behind the
 rules).
 
 ## Documentation
 
-- **[Philosophy](docs/explanation/philosophy.md)** — what Spark stands for and the
+- **[Philosophy](plugins/spark/docs/explanation/philosophy.md)** — what Spark stands for and the
   doctrine behind the rules.
 - **[Documentation index](docs/README.md)** — the full Diátaxis tree: tutorials,
   how-to guides, reference, and explanation, plus ADRs and architecture notes.
