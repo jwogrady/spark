@@ -225,6 +225,70 @@ cmd_doctor() {
   done < <(find "$doc_root" -type f -name '*.md' ! -path '*/.git/*' ! -path '*/node_modules/*' | sort)
   [ "$broken" -eq 0 ] && green "  ✓ no broken relative links"
 
+  # Enforcement parity: Spark deliberately states each rule on more than one
+  # surface — the PreToolUse guard (Claude's door), the git hooks (the human
+  # door), and the docs. That redundancy gives coverage but drifts silently
+  # (ADR-0003), so inside the Spark repo doctor proves the surfaces still
+  # agree. Skipped elsewhere: user repos don't carry these docs.
+  local repo_root=""
+  [ -f "$SPARK_ROOT/../../.claude-plugin/marketplace.json" ] \
+    && repo_root="$(cd "$SPARK_ROOT/../.." && pwd)"
+  if [ -n "$repo_root" ] && [ -f "$repo_root/CLAUDE.md" ] && [ -f "$repo_root/AGENTS.md" ]; then
+    echo
+    echo "Enforcement parity:"
+    local guard="$SPARK_ROOT/hooks/guard-bash.sh"
+    local cmsg="$SPARK_ROOT/scripts/hooks/commit-msg"
+    local precommit="$SPARK_ROOT/scripts/hooks/pre-commit"
+    local cm="$repo_root/CLAUDE.md" am="$repo_root/AGENTS.md"
+
+    # parity <pattern> <file> <fix-hint> — one missing surface = one error.
+    parity() {
+      grep -qiE -e "$1" "$2" 2>/dev/null && return 0
+      red "  ✗ ${2#"$repo_root"/}: $3"; errors=$((errors+1)); return 1
+    }
+
+    # (a) The conventional-commit type list must be one set everywhere.
+    local hook_types cm_types am_types
+    # Each extraction ends in || true: with pipefail, a surface that lost its
+    # rule would otherwise abort doctor instead of being reported as drift.
+    hook_types="$(grep -oE '\(feat\|[a-z|]+\)' "$cmsg" 2>/dev/null | head -n1 | tr -d '()' | tr '|' '\n' | sort | tr '\n' ' ' || true)"
+    cm_types="$(grep -i 'conventional commits' "$cm" | grep -oE '`[a-z]+:`' | tr -d '`:' | sort | tr '\n' ' ' || true)"
+    am_types="$(grep -i 'conventional commits' "$am" | grep -oE '`[a-z]+:`' | tr -d '`:' | sort | tr '\n' ' ' || true)"
+    if [ -n "$hook_types" ] && [ "$hook_types" = "$cm_types" ] && [ "$hook_types" = "$am_types" ]; then
+      green "  ✓ commit types agree across commit-msg, CLAUDE.md, AGENTS.md (${hook_types% })"
+    else
+      red "  ✗ commit type lists drift — commit-msg: [${hook_types% }] CLAUDE.md: [${cm_types% }] AGENTS.md: [${am_types% }]. Align the list on all three surfaces."
+      errors=$((errors+1))
+    fi
+
+    # (b) AI-attribution prohibition: implemented in the hook, documented twice.
+    local ok=1
+    parity 'co-authored-by' "$cmsg" "must reject AI co-author trailers" || ok=0
+    parity 'ai attribution' "$cmsg" "must reject AI attribution in commit bodies" || ok=0
+    parity 'never credit an ai' "$cm" "must document the AI-attribution prohibition" || ok=0
+    parity 'ai tool names|never credit an ai' "$am" "must document the AI-attribution prohibition" || ok=0
+    [ "$ok" -eq 1 ] && green "  ✓ AI-attribution ban implemented (commit-msg) and documented (CLAUDE.md, AGENTS.md)"
+
+    # (c) Trunk protection: guard blocks pushes, pre-commit blocks commits,
+    # docs state both rules.
+    ok=1
+    parity 'master\|main' "$guard" "must block pushes to master/main" || ok=0
+    parity 'master\|main' "$precommit" "must block commits on master/main" || ok=0
+    parity 'do not push directly to .master' "$cm" "must document the no-push-to-trunk rule" || ok=0
+    parity 'never commit directly to .master' "$cm" "must document the no-commit-on-trunk rule" || ok=0
+    parity 'never commit to .master. directly|never commit directly to .master' "$am" "must document the no-commit-on-trunk rule" || ok=0
+    [ "$ok" -eq 1 ] && green "  ✓ trunk protection implemented (guard-bash.sh, pre-commit) and documented (CLAUDE.md, AGENTS.md)"
+
+    # (d) Force-push: guard blocks --force but allows --force-with-lease;
+    # docs state the same split.
+    ok=1
+    parity 'force-push is blocked' "$guard" "must block force-pushes" || ok=0
+    parity 'force-with-lease' "$guard" "must allow the safer --force-with-lease" || ok=0
+    parity 'force-with-lease' "$cm" "must document the force-push rule and the --force-with-lease exception" || ok=0
+    parity 'force-push' "$am" "must document the force-push rule" || ok=0
+    [ "$ok" -eq 1 ] && green "  ✓ force-push rules implemented (guard-bash.sh) and documented (CLAUDE.md, AGENTS.md)"
+  fi
+
   # Git hooks installed in the current repo? In an arbitrary project this is
   # advice (warning). Inside the Spark repo itself the hooks *are* the
   # enforcement door, so their absence is an error — except in CI, where a
