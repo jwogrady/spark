@@ -1,23 +1,30 @@
 # Spark
 
-> **`$ spark` — one rig. every repo. zero drift. ▌**
+> **`$ spark` — your standards, one bag, every course. ▌**
 
 ![version](https://img.shields.io/badge/version-0.3.1-blue)
 ![maintained](https://img.shields.io/badge/maintained-yes-brightgreen)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
-Raw idea in, durable GitHub artifacts out. Spark is a Claude Code plugin that
-carries one lifecycle — **Ideate → Plan → Codify → Validate → Ship** — into every
-repo you crack open.
+**Spark is the layer between your intent and Claude's tools.** You bring the
+judgment — definitions, priorities, preferences. Claude brings a growing set of
+great tools. Spark owns what sits between: the **sequence**, the **gaps**, and
+**your standards**. The canonical statement is
+[what Spark is](plugins/spark/docs/explanation/identity.md).
 
-At heart, Spark is the **layer between your intent and Claude's tools**: you bring
-the judgment, Claude brings the tools, Spark owns the sequence, the gaps, and your
-standards — [what Spark is](plugins/spark/docs/explanation/identity.md).
+It behaves like a **caddy**, not a control panel: it reads the situation,
+recommends the right club, challenges a questionable choice — and you take the
+shot. The clubs come from **three bags**: the *provider's bag* (Claude's native
+tools, leveraged and never duplicated), the *standard bag* (your preferences,
+lifecycle, and tooling — **this bag is Spark**, loaded once and carried
+everywhere), and the *project's bag* (clubs local to one repo).
 
-Install it once and the rails come with you: a PreToolUse guard kills force-pushes
-and trunk commits *before* Claude can fumble, a `commit-msg` hook rejects sloppy
-commits, and `spark doctor` audits the whole rig. Twelve skills, two agent crews,
-zero runtime deps. No reinvention, no drift.
+In practice: raw idea in, durable GitHub artifacts out. Spark is a Claude Code
+plugin that carries one lifecycle — **Ideate → Plan → Codify → Validate → Ship**
+— into every repo you crack open. Install it once and the rails come with you: a
+PreToolUse guard kills force-pushes and trunk commits *before* Claude can fumble,
+a `commit-msg` hook rejects sloppy commits, and `spark doctor` audits the whole
+rig. Twelve skills, two agent crews, zero runtime deps. No reinvention, no drift.
 
 ```mermaid
 flowchart LR
