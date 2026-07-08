@@ -46,7 +46,8 @@ plugins/spark/          # the installable plugin (everything that ships to users
 │   ├── hooks.json              # PreToolUse wiring
 │   └── guard-bash.sh           # blocks force-push and pushes to trunk
 ├── scripts/hooks/              # git hook sources (commit-msg, pre-commit)
-├── bin/spark                   # the CLI (doctor, list-skills, new-skill, install-git-hooks, shred-env)
+├── settings/permission-baseline.json  # recommended permissions.allow, applied by spark apply-permissions
+├── bin/spark                   # the CLI (doctor, list-skills, new-skill, install-git-hooks, apply-permissions, shred-env)
 └── docs/                       # USER docs (ship with the plugin), organized by Diátaxis
 docs/                   # DEV docs (repo root, never shipped): ADRs, architecture, packaging reference
 .github/                # PR + issue templates (the plan skill uses these)
