@@ -61,6 +61,33 @@ cmd_version() {
   echo "spark $v"
 }
 
+# Lint one SKILL.md's frontmatter. The description is the only thing Claude
+# sees when choosing a skill, so its quality is checked here — and both doctor
+# and new-skill call this, so scaffold-time and audit-time verdicts agree.
+# Sets lint_errors/lint_warnings; findings print as "  ✗|! <label>: <finding>".
+lint_skill_md() {
+  local f="$1" label="$2" desc
+  lint_errors=0 lint_warnings=0
+  if ! grep -q '^name:' "$f"; then
+    red "  ✗ $label: SKILL.md missing 'name:' frontmatter"; lint_errors=$((lint_errors+1))
+  fi
+  if ! grep -q '^description:' "$f"; then
+    red "  ✗ $label: SKILL.md missing 'description:' frontmatter"; lint_errors=$((lint_errors+1))
+    return 0
+  fi
+  desc="$(grep '^description:' "$f" | sed 's/^description: *//' | head -1)"
+  if [ "${#desc}" -gt 1024 ]; then
+    yellow "  ! $label: description is ${#desc} chars (over the 1024 limit)"; lint_warnings=$((lint_warnings+1))
+  fi
+  if ! printf '%s' "$desc" | grep -qiE 'use (when|after|for|to)'; then
+    yellow "  ! $label: description names no trigger (\"Use when …\")"; lint_warnings=$((lint_warnings+1))
+  fi
+  if ! printf '%s' "$desc" | grep -qiE 'not for|instead|rather than|use the native|/init'; then
+    yellow "  ! $label: description has no boundary clause (\"not for X — use Y\")"; lint_warnings=$((lint_warnings+1))
+  fi
+  return 0
+}
+
 cmd_doctor() {
   local errors=0 warnings=0
 
@@ -123,24 +150,9 @@ cmd_doctor() {
       if [ ! -f "$d/SKILL.md" ]; then
         red "  ✗ $name: missing SKILL.md"; errors=$((errors+1)); continue
       fi
-      if ! grep -q '^name:' "$d/SKILL.md"; then
-        red "  ✗ $name: SKILL.md missing 'name:' frontmatter"; errors=$((errors+1)); continue
-      fi
-      if ! grep -q '^description:' "$d/SKILL.md"; then
-        red "  ✗ $name: SKILL.md missing 'description:' frontmatter"; errors=$((errors+1)); continue
-      fi
-      # The description is the only thing Claude sees when choosing a skill, so
-      # lint its quality: it must name a trigger and a boundary, and fit the cap.
-      desc="$(grep '^description:' "$d/SKILL.md" | sed 's/^description: *//' | head -1)"
-      if [ "${#desc}" -gt 1024 ]; then
-        yellow "  ! $name: description is ${#desc} chars (over the 1024 limit)"; warnings=$((warnings+1))
-      fi
-      if ! printf '%s' "$desc" | grep -qiE 'use (when|after|for|to)'; then
-        yellow "  ! $name: description names no trigger (\"Use when …\")"; warnings=$((warnings+1))
-      fi
-      if ! printf '%s' "$desc" | grep -qiE 'not for|instead|rather than|use the native|/init'; then
-        yellow "  ! $name: description has no boundary clause (\"not for X — use Y\")"; warnings=$((warnings+1))
-      fi
+      lint_skill_md "$d/SKILL.md" "$name"
+      errors=$((errors+lint_errors)); warnings=$((warnings+lint_warnings))
+      [ "$lint_errors" -gt 0 ] && continue
       green "  ✓ $name"
     done
   else
@@ -266,6 +278,12 @@ description: One sentence on what this does. Use when [specific triggers].
 - Keep it focused.
 EOF
   green "Created $dir/SKILL.md"
+  # Lint the scaffold immediately with doctor's own checks, so a weak
+  # description is flagged now rather than at the next doctor run.
+  lint_skill_md "$dir/SKILL.md" "$name"
+  if [ "$((lint_errors+lint_warnings))" -gt 0 ]; then
+    echo "Fix the finding(s) above — spark doctor runs the same lint."
+  fi
   echo "Next: edit the description (it's the only thing Claude sees when choosing the skill)."
   echo "Authoring rules (description format, 100-line cap, when to split): see the"
   echo "'Skill Authoring' section of CLAUDE.md."
