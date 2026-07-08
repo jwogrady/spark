@@ -37,7 +37,7 @@ Zero dependencies guarantee the toolkit works everywhere it is forked.
 continuing. Graceful degradation means a missing `jq`/`python3` weakens a check
 rather than breaking the run. Two enforcement doors are required because a plugin
 hook only sees Claude's tool calls — a human running git bypasses it entirely.
-Full per-rule detail is in [../reference/hooks.md](../reference/hooks.md).
+Full per-rule detail is in [../reference/hooks.md](../../plugins/spark/docs/reference/hooks.md).
 
 `spark doctor` is the push-readiness preflight, but it is a **human convention**
 ("run it before pushing"), not a CI gate — there is no `.github/workflows/` that
@@ -79,6 +79,6 @@ enforces it.
 
 ## Related Docs
 
-- [../reference/hooks.md](../reference/hooks.md)
-- [../reference/cli.md](../reference/cli.md)
+- [../reference/hooks.md](../../plugins/spark/docs/reference/hooks.md)
+- [../reference/cli.md](../../plugins/spark/docs/reference/cli.md)
 - [../architecture/spark-internals.md](../architecture/spark-internals.md) — the architecture map

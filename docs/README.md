@@ -1,70 +1,11 @@
-# Spark documentation
+# Spark — developer documentation
 
-These docs follow [Diátaxis](https://diataxis.fr/) — four modes of documentation,
-each serving a different need. Find what you need by what you're trying to do:
+Internal docs for building and understanding Spark itself. These are the
+**developer** surface — they do **not** ship with the plugin.
 
-| You want to… | Go to | Mode |
-|---|---|---|
-| Learn Spark by doing, start to finish | [Tutorial](#tutorial) | Tutorial (learning) |
-| Accomplish one specific task | [How-to guides](#how-to-guides) | How-to (task) |
-| Look up exactly how something behaves | [Reference](#reference) | Reference (information) |
-| Understand why Spark is built this way | [Understanding Spark](#understanding-spark) | Explanation (understanding) |
-| See how the pieces fit together, or trace a past decision | [Architecture & decisions](#architecture--decisions) | Architecture & decisions |
-
-## The shape of the rig
-
-One portable, opinionated toolkit — boot it once, carry it into every repo.
-Everything orbits a single GitHub-native lifecycle:
-
-```
-Ideate → Plan → Codify → Validate → Ship
-```
-
-Each stage is a skill (`/spark:ideate`, `/spark:plan`, `/spark:codify`,
-`/spark:validate`, `/spark:ship`), backed by enforcement hooks
-and a small `spark` CLI. See [explanation/sdlc-doctrine.md](explanation/sdlc-doctrine.md)
-for why this is the spine.
-
-## Tutorial
-
-New here? Start with one idea taken through all five stages, end to end:
-
-- [tutorials/build-your-first-project.md](tutorials/build-your-first-project.md) — install Spark and run a single idea from Ideate to an open PR.
-
-## How-to guides
-
-Task-oriented recipes — the lifecycle stages in order, then setup and audit:
-
-- [how-to/ideate.md](how-to/ideate.md) — `/spark:ideate` · frame a fuzzy idea into a written problem statement.
-- [how-to/plan.md](how-to/plan.md) — `/spark:plan` · decompose the problem into scoped work items.
-- [how-to/codify.md](how-to/codify.md) — `/spark:codify` · implement one work item on a feature branch.
-- [how-to/validate.md](how-to/validate.md) — `/spark:validate` · review and harden the change until it's ready.
-- [how-to/ship.md](how-to/ship.md) — `/spark:ship` · commit, push, and open a focused PR.
-- [how-to/install.md](how-to/install.md) — install the plugin and apply the permission baseline.
-- [how-to/bootstrap.md](how-to/bootstrap.md) — `/spark:bootstrap` · scaffold a project runtime (Bun / uv).
-- [how-to/connect.md](how-to/connect.md) — `/spark:connect` · wire up services and secrets via 1Password.
-- [how-to/review.md](how-to/review.md) — `/spark:review` · run the multi-agent project audit.
-
-## Reference
-
-Information-oriented — what each piece is and how it behaves:
-
-- [reference/skills.md](reference/skills.md) — every skill, its stage, and what triggers it.
-- [reference/codify-readiness.md](reference/codify-readiness.md) — the Plan→Codify readiness gate: the checklist and the health signal.
-- [reference/cli.md](reference/cli.md) — the `spark` CLI and its subcommands.
-- [reference/hooks.md](reference/hooks.md) — the enforcement hooks and what each blocks.
-- [reference/plugin-manifest.md](reference/plugin-manifest.md) — the plugin manifest and marketplace files.
-
-## Understanding Spark
-
-The *why* behind the build — read these to grasp the worldview and the design
-choices (Explanation mode):
-
-- [explanation/philosophy.md](explanation/philosophy.md) — what Spark stands for and the doctrine behind the rules
-- [explanation/enforcement-model.md](explanation/enforcement-model.md) — why enforcement is mechanical, not advisory
-- [explanation/sdlc-doctrine.md](explanation/sdlc-doctrine.md) — why the five-stage lifecycle is the spine
-- [explanation/scope-and-upstream.md](explanation/scope-and-upstream.md) — what Spark adds and what it leaves to Anthropic's spec
-- [explanation/why-a-plugin.md](explanation/why-a-plugin.md) — why Spark ships as a plugin, not a framework
+The **user-facing** documentation (tutorial, how-to guides, reference, and the
+explanation of why Spark is built this way) ships *with* the plugin and lives
+under [`../plugins/spark/docs/`](../plugins/spark/docs/README.md).
 
 ## Architecture & decisions
 
@@ -74,4 +15,12 @@ How the layers fit together, and the dated record of why Spark is built this way
 - [adr/0001-plugin-not-framework.md](adr/0001-plugin-not-framework.md) — Spark is a Claude Code plugin, not a framework
 - [adr/0002-additive-to-anthropic-spec.md](adr/0002-additive-to-anthropic-spec.md) — Additive to Anthropic's spec — never reinvent upstream
 - [adr/0003-zero-dependency-bash-and-enforcement-hooks.md](adr/0003-zero-dependency-bash-and-enforcement-hooks.md) — Zero-dependency POSIX Bash + enforcement hooks
-- [glossary.md](glossary.md) — Spark-internal vocabulary
+- [adr/0000-template.md](adr/0000-template.md) — the ADR template
+
+## Packaging reference
+
+Information about how the plugin is packaged and how it relates to Claude Code's
+built-ins — contributor concerns, not user concerns:
+
+- [reference/plugin-manifest.md](reference/plugin-manifest.md) — the plugin manifest and marketplace files
+- [reference/native-overlap.md](reference/native-overlap.md) — proof that no Spark skill reimplements a Claude Code built-in

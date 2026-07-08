@@ -2,8 +2,8 @@
 
 > Reference — information-oriented.
 
-Spark enforces its guardrails through two independent layers, because the
-Claude-driven path and the human-driven path are different doors.
+Spark enforces its guardrails through two independent doors, because the
+Claude-driven path and the human-driven path need separate gates.
 
 ## Plugin hook (Claude-driven path)
 
@@ -46,5 +46,5 @@ the plugin; the permission baseline is applied separately (see
 
 ## See also
 
-- Why two doors — the decision and its scope: [../adr/0003-zero-dependency-bash-and-enforcement-hooks.md](../adr/0003-zero-dependency-bash-and-enforcement-hooks.md)
-- The architectural view of the two-doors model: [../architecture/spark-internals.md](../architecture/spark-internals.md)
+- Why two doors — the decision and its scope: ../adr/0003-zero-dependency-bash-and-enforcement-hooks.md
+- The architectural view of the two-doors model: ../architecture/spark-internals.md

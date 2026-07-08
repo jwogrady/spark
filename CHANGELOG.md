@@ -8,7 +8,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- **Documentation truth audit.** Corrected docs to match the code as it ships:
+  the skill count is now 12 (the `cleanup` skill, added in `0.3.1`, was missing
+  from the README, `CLAUDE.md`, and the canonical taxonomy in
+  `docs/reference/skills.md`); refreshed stale `0.2.0` version references to
+  `0.3.1` across the README and docs; and reworded claims that presented
+  v0.4-planned GitHub-issue generation as shipped. No behavior changed.
 
 ## [0.3.1] - 2026-06-20
 

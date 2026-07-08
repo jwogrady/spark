@@ -58,13 +58,19 @@ cmd_doctor() {
     red "✗ .claude-plugin/plugin.json is missing"; errors=$((errors+1))
   fi
 
-  # Marketplace.
-  if [ -f "$SPARK_ROOT/.claude-plugin/marketplace.json" ]; then
-    check_json "$SPARK_ROOT/.claude-plugin/marketplace.json" \
-      && green "✓ .claude-plugin/marketplace.json is valid JSON" \
+  # Marketplace catalog — lives at the marketplace repo root. With the plugin in
+  # plugins/<name>/ that is two levels up; fall back to the plugin dir for a
+  # plugin that is itself the repo root.
+  market=""
+  for cand in "$SPARK_ROOT/../../.claude-plugin/marketplace.json" "$SPARK_ROOT/.claude-plugin/marketplace.json"; do
+    [ -f "$cand" ] && { market="$cand"; break; }
+  done
+  if [ -n "$market" ]; then
+    check_json "$market" \
+      && green "✓ marketplace.json is valid JSON" \
       || { red "✗ marketplace.json is not valid JSON"; errors=$((errors+1)); }
   else
-    yellow "! .claude-plugin/marketplace.json is missing (not git-installable)"; warnings=$((warnings+1))
+    yellow "! marketplace.json not found (not git-installable)"; warnings=$((warnings+1))
   fi
 
   # Hooks.

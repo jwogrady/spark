@@ -1,18 +1,22 @@
 # Spark — Claude Code Guide
 
 > This file is maintained using the Spark `agents-md` skill.
-> See `skills/agents-md/SKILL.md` for authoring rules.
+> See `plugins/spark/skills/agents-md/SKILL.md` for authoring rules.
 
 ## Mission
 
-Spark is a portable project-inception and software-delivery system for
-AI-assisted development. It turns raw project intent into durable repo artifacts,
+**Spark is the layer between your intent and Claude's tools** — you bring the
+judgment (definitions, priorities, preferences), Claude brings the tools, and
+Spark owns the sequence, the gaps, and your standards. The full identity lives in
+[`plugins/spark/docs/explanation/identity.md`](plugins/spark/docs/explanation/identity.md).
+
+In practice it is a portable project-inception and software-delivery system for
+AI-assisted development: it turns raw project intent into durable repo artifacts,
 implementation branches, reviews, commits, and pull requests (scoped GitHub
 issue generation is a v0.4 goal). The methodology is portable; the current
 implementation ships as a Claude Code plugin you install once and carry into
-every project. It puts one
-opinionated lifecycle at your fingertips and enforces the guardrails that keep
-work clean:
+every project. It puts one opinionated lifecycle at your fingertips and enforces
+the guardrails that keep work clean:
 
 ```
 Ideate → Plan → Codify → Validate → Ship
@@ -33,16 +37,18 @@ reuses Claude Code's built-in tools (`/code-review`, `/security-review`,
 
 ```
 .claude-plugin/
-├── plugin.json         # plugin manifest
-└── marketplace.json    # makes this repo git-installable as a marketplace
-skills/<name>/SKILL.md  # lifecycle skills + carried-over skills
-agents/<crew>/*.md      # real subagents for the docit + knowledge crews
-hooks/
-├── hooks.json          # PreToolUse wiring
-└── guard-bash.sh       # blocks force-push and pushes to trunk
-scripts/hooks/          # git hook sources (commit-msg, pre-commit)
-bin/spark               # the CLI (doctor, list-skills, new-skill, install-git-hooks, shred-env)
-docs/                   # documentation, organized by Diátaxis
+└── marketplace.json    # marketplace catalog — points at ./plugins/spark
+plugins/spark/          # the installable plugin (everything that ships to users)
+├── .claude-plugin/plugin.json  # plugin manifest
+├── skills/<name>/SKILL.md      # lifecycle + carried-over skills, run as /spark:<name>
+├── agents/<crew>/*.md          # real subagents for the docit + knowledge crews
+├── hooks/
+│   ├── hooks.json              # PreToolUse wiring
+│   └── guard-bash.sh           # blocks force-push and pushes to trunk
+├── scripts/hooks/              # git hook sources (commit-msg, pre-commit)
+├── bin/spark                   # the CLI (doctor, list-skills, new-skill, install-git-hooks, shred-env)
+└── docs/                       # USER docs (ship with the plugin), organized by Diátaxis
+docs/                   # DEV docs (repo root, never shipped): ADRs, architecture, packaging reference
 .github/                # PR + issue templates (the plan skill uses these)
 CLAUDE.md               # this file (maintained by the agents-md skill)
 AGENTS.md               # tool-agnostic agent guide (maintained by agents-md skill)
@@ -50,8 +56,8 @@ AGENTS.md               # tool-agnostic agent guide (maintained by agents-md ski
 
 ## The Skills
 
-The 11 skills group into four categories. The canonical taxonomy lives in
-[`docs/reference/skills.md`](docs/reference/skills.md); this list mirrors it.
+The 12 skills group into four categories. The canonical taxonomy lives in
+[`plugins/spark/docs/reference/skills.md`](plugins/spark/docs/reference/skills.md); this list mirrors it.
 
 **Lifecycle** — the five stages:
 
@@ -63,11 +69,11 @@ The 11 skills group into four categories. The canonical taxonomy lives in
 | Validate | `validate` | Orchestrate built-in reviews, then fix |
 | Ship | `ship` | Conventional commit, then a focused PR |
 
-The remaining six:
+The remaining seven:
 
 - **Setup** — `bootstrap` (scaffold a project runtime), `connect` (services + secrets via 1Password).
 - **Authorship** — `docit` (glow up public docs through author personas), `knowledge` (capture internal knowledge through an author crew).
-- **Supporting** — `agents-md` (maintains `CLAUDE.md` + `AGENTS.md`), `review` (multi-agent whole-project audit).
+- **Supporting** — `agents-md` (maintains `CLAUDE.md` + `AGENTS.md`), `review` (multi-agent whole-project audit), `cleanup` (purge proven-dead code and false docs; emits an orchestrator prompt).
 
 ## Development Workflow
 
@@ -93,7 +99,7 @@ Markdown. `spark doctor` and `bash -n` are the only validation gates.
 
 ## Skill Authoring
 
-- Skills live in `skills/<skill-name>/`.
+- Skills live in `plugins/spark/skills/<skill-name>/`.
 - Scaffold a new skill with `spark new-skill <name>`.
 - Each skill needs a `SKILL.md` with `name:` and `description:` frontmatter. The
   `description` is the only thing Claude sees when choosing the skill, so make it

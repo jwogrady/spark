@@ -14,7 +14,7 @@ The skill — the main loop — is the sole orchestrator: a subagent cannot spaw
 another, so every dispatch and barrier is the main loop's job, and the agents
 coordinate only through shared notes in `.knowledge-notes/`, never by calling each
 other. That general pattern is documented once in
-[the architecture map](../../../docs/architecture/spark-internals.md#the-subagent-orchestration-pattern);
+the architecture map;
 below is what's specific to `knowledge`.
 
 A role is **dispatched fresh once per phase it takes part in** — the agent

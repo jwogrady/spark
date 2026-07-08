@@ -6,7 +6,7 @@ This is the rationale behind [Principle 1 of the philosophy](philosophy.md) —
 "enforcement over aspiration." It explains a design choice, not a procedure; for
 the exact hook wiring and exit codes, see the
 [hooks reference](../reference/hooks.md) and
-[ADR 0003](../adr/0003-zero-dependency-bash-and-enforcement-hooks.md).
+ADR 0003.
 
 ## The problem with advisory rules
 
@@ -83,7 +83,7 @@ Two honest boundaries:
 - **Enforcement is not the same as quality assurance.** The hooks cover commit
   conventions, trunk discipline, force-push safety, attribution honesty, and
   artifact well-formedness. They do **not** test that a skill behaves correctly.
-  CI and automated regression on skill behavior are a known gap at v0.2.0; the
+  CI and automated regression on skill behavior are a known gap at v0.3.1; the
   mechanical model is the intentional quality mechanism for a Bash/Markdown
   project, not a complete one.
 - **The git hooks are opt-in per repo.** The PreToolUse guard works as soon as the
@@ -95,5 +95,5 @@ Two honest boundaries:
 
 - [Philosophy](philosophy.md) — the values layer this rationale supports.
 - [Hooks reference](../reference/hooks.md) — exact wiring, exit codes, and behavior.
-- [ADR 0003](../adr/0003-zero-dependency-bash-and-enforcement-hooks.md) — the
+- ADR 0003 — the
   decision to implement enforcement as zero-dependency Bash hooks.

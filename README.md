@@ -2,7 +2,7 @@
 
 > **`$ spark` — one rig. every repo. zero drift. ▌**
 
-![version](https://img.shields.io/badge/version-0.2.0-blue)
+![version](https://img.shields.io/badge/version-0.3.1-blue)
 ![maintained](https://img.shields.io/badge/maintained-yes-brightgreen)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
@@ -10,9 +10,13 @@ Raw idea in, durable GitHub artifacts out. Spark is a Claude Code plugin that
 carries one lifecycle — **Ideate → Plan → Codify → Validate → Ship** — into every
 repo you crack open.
 
+At heart, Spark is the **layer between your intent and Claude's tools**: you bring
+the judgment, Claude brings the tools, Spark owns the sequence, the gaps, and your
+standards — [what Spark is](plugins/spark/docs/explanation/identity.md).
+
 Install it once and the rails come with you: a PreToolUse guard kills force-pushes
 and trunk commits *before* Claude can fumble, a `commit-msg` hook rejects sloppy
-commits, and `spark doctor` audits the whole rig. Eleven skills, two agent crews,
+commits, and `spark doctor` audits the whole rig. Twelve skills, two agent crews,
 zero runtime deps. No reinvention, no drift.
 
 ```mermaid
@@ -42,7 +46,7 @@ flowchart LR
 ```
 
 > **Install path:** The verified path today is a local clone or Git URL. The
-> one-click published-marketplace listing is a v0.2 open item (see `ROADMAP.md`);
+> one-click published-marketplace listing is still an open item (see `ROADMAP.md`);
 > if the marketplace command is not yet reachable, install from a Git URL or local
 > path. Spark is then available globally — every project you open gets the
 > lifecycle skills (`/spark:ideate`, `/spark:plan`, …) and the `spark` CLI.
@@ -73,7 +77,7 @@ agent file. It prints a `✓ <name>` line per item and ends with
 > version generates scoped work items and milestone scaffolds.
 
 Ready for a deeper walkthrough? See
-[Build your first project](docs/tutorials/build-your-first-project.md).
+[Build your first project](plugins/spark/docs/tutorials/build-your-first-project.md).
 
 **Prerequisites:** a git repo (`git init` first); for PR creation, the GitHub CLI
 (`gh`) installed and authenticated (`gh auth login`) — without it, `/spark:ship`
@@ -81,16 +85,16 @@ fails at the push step.
 
 ## The skills, grouped
 
-Spark's 11 skills fall into four categories (canonical list:
-[`docs/reference/skills.md`](docs/reference/skills.md)):
+Spark's 12 skills fall into four categories (canonical list:
+[`plugins/spark/docs/reference/skills.md`](plugins/spark/docs/reference/skills.md)):
 
 - **Lifecycle** — `ideate`, `plan`, `codify`, `validate`, `ship` (the five steps above).
 - **Setup** — `bootstrap` (scaffold a runtime), `connect` (services + secrets via 1Password).
 - **Authorship** — `docit` (public docs), `knowledge` (internal knowledge).
-- **Supporting** — `agents-md` (`CLAUDE.md` + `AGENTS.md`), `review` (whole-project audit).
+- **Supporting** — `agents-md` (`CLAUDE.md` + `AGENTS.md`), `review` (whole-project audit), `cleanup` (stale-code + doc-truth hygiene).
 
 Not sure which one? Follow the
-**[skill chooser](docs/reference/skills.md#which-skill-do-i-use)** — a flowchart
+**[skill chooser](plugins/spark/docs/reference/skills.md#which-skill-do-i-use)** — a flowchart
 and intent table that pick the right skill in one read.
 
 ## Why Spark, not raw Claude Code?
@@ -116,11 +120,10 @@ friction.
 
 ## Maturity and trust
 
-Spark is pre-1.0, at `v0.2.0`. That is the honest contract, not a caveat. The
-`v0.2` milestone shipped its full scope — plugin packaging, the lifecycle skills,
-enforcement hooks, the Diátaxis docs tree — with one open item: end-to-end install
-validation from a published marketplace (tracked in `ROADMAP.md` and the
-`CHANGELOG.md` `[Unreleased]` block). No breaking-change policy is documented yet;
+Spark is pre-1.0, at `v0.3.1`. That is the honest contract, not a caveat. Plugin
+packaging, the lifecycle skills, enforcement hooks, and the Diátaxis docs tree are
+in place; one item is still open — end-to-end install validation from a published
+marketplace (tracked in `ROADMAP.md`). No breaking-change policy is documented yet;
 treat any `v0.x` release as potentially breaking.
 
 - **Scope: single-developer tool.** Git handles repository concurrency; the plugin
@@ -146,7 +149,7 @@ built-ins, reusing the built-in reviewers rather than reinventing them.
 ├──────────────────────────────────────────────────────────────┤
 │                Spark plugin (you install once)               │
 │  skills/            hooks/              bin/spark            │
-│  11 SKILL.md        PreToolUse          doctor               │
+│  12 SKILL.md        PreToolUse          doctor               │
 │  files              guard-bash.sh       list-skills          │
 │                                         new-skill            │
 │  scripts/hooks/                         install-git-hooks    │
@@ -158,9 +161,9 @@ built-ins, reusing the built-in reviewers rather than reinventing them.
 └──────────────────────────────────────────────────────────────┘
 ```
 
-`guard-bash.sh` lives under `hooks/`; `commit-msg` and `pre-commit` live under
-`scripts/hooks/` — two distinct directories, two distinct enforcement mechanisms
-(a PreToolUse hook vs. git hooks).
+`guard-bash.sh` lives under `plugins/spark/hooks/`; `commit-msg` and `pre-commit`
+live under `plugins/spark/scripts/hooks/` — two distinct directories, two distinct
+enforcement mechanisms (a PreToolUse hook vs. git hooks).
 
 **The `spark` CLI:** `doctor`, `list-skills`, `new-skill`, `install-git-hooks`,
 `shred-env`, `help`. Pure POSIX-friendly Bash, zero runtime dependencies, graceful
@@ -174,7 +177,7 @@ gets the improvement. The path has four legs: scaffold, implement, validate, ope
 PR on a feature branch.
 
 ```bash
-spark new-skill <your-skill-name>   # scaffold skills/<name>/SKILL.md
+spark new-skill <your-skill-name>   # scaffold plugins/spark/skills/<name>/SKILL.md
 # implement: SKILL.md needs name: + description: frontmatter; keep it focused
 spark doctor                        # validate manifests, hooks, skill + agent frontmatter
 bash -n <any-script-you-touched>    # syntax-check shell
@@ -185,12 +188,12 @@ Standards: valid skill frontmatter; POSIX-friendly Bash with `set -euo pipefail`
 conventional commits (subject ≤ 72 chars, no trailing period, no AI-attribution
 trailers); one concern per branch and per PR; never commit directly to
 `master`/`main`. Attribution in every author/credit field is the literal string
-`jwogrady`. See `CONTRIBUTING.md` and [`docs/explanation/philosophy.md`](docs/explanation/philosophy.md) (the *why* behind the
+`jwogrady`. See `CONTRIBUTING.md` and [`docs/explanation/philosophy.md`](plugins/spark/docs/explanation/philosophy.md) (the *why* behind the
 rules).
 
 ## Documentation
 
-- **[Philosophy](docs/explanation/philosophy.md)** — what Spark stands for and the
+- **[Philosophy](plugins/spark/docs/explanation/philosophy.md)** — what Spark stands for and the
   doctrine behind the rules.
 - **[Documentation index](docs/README.md)** — the full Diátaxis tree: tutorials,
   how-to guides, reference, and explanation, plus ADRs and architecture notes.

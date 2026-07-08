@@ -1,7 +1,7 @@
 # Spark — AI Agent Guide
 
 > This file is maintained using the Spark `agents-md` skill.
-> See `skills/agents-md/SKILL.md` for authoring rules.
+> See `plugins/spark/skills/agents-md/SKILL.md` for authoring rules.
 
 This guide applies to any AI coding agent working in this repo, regardless of tool.
 
@@ -35,8 +35,10 @@ built-in tools rather than reinventing them.
 
 ### Documentation
 - Update `CHANGELOG.md` when behavior changes.
-- Docs follow Diátaxis (`docs/{tutorials,how-to,reference,explanation}/`). Put
-  new docs in the quadrant that matches their purpose.
+- Docs follow Diátaxis. User-facing docs ship with the plugin under
+  `plugins/spark/docs/{tutorials,how-to,reference,explanation}/`; developer docs
+  (ADRs, architecture, packaging) stay in the root `docs/`. Put new docs in the
+  surface and quadrant that match their purpose.
 - Write docs that explain *why*, not just *what*.
 
 ### Destructive Actions — Always Ask First
@@ -66,10 +68,10 @@ Never perform these without explicit user confirmation:
 
 ## Skill Authoring Quick Reference
 
-New skills go in `skills/<skill-name>/`. Scaffold with `spark new-skill <name>`.
+New skills go in `plugins/spark/skills/<skill-name>/`. Scaffold with `spark new-skill <name>`.
 
 ```
-skills/<name>/
+plugins/spark/skills/<name>/
 ├── SKILL.md       # required — frontmatter (name, description) + instructions
 ├── references/    # optional — long schemas, prompts, or examples
 └── agents/        # optional — agent definitions
