@@ -36,6 +36,17 @@ Copies `scripts/hooks/{commit-msg,pre-commit}` into the current repo's
 Spark hook, it is left untouched and a warning is printed — move it aside first
 if you want Spark's.
 
+## `spark apply-permissions [--yes]`
+
+Merges `settings/permission-baseline.json` — Spark's conservative
+`permissions.allow` list — into the current project's `.claude/settings.json`
+(anchored at the git repo root when inside one). Copies the baseline as-is when
+no settings file exists; otherwise lists the missing rules and appends them only
+after confirmation (`--yes` skips the prompt). Existing entries are never
+changed, removed, or reordered, so re-running is a no-op once every rule is
+present. Merging into an existing file requires `jq` or `python3`; without
+either, it prints the baseline's path for a manual merge.
+
 ## `spark shred-env <file>`
 
 Securely deletes a transient secrets file (e.g. `.env`) once its keys are stored
