@@ -8,6 +8,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.4.0](https://github.com/jwogrady/spark/compare/v0.3.1...v0.4.0) (2026-07-09)
+
 ### Added
 
 - **Architecture v1.0.** ADR-0008 (information architecture: Operator/Project/
@@ -59,6 +63,25 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
   `docs/reference/skills.md`); refreshed stale `0.2.0` version references to
   `0.3.1` across the README and docs; and reworded claims that presented
   v0.4-planned GitHub-issue generation as shipped. No behavior changed.
+
+### Features
+
+* add an enforcement-parity check to spark doctor ([#121](https://github.com/jwogrady/spark/issues/121)) ([498dd2f](https://github.com/jwogrady/spark/commit/498dd2f9f97f1c8d067c47d7b480a559d667fef9)), closes [#72](https://github.com/jwogrady/spark/issues/72)
+* add planning fields to issue templates ([#101](https://github.com/jwogrady/spark/issues/101)) ([de6f4d6](https://github.com/jwogrady/spark/commit/de6f4d6f89fab1718525ee19867504d476f7a077)), closes [#87](https://github.com/jwogrady/spark/issues/87)
+* adopt Release Please for Spark's own releases ([#127](https://github.com/jwogrady/spark/issues/127)) ([9f3bd1b](https://github.com/jwogrady/spark/commit/9f3bd1bff446a3ed5374297d06c67e0317828aef))
+* drive usage from a verb table and add spark version ([#119](https://github.com/jwogrady/spark/issues/119)) ([9d2249d](https://github.com/jwogrady/spark/commit/9d2249daaf794686a13dd616432f1b8e025cd943)), closes [#75](https://github.com/jwogrady/spark/issues/75)
+* fail doctor on missing git hooks inside the Spark repo ([#110](https://github.com/jwogrady/spark/issues/110)) ([4939f26](https://github.com/jwogrady/spark/commit/4939f26071f5dad116f8c1654bb7e59649168c93)), closes [#73](https://github.com/jwogrady/spark/issues/73)
+* fold bash -n and a relative-link scan into spark doctor ([#109](https://github.com/jwogrady/spark/issues/109)) ([254a796](https://github.com/jwogrady/spark/commit/254a796832a36f312a4a2be5141c99f218f828ca)), closes [#71](https://github.com/jwogrady/spark/issues/71)
+* gate PRs with a validation workflow that wraps spark doctor ([#122](https://github.com/jwogrady/spark/issues/122)) ([cb8de5a](https://github.com/jwogrady/spark/commit/cb8de5a25ea7f47672d66c085529b04a593a97e6)), closes [#70](https://github.com/jwogrady/spark/issues/70)
+* lint new-skill scaffolds with doctor's description linter ([#120](https://github.com/jwogrady/spark/issues/120)) ([c08a3b1](https://github.com/jwogrady/spark/commit/c08a3b17f2f567df87337a8fe21b5bbf962e2b58)), closes [#76](https://github.com/jwogrady/spark/issues/76)
+* persist the ideate problem statement to a canonical path ([#99](https://github.com/jwogrady/spark/issues/99)) ([fd46a66](https://github.com/jwogrady/spark/commit/fd46a662d891e28ac9ef175965ebb0c7d144ec26)), closes [#68](https://github.com/jwogrady/spark/issues/68)
+* ship a versioned permission baseline and an apply verb ([#112](https://github.com/jwogrady/spark/issues/112)) ([958adf4](https://github.com/jwogrady/spark/commit/958adf41778b7ed02c27e608987dec988e114469)), closes [#64](https://github.com/jwogrady/spark/issues/64)
+* tier knowledge crew models by role instead of all-Opus ([#102](https://github.com/jwogrady/spark/issues/102)) ([e9f15b4](https://github.com/jwogrady/spark/commit/e9f15b48f218a7005ac39bc52cf91edeac3adc14)), closes [#74](https://github.com/jwogrady/spark/issues/74)
+
+
+### Bug Fixes
+
+* remove committed worktree gitlinks and ignore .claude ([#124](https://github.com/jwogrady/spark/issues/124)) ([9faa761](https://github.com/jwogrady/spark/commit/9faa761f1d9f17b4a2edf812842277d8b597c932))
 
 ## [0.3.1] - 2026-06-20
 
