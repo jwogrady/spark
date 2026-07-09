@@ -37,34 +37,26 @@ rules mechanically; this skill produces a commit and PR that pass the first time
    - Anything reviewers should look at closely.
 6. **Report the PR URL** back to the user.
 
-## Cut the release (version-bumping ships)
+## Releases: defer to Release Please
 
-Spark projects follow the version ladder in
-[`docs/explanation/sdlc-doctrine.md`](../../docs/explanation/sdlc-doctrine.md):
-each coding contribution bumps the patch (`0.0.x`); `0.1.0` is the first usable
-product. After `0.1.0` the bump is derived mechanically from the commit types in
-the range:
+**Ship owns the commit and the PR; Release Please owns the release** —
+versioning, changelog, tag, and the GitHub Release (ADR-0006, ADR-0009). If the
+repo has a `release-please-config.json` (or a `release-please` workflow), never
+bump a version, roll the changelog, tag, or create a Release from this skill:
+your conventional commit types are the release input, and merging the
+release-PR that Release Please maintains is the release act — a human decision.
 
-- `feat:` → **minor**
-- `fix:` / `docs:` / `chore:` / `refactor:` / `test:` → **patch**
-- `!` or a `BREAKING CHANGE:` footer → **major**
+**Fallback — repos without Release Please only,** and only with explicit user
+go-ahead (never cut a tag or Release unprompted): derive the bump from the
+commit types in the range per the version ladder in
+[`docs/explanation/sdlc-doctrine.md`](../../docs/explanation/sdlc-doctrine.md)
+(`feat:` → minor; `fix:`/`docs:`/`chore:`/`refactor:`/`test:` → patch; `!` or
+`BREAKING CHANGE:` → major; take the highest), then in order: roll
+`[Unreleased]` into a dated `vX.Y.Z` section, bump the version file, annotated
+tag, `gh release create` with the CHANGELOG section as notes, fresh
+`[Unreleased]`.
 
-Take the highest bump any commit in the range implies.
-
-When a ship crosses a version boundary **and the user has approved the release**
-(never cut a tag or Release without explicit go-ahead), do this in order:
-
-1. Roll `CHANGELOG.md` `[Unreleased]` into a dated `vX.Y.Z` section
-   (Keep a Changelog).
-2. Bump the project's version file (`plugin.json`, `package.json`,
-   `pyproject.toml`, …) to match.
-3. Annotated tag: `git tag -a vX.Y.Z -m vX.Y.Z` — never a lightweight tag.
-4. GitHub Release from that tag (`gh release create vX.Y.Z`) using the CHANGELOG
-   section as the notes.
-5. Open a fresh empty `[Unreleased]` section.
-
-Non-version-bumping ships skip 2–4 but still update `[Unreleased]` when behavior
-changed.
+Non-version-bumping ships still update `[Unreleased]` when behavior changed.
 
 **A changelog records what changed in the product, not how it was built.** Every
 `[Unreleased]` entry describes a user-facing change — a feature, fix, or

@@ -1,0 +1,22 @@
+# Spark's release mechanism (ADR-0009): Release Please maintains a release PR
+# from the conventional commits on master; merging that PR — a human decision —
+# produces the version bump (plugin.json via extra-files), the CHANGELOG entry,
+# the tag, and the GitHub Release. Ship never cuts releases (ADR-0006).
+name: release-please
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v4
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
