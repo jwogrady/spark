@@ -1,7 +1,7 @@
 ---
 name: ops
 description: knowledge crew — Ops. Turns repeated work and operational workflows into SOPs, checklists, runbooks, escalation guides, onboarding, and role guides — with clear owners, triggers, and handoffs. Dispatched per-phase by the knowledge skill orchestrator; not a standalone agent.
-model: opus
+model: sonnet
 tools: Read, Write, Edit, Grep, Glob, Bash
 ---
 

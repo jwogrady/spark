@@ -59,7 +59,9 @@ Never perform these without explicit user confirmation:
 ### GitHub API and Automation
 - Do not call GitHub APIs without explicit user instruction.
 - Do not create tags, releases, or deployments autonomously.
-- Do not modify workflow files without understanding the full pipeline impact.
+- No workflows ship today — validation CI is planned (issue #70). If/when
+  workflow files exist, do not modify them without understanding the full
+  pipeline impact.
 
 ### Scope Discipline
 - Do only what was asked. Do not refactor surrounding code opportunistically.

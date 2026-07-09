@@ -69,6 +69,65 @@ body:
     validations:
       required: false
 
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: Maps to the repo's P0–P3 labels.
+      options:
+        - P0
+        - P1
+        - P2
+        - P3
+    validations:
+      required: false
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      description: The theme this issue belongs to. Maps to the existing theme labels where one exists.
+      options:
+        - Product Identity
+        - Preferences
+        - Carry-In
+        - Carry-Forward
+        - DX
+        - UX
+        - Enforcement
+        - Docs Truth
+        - Skill Quality
+        - Agent Quality
+        - Architecture
+    validations:
+      required: false
+
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies
+      description: >
+        List "Blocked by" / "Blocks" relationships. Dependencies MUST use real
+        GitHub issue numbers (e.g. "Blocked by #86") — never draft-local or
+        slate-local numbering.
+      placeholder: |
+        Blocked by: #86
+        Blocks: #90
+    validations:
+      required: false
+
+  - type: dropdown
+    id: size
+    attributes:
+      label: Size
+      description: Rough effort estimate.
+      options:
+        - S
+        - M
+        - L
+    validations:
+      required: false
+
   - type: checkboxes
     id: attribution
     attributes:

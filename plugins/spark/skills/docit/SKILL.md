@@ -1,6 +1,6 @@
 ---
 name: docit
-description: Generate or refresh a repo's public-facing docs (README, philosophy/motivation, positioning, launch copy) by writing through a cast of author personas, then assembling them with an Editor-in-Chief. Use when you want to "glow up" a repo to attract GitHub stars, write or rewrite the README, articulate the project's philosophy, or produce launch/marketing copy aimed at developers. Not for internal/company knowledge like ADRs, specs, or runbooks — use `knowledge` for that.
+description: Generate or refresh a repo's public-facing docs (README, philosophy/motivation, positioning, launch copy) by writing through a cast of author personas, then assembling them with an Editor-in-Chief. Use when the user wants to "glow up" a repo to attract GitHub stars, write or rewrite the README, articulate the project's philosophy, or produce launch/marketing copy aimed at developers. Not for internal/company knowledge like ADRs, specs, or runbooks — use `knowledge` for that.
 ---
 
 # docit — multi-persona docs & glow-up
@@ -125,7 +125,7 @@ Each owns one section through a distinct perspective:
 - `.docit-notes/13-proposed-issues.md` — the council's ranked, annotated slate
   (Editor-in-Chief), also filed as `proposed`-labeled GitHub issues for the human
   to triage; kept ones flow to [`plan`](../plan/SKILL.md).
-- `.docit-notes/` — the per-persona working notes (archive, don't ship to users).
+- `.docit-notes/` — the per-persona working notes (gitignored scratch, never committed).
 
 ## Guardrails
 
