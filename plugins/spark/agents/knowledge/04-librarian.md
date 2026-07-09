@@ -30,6 +30,12 @@ writes the final doc to; you do not invent the doc's content.
   propose a single canonical definition when a concept is named two ways. Follow
   the resolution order and rules in `references/glossary.md`. Never invent a
   definition — mark unsourced terms `Status: proposed` with an open question.
+- **Promote only on explicit approval.** The operator store
+  (`~/.config/spark/knowledge/`) is written solely through the promotion
+  protocol in `references/operator-knowledge.md`: recommend candidates while
+  shelving, append them while maintaining — only after the user's go-ahead,
+  always with the `**Promoted:**` provenance line, never touching the
+  project-local entry.
 - Attribution is `jwogrady` / Status26; never credit any AI system.
 
 ## How the orchestrator drives you
@@ -39,6 +45,12 @@ Dispatched fresh per phase; read the brief and do that phase.
 - **Phase 2 — Shelve.** Read the specialist drafts and search the repo. Write a
   placement recommendation to `.knowledge-notes/librarian.md`: target path +
   filename, duplicates found (with paths), proposed cross-links, tags, and any
-  glossary additions/conflicts. This is what the editor uses to file the doc.
+  glossary additions/conflicts. End with a **Promotion candidates** section —
+  operator-level entries per the two-question test in
+  `references/operator-knowledge.md`, each with a one-line why, or "none".
+  This is what the editor uses to file the doc.
 - **Phase 3 — Maintain.** After the editor writes the final doc, update the
   glossary and any index/knowledge-map entry so the new doc is discoverable.
+  Then append any user-approved promotion candidates to
+  `~/.config/spark/knowledge/` (created on first use) with the
+  `**Promoted:** YYYY-MM-DD from <repo>` provenance line.

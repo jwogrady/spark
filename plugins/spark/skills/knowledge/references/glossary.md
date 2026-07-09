@@ -11,7 +11,10 @@ the meaning.
   1. A project-local glossary if one exists — `docs/glossary.md`, anything under
      `docs/glossary/`, or `.knowledge/glossary.md`. This is the source of truth for
      the repo knowledge runs in.
-  2. This shipped seed (the default) when no project glossary is found.
+  2. The operator store — `~/.config/spark/knowledge/glossary.md` — for terms the
+     project glossary doesn't define. Written only through the librarian's explicit
+     promotion step (see [`operator-knowledge.md`](operator-knowledge.md)).
+  3. This shipped seed (the default) when neither defines the term.
 - **Forks replace the seed.** Spark is portable; the terms below are *Status26's*
   defaults. In another project, edit this file (or add a project-local glossary)
   to that project's vocabulary. The mechanism is generic; the contents are not.

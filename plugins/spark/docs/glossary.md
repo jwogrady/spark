@@ -33,6 +33,16 @@ between stages. **Carry-forward** — Session → Project (work state survives t
 session) and Project → Operator (knowledge promotion). Prefer these exact
 terms; do not coin near-synonyms. See adr/0008-information-architecture.md.
 
+### operator knowledge home (`~/.config/spark/knowledge/`)
+
+The Operator layer's knowledge store: a plain directory holding `glossary.md`
+(operator vocabulary) and `decisions.md` (standing decisions), sitting beside
+the operator preferences file and honoring `XDG_CONFIG_HOME` the same way.
+Written only through the `knowledge` skill's explicit, user-approved promotion
+step (Project → Operator carry-forward) — never by silent copying — and
+created lazily on first promotion. Project-local glossaries win over it on
+conflict. See skills/knowledge/references/operator-knowledge.md.
+
 ### two-doors enforcement model
 
 Spark enforces the same git-hygiene rules through two independent doors, because

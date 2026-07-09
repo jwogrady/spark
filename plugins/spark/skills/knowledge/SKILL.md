@@ -45,7 +45,13 @@ that hides an unknown is worse than a rough one that names it.
    glossary/index so it's findable.
 7. **Show the diff first** — for any overwrite of an existing doc, present the diff
    and get a go-ahead before writing.
-8. **Ship through the lifecycle** — hand the result to [`ship`](../ship/SKILL.md)
+8. **Promote deliberately (optional)** — if the librarian flagged operator-level
+   candidates (vocabulary or standing decisions that transcend this project),
+   present them and, only on explicit go-ahead, have the librarian append them
+   with provenance to `~/.config/spark/knowledge/`. Never copy silently; the
+   project-local entry stays put and wins on conflict. Rules and layout:
+   [`references/operator-knowledge.md`](references/operator-knowledge.md).
+9. **Ship through the lifecycle** — hand the result to [`ship`](../ship/SKILL.md)
    to commit and open a PR. Commit only the published docs; keep
    `.knowledge-notes/` out of the repo (gitignore it). The scratch is process exhaust —
    the docs and their git history are the durable record of the reasoning.
@@ -97,11 +103,12 @@ The fact/assumption/uncertainty discipline is "The one rule" above. Beyond it:
   **Product docs** include user, problem, workflow, data objects, and success
   criteria. **Architecture docs** include context, components, boundaries, data
   flow, tradeoffs, and open questions.
-- **Preserve domain vocabulary.** The crew consults a configurable glossary
-  ([`references/glossary.md`](references/glossary.md), overridden by a project-local
-  `docs/glossary*` or `.knowledge/glossary.md`) and never normalizes a listed term.
-  Spark is portable: the shipped glossary seeds Status26's vocabulary; forks
-  replace it with their own.
+- **Preserve domain vocabulary.** The crew consults the glossary tiers — the
+  shipped seed ([`references/glossary.md`](references/glossary.md)), then the
+  operator store (`~/.config/spark/knowledge/glossary.md`), then a project-local
+  `docs/glossary*` or `.knowledge/glossary.md` — later tiers win, and no listed
+  term is ever normalized. Spark is portable: the seed is Status26's vocabulary;
+  forks replace it with their own.
 
 ## Guardrails
 
