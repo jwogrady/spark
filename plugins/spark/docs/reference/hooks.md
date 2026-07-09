@@ -20,6 +20,22 @@ Protocol: the guard reads the tool call as JSON on stdin, extracts
 Claude) or `0` to allow. It only ever *blocks* on a match — it never
 auto-approves — so it fails safe if JSON parsing is unavailable.
 
+## Session brief (SessionStart)
+
+Also defined in `hooks/hooks.json`: on Claude Code's `SessionStart` event the
+plugin runs `bin/spark brief --short`. This is not an enforcement door — it
+blocks nothing. It prints at most three plain-text lines into the session
+context: branch and working-tree state (orient), the lifecycle position from
+`.spark/state.json` or repo-shape inference (locate), and the
+resolved-preferences headline (load) — the carry-in and carry-forward motions
+applied at session entry. The entry has no matcher, so the brief also re-fires
+when a session resumes, clears, or compacts — exactly the moments context was
+lost.
+
+Outside a git repo the command prints nothing and exits `0`, so sessions in
+non-project directories start clean. The full sectioned briefing is available
+on demand as `spark brief` (see [cli.md](cli.md)).
+
 ## Git hooks (human-driven path)
 
 Installed into a repo's `.git/hooks/` by `spark install-git-hooks`. Source lives
