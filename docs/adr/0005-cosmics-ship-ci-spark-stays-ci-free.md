@@ -38,6 +38,25 @@ Spark-self obligation — dissolves the apparent conflict.
 - Generated Cosmics validate continuously from the first commit.
 - The default workflow must be stack-aware — Python + `uv` first (see ADR-0007).
 
+## Amendment (2026-07-08)
+
+Spark now carries one workflow: `.github/workflows/validate.yml`, added with
+the doctor-superset work (#70, #71). This narrows — but does not reverse — the
+decision above, and the two kinds of CI must not be conflated:
+
+- **Spark-repo validation CI** is a thin wrapper that checks out the repo and
+  runs `./plugins/spark/bin/spark doctor` on pull requests. It contains no
+  check logic of its own; the local command and the CI gate are the same
+  command, so they cannot drift. New checks belong in doctor, never in YAML.
+- **Cosmic-generated build CI** is what `bootstrap` scaffolds into generated
+  projects: stack-aware build/test pipelines (Python + `uv` first, ADR-0007).
+  That remains a generation-time template, not something Spark runs on itself.
+
+"Spark stays CI-free" therefore now means: Spark has no build/test pipeline,
+because there is still nothing to build or test. Mechanically enforcing its
+own validation gate is consistent with ADR-0003's discipline rationale, not a
+contradiction of it.
+
 ## Related Docs
 
 - [0003-zero-dependency-bash-and-enforcement-hooks.md](0003-zero-dependency-bash-and-enforcement-hooks.md) — why Spark's own enforcement is hook-based, not CI
