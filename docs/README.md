@@ -19,6 +19,10 @@ How the layers fit together, and the dated record of why Spark is built this way
 - [adr/0005-cosmics-ship-ci-spark-stays-ci-free.md](adr/0005-cosmics-ship-ci-spark-stays-ci-free.md) — generated Cosmics ship GitHub Actions CI; Spark itself stays CI-free
 - [adr/0006-cosmics-use-release-please.md](adr/0006-cosmics-use-release-please.md) — generated Cosmics release via Release Please; `ship` defers to it
 - [adr/0007-default-stack-python-uv.md](adr/0007-default-stack-python-uv.md) — default Cosmic stack is Python + `uv`; TypeScript/Bun only for a frontend
+- [adr/0008-information-architecture.md](adr/0008-information-architecture.md) — three layers (Operator/Project/Session), one canonical source per information class, the three carry motions
+- [adr/0009-spark-release-mechanism.md](adr/0009-spark-release-mechanism.md) — Spark releases manually today, adopts Release Please once validation CI lands
+- [adr/0010-preferences-source-model.md](adr/0010-preferences-source-model.md) — preferences resolve shipped defaults → operator overrides → committed project facts
+- [adr/0011-doctor-is-the-validation-gate.md](adr/0011-doctor-is-the-validation-gate.md) — `spark doctor` is the single validation gate; two-door parity is mechanical
 - [adr/0000-template.md](adr/0000-template.md) — the ADR template
 
 ## Packaging reference

@@ -1,7 +1,11 @@
 # ADR: Generated Cosmics ship CI; Spark itself stays CI-free
 
 Date: 2026-07-08
-Status: Accepted
+Status: Accepted; superseded in part by
+[ADR-0011](0011-doctor-is-the-validation-gate.md) — the Spark-repo
+validation-CI decision recorded in this file's Amendment section now lives in
+its own numbered ADR (the amendment was misfiled per the template's
+append-only rule; its text remains below as history)
 Owner: jwogrady
 
 ## Context
