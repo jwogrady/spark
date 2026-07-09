@@ -35,6 +35,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ### Changed
 
+- **Spark releases via Release Please** (ADR-0009): a workflow maintains the
+  release PR from conventional commits; merging it produces the version bump,
+  CHANGELOG entry, tag, and GitHub Release. The `ship` skill now defers to it
+  wherever a Release Please config exists (discharging ADR-0006's consequence)
+  and keeps the manual ladder only as the explicit-approval fallback for repos
+  without it.
+
 - Knowledge-crew agent models tiered by role instead of all-Opus.
 - Install how-to leads with the verified Git/local-clone path; the
   published-marketplace one-click flow is marked as the open item it is.
