@@ -195,5 +195,5 @@ rules).
 
 - **[Philosophy](plugins/spark/docs/explanation/philosophy.md)** — what Spark stands for and the
   doctrine behind the rules.
-- **[Documentation index](docs/README.md)** — the full Diátaxis tree: tutorials,
-  how-to guides, reference, and explanation, plus ADRs and architecture notes.
+- **[Documentation index](plugins/spark/docs/README.md)** — the full Diátaxis tree:
+  tutorials, how-to guides, reference, and explanation.
