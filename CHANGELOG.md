@@ -8,6 +8,42 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+### Added
+
+- **Architecture v1.0.** ADR-0008 (information architecture: Operator/Project/
+  Session layers, one canonical source per information class, the carry-in /
+  carry-through / carry-forward motions), ADR-0009 (Spark's own release
+  mechanism), ADR-0010 (three-tier preferences source), and the conformance
+  audit (`docs/architecture/conformance.md`) mapping every shipped component to
+  the model — clean pass, architecture declared complete.
+- **`spark doctor` is the superset gate.** Doctor now runs `bash -n` on every
+  shipped script, scans docs for broken relative links, checks git-hook install
+  state inside the Spark repo, and verifies enforcement parity (commit types,
+  attribution, trunk and force-push rules) across guard, git hooks, and docs.
+- **Validation CI.** `.github/workflows/validate.yml` gates PRs by running
+  `spark doctor` — no duplicated check logic in the workflow.
+- **`spark version`** verb; `usage()` now generated from a verb table.
+  `new-skill` lints its scaffold's description at creation time.
+- **Permission baseline** shipped as a versioned artifact with a documented
+  apply step.
+- **Issue-template planning fields** (priority, category, dependencies with
+  real issue numbers, size).
+- **Four how-to guides** (cleanup, docit, knowledge, agents-md); onboarding
+  and tutorial now open with the identity mental model.
+- **`ideate` persists the problem statement** to `docs/problem-statement.md`
+  by default.
+
+### Changed
+
+- Knowledge-crew agent models tiered by role instead of all-Opus.
+- Install how-to leads with the verified Git/local-clone path; the
+  published-marketplace one-click flow is marked as the open item it is.
+- Dev docs (`spark-internals`, `plugin-manifest`) refreshed to the
+  `plugins/spark/` layout; ADRs 0004–0007 indexed; "Cosmic" defined in the
+  glossary.
+- Skill scratch directories settled as gitignored; durable findings promote to
+  PRs and issues.
+
 ### Fixed
 
 - **Documentation truth audit.** Corrected docs to match the code as it ships:

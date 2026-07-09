@@ -65,6 +65,6 @@ carry-forward, `version` (#75) is support.
 explicit support with a stated rationale; nothing is "neither" without a
 disposition, and nothing requires deprecation or reclassification.
 
-**Declaration:** contingent on ADR-0008's ratification — when that ADR's status
-flips to Accepted, **Spark Architecture v1.0 is complete**, and subsequent
-milestones are implementation of the model, not expansion of the design.
+**Declaration:** ADR-0008 is Accepted — **Spark Architecture v1.0 is
+complete**. Subsequent milestones are implementation of the model, not
+expansion of the design.
