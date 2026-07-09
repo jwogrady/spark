@@ -4,7 +4,7 @@
 feature — and answers it with a mechanical system that makes the right thing easy
 and the wrong thing hard.**
 
-> *The values layer. The ADRs (`docs/adr/0001..0003`) are the decisions layer;
+> *The values layer. The ADRs (`docs/adr/`) are the decisions layer;
 > every principle below ties back to a shipped feature — no untethered manifesto.*
 
 ## The problem Spark refuses to accept
@@ -30,9 +30,10 @@ before a commit lands. The PreToolUse Bash guard blocks force-pushes and trunk
 pushes before they execute, covering AI-mediated git actions. The `commit-msg` hook
 rejects non-conforming messages before they land in history, covering all commits
 once the hooks are installed via `spark install-git-hooks`. Aspiration lives in
-READMEs; enforcement lives in `hooks/` and `scripts/hooks/`. CI and automated
-testing are a known gap at v0.3.1 — the mechanical enforcement today covers commit
-conventions, trunk discipline, and docs honesty, not the full quality surface.
+READMEs; enforcement lives in `hooks/` and `scripts/hooks/`. Validation CI gates
+every PR to the Spark repo by running `spark doctor` — the same command as the
+local gate, so the two cannot drift. What remains unautomated is behavioral
+regression on the skills themselves; their quality gate is use.
 
 **2. One lifecycle, portable.** Every project deserves the same discipline — not a
 copy-paste of conventions that drift per repo, but one versioned toolkit installed

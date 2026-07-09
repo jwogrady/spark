@@ -10,10 +10,13 @@ each serving a different need. Find what you need by what you're trying to do:
 | Look up exactly how something behaves | [Reference](#reference) | Reference (information) |
 | Understand why Spark is built this way | [Understanding Spark](#understanding-spark) | Explanation (understanding) |
 
-## The shape of the rig
+## One toolkit, three motions
 
-One portable, opinionated toolkit — boot it once, carry it into every repo.
-Everything orbits a single GitHub-native lifecycle:
+Spark is installed once and carried into every repo. Everything it does is one
+of three motions ([glossary](glossary.md)): **carry-in** — your standards enter
+the project; **carry-through** — one GitHub-native lifecycle moves the work;
+**carry-forward** — what a session produces outlives it. The lifecycle is the
+carry-through spine:
 
 ```
 Ideate → Plan → Codify → Validate → Ship
