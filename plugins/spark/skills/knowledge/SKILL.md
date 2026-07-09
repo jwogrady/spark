@@ -1,6 +1,6 @@
 ---
 name: knowledge
-description: Turn messy founder notes, repo findings, architecture decisions, product specs, ops workflows, and Claude Code session discoveries into clean, durable, searchable internal company knowledge — ADRs, system docs, product specs, SOPs/runbooks, onboarding guides, and glossary entries. Runs a small crew of author subagents (intake → specialist → editor + librarian). Use when you need to capture or write up internal knowledge, record a decision, document a system or process, or turn rough notes into a real doc. For outward-facing marketing docs and README glow-ups, use docit instead.
+description: Turn messy founder notes, repo findings, architecture decisions, product specs, ops workflows, and Claude Code session discoveries into clean, durable, searchable internal company knowledge — ADRs, system docs, product specs, SOPs/runbooks, onboarding guides, and glossary entries. Runs a small crew of author subagents (intake → specialist → editor + librarian). Use when the user needs to capture or write up internal knowledge, record a decision, document a system or process, or turn rough notes into a real doc. For outward-facing marketing docs and README glow-ups, use docit instead.
 ---
 
 # knowledge — internal knowledge crew

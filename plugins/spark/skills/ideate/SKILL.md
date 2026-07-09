@@ -31,11 +31,16 @@ the `plan` skill can decompose.
    - **Constraints** — stack, deadline, must-use / must-avoid.
    - **Non-goals** — what this explicitly will not do.
 5. **Confirm.** Read it back. Get a yes before handing off to `plan`.
+6. **Persist it.** Write the confirmed statement to `docs/problem-statement.md`
+   (create `docs/` if needed) and announce where it was saved — don't ask
+   whether to save. If the file already exists, show the diff and confirm
+   before overwriting. Only write elsewhere if the user names a different home.
 
 ## Output
 
-A markdown problem statement. Offer to save it where the project keeps its
-planning docs (e.g. `docs/` or an issue), or to pass it straight to `plan`.
+`docs/problem-statement.md` — the canonical path `plan` reads first. The
+statement is the seed of the whole lifecycle; persisting it by default is what
+lets a future session resume without re-deriving intent from the conversation.
 
 ## Guardrails
 

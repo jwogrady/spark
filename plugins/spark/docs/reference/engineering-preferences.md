@@ -8,6 +8,14 @@ This is the operator's standing engineering standard. It exists so preferences a
 **loaded once, not re-stated per project**. `bootstrap` reads this at generation
 and applies it to a new Cosmic.
 
+This document is the canonical **prose** form — the *why* behind each
+convention. The machine-resolvable form is decided in ADR-0010 *(proposed)*:
+shipped defaults in `plugins/spark/preferences/defaults.json`, operator
+overrides in `~/.config/spark/preferences.json`, per-project exceptions
+committed as `.spark/preferences.json`, resolved in that order at apply time.
+The JSON carries *what to apply*; this document carries *why it is the
+standard*.
+
 It is written **link-don't-paste**: conventions Spark already enforces or codifies
 are *pointed to*, not restated. Only the standard Spark does not yet carry is
 spelled out here.

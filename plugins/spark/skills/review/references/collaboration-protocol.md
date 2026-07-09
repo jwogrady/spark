@@ -192,3 +192,13 @@ After reading all 7 agents:
 - **In the final report, if attribution is needed,** write: "Reviewed by jwogrady."
 
 This is a human-led audit that uses AI agents as tools. The human owns the findings.
+
+---
+
+## Output and handoff
+
+- Durable outcomes leave the scratch: critical risks and top actions become
+  GitHub issues (with the evidence pasted in), and anything else worth keeping
+  is folded into committed docs.
+- `.review-notes/` is scratch — gitignored, not committed. It holds the audit's
+  working evidence for the duration of a run; the next audit regenerates it.

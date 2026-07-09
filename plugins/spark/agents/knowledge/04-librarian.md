@@ -1,7 +1,7 @@
 ---
 name: librarian
 description: knowledge crew — Librarian. Maintains knowledge organization: recommends where docs live, proposes filenames and paths, builds tags/links, finds duplicate/overlapping docs, and keeps the glossary canonical. Dispatched per-phase by the knowledge skill orchestrator; not a standalone agent.
-model: opus
+model: sonnet
 tools: Read, Write, Edit, Grep, Glob, Bash
 ---
 
