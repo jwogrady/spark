@@ -6,6 +6,18 @@
 By the end you'll have taken one idea from a sentence to an open pull request,
 using each Spark stage exactly once.
 
+## The mental model, in one minute
+
+Spark is **the layer between your intent and Claude's tools**. You bring the
+judgment — what to build, in what order, to what standard. Claude brings the
+tools. Spark is the **caddy** in between: it reads the situation, recommends the
+right club, challenges a questionable choice — and you take the shot. Its clubs
+come from **three bags**: Claude's native tools (leveraged, never duplicated),
+your standard bag (Spark itself — loaded once, carried into every repo), and the
+project's own local tooling. The five stages below are how the caddy plays the
+course: the fixed sequence your standards travel in. The canonical statement is
+[What Spark is](../explanation/identity.md).
+
 ## Before you start
 
 - Spark installed (`/plugin install spark`) — see [../how-to/install.md](../how-to/install.md).
