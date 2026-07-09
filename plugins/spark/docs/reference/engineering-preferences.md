@@ -110,15 +110,19 @@ The layer Spark does not yet carry. This is what makes a generated Cosmic
 
 ## How this gets applied
 
-`bootstrap` reads this reference when it generates a Cosmic and materializes the
-standard above — the doc set, the stack default, the CI workflow, the Release
-Please config — so a new project starts already conforming.
+`bootstrap` carries the standard in at generation time: after the runtime
+scaffold it runs `spark preferences --apply`, which resolves the three
+ADR-0010 tiers and materializes the result — the standard doc set, a
+stack-aware CI workflow selected by the resolved `stack.default`, and the
+Release Please config — reporting what it created (`+`), kept (`=`), and left
+for a decision (`!`). The same engine serves an existing repo on demand.
+Application is create-only: an existing file is a project choice and is never
+overwritten.
 
-> **Status:** this reference is the source of truth today. The `bootstrap`
-> application step is **in progress** — tracked in the v0.4 milestone
-> ([#61](https://github.com/jwogrady/spark/issues/61), against ADR-0010's
-> source model). Until it lands, this is the checklist a Cosmic is brought up
-> to by hand.
+> **Status:** shipped. The machine form lives at
+> `plugins/spark/preferences/defaults.json`; `spark preferences` shows the
+> resolved standard with each value's source tier, and
+> `spark preferences --apply` applies it.
 
 ## Related docs
 

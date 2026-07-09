@@ -1,0 +1,12 @@
+{
+  "stack.default": "python-uv",
+  "stack.frontend": "typescript-bun",
+  "stack.infra": "opentofu",
+  "release.mechanism": "release-please",
+  "ci.provider": "github-actions",
+  "docs.set": "README.md CHANGELOG.md CONTRIBUTING.md LICENSE ROADMAP.md",
+  "issue.taxonomy": "feature bug documentation chore tech-debt research infrastructure",
+  "branch.model": "github-flow",
+  "commit.convention": "conventional-commits",
+  "commit.subject-max": "72"
+}
