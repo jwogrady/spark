@@ -1,5 +1,19 @@
 # Contributing
 
+## One-time setup: install the git hooks
+
+Spark's commit rules are enforced mechanically by git hooks (`commit-msg`
+checks the message format, `pre-commit` blocks direct commits to trunk).
+Hooks live in your local `.git/hooks`, so every contributor installs them
+once per clone:
+
+```
+./plugins/spark/bin/spark install-git-hooks
+```
+
+`spark doctor` fails inside this repo until the hooks are installed, so a
+skipped install cannot go unnoticed.
+
 ## How work is tracked
 
 GitHub issues are the work ledger. Every feature, bug, and skill addition

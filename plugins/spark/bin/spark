@@ -6,7 +6,6 @@
 #   spark list-skills        List all available skills with descriptions.
 #   spark new-skill <name>   Scaffold a new skill under skills/<name>/.
 #   spark install-git-hooks  Install Spark's git hooks into the current repo.
-#   spark apply-permissions  Merge the permission baseline into .claude/settings.json.
 #   spark shred-env <file>   Securely delete a transient secrets file (e.g. .env).
 #   spark help               Show this help.
 
@@ -29,7 +28,7 @@ yellow(){ printf '\033[33m%s\033[0m\n' "$1"; }
 
 usage() {
   # Print the contiguous leading comment block (after the shebang) as help.
-  sed -n '2,11p' "$self" | sed 's/^# \{0,1\}//'
+  sed -n '2,10p' "$self" | sed 's/^# \{0,1\}//'
 }
 
 cmd_doctor() {
@@ -184,14 +183,25 @@ cmd_doctor() {
   done < <(find "$doc_root" -type f -name '*.md' ! -path '*/.git/*' ! -path '*/node_modules/*' | sort)
   [ "$broken" -eq 0 ] && green "  ✓ no broken relative links"
 
-  # Git hooks installed in the current repo?
+  # Git hooks installed in the current repo? In an arbitrary project this is
+  # advice (warning). Inside the Spark repo itself the hooks *are* the
+  # enforcement door, so their absence is an error — except in CI, where a
+  # fresh checkout never has hooks and no commits are made anyway.
   echo
   if git rev-parse --git-dir >/dev/null 2>&1; then
     local hooksdir; hooksdir="$(git rev-parse --git-path hooks)"
     if [ -f "$hooksdir/commit-msg" ] && [ -f "$hooksdir/pre-commit" ]; then
       green "✓ Spark git hooks are installed in this repo"
     else
-      yellow "! Spark git hooks not installed here — run: spark install-git-hooks"; warnings=$((warnings+1))
+      local toplevel spark_repo=""
+      toplevel="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+      [ -f "$SPARK_ROOT/../../.claude-plugin/marketplace.json" ] \
+        && spark_repo="$(cd "$SPARK_ROOT/../.." && pwd)"
+      if [ -n "$spark_repo" ] && [ "$toplevel" = "$spark_repo" ] && [ -z "${CI:-}" ]; then
+        red "✗ Spark git hooks not installed in the Spark repo — run: spark install-git-hooks (see CONTRIBUTING.md)"; errors=$((errors+1))
+      else
+        yellow "! Spark git hooks not installed here — run: spark install-git-hooks"; warnings=$((warnings+1))
+      fi
     fi
   fi
 
@@ -266,103 +276,11 @@ cmd_install_git_hooks() {
   done
 }
 
-cmd_apply_permissions() {
-  local assume_yes=0
-  case "${1:-}" in -y|--yes) assume_yes=1 ;; esac
-
-  local baseline="$SPARK_ROOT/settings/permission-baseline.json"
-  [ -f "$baseline" ] || { red "✗ baseline not found: $baseline"; return 1; }
-
-  # Anchor on the repo root when inside one, so the settings land where Claude
-  # Code actually reads them, regardless of the current subdirectory.
-  local root="."
-  if git rev-parse --show-toplevel >/dev/null 2>&1; then
-    root="$(git rev-parse --show-toplevel)"
-  fi
-  local target="$root/.claude/settings.json"
-
-  if [ ! -f "$target" ]; then
-    mkdir -p "$root/.claude"
-    cp "$baseline" "$target"
-    green "✓ created $target from Spark's permission baseline"
-    return 0
-  fi
-
-  # An existing file means project-specific settings we must not clobber:
-  # parse it, append only the rules that are missing, and only after a yes.
-  local have_jq=0 have_py=0
-  command -v jq >/dev/null 2>&1 && have_jq=1
-  command -v python3 >/dev/null 2>&1 && have_py=1
-  if [ "$have_jq" -eq 0 ] && [ "$have_py" -eq 0 ]; then
-    yellow "! neither jq nor python3 is available, so Spark can't merge JSON safely."
-    echo "  Merge the baseline into $target by hand:"
-    echo "  $baseline"
-    return 1
-  fi
-
-  local valid=0
-  if [ "$have_jq" -eq 1 ]; then
-    jq empty "$target" >/dev/null 2>&1 && valid=1
-  else
-    python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$target" >/dev/null 2>&1 && valid=1
-  fi
-  [ "$valid" -eq 1 ] || { red "✗ $target is not valid JSON — fix it before merging"; return 1; }
-
-  local additions
-  if [ "$have_jq" -eq 1 ]; then
-    additions="$(jq -r --slurpfile cur "$target" \
-      '(.permissions.allow // []) - ($cur[0].permissions.allow // []) | .[]' "$baseline")"
-  else
-    additions="$(python3 - "$target" "$baseline" <<'PY'
-import json, sys
-cur, base = (json.load(open(p)) for p in sys.argv[1:3])
-have = cur.get("permissions", {}).get("allow", [])
-for rule in base.get("permissions", {}).get("allow", []):
-    if rule not in have:
-        print(rule)
-PY
-)"
-  fi
-
-  if [ -z "$additions" ]; then
-    green "✓ baseline already applied — $target has every baseline rule"
-    return 0
-  fi
-
-  echo "Spark will add these rules to permissions.allow in $target:"
-  printf '%s\n' "$additions" | sed 's/^/  + /'
-  if [ "$assume_yes" -ne 1 ]; then
-    printf 'Proceed? [y/N] '
-    local reply=""
-    read -r reply || true
-    case "$reply" in y|Y|yes|YES) ;; *) yellow "! aborted — nothing written"; return 1 ;; esac
-  fi
-
-  local tmp; tmp="$(mktemp "$target.XXXXXX")"
-  if [ "$have_jq" -eq 1 ]; then
-    jq --slurpfile base "$baseline" \
-      '(.permissions.allow // []) as $have
-       | .permissions.allow = ($have + (($base[0].permissions.allow // []) - $have))' \
-      "$target" > "$tmp" || { rm -f "$tmp"; red "✗ merge failed"; return 1; }
-  else
-    python3 - "$target" "$baseline" > "$tmp" <<'PY' || { rm -f "$tmp"; red "✗ merge failed"; return 1; }
-import json, sys
-cur, base = (json.load(open(p)) for p in sys.argv[1:3])
-have = cur.setdefault("permissions", {}).setdefault("allow", [])
-have += [r for r in base.get("permissions", {}).get("allow", []) if r not in have]
-print(json.dumps(cur, indent=2))
-PY
-  fi
-  mv "$tmp" "$target"
-  green "✓ merged the Spark baseline into $target"
-}
-
 case "${1:-help}" in
   doctor)            shift; cmd_doctor "$@" ;;
   list-skills)       shift; cmd_list_skills "$@" ;;
   new-skill)         shift; cmd_new_skill "$@" ;;
   install-git-hooks) shift; cmd_install_git_hooks "$@" ;;
-  apply-permissions) shift; cmd_apply_permissions "$@" ;;
   shred-env)         shift; cmd_shred_env "$@" ;;
   help|-h|--help)    usage ;;
   *) red "unknown command: $1"; echo; usage; exit 1 ;;
