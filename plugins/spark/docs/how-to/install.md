@@ -41,6 +41,10 @@ Verify:
 spark doctor
 ```
 
+Next, before your first project:
+[carry your preferences in](carry-your-preferences-in.md) — accept or edit the
+standard bag and apply the permission baseline once.
+
 ## One-click published-marketplace install (open item)
 
 Installing Spark from a *published* marketplace listing — one click, no Git URL
