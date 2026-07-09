@@ -70,6 +70,27 @@ the work, and claims travel only as far as the evidence beneath them. An issue-f
 gate reinforces this at the contribution level — new skills require a GitHub issue
 and community feedback before any code is written.
 
+**7. One canonical source per class of information.** Preferences, decisions,
+knowledge, state — each kind of information Spark manages has exactly one place
+its truth lives, and everything else points there. Two documents that must agree
+will eventually disagree; a class with no decided home becomes a contradiction
+waiting to be filed. The layers-and-classes model in ADR-0008 is this principle
+made mechanical.
+
+**8. Operator, Project, and Session are separate layers.** What travels with
+the person, what belongs to the repo, and what dies with the conversation are
+three different things, and every artifact belongs to exactly one. Movement
+between layers is explicit — commit, PR, or deliberate promotion — never silent
+copying. Blurring these layers is how preferences get re-typed per project and
+work evaporates at session end.
+
+**9. Carry context, don't recreate it.** The operator loads preferences once
+and every project starts already carrying them; a new session resumes the work
+instead of re-deriving it. Re-explaining your own standards to your own tooling
+is waste, and Spark treats it as a defect, not a ritual. Carry-in,
+carry-through, carry-forward — the three motions in the glossary — are this
+principle in verb form.
+
 ## The future Spark argues for
 
 The future Spark is building toward is one where AI-assisted development is

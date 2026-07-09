@@ -13,8 +13,9 @@ feature, not a task list.
 
 ## Do this
 
-1. **Read the problem statement.** If there isn't one, run
-   [`ideate`](../ideate/SKILL.md) first.
+1. **Read the problem statement.** Look at `docs/problem-statement.md` first —
+   that's where `ideate` persists it. If it's not there and the user hasn't
+   pointed at one, run [`ideate`](../ideate/SKILL.md) first.
 2. **Decide the implementation approach.** Pick up the tech choice `ideate`
    deferred: language/runtime, top-level layout, and key dependencies. Record
    each decision as an ADR under `docs/adr/` (use the `0000-template.md`

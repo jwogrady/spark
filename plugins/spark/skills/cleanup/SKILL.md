@@ -1,6 +1,6 @@
 ---
 name: cleanup
-description: Use when the user asks for /spark:cleanup or describes a repo cleanup, stale-code purge, stale-branch review, documentation truth audit, dependency cleanup, or full-codebase hygiene pass. Produces one copy-paste-ready orchestrator prompt that spins up a coordinated team of cleanup agents which prioritize evidence, safety, reversibility, and truthful documentation. Not for assessing project health or producing a review report — use `review`; cleanup removes what's proven dead or false and emits an orchestrator prompt rather than running the audit itself.
+description: Produces one copy-paste-ready orchestrator prompt that spins up a coordinated team of cleanup agents which prioritize evidence, safety, reversibility, and truthful documentation. Use when the user asks for /spark:cleanup or describes a repo cleanup, stale-code purge, stale-branch review, documentation truth audit, dependency cleanup, or full-codebase hygiene pass. Not for assessing project health or producing a review report — use `review`; cleanup removes what's proven dead or false and emits an orchestrator prompt rather than running the audit itself.
 ---
 
 # Spark Cleanup

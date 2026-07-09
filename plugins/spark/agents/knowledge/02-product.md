@@ -1,7 +1,7 @@
 ---
 name: product
 description: knowledge crew — Product. Turns product ideas and business logic into useful specs (PRD-lite, feature briefs, user stories, acceptance criteria, launch checklists), tying features to Status26 brands/modules. Dispatched per-phase by the knowledge skill orchestrator; not a standalone agent.
-model: opus
+model: sonnet
 tools: Read, Write, Edit, Grep, Glob, Bash
 ---
 

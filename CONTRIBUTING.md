@@ -23,6 +23,19 @@ templates in `.github/ISSUE_TEMPLATE/` to file the issues (generating the GitHub
 issues directly from `plan` is a v0.4 goal; today you create them from its
 output).
 
+### Planning fields
+
+The issue templates carry four lightweight planning fields:
+
+- **Priority** — P0 (urgent) to P3 (someday); maps to the repo's `P0`–`P3` labels.
+- **Category** — the theme the issue belongs to (DX, UX, Architecture, …); maps
+  to the theme labels where one exists.
+- **Dependencies** — `Blocked by` / `Blocks` lists. Always use real GitHub issue
+  numbers (e.g. `Blocked by #86`), never draft-local numbering.
+- **Size** — a rough S/M/L effort estimate.
+
+All four are optional. Fill in what you know; skip what you don't.
+
 ## Branches
 
 Work on a feature branch. Never commit directly to `master`.
