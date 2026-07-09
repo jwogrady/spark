@@ -12,8 +12,8 @@ Spark owns the sequence, the gaps, and your standards. The full identity lives i
 
 In practice it is a portable project-inception and software-delivery system for
 AI-assisted development: it turns raw project intent into durable repo artifacts,
-implementation branches, reviews, commits, and pull requests (scoped GitHub
-issue generation is a v0.4 goal). The methodology is portable; the current
+scoped GitHub issues, implementation branches, reviews, commits, and pull
+requests. The methodology is portable; the current
 implementation ships as a Claude Code plugin you install once and carry into
 every project. It puts one opinionated lifecycle at your fingertips and enforces
 the guardrails that keep work clean:
@@ -64,7 +64,7 @@ The 12 skills group into four categories. The canonical taxonomy lives in
 | Stage | Skill | Job |
 |---|---|---|
 | Ideate | `ideate` | Frame the problem in writing (uses the native `grill-me`) |
-| Plan | `plan` | Decompose into scoped work items + a milestone scaffold (issue generation is a v0.4 goal) |
+| Plan | `plan` | Decompose into scoped GitHub issues + a milestone (created on approval) |
 | Codify | `codify` | Implement one work item on a feature branch |
 | Validate | `validate` | Orchestrate built-in reviews, then fix |
 | Ship | `ship` | Conventional commit, then a focused PR |

@@ -115,8 +115,10 @@ standard above — the doc set, the stack default, the CI workflow, the Release
 Please config — so a new project starts already conforming.
 
 > **Status:** this reference is the source of truth today. The `bootstrap`
-> application step is **planned, not yet wired** — see the Cosmic-repo-standard
-> milestone. Until then, this is the checklist a Cosmic is brought up to by hand.
+> application step is **in progress** — tracked in the v0.4 milestone
+> ([#61](https://github.com/jwogrady/spark/issues/61), against ADR-0010's
+> source model). Until it lands, this is the checklist a Cosmic is brought up
+> to by hand.
 
 ## Related docs
 
