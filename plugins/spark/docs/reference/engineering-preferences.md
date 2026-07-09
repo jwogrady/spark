@@ -9,7 +9,7 @@ This is the operator's standing engineering standard. It exists so preferences a
 and applies it to a new Cosmic.
 
 This document is the canonical **prose** form — the *why* behind each
-convention. The machine-resolvable form is decided in ADR-0010 *(proposed)*:
+convention. The machine-resolvable form is decided in ADR-0010:
 shipped defaults in `plugins/spark/preferences/defaults.json`, operator
 overrides in `~/.config/spark/preferences.json`, per-project exceptions
 committed as `.spark/preferences.json`, resolved in that order at apply time.

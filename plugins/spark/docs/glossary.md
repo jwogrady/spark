@@ -20,8 +20,7 @@ to one working conversation and is ephemeral unless explicitly promoted
 (scratch, unpromoted review notes). Promotion between layers is always
 explicit: commit/PR/issue moves Session → Project; the `knowledge` skill's
 deliberate promotion moves Project → Operator. See
-adr/0008-information-architecture.md. *(Proposed — canonical once ADR-0008 is
-accepted.)*
+adr/0008-information-architecture.md.
 
 ### carry-in / carry-through / carry-forward
 
@@ -33,7 +32,6 @@ layer: the lifecycle (Ideate → Plan → Codify → Validate → Ship) moves wo
 between stages. **Carry-forward** — Session → Project (work state survives the
 session) and Project → Operator (knowledge promotion). Prefer these exact
 terms; do not coin near-synonyms. See adr/0008-information-architecture.md.
-*(Proposed — canonical once ADR-0008 is accepted.)*
 
 ### two-doors enforcement model
 

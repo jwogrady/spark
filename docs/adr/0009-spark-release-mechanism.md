@@ -1,7 +1,7 @@
 # ADR: Spark releases manually today, adopts Release Please once validation CI lands
 
 Date: 2026-07-08
-Status: Proposed
+Status: Accepted
 Owner: jwogrady
 
 ## Context

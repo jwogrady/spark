@@ -1,7 +1,7 @@
 # ADR: The preferences source — shipped defaults, operator overrides, project facts
 
 Date: 2026-07-08
-Status: Proposed
+Status: Accepted
 Owner: jwogrady
 
 ## Context

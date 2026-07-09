@@ -1,7 +1,7 @@
 # ADR: Information architecture — three layers, one canonical source per class
 
 Date: 2026-07-08
-Status: Proposed
+Status: Accepted
 Owner: jwogrady
 
 ## Context
