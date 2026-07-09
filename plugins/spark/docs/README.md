@@ -44,6 +44,7 @@ and the supporting skills:
 - [how-to/validate.md](how-to/validate.md) — `/spark:validate` · review and harden the change until it's ready.
 - [how-to/ship.md](how-to/ship.md) — `/spark:ship` · commit, push, and open a focused PR.
 - [how-to/install.md](how-to/install.md) — install the plugin and apply the permission baseline.
+- [how-to/carry-your-preferences-in.md](how-to/carry-your-preferences-in.md) — declare your standard bag once (preferences + permission baseline) and carry it into every project.
 - [how-to/bootstrap.md](how-to/bootstrap.md) — `/spark:bootstrap` · scaffold a project runtime (Bun / uv).
 - [how-to/connect.md](how-to/connect.md) — `/spark:connect` · wire up services and secrets via 1Password.
 - [how-to/docit.md](how-to/docit.md) — `/spark:docit` · glow up the public docs through author personas.
@@ -51,6 +52,7 @@ and the supporting skills:
 - [how-to/agents-md.md](how-to/agents-md.md) — `/spark:agents-md` · maintain and sync `CLAUDE.md` + `AGENTS.md`.
 - [how-to/review.md](how-to/review.md) — `/spark:review` · run the multi-agent project audit.
 - [how-to/cleanup.md](how-to/cleanup.md) — `/spark:cleanup` · purge proven-dead code and false docs.
+- [how-to/resume.md](how-to/resume.md) — `spark resume` · pick up where a past session left off via the committed work state.
 
 ## Reference
 
@@ -61,7 +63,9 @@ Information-oriented — what each piece is and how it behaves:
 - [reference/cli.md](reference/cli.md) — the `spark` CLI and its subcommands.
 - [reference/hooks.md](reference/hooks.md) — the enforcement hooks and what each blocks.
 - [reference/engineering-preferences.md](reference/engineering-preferences.md) — the engineering standard every generated project conforms to.
+- [reference/state.md](reference/state.md) — the committed work state (`.spark/state.json`) and its schema.
 - [glossary.md](glossary.md) — Spark vocabulary.
+
 
 ## Understanding Spark
 

@@ -35,6 +35,9 @@ the `plan` skill can decompose.
    (create `docs/` if needed) and announce where it was saved — don't ask
    whether to save. If the file already exists, show the diff and confirm
    before overwriting. Only write elsewhere if the user names a different home.
+7. **Carry the state forward.** Update `.spark/state.json`
+   ([schema](../../docs/reference/state.md)): `stage` `ideate`,
+   `problem_statement` the saved path, `next_action` the plan handoff, `updated`.
 
 ## Output
 

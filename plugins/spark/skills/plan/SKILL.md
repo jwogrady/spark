@@ -34,6 +34,10 @@ feature, not a task list.
    a first usable-product milestone targets `0.1.0`; the contributions under it
    ship as `0.0.x`.
 6. **Confirm before creating anything on GitHub.**
+7. **Carry the state forward.** Update `.spark/state.json`
+   ([schema](../../docs/reference/state.md)): `stage` `plan`, `issue` the number
+   picked for codify (`""` until one is — GitHub owns the backlog),
+   `next_action`, `updated`.
 
 ## Creating the issues
 

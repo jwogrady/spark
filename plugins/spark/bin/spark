@@ -27,8 +27,12 @@ VERBS='doctor|cmd_doctor|Validate the Spark plugin layout and report health
 list-skills|cmd_list_skills|List all available skills with descriptions
 new-skill|cmd_new_skill|Scaffold a new skill under skills/<name>/
 install-git-hooks|cmd_install_git_hooks|Install Spark'\''s git hooks into the current repo
+apply-permissions|cmd_apply_permissions|Merge the permission baseline into .claude/settings.json
+preferences|cmd_preferences|Show the resolved engineering standard; --apply carries it into this repo
 shred-env|cmd_shred_env|Securely delete a transient secrets file (e.g. .env)
+resume|cmd_resume|Rebuild where the lifecycle left off from .spark/state.json
 version|cmd_version|Print the Spark plugin version
+brief|cmd_brief|Print the session brief: orient, locate, load (--short for the SessionStart hook)
 help|usage|Show this help'
 
 usage() {
@@ -42,6 +46,192 @@ usage() {
   done <<EOF
 $VERBS
 EOF
+}
+
+# ---------------------------------------------------------------------------
+# Preferences (ADR-0010). Three tiers resolve at read time, later tiers win:
+# shipped defaults → operator overrides → committed project facts. Flat JSON,
+# string values only, dot-namespaced keys — so a zero-dependency reader works
+# everywhere and jq stays an optimization, never a requirement.
+# ---------------------------------------------------------------------------
+
+# prefs_operator_path — the one expression for the operator tier's location,
+# so every consumer (resolver, verbs, provenance headers) names the same file.
+prefs_operator_path() {
+  printf '%s\n' "${XDG_CONFIG_HOME:-$HOME/.config}/spark/preferences.json"
+}
+
+# read_flat_json <file> — print one "key<TAB>value" line per pair. A missing
+# file prints nothing: every tier above the shipped defaults is optional.
+read_flat_json() {
+  local f="$1"
+  [ -f "$f" ] || return 0
+  if command -v jq >/dev/null 2>&1; then
+    jq -r 'to_entries[] | .key + "\t" + (.value | tostring)' "$f" 2>/dev/null || true
+    return 0
+  fi
+  # Fallback for the documented schema: one "key": "value" pair per line.
+  # Splitting on '"' keeps spaces and colons inside values intact; escaped
+  # quotes are outside the schema, so they are out of scope here.
+  awk -F'"' 'NF >= 5 && $3 ~ /^[[:space:]]*:[[:space:]]*$/ { print $2 "\t" $4 }' "$f"
+}
+
+# resolve_prefs — print "key<TAB>value<TAB>source" for the fully resolved
+# standard, source ∈ default|operator|project. Keys keep first-seen order so
+# the shipped defaults define the listing; later tiers override the value.
+resolve_prefs() {
+  local top
+  top="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  {
+    read_flat_json "$SPARK_ROOT/preferences/defaults.json" \
+      | awk -F'\t' 'NF >= 2 { print $0 "\tdefault" }'
+    read_flat_json "$(prefs_operator_path)" \
+      | awk -F'\t' 'NF >= 2 { print $0 "\toperator" }'
+    if [ -n "$top" ]; then
+      read_flat_json "$top/.spark/preferences.json" \
+        | awk -F'\t' 'NF >= 2 { print $0 "\tproject" }'
+    fi
+  } | awk -F'\t' '
+      !($1 in v) { order[++n] = $1 }
+      { v[$1] = $2; s[$1] = $3 }
+      END { for (i = 1; i <= n; i++) print order[i] "\t" v[order[i]] "\t" s[order[i]] }'
+}
+
+# pref_get <key> — print the single resolved value; exit 1 when the key is
+# unset so callers can chain an explicit fallback.
+pref_get() {
+  resolve_prefs | awk -F'\t' -v k="$1" '$1 == k { print $2; f = 1 } END { exit f ? 0 : 1 }'
+}
+
+# apply_standard [git-root] — the carry-in engine (ADR-0008): materialize the
+# resolved engineering standard into the repo. Create-only: an existing file
+# is a project choice, so it is kept and reported, never overwritten — which
+# is what makes every run idempotent by construction.
+# Report lanes:  + created   = exists, kept   ! needs a manual decision
+# Exit: 0 on success even with ! items (they are decisions, not failures);
+# 1 only when there is no git repo to carry the standard into.
+apply_standard() {
+  local top="${1:-}"
+  [ -n "$top" ] || top="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  [ -n "$top" ] || { red "apply_standard: not inside a git repo"; return 1; }
+  local name created=0 kept=0 attention=0
+  name="$(basename "$top")"
+
+  # place <relpath> — write stdin to the repo path unless it already exists.
+  place() {
+    local dest="$top/$1"
+    if [ -e "$dest" ]; then
+      echo "  = $1 (exists — kept)"; kept=$((kept+1))
+    else
+      mkdir -p "$(dirname "$dest")"
+      cat > "$dest"
+      green "  + $1"; created=$((created+1))
+    fi
+  }
+
+  # place_template <relpath> <template> — like place, sourced from the plugin.
+  place_template() {
+    local src="$SPARK_ROOT/preferences/templates/$2"
+    if [ -f "$src" ]; then
+      place "$1" < "$src"
+    else
+      yellow "  ! $1 — template $2 missing from the plugin (reinstall, or write it by hand)"
+      attention=$((attention+1))
+    fi
+  }
+
+  echo "Applying the engineering standard (three-tier resolve, ADR-0010):"
+
+  # Standard doc set, driven by docs.set. Unquoted on purpose: the value is a
+  # space-separated token list by schema.
+  local doc
+  for doc in $(pref_get docs.set || true); do
+    case "$doc" in
+      LICENSE)
+        # A license is a legal judgment call — never defaulted, always
+        # surfaced for the operator to decide.
+        if [ -e "$top/LICENSE" ]; then
+          echo "  = LICENSE (exists — kept)"; kept=$((kept+1))
+        else
+          yellow "  ! LICENSE — pick one (MIT? Apache-2.0? proprietary?)"
+          attention=$((attention+1))
+        fi
+        ;;
+      README.md) place "README.md" <<EOF
+# $name
+
+What this project is, in one paragraph — what it does and for whom.
+
+## Status
+
+Freshly scaffolded. This README describes reality; update it as the project grows.
+EOF
+        ;;
+      CHANGELOG.md) place "CHANGELOG.md" <<'EOF'
+# Changelog
+
+All notable changes to this project are documented here. Release Please
+maintains the released sections from the conventional commits on the trunk.
+
+## [Unreleased]
+
+Nothing yet.
+EOF
+        ;;
+      CONTRIBUTING.md) place "CONTRIBUTING.md" <<'EOF'
+# Contributing
+
+- Work on a short-lived feature branch; never commit to the trunk directly.
+- Conventional commits: imperative subject under 72 characters, no trailing
+  period; the body explains *why*.
+- One concern per pull request. Delete merged branches.
+EOF
+        ;;
+      ROADMAP.md) place "ROADMAP.md" <<'EOF'
+# Roadmap
+
+What is planned, in priority order. Keep it honest — remove what has shipped
+or been abandoned.
+
+- Nothing planned yet.
+EOF
+        ;;
+      *)
+        # A doc the operator added beyond the shipped set: no template to
+        # write, so surface it rather than guess at content.
+        yellow "  ! $doc — in docs.set but Spark ships no template for it"
+        attention=$((attention+1))
+        ;;
+    esac
+  done
+
+  # Release mechanism: Release Please is the shipped standard; any other
+  # resolved value is the operator's own machinery to wire.
+  local mech
+  mech="$(pref_get release.mechanism || true)"
+  if [ "$mech" = "release-please" ]; then
+    place_template "release-please-config.json" "release-please-config.json"
+    place_template ".release-please-manifest.json" "release-please-manifest.json"
+    place_template ".github/workflows/release-please.yml" "release-please.yml"
+  else
+    yellow "  ! release.mechanism=$mech — no shipped template; wire the release pipeline by hand"
+    attention=$((attention+1))
+  fi
+
+  # Build CI is stack-aware: the resolved stack.default selects the template,
+  # so a committed project fact like {"stack.default": "typescript-bun"}
+  # changes what lands here — read-time resolution doing its job.
+  local stack
+  stack="$(pref_get stack.default || true)"
+  if [ -f "$SPARK_ROOT/preferences/templates/ci/validate-$stack.yml" ]; then
+    place_template ".github/workflows/validate.yml" "ci/validate-$stack.yml"
+  else
+    yellow "  ! .github/workflows/validate.yml — no CI template for stack '$stack'; write one for this stack"
+    attention=$((attention+1))
+  fi
+
+  echo
+  echo "Standard: $created created, $kept kept, $attention need attention."
 }
 
 cmd_version() {
@@ -139,6 +329,24 @@ cmd_doctor() {
       && green "✓ hooks/guard-bash.sh is executable" \
       || { red "✗ hooks/guard-bash.sh is not executable"; errors=$((errors+1)); }
   fi
+
+  # Preferences source (ADR-0010): the shipped defaults and templates are
+  # load-bearing for carry-in — apply_standard reads them — so a broken or
+  # missing file is an error, not advice.
+  if [ -f "$SPARK_ROOT/preferences/defaults.json" ]; then
+    check_json "$SPARK_ROOT/preferences/defaults.json" \
+      && green "✓ preferences/defaults.json is valid JSON" \
+      || { red "✗ preferences/defaults.json is not valid JSON"; errors=$((errors+1)); }
+  else
+    red "✗ preferences/defaults.json is missing"; errors=$((errors+1))
+  fi
+  local tmpl tmpl_ok=1
+  for tmpl in release-please-config.json release-please-manifest.json release-please.yml \
+              ci/validate-python-uv.yml ci/validate-typescript-bun.yml; do
+    [ -f "$SPARK_ROOT/preferences/templates/$tmpl" ] \
+      || { red "✗ preferences/templates/$tmpl is missing"; errors=$((errors+1)); tmpl_ok=0; }
+  done
+  [ "$tmpl_ok" -eq 1 ] && green "✓ preferences/templates carry the full standard set"
 
   # Skills: each must have a SKILL.md with name + description frontmatter.
   echo
@@ -353,6 +561,66 @@ EOF
   echo "'Skill Authoring' section of CLAUDE.md."
 }
 
+# The carry-in verb (ADR-0008): inspect the engineering standard resolved
+# across the three ADR-0010 tiers, or carry it into the current repo through
+# the same apply_standard engine bootstrap uses.
+cmd_preferences() {
+  local usage_line="usage: spark preferences [--show | --apply]"
+  local mode="show"
+  case "${1:-}" in
+    ""|--show) mode="show" ;;
+    --apply)   mode="apply" ;;
+    -h|--help) echo "$usage_line"; return 0 ;;
+    *) red "unknown option: $1"; echo "$usage_line"; return 1 ;;
+  esac
+  [ "$#" -le 1 ] || { red "too many arguments"; echo "$usage_line"; return 1; }
+
+  if [ "$mode" = "apply" ]; then
+    # apply_standard refuses outside a repo too, but the refusal here can say
+    # what still works: showing resolves from defaults + operator anywhere.
+    if ! git rev-parse --show-toplevel >/dev/null 2>&1; then
+      red "spark preferences --apply needs a git repo — run it from inside the project."
+      echo "(bare 'spark preferences' works anywhere and shows what would apply)"
+      return 1
+    fi
+    apply_standard
+    return
+  fi
+
+  # The header names the same three paths resolve_prefs reads (ADR-0010), so
+  # the provenance column below is verifiable at a glance.
+  local defaults="$SPARK_ROOT/preferences/defaults.json"
+  local operator="${XDG_CONFIG_HOME:-$HOME/.config}/spark/preferences.json"
+  local gitroot project=""
+  gitroot="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  [ -n "$gitroot" ] && project="$gitroot/.spark/preferences.json"
+
+  # The shipped defaults are load-bearing for carry-in: absence means a
+  # broken install, not an empty standard.
+  [ -f "$defaults" ] || { red "shipped defaults missing: $defaults — reinstall the Spark plugin"; return 1; }
+
+  tier_line() {
+    if [ -z "$2" ]; then
+      printf '  %-9s %s\n' "$1" "(not in a git repo)"
+    elif [ -f "$2" ]; then
+      printf '  %-9s %s  (present)\n' "$1" "$2"
+    else
+      printf '  %-9s %s  (absent)\n' "$1" "$2"
+    fi
+  }
+
+  echo "Spark preferences — the engineering standard, resolved (later tiers win)"
+  echo
+  tier_line default  "$defaults"
+  tier_line operator "$operator"
+  tier_line project  "$project"
+  echo
+  local key value source
+  while IFS=$'\t' read -r key value source; do
+    printf '  %-26s %-24s [%s]\n' "$key" "$value" "$source"
+  done < <(resolve_prefs)
+}
+
 cmd_list_skills() {
   [ -d "$SPARK_ROOT/skills" ] || { red "skills/ directory not found"; return 1; }
   echo "Available Spark skills:"
@@ -371,6 +639,131 @@ cmd_shred_env() {
   "$SPARK_ROOT/scripts/shred-env.sh" "$@"
 }
 
+# spark brief [--short] — the brief-on-entry (ADR-0008's carry-in and
+# carry-forward applied at session entry). Orient reads raw git facts; locate
+# prefers the durable work state (.spark/state.json, schema in
+# docs/reference/state.md) and falls back to repo-shape heuristics; load
+# summarizes the resolved standard bag (ADR-0010).
+cmd_brief() {
+  local short=0
+  case "${1:-}" in
+    --short) short=1 ;;
+    '') ;;
+    *) red "usage: spark brief [--short]"; return 1 ;;
+  esac
+
+  # --short is the SessionStart hook path and fires in every directory Claude
+  # opens, Spark project or not — outside a git repo it must contribute
+  # nothing to the session (silent, exit 0).
+  local root
+  root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  if [ -z "$root" ]; then
+    [ "$short" -eq 1 ] && return 0
+    yellow "spark brief: not inside a git repo — nothing to orient on."
+    return 0
+  fi
+
+  # Orient: cheap local git facts. The gh PR lookup is a network call, so it
+  # is reserved for the interactive mode — a session-start hook must never
+  # wait on the network.
+  local branch dirty counts ahead='' behind='' pr=''
+  branch="$(git -C "$root" symbolic-ref --quiet --short HEAD || echo '(detached)')"
+  dirty="$(git -C "$root" status --porcelain 2>/dev/null | awk 'NF{n++} END{print n+0}')"
+  if counts="$(git -C "$root" rev-list --left-right --count '@{upstream}...HEAD' 2>/dev/null)"; then
+    behind="$(printf '%s' "$counts" | awk '{print $1}')"
+    ahead="$(printf '%s' "$counts" | awk '{print $2}')"
+  fi
+  if [ "$short" -eq 0 ] && command -v gh >/dev/null 2>&1; then
+    pr="$(gh pr view --json number,title --template 'PR #{{.number}} — {{.title}}' 2>/dev/null || true)"
+  fi
+
+  # Locate: durable state when a lifecycle skill has written it (schema:
+  # docs/reference/state.md); otherwise infer the stage from what the repo
+  # already proves about itself.
+  local state="$root/.spark/state.json"
+  local stage='' issue='' next='' blockers='' updated='' located='' k v
+  if [ -f "$state" ]; then
+    while IFS=$'\t' read -r k v; do
+      case "$k" in
+        stage)       stage="$v" ;;
+        issue)       issue="$v" ;;
+        next_action) next="$v" ;;
+        blockers)    blockers="$v" ;;
+        updated)     updated="$v" ;;
+      esac
+    done < <(read_flat_json "$state")
+  fi
+  if [ -n "$stage" ]; then
+    # The state schema stores lowercase stage names; capitalize for display
+    # so the recorded and inferred lines read alike.
+    located="$(printf '%s' "$stage" | awk '{ print toupper(substr($0,1,1)) substr($0,2) }')${issue:+ — issue #${issue#\#}}"
+  elif [ ! -f "$root/docs/problem-statement.md" ]; then
+    located="Ideate (inferred) — no docs/problem-statement.md yet"
+  elif [ "$branch" = "master" ] || [ "$branch" = "main" ]; then
+    located="Plan (inferred) — on trunk with a problem statement; pick the next issue"
+  elif [ -n "$pr" ]; then
+    located="Validate/Ship (inferred) — $pr is open for this branch"
+  else
+    located="Codify (inferred) — working branch $branch"
+  fi
+
+  # Load: one resolve_prefs pass, summarized — how big the standard bag is,
+  # how much of it is overridden, and the two headline conventions.
+  local prefs total=0 overridden=0 stack_pref='' release_pref=''
+  prefs="$(resolve_prefs 2>/dev/null || true)"
+  if [ -n "$prefs" ]; then
+    total="$(printf '%s\n' "$prefs" | awk 'NF{n++} END{print n+0}')"
+    overridden="$(printf '%s\n' "$prefs" | awk -F'\t' '$3=="operator" || $3=="project" {n++} END{print n+0}')"
+    stack_pref="$(printf '%s\n' "$prefs" | awk -F'\t' '$1=="stack.default"{print $2; exit}')"
+    release_pref="$(printf '%s\n' "$prefs" | awk -F'\t' '$1=="release.mechanism"{print $2; exit}')"
+  fi
+
+  if [ "$short" -eq 1 ]; then
+    # At most three lines, plain text — this lands in Claude's session
+    # context, so no color codes and no section headers.
+    local line="[spark] $branch"
+    [ "$dirty" -gt 0 ] && line="$line · $dirty uncommitted"
+    [ -n "$ahead" ] && line="$line · ↑$ahead ↓$behind"
+    echo "$line"
+    echo "[spark] $located${next:+ · next: $next}"
+    if [ -n "$prefs" ]; then
+      echo "[spark] standards: $total prefs, $overridden overridden${stack_pref:+ · stack=$stack_pref}${release_pref:+ · release=$release_pref}"
+    fi
+    return 0
+  fi
+
+  echo "Spark brief — $root"
+  echo
+  echo "Orient"
+  echo "  branch    $branch"
+  echo "  tree      $dirty uncommitted file(s)"
+  if [ -n "$ahead" ]; then
+    echo "  upstream  ahead $ahead, behind $behind"
+  else
+    echo "  upstream  none tracked"
+  fi
+  [ -n "$pr" ] && echo "  pr        $pr"
+  echo
+  echo "Locate"
+  echo "  $located"
+  [ -n "$next" ] && echo "  next      $next"
+  [ -n "$blockers" ] && echo "  blockers  $blockers"
+  if [ -f "$state" ]; then
+    echo "  state     .spark/state.json${updated:+, updated $updated} — full view: spark resume"
+  fi
+  echo
+  echo "Load"
+  if [ -n "$prefs" ]; then
+    echo "  $total preference key(s) resolved, $overridden overridden (operator/project)"
+    [ -n "$stack_pref" ] && echo "  stack.default      $stack_pref"
+    [ -n "$release_pref" ] && echo "  release.mechanism  $release_pref"
+    echo "  full resolution: spark preferences"
+  else
+    echo "  no preferences resolved — is preferences/defaults.json shipped with the plugin?"
+  fi
+  return 0
+}
+
 cmd_install_git_hooks() {
   git rev-parse --git-dir >/dev/null 2>&1 || { red "not inside a git repo"; return 1; }
   local hooksdir; hooksdir="$(git rev-parse --git-path hooks)"
@@ -386,6 +779,207 @@ cmd_install_git_hooks() {
     chmod +x "$hooksdir/$h"
     green "✓ installed $h"
   done
+}
+
+cmd_apply_permissions() {
+  local assume_yes=0
+  case "${1:-}" in -y|--yes) assume_yes=1 ;; esac
+
+  local baseline="$SPARK_ROOT/settings/permission-baseline.json"
+  [ -f "$baseline" ] || { red "✗ baseline not found: $baseline"; return 1; }
+
+  # Anchor on the repo root when inside one, so the settings land where Claude
+  # Code actually reads them, regardless of the current subdirectory.
+  local root="."
+  if git rev-parse --show-toplevel >/dev/null 2>&1; then
+    root="$(git rev-parse --show-toplevel)"
+  fi
+  local target="$root/.claude/settings.json"
+
+  if [ ! -f "$target" ]; then
+    mkdir -p "$root/.claude"
+    cp "$baseline" "$target"
+    green "✓ created $target from Spark's permission baseline"
+    return 0
+  fi
+
+  # An existing file means project-specific settings we must not clobber:
+  # parse it, append only the rules that are missing, and only after a yes.
+  local have_jq=0 have_py=0
+  command -v jq >/dev/null 2>&1 && have_jq=1
+  command -v python3 >/dev/null 2>&1 && have_py=1
+  if [ "$have_jq" -eq 0 ] && [ "$have_py" -eq 0 ]; then
+    yellow "! neither jq nor python3 is available, so Spark can't merge JSON safely."
+    echo "  Merge the baseline into $target by hand:"
+    echo "  $baseline"
+    return 1
+  fi
+
+  local valid=0
+  if [ "$have_jq" -eq 1 ]; then
+    jq empty "$target" >/dev/null 2>&1 && valid=1
+  else
+    python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$target" >/dev/null 2>&1 && valid=1
+  fi
+  [ "$valid" -eq 1 ] || { red "✗ $target is not valid JSON — fix it before merging"; return 1; }
+
+  local additions
+  if [ "$have_jq" -eq 1 ]; then
+    additions="$(jq -r --slurpfile cur "$target" \
+      '(.permissions.allow // []) - ($cur[0].permissions.allow // []) | .[]' "$baseline")"
+  else
+    additions="$(python3 - "$target" "$baseline" <<'PY'
+import json, sys
+cur, base = (json.load(open(p)) for p in sys.argv[1:3])
+have = cur.get("permissions", {}).get("allow", [])
+for rule in base.get("permissions", {}).get("allow", []):
+    if rule not in have:
+        print(rule)
+PY
+)"
+  fi
+
+  if [ -z "$additions" ]; then
+    green "✓ baseline already applied — $target has every baseline rule"
+    return 0
+  fi
+
+  echo "Spark will add these rules to permissions.allow in $target:"
+  printf '%s\n' "$additions" | sed 's/^/  + /'
+  if [ "$assume_yes" -ne 1 ]; then
+    printf 'Proceed? [y/N] '
+    local reply=""
+    read -r reply || true
+    case "$reply" in y|Y|yes|YES) ;; *) yellow "! aborted — nothing written"; return 1 ;; esac
+  fi
+
+  local tmp; tmp="$(mktemp "$target.XXXXXX")"
+  if [ "$have_jq" -eq 1 ]; then
+    jq --slurpfile base "$baseline" \
+      '(.permissions.allow // []) as $have
+       | .permissions.allow = ($have + (($base[0].permissions.allow // []) - $have))' \
+      "$target" > "$tmp" || { rm -f "$tmp"; red "✗ merge failed"; return 1; }
+  else
+    python3 - "$target" "$baseline" > "$tmp" <<'PY' || { rm -f "$tmp"; red "✗ merge failed"; return 1; }
+import json, sys
+cur, base = (json.load(open(p)) for p in sys.argv[1:3])
+have = cur.setdefault("permissions", {}).setdefault("allow", [])
+have += [r for r in base.get("permissions", {}).get("allow", []) if r not in have]
+print(json.dumps(cur, indent=2))
+PY
+  fi
+  mv "$tmp" "$target"
+  green "✓ merged the Spark baseline into $target"
+}
+
+# resume — the carry-forward read side: rebuild "where you were / what's
+# next" from the committed work state. Each recorded fact is cross-checked
+# against the live repo before it is presented, because state written in a
+# past session may have been overtaken — drift is reported, never trusted.
+cmd_resume() {
+  local root
+  root="$(git rev-parse --show-toplevel 2>/dev/null)" \
+    || { red "not inside a git repo — nothing to resume"; return 1; }
+  local state="$root/.spark/state.json"
+  if [ ! -f "$state" ]; then
+    yellow "No work state at .spark/state.json — nothing recorded yet."
+    echo "The lifecycle skills write it at each stage's close-out. Start with"
+    echo "/spark:ideate, or orient from GitHub: gh issue list, gh pr list."
+    return 0
+  fi
+
+  local key value got=0 stage="" problem="" issue="" branch="" pr="" blockers="" next="" updated=""
+  while IFS=$'\t' read -r key value; do
+    got=1
+    case "$key" in
+      stage)             stage="$value" ;;
+      problem_statement) problem="$value" ;;
+      issue)             issue="$value" ;;
+      branch)            branch="$value" ;;
+      pr)                pr="$value" ;;
+      blockers)          blockers="$value" ;;
+      next_action)       next="$value" ;;
+      updated)           updated="$value" ;;
+    esac
+  done < <(read_flat_json "$state")
+
+  # A file that parses to nothing is a claim resume cannot read — say so
+  # rather than presenting an empty briefing as if nothing was recorded.
+  if [ "$got" -eq 0 ]; then
+    yellow ".spark/state.json exists but no facts could be read from it — it may"
+    yellow "be malformed. Trust the repo; the next close-out rewrites the file."
+    return 0
+  fi
+
+  # Facts the repo contradicts are flagged and counted — the repo wins over
+  # the state file, always.
+  local drift=0
+  note() { yellow "    ! $1"; drift=$((drift+1)); }
+
+  echo "Where you were${updated:+ (recorded $updated)}:"
+  case "$stage" in
+    ideate|plan|codify|validate|ship) echo "  stage:    $stage" ;;
+    "") note "no stage recorded" ;;
+    *)  echo "  stage:    $stage"
+        note "not a lifecycle stage (expected ideate|plan|codify|validate|ship)" ;;
+  esac
+
+  if [ -n "$problem" ]; then
+    echo "  problem:  $problem"
+    [ -f "$root/$problem" ] || note "that file is missing from the repo"
+  fi
+
+  if [ -n "$issue" ]; then
+    issue="${issue#\#}"
+    echo "  issue:    #$issue"
+    if command -v gh >/dev/null 2>&1; then
+      local istate
+      istate="$(gh issue view "$issue" --json state --jq .state 2>/dev/null || true)"
+      [ "$istate" = "CLOSED" ] && note "issue #$issue is closed — this may be finished work"
+    fi
+  fi
+
+  if [ -n "$branch" ]; then
+    echo "  branch:   $branch"
+    local here; here="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+    if ! git show-ref --verify --quiet "refs/heads/$branch"; then
+      note "branch does not exist locally (merged and deleted, or never fetched)"
+    elif [ "$here" != "$branch" ]; then
+      note "you are on '$here' — git checkout $branch to pick the work back up"
+    fi
+  fi
+
+  if [ -n "$pr" ]; then
+    if command -v gh >/dev/null 2>&1; then
+      local prstate
+      prstate="$(gh pr view "$pr" --json state --jq .state 2>/dev/null || true)"
+      echo "  pr:       #$pr${prstate:+ ($prstate)}"
+      case "$prstate" in
+        MERGED) note "already merged — the recorded stage is behind; the loop restarts at ideate" ;;
+        CLOSED) note "closed unmerged — decide whether this work is abandoned" ;;
+        "")     note "could not reach GitHub — treat the PR's state as unverified" ;;
+      esac
+    else
+      echo "  pr:       #$pr"
+      note "gh not available — the PR's state is unverified"
+    fi
+  fi
+
+  [ -n "$blockers" ] && echo "  blockers: $blockers"
+
+  echo
+  echo "What's next:"
+  if [ -n "$next" ]; then
+    echo "  $next"
+  else
+    yellow "  (no next_action recorded — decide from the stage above)"
+  fi
+
+  if [ "$drift" -gt 0 ]; then
+    echo
+    yellow "$drift fact(s) drifted since this state was written — trust the repo,"
+    yellow "then let the current stage's close-out rewrite .spark/state.json."
+  fi
 }
 
 verb="${1:-help}"

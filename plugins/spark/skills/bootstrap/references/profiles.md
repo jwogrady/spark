@@ -105,6 +105,10 @@ uv run ruff check . && uv run ruff format --check .
 
 ## After scaffolding
 
-Hand off to the rest of setup: generate `CLAUDE.md`/`AGENTS.md`, run
-`spark install-git-hooks`, connect services with the `connect` skill, then begin
+Carry the standard in: record project facts in `.spark/preferences.json` when
+this project deviates from the resolved defaults, then run
+`spark preferences --apply` — it materializes the standard doc set, the
+stack-aware CI workflow, and the Release Please config, create-only. Then hand
+off to the rest of setup: generate `CLAUDE.md`/`AGENTS.md`, run
+`spark install-git-hooks`, connect services with the `connect` skill, and begin
 the lifecycle at `ideate`.

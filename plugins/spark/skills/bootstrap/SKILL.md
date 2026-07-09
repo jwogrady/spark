@@ -19,7 +19,9 @@ Concrete per-framework commands and quality-gate defaults live in
 
 1. **Decide the shape** — frontend, backend, or both. If a problem statement from
    [`ideate`](../ideate/SKILL.md) exists, infer from it; otherwise ask.
-2. **Pick a framework** for each side (the only real config choice):
+2. **Pick a framework** for each side (the only real config choice). The
+   resolved standard names the default stack — `spark preferences` shows it
+   (`stack.default` is Python + uv unless a tier overrides it):
    - TS frontend: Vite (SPA), Next.js (SSR/marketing), Astro (content).
    - TS backend: Hono (APIs), or `bun init` (lib/CLI).
    - Python backend: FastAPI (APIs), Django (full-stack), or `uv init` (lib/CLI).
@@ -29,7 +31,13 @@ Concrete per-framework commands and quality-gate defaults live in
 5. **Verify the scaffold runs** — build or boot it once (`bun run build` /
    `uv run …`) and confirm it works before moving on. If it fails, report the
    output plainly; don't paper over it.
-6. **Layer Spark on top:**
+6. **Carry the standard in.** Record deviations from the resolved defaults as
+   committed project facts — e.g. a frontend Cosmic writes
+   `.spark/preferences.json` with `{"stack.default": "typescript-bun"}` so the
+   exception is visible in review. Then run `spark preferences --apply` and
+   relay its report verbatim (`+` created, `=` kept, `!` needs a decision).
+   Resolve every `!` with the user — the LICENSE choice always is one.
+7. **Layer Spark on top:**
    - Generate `CLAUDE.md` and `AGENTS.md` with [`agents-md`](../agents-md/SKILL.md).
    - Install the git hooks: `spark install-git-hooks`.
    - Connect services and secrets with [`connect`](../connect/SKILL.md).
@@ -44,6 +52,9 @@ Concrete per-framework commands and quality-gate defaults live in
 - **Commit the lockfile** (`bun.lock`, `uv.lock`) so the runtime is reproducible.
 - **One concern.** bootstrap stands up the runtime; it does not start
   implementing features — that's `codify`, after planning.
+- **The standard comes from the resolver, never from memory.** Doc set, CI
+  workflow, and release config are materialized by `spark preferences --apply`
+  (three-tier resolve, ADR-0010) — don't hand-roll them.
 - Don't add dependencies the chosen profile doesn't need.
 
 ## Fits the lifecycle

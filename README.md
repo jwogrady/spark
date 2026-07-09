@@ -17,18 +17,21 @@ the shot. The canonical statement is
 Everything Spark does is one of **three motions**
 ([glossary](plugins/spark/docs/glossary.md)):
 
-- **Carry-in** — your engineering standards enter every project you open.
-  *Today:* the enforcement hooks and permission baseline install once and
-  travel with the plugin. *In progress (v0.4):* `bootstrap` applying your full
+- **Carry-in** — your engineering standards enter every project you open. The
+  enforcement hooks and permission baseline install once and travel with the
+  plugin; your
   [engineering preferences](plugins/spark/docs/reference/engineering-preferences.md)
-  at project generation ([#61](https://github.com/jwogrady/spark/issues/61)).
+  resolve through three tiers — shipped defaults, your overrides, committed
+  project facts — and enter a repo through `bootstrap` at generation or
+  `spark preferences --apply` on demand. Start at
+  [carry your preferences in](plugins/spark/docs/how-to/carry-your-preferences-in.md).
 - **Carry-through** — one lifecycle moves work from idea to merged PR:
   **Ideate → Plan → Codify → Validate → Ship**, with the discipline enforced by
   code, not convention. *Shipped and enforced.*
-- **Carry-forward** — what a session produces outlives it. *Today:* `ideate`
-  persists the problem statement; issues and ADRs are the durable ledger.
-  *In progress (v0.4):* resumable work state
-  ([#66](https://github.com/jwogrady/spark/issues/66)).
+- **Carry-forward** — what a session produces outlives it. `ideate` persists
+  the problem statement; issues and ADRs are the durable ledger; the lifecycle
+  skills record work state in a committed `.spark/state.json`, a session-start
+  brief reads it back, and `spark resume` picks the work up where it stopped.
 
 ```mermaid
 flowchart LR
@@ -144,9 +147,11 @@ Spark is pre-1.0, at `v0.3.1`. That is the honest contract, not a caveat.
 
 - **Architecture v1.0 is complete and ratified** (ADR-0008: three layers, one
   canonical source per information class, the three motions above; audited in
-  `docs/architecture/conformance.md`). The open work is implementation, not
-  design — the **v0.4 milestone** (carry-in and carry-forward features) is
-  tracked as GitHub issues.
+  `docs/architecture/conformance.md`). The core v0.4 carry-in and carry-forward
+  features — three-tier preferences, the session brief, resumable work state —
+  now ship; the rest of the **v0.4 milestone** (e.g. scoped issue generation)
+  is tracked as GitHub issues.
+
 - **Validation CI is live**: every PR to this repo must pass `spark doctor`.
   What is *not* automated is behavioral regression on the skills themselves —
   skills are prompts, and their quality gate is use.
@@ -170,10 +175,13 @@ built-ins, reusing the built-in reviewers rather than reinventing them.
 │  skills/          hooks/               bin/spark             │
 │  12 SKILL.md      PreToolUse           doctor  list-skills   │
 │  files            guard-bash.sh        new-skill  version    │
-│  agents/                               install-git-hooks     │
-│  docit (13)       scripts/hooks/       shred-env  help       │
-│  knowledge (6)    commit-msg           settings/             │
-│                   pre-commit           permission baseline   │
+│  agents/          SessionStart         install-git-hooks     │
+│  docit (13)       spark brief          apply-permissions     │
+│  knowledge (6)                         preferences  brief    │
+│                   scripts/hooks/       resume  shred-env     │
+│  preferences/     commit-msg           help                  │
+│  defaults.json    pre-commit           settings/             │
+│  templates/                            permission baseline   │
 ├──────────────────────────────────────────────────────────────┤
 │              Claude Code (Anthropic built-ins)               │
 │      /code-review   /security-review   verify                │
@@ -185,8 +193,9 @@ hook); `commit-msg` and `pre-commit` live under `plugins/spark/scripts/hooks/`
 (git hooks) — two directories because they are two enforcement doors.
 
 **The `spark` CLI:** `doctor`, `list-skills`, `new-skill`, `install-git-hooks`,
-`shred-env`, `version`, `help`. Pure POSIX-friendly Bash, zero runtime
-dependencies, graceful degradation when `jq`/`python3` are absent.
+`apply-permissions`, `preferences`, `brief`, `resume`, `shred-env`, `version`,
+`help`. Pure POSIX-friendly Bash, zero runtime dependencies, graceful
+degradation when `jq`/`python3` are absent.
 
 ## Contributing
 

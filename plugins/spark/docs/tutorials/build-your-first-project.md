@@ -21,6 +21,8 @@ statement is [What Spark is](../explanation/identity.md).
 ## Before you start
 
 - Spark installed (`/plugin install spark`) — see [../how-to/install.md](../how-to/install.md).
+- Your standard bag carried in (preferences accepted or overridden, permission
+  baseline applied) — see [../how-to/carry-your-preferences-in.md](../how-to/carry-your-preferences-in.md).
 - A git repository you can open a branch and PR in.
 - `spark install-git-hooks` run once in that repo.
 

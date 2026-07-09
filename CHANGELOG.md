@@ -8,7 +8,26 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **Carry-in shipped** (#61, #63): `preferences/defaults.json` is the machine
+  form of the engineering standard; `spark preferences` shows the resolved
+  three-tier standard (defaults → operator → project, ADR-0010) and `--apply`
+  materializes it — doc set, Release Please wiring, stack-aware validation
+  CI — create-only and idempotent. `bootstrap` applies the standard at
+  generation with Python+uv as the resolved default (ADR-0007).
+- **Carry-forward shipped** (#66, #68, #62): lifecycle skills record work
+  state in `.spark/state.json`; `spark resume` rebuilds where you were and
+  flags drift against the live repo; a SessionStart hook runs
+  `spark brief --short` so every session opens oriented (orient/locate/load).
+- **Portable operator knowledge** (#67): `~/.config/spark/knowledge/` home,
+  written only through the librarian's explicit promotion step.
+- **On-ramp** (#80): `how-to/carry-your-preferences-in.md`.
+
+### Fixed
+
+- Restored the `spark apply-permissions` verb lost in a merge-conflict
+  resolution; docs and CLI agree again.
 
 ## [0.4.0](https://github.com/jwogrady/spark/compare/v0.3.1...v0.4.0) (2026-07-09)
 

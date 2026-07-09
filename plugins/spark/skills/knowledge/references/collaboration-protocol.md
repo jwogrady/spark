@@ -77,8 +77,8 @@ Phase 1 — Draft (route)
 
 Phase 2 — Review + shelve (parallel)
   Dispatch spark:knowledge:editor (edit feedback on each draft) and
-  spark:knowledge:librarian (placement, dedup, cross-links, glossary) CONCURRENTLY.
-  Wait for both.
+  spark:knowledge:librarian (placement, dedup, cross-links, glossary,
+  promotion candidates) CONCURRENTLY. Wait for both.
         ↓ feedback appended to drafts; .knowledge-notes/librarian.md
 
 Phase 3 — Revise in place (parallel)
@@ -91,7 +91,10 @@ Phase 4 — Synthesize + file (barrier)
   librarian's recommendation, writes the final doc in one voice to the recommended
   path, and writes .knowledge-notes/editor-log.md. Before any overwrite, the
   orchestrator shows the user a diff and gets go-ahead. Then re-dispatch
-  spark:knowledge:librarian to update the glossary / index so the doc is findable.
+  spark:knowledge:librarian to update the glossary / index so the doc is findable
+  — and, for any promotion candidates the user explicitly approved, to append
+  them to the operator store with provenance
+  (references/operator-knowledge.md).
         ↓ the final doc in docs/…, .knowledge-notes/editor-log.md
 ```
 
