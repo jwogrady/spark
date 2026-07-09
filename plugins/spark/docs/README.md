@@ -32,7 +32,8 @@ New here? Start with one idea taken through all five stages, end to end:
 
 ## How-to guides
 
-Task-oriented recipes — the lifecycle stages in order, then setup and audit:
+Task-oriented recipes — the lifecycle stages in order, then setup, authorship,
+and the supporting skills:
 
 - [how-to/ideate.md](how-to/ideate.md) — `/spark:ideate` · frame a fuzzy idea into a written problem statement.
 - [how-to/plan.md](how-to/plan.md) — `/spark:plan` · decompose the problem into scoped work items.
@@ -42,7 +43,11 @@ Task-oriented recipes — the lifecycle stages in order, then setup and audit:
 - [how-to/install.md](how-to/install.md) — install the plugin and apply the permission baseline.
 - [how-to/bootstrap.md](how-to/bootstrap.md) — `/spark:bootstrap` · scaffold a project runtime (Bun / uv).
 - [how-to/connect.md](how-to/connect.md) — `/spark:connect` · wire up services and secrets via 1Password.
+- [how-to/docit.md](how-to/docit.md) — `/spark:docit` · glow up the public docs through author personas.
+- [how-to/knowledge.md](how-to/knowledge.md) — `/spark:knowledge` · capture internal knowledge as durable docs.
+- [how-to/agents-md.md](how-to/agents-md.md) — `/spark:agents-md` · maintain and sync `CLAUDE.md` + `AGENTS.md`.
 - [how-to/review.md](how-to/review.md) — `/spark:review` · run the multi-agent project audit.
+- [how-to/cleanup.md](how-to/cleanup.md) — `/spark:cleanup` · purge proven-dead code and false docs.
 
 ## Reference
 
