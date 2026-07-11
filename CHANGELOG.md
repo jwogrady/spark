@@ -6,13 +6,6 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ---
 
-## [0.5.0](https://github.com/jwogrady/spark/compare/v0.4.0...v0.5.0) (2026-07-09)
-
-
-### Features
-
-* carry-in and carry-forward — the v0.4 milestone five ([#129](https://github.com/jwogrady/spark/issues/129)) ([d9ff8fe](https://github.com/jwogrady/spark/commit/d9ff8feca87ce23ed90408b71d924b3138ef1c66))
-
 ## [Unreleased]
 
 ### Added
@@ -24,6 +17,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
   report. The granular commands are unchanged; `install-git-hooks` now
   reports an already-current Spark hook instead of re-copying it. The docs'
   primary arm-a-repo path is now `spark setup`.
+
+## [0.5.0](https://github.com/jwogrady/spark/compare/v0.4.0...v0.5.0) (2026-07-09)
+
+
+### Features
+
+* carry-in and carry-forward — the v0.4 milestone five ([#129](https://github.com/jwogrady/spark/issues/129)) ([d9ff8fe](https://github.com/jwogrady/spark/commit/d9ff8feca87ce23ed90408b71d924b3138ef1c66))
+
+### Added
+
 - **Carry-in shipped** (#61, #63): `preferences/defaults.json` is the machine
   form of the engineering standard; `spark preferences` shows the resolved
   three-tier standard (defaults → operator → project, ADR-0010) and `--apply`
