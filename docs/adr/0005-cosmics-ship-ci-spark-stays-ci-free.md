@@ -5,7 +5,7 @@ Status: Accepted; superseded in part by
 [ADR-0011](0011-doctor-is-the-validation-gate.md) — the Spark-repo
 validation-CI decision recorded in this file's Amendment section now lives in
 its own numbered ADR (the amendment was misfiled per the template's
-append-only rule; its text remains below as history)
+append-only rule; its text remains below as history); vocabulary superseded by [ADR-0015](0015-generated-projects-without-the-cosmic-model.md) — "Cosmic" is retired from the public docs
 Owner: jwogrady
 
 ## Context

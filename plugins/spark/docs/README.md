@@ -75,8 +75,7 @@ choices (Explanation mode):
 - [explanation/philosophy.md](explanation/philosophy.md) — what Spark stands for and the doctrine behind the rules
 - [explanation/enforcement-model.md](explanation/enforcement-model.md) — why enforcement is mechanical, not advisory
 - [explanation/sdlc-doctrine.md](explanation/sdlc-doctrine.md) — why the five-stage lifecycle is the spine
-- [explanation/scope-and-upstream.md](explanation/scope-and-upstream.md) — what Spark adds and what it leaves to Anthropic's spec
-- [explanation/why-a-plugin.md](explanation/why-a-plugin.md) — why Spark ships as a plugin, not a framework
+- [explanation/additive.md](explanation/additive.md) — why Spark is additive: what it adds, what it leaves to Anthropic's spec, and why it ships as a plugin
 
 > Building or contributing to Spark itself? The developer docs — architecture,
 > ADRs, and packaging reference — live in the repository root under `docs/`, and

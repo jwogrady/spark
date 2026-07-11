@@ -62,9 +62,9 @@ graceful degradation when optional tools (`jq`, `python3`) are absent. Any forke
 project, any stack, any machine — the guardrails still hold.
 
 **6. Honest attribution, honest hype.** The `commit-msg` hook blocks AI co-author
-trailers mechanically, with exit code 2. The docit crew's phase protocol requires
-every claim to trace to a verified ground-truth note before it ships; the author
-reviews and rejects any note that cannot cite its evidence. The first is a
+trailers mechanically, with exit code 2. The authorship crews' citation
+discipline (the `spark-docs` companion) holds the other end: no claim ships
+without evidence beneath it, and the author is the final gate. The first is a
 deterministic code check; the second is a rigorous process with author review as
 the final gate. Both reflect one belief: the author of the work is the author of
 the work, and claims travel only as far as the evidence beneath them. An issue-first
@@ -106,7 +106,5 @@ documented.
 
 - [`enforcement-model.md`](enforcement-model.md) — *why* mechanical enforcement was
   chosen over advisory rules (the rationale behind Principle 1).
-- `docs/explanation/authorship-crews.md` — the multi-persona `docit`/`knowledge`
-  subagent design behind Principle 6. *(Planned — see the proposed issue slate.)*
-- [`sdlc-doctrine.md`](sdlc-doctrine.md), [`scope-and-upstream.md`](scope-and-upstream.md),
-  [`why-a-plugin.md`](why-a-plugin.md), and the ADRs under `docs/adr/`.
+- [`sdlc-doctrine.md`](sdlc-doctrine.md), [`additive.md`](additive.md),
+  and the ADRs under `docs/adr/`.
