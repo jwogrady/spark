@@ -4,13 +4,28 @@
     "name": "jwogrady"
   },
   "metadata": {
-    "description": "Spark — a portable, GitHub-native SDLC toolkit for Claude Code that carries one opinionated lifecycle (ideate, plan, codify, validate, ship) into every project."
+    "description": "Spark — a focused core that turns Claude Code and GitHub into a software delivery system (ideate, plan, codify, validate, ship), plus companion plugins for auditing, service connectivity, and public docs."
   },
   "plugins": [
     {
       "name": "spark",
       "source": "./plugins/spark",
-      "description": "Portable GitHub-native SDLC toolkit for Claude Code: ideate, plan, codify, validate, ship."
+      "description": "The core: one-command carry-in (setup), project inception (bootstrap), the five-stage lifecycle, three-tier preferences, session brief/resume with durable work state, mechanical git enforcement, doctor, and Release Please scaffolding."
+    },
+    {
+      "name": "spark-audit",
+      "source": "./plugins/spark-audit",
+      "description": "Whole-project assessment (assess) and evidence-backed cleanup (purge) behind a human approval gate."
+    },
+    {
+      "name": "spark-connect",
+      "source": "./plugins/spark-connect",
+      "description": "Service connectivity and secrets bootstrap via 1Password: capture, verify, shred; provider recipes included."
+    },
+    {
+      "name": "spark-docs",
+      "source": "./plugins/spark-docs",
+      "description": "Public docs and positioning through author personas under an honest-hype contract: README, philosophy, visuals, launch copy."
     }
   ]
 }

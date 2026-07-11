@@ -4,7 +4,7 @@
 
 Use this to give a project authenticated access to GitHub / Google Cloud / Vultr
 / Linode, with every secret stored in 1Password and nothing plaintext left on
-disk. Recipes per service: [../../skills/connect/references/recipes.md](../../skills/connect/references/recipes.md).
+disk. Recipes per service: [../skills/connect/references/recipes.md](../skills/connect/references/recipes.md).
 
 ## 1. Prepare (before any key touches disk)
 
@@ -37,7 +37,8 @@ and runs one smoke-test (e.g. `gh api user`, or an HTTP 200 from the provider).
 Only after every key verifies, securely delete the plaintext:
 
 ```bash
-spark shred-env .env
+# via the connect skill, which runs the plugin's shred-env.sh; by hand:
+shred -u -z .env   # or: scripts/shred-env.sh .env from this plugin's root
 ```
 
 This overwrites and removes the file, then confirms it's gone. It refuses to

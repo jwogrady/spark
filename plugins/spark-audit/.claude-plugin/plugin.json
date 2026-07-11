@@ -1,0 +1,11 @@
+{
+  "name": "spark-audit",
+  "description": "Whole-project assessment and evidence-backed cleanup for Claude Code. Assess mode produces an evidence-cited health report across six dimensions; purge mode removes proven-dead code, false docs, and stale branches behind a human approval gate. Companion to the Spark core plugin.",
+  "version": "0.1.0",
+  "author": {
+    "name": "jwogrady"
+  },
+  "homepage": "https://github.com/jwogrady/spark",
+  "repository": "https://github.com/jwogrady/spark",
+  "license": "MIT"
+}

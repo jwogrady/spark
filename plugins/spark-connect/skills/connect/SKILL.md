@@ -25,7 +25,7 @@ Service-specific connect + smoke-test recipes live in
    `op://<vault>/<item>/<field>` references.
 3. **Shred.** Only after each key is confirmed readable from `op`
    (`op read op://…` succeeds) **and** its smoke-test passes, securely delete the
-   raw file: `spark shred-env .env`. Verify it's gone.
+   raw file with the plugin's `scripts/shred-env.sh .env`. Verify it's gone.
 4. **Inject (steady state).** Run the app with secrets injected from 1Password,
    never from a plaintext file:
    ```bash
@@ -52,8 +52,8 @@ projects, make that a conscious, documented choice — never the silent default.
   hard to reverse. Always show the `op item create` command and get explicit
   confirmation before running it.
 - **Shred only after verify.** Never delete the raw `.env` until every key reads
-  back from `op` and its smoke-test passes. Use `spark shred-env` (secure delete +
-  verification), never a bare `rm`.
+  back from `op` and its smoke-test passes. Use the plugin's `scripts/shred-env.sh`
+  (secure delete + verification), never a bare `rm`.
 - **Never commit secrets.** Confirm `.gitignore` covers `.env*`/`sa.json` before
   capture. Only `.env.tmpl` (references) is committed.
 
@@ -66,6 +66,6 @@ projects, make that a conscious, documented choice — never the silent default.
 
 ## Fits the lifecycle
 
-`connect` is project setup — run it alongside runtime bootstrap, before
-[`ideate`](../ideate/SKILL.md). Once connections are live and the plaintext is
+`connect` is project setup — run it alongside the Spark core's runtime
+bootstrap, before framing the work. Once connections are live and the plaintext is
 shredded, you're ready to build.
