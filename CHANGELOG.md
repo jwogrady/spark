@@ -6,6 +6,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ---
 
+## [0.8.0](https://github.com/jwogrady/spark/compare/v0.7.0...v0.8.0) (2026-07-11)
+
+
+### Features
+
+* wire per-companion release trains through Release Please ([#154](https://github.com/jwogrady/spark/issues/154)) ([6f34f9c](https://github.com/jwogrady/spark/commit/6f34f9c86f96e38b9f62394f715f323372d96495)), closes [#150](https://github.com/jwogrady/spark/issues/150)
+
+
+### Bug Fixes
+
+* exempt git-generated messages from commit-msg style rules ([#151](https://github.com/jwogrady/spark/issues/151)) ([dc9f8df](https://github.com/jwogrady/spark/commit/dc9f8df262c1fd4d1812e0cd54aba9cf8378df23)), closes [#148](https://github.com/jwogrady/spark/issues/148)
+
 ## [0.7.0](https://github.com/jwogrady/spark/compare/v0.6.0...v0.7.0) (2026-07-11)
 
 

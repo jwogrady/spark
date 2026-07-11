@@ -1,6 +1,6 @@
 {
-  ".": "0.7.0",
-  "plugins/spark-audit": "0.1.0",
-  "plugins/spark-connect": "0.1.0",
-  "plugins/spark-docs": "0.1.0"
+  ".": "0.8.0",
+  "plugins/spark-audit": "0.2.0",
+  "plugins/spark-connect": "0.2.0",
+  "plugins/spark-docs": "0.2.0"
 }
