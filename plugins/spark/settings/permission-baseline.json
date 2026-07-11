@@ -23,6 +23,7 @@
       "Bash(gh repo view:*)",
       "Bash(spark doctor:*)",
       "Bash(spark list-skills:*)",
+      "Bash(spark setup:*)",
       "Bash(spark install-git-hooks:*)",
       "Bash(bash -n:*)"
     ]
