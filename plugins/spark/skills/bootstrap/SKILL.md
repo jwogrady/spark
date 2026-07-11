@@ -32,7 +32,7 @@ Concrete per-framework commands and quality-gate defaults live in
    `uv run …`) and confirm it works before moving on. If it fails, report the
    output plainly; don't paper over it.
 6. **Carry the standard in.** Record deviations from the resolved defaults as
-   committed project facts — e.g. a frontend Cosmic writes
+   committed project facts — e.g. a frontend project writes
    `.spark/preferences.json` with `{"stack.default": "typescript-bun"}` so the
    exception is visible in review. Then run `spark setup` — one run installs
    the git hooks, applies the permission baseline, and materializes the

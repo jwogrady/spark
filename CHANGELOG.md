@@ -8,17 +8,22 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
-Nothing yet.
-
-## [0.6.0](https://github.com/jwogrady/spark/compare/v0.5.0...v0.6.0) (2026-07-11)
-
-
-### Features
-
-* add a spark setup verb that runs the whole carry-in ([#132](https://github.com/jwogrady/spark/issues/132)) ([e2b61db](https://github.com/jwogrady/spark/commit/e2b61db71ae3f72d831f80c1d46fd37f87ef03b5))
-
 ### Changed
 
+- **The marketplace reshaped into a focused core and companion plugins**
+  (#140, ADR-0014, ADR-0015). The core plugin now ships only the shipping
+  loop — `setup`, `bootstrap`, the five lifecycle skills, three-tier
+  preferences, `brief`/`resume` with a new `idle` work-state stage, the two
+  enforcement doors, `doctor`, and Release Please scaffolding — plus a
+  slimmed `knowledge` crew (three roles) and `agents-md`. Three companion
+  plugins are installable from the same marketplace: `spark-audit` (the
+  audit skill moves there), `spark-connect` (the connect skill and
+  `shred-env`, which leaves the core CLI), and `spark-docs` (the public-docs
+  crew, slimmed to five personas with the Issue Council removed). All moves
+  are history-preserving; `doctor` now validates every listed plugin and
+  enforces taxonomy parity, and the docs — README, taxonomy, identity,
+  glossary, onboarding — describe the new shape. The internal "Cosmic"
+  product vocabulary is retired from public docs.
 - **`review` + `cleanup` consolidated into one `audit` skill** (#139). Both
   skills are removed; `/spark:audit` runs the whole-project audit directly
   in-session with at most five dispatched roles — **assess** keeps review's
@@ -36,6 +41,13 @@ Nothing yet.
   `agents/openai.yaml`; and the work-state loop now closes — when the recorded
   PR is merged, `spark resume` presents the loop restart instead of the stale
   `next_action` (documented in `docs/reference/state.md`).
+
+## [0.6.0](https://github.com/jwogrady/spark/compare/v0.5.0...v0.6.0) (2026-07-11)
+
+
+### Features
+
+* add a spark setup verb that runs the whole carry-in ([#132](https://github.com/jwogrady/spark/issues/132)) ([e2b61db](https://github.com/jwogrady/spark/commit/e2b61db71ae3f72d831f80c1d46fd37f87ef03b5))
 
 ## [0.5.0](https://github.com/jwogrady/spark/compare/v0.4.0...v0.5.0) (2026-07-09)
 
@@ -59,18 +71,6 @@ Nothing yet.
 - **Portable operator knowledge** (#67): `~/.config/spark/knowledge/` home,
   written only through the librarian's explicit promotion step.
 - **On-ramp** (#80): `how-to/carry-your-preferences-in.md`.
-
-### Changed
-
-- **Consolidation hygiene** (#141): the operator knowledge store is
-  `glossary.md` only — the `decisions.md` half is deferred until a shipped
-  surface reads it (existing stores untouched on disk); the `agents-md`
-  pre-plugin relics (`references/system-prompt.md`, `references/io-schema.yaml`,
-  `references/examples.md`, `agents/openai.yaml`) are deleted and the PR
-  template now asks for a `SKILL.md` with valid frontmatter instead of
-  `agents/openai.yaml`; and the work-state loop now closes — when the recorded
-  PR is merged, `spark resume` presents the loop restart instead of the stale
-  `next_action` (documented in `docs/reference/state.md`).
 
 ### Fixed
 

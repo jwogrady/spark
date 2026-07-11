@@ -492,7 +492,7 @@ cmd_doctor() {
         red "  ✗ ${md#"$doc_root"/}: broken link → $target"; errors=$((errors+1)); broken=1
       fi
     done < <(grep -oE '\]\([^)]+\)' "$md" 2>/dev/null || true)
-  done < <(find "$doc_root" -type f -name '*.md' ! -path '*/.git/*' ! -path '*/node_modules/*' | sort)
+  done < <(find "$doc_root" -type f -name '*.md' ! -path '*/.git/*' ! -path '*/node_modules/*' ! -path '*/.claude/*' | sort)
   [ "$broken" -eq 0 ] && green "  ✓ no broken relative links"
 
   # Enforcement parity: Spark deliberately states each rule on more than one

@@ -83,6 +83,6 @@ pre-plugin relics; the work state gets a defined loop close.
 
 Project inception — `/plugin install spark` plus the `bootstrap` skill —
 graduates into a guided "scaffold a new project from Spark" flow, distinct
-from plain distribution. The per-client Cosmic rungs (infra, runtime,
+from plain distribution. The per-client environment rungs (infra, runtime,
 telemetry) build on it. Bundled MCP servers stay deferred until a proven
 lifecycle gap requires one.

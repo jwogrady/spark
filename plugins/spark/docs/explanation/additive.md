@@ -66,7 +66,7 @@ A plugin cannot bundle a full `settings.json` (only `agent` and
 So two pieces ship differently — through the CLI, in one command:
 `spark setup` arms the current repo with the git hooks, the permission
 baseline, and the resolved engineering standard (see
-[the install how-to](../how-to/install.md)). The pieces remain individually
+[the get-started guide](../how-to/get-started.md)). The pieces remain individually
 addressable:
 
 - **Permission baseline** → `settings/permission-baseline.json`, applied by

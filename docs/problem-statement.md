@@ -42,8 +42,9 @@ close, and the one-command carry-in covers the whole permission baseline.
 
 ## Prior art & reusable assets
 
-- The conformance audit (`docs/architecture/conformance.md`) already
-  classifies every component; this effort implements its verdicts.
+- The architecture map's conformance test (ADR-0008, now enforced
+  mechanically by doctor's taxonomy parity check) already classifies every
+  component; this effort implements its verdicts.
 - Precedent: `caveman`, `handoff`, and `commit` were removed or folded in
   earlier releases — dropping skills is an established, changelogged move.
 - The cleanup skill's evidence table, confidence levels, and deletion-safety

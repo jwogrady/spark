@@ -59,7 +59,7 @@ Rejects a commit made directly on `master` or `main`.
 A plugin cannot bundle a full `settings.json`. The PreToolUse guard ships *in*
 the plugin; the permission baseline ships as `settings/permission-baseline.json`
 and is applied separately by `spark apply-permissions` (see
-[../how-to/install.md](../how-to/install.md)).
+[../how-to/get-started.md](../how-to/get-started.md)).
 
 ## See also
 
