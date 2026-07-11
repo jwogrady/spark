@@ -29,40 +29,17 @@ docs/                           # DEV docs (repo root, never shipped): ADRs,
 
 ## `plugins/spark/.claude-plugin/plugin.json`
 
-```json
-{
-  "name": "spark",
-  "description": "A portable project-inception and software-delivery system for AI-assisted development, delivered as a Claude Code plugin. Carries one opinionated lifecycle into every project: ideate, plan, codify, validate, ship.",
-  "version": "0.3.1",
-  "author": {
-    "name": "jwogrady"
-  },
-  "homepage": "https://github.com/jwogrady/spark",
-  "repository": "https://github.com/jwogrady/spark",
-  "license": "MIT"
-}
-```
+The plugin manifest: name, description, `version` (maintained by Release
+Please — never hand-bump it), author (`jwogrady`), homepage/repository, and
+the MIT license field. The file itself is the single source of truth; this
+page deliberately embeds no copy of it, because an embedded copy goes stale
+on every release.
 
 ## `.claude-plugin/marketplace.json`
 
-```json
-{
-  "name": "spark",
-  "owner": {
-    "name": "jwogrady"
-  },
-  "metadata": {
-    "description": "Spark — a portable, GitHub-native SDLC toolkit for Claude Code that carries one opinionated lifecycle (ideate, plan, codify, validate, ship) into every project."
-  },
-  "plugins": [
-    {
-      "name": "spark",
-      "source": "./plugins/spark",
-      "description": "Portable GitHub-native SDLC toolkit for Claude Code: ideate, plan, codify, validate, ship."
-    }
-  ]
-}
-```
+The marketplace catalog: the marketplace `name` and owner, and a `plugins`
+array whose single entry points at `./plugins/spark`. Read the file for the
+current values.
 
 `source: "./plugins/spark"` means the plugin root is the `plugins/spark/`
 directory, not the repo root. Adding the repo as a marketplace exposes a single
