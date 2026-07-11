@@ -12,13 +12,30 @@ Defined in `hooks/hooks.json`, fires on Claude Code's `PreToolUse` event for the
 
 | Blocks | Condition | Allows instead |
 |---|---|---|
-| Force-push | `git push --force` or `git push -f` | `--force-with-lease` |
-| Push to trunk | `git push … master` / `… main` | Push a feature branch |
+| Force-push | `--force`, `-f` (also inside short-option bundles like `-fu`), or a `+refspec` | `--force-with-lease` |
+| Push to trunk | any push whose refspec *destination* resolves to `master`/`main` — bare names, `HEAD:main`, `feat:master`, `refs/heads/…` forms, and deletes (`:main`) | Push a feature branch |
+
+The guard tokenizes the command rather than substring-matching, so it sees
+through leading git options (`git -C <path> push`, `-c k=v`, `--git-dir …`),
+compound commands (`… && git push …`), and full refspecs. Push options that
+take a value (`-o`, `--push-option`, `--repo`, `--receive-pack`, `--exec`)
+are skipped so their arguments are not misread as refspecs.
+
+The enforcement boundary, precisely: the guard analyzes the command *text*.
+It cannot know the current branch, so a bare `git push` (no refspec) while
+standing on trunk is allowed here — that push is caught by the `pre-commit`
+door and branch discipline. Git aliases and commands assembled at runtime
+(`$(…)`) are likewise out of scope. Ambiguity resolves toward blocking: a
+quoted argument that splits oddly or a remote literally named `main` can
+over-block, never under-block.
 
 Protocol: the guard reads the tool call as JSON on stdin, extracts
 `.tool_input.command`, and exits `2` to block (feeding the reason back to
 Claude) or `0` to allow. It only ever *blocks* on a match — it never
-auto-approves — so it fails safe if JSON parsing is unavailable.
+auto-approves — so it fails safe if JSON parsing is unavailable. When
+`SPARK_AUDIT_LOG` points at a writable file, every block is appended there.
+
+Regression tests: `tests/test-guard-bash.sh` (run `bash tests/run.sh`).
 
 ## Session brief (SessionStart)
 
