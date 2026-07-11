@@ -22,7 +22,8 @@
           "path": ".claude-plugin/plugin.json",
           "jsonpath": "$.version"
         }
-      ]
+      ],
+      "skip-github-release": true
     },
     "plugins/spark-connect": {
       "component": "spark-connect",
@@ -33,7 +34,8 @@
           "path": ".claude-plugin/plugin.json",
           "jsonpath": "$.version"
         }
-      ]
+      ],
+      "skip-github-release": true
     },
     "plugins/spark-docs": {
       "component": "spark-docs",
@@ -44,7 +46,8 @@
           "path": ".claude-plugin/plugin.json",
           "jsonpath": "$.version"
         }
-      ]
+      ],
+      "skip-github-release": true
     }
   }
 }

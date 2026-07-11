@@ -1,7 +1,14 @@
 # Spark's release mechanism (ADR-0009): Release Please maintains a release PR
 # from the conventional commits on master; merging that PR — a human decision —
 # produces the version bump (plugin.json via extra-files), the CHANGELOG entry,
-# the tag, and the GitHub Release. Ship never cuts releases (ADR-0006).
+# the tag, and the GitHub Release.
+#
+# Only the root package gets a GitHub Release, so the repo's "Latest" always
+# names the core plugin (ADR-0016 addendum). Companions skip the Release page
+# (skip-github-release) but still need tags for Release Please to anchor the
+# next version range — the tag-companions job is that "existing infrastructure
+# to tag these releases" the option requires. Ship never cuts releases
+# (ADR-0006).
 name: release-please
 
 on:
@@ -20,3 +27,24 @@ jobs:
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+      # Tag companion versions from the manifest, idempotently: a missing
+      # spark-<name>-vX.Y.Z tag is created at the current release commit; an
+      # existing one is left alone, so non-release pushes are no-ops.
+      - uses: actions/checkout@v4
+      - name: tag companion releases
+        run: |
+          set -euo pipefail
+          for path in plugins/spark-audit plugins/spark-connect plugins/spark-docs; do
+            name="$(basename "$path")"
+            v="$(jq -r --arg p "$path" '.[$p] // empty' .release-please-manifest.json)"
+            [ -n "$v" ] || continue
+            tag="$name-v$v"
+            if git rev-parse -q --verify "refs/tags/$tag" >/dev/null || \
+               git ls-remote --exit-code --tags origin "$tag" >/dev/null 2>&1; then
+              echo "= $tag (exists)"
+            else
+              git tag "$tag"
+              git push origin "$tag"
+              echo "+ $tag"
+            fi
+          done
