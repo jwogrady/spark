@@ -71,6 +71,28 @@ Body: explain why, not what. Reference issues when relevant.
 
 Do not rewrite published history. Do not force push to shared branches.
 
+## Testing
+
+Two gates run on every PR, and both are one local command:
+
+- `./plugins/spark/bin/spark doctor` — the static gate: layout, JSON,
+  frontmatter, `bash -n`, doc links, enforcement parity.
+- `bash tests/run.sh` — the behavioral gate: every `tests/test-*.sh` suite,
+  exercising the CLI flows (`setup`, `apply-permissions`, `preferences`,
+  `brief`/`resume`, `new-skill`) and the enforcement hooks (`guard-bash.sh`,
+  `commit-msg`, `pre-commit`) against throwaway git repos and a private copy
+  of the plugin. Suites never touch the checkout, your `$HOME`, or the
+  network, and need nothing beyond bash, git, and jq/python3.
+
+Scope and limits: the suites assert the *contracts* — exit semantics,
+artifacts created or refused, allow/block decisions — not every output line.
+Skill behavior (the Markdown prompts) has no automated coverage; that gap is
+deliberate and documented in the enforcement-model explanation.
+
+When you change a tested script, run `bash tests/run.sh` before pushing and
+extend the matching suite; a new tested surface gets a new `tests/test-*.sh`
+(the runner picks it up by name).
+
 ## Changelog policy
 
 Hand-curated changelog entries go only under the `[Unreleased]` heading in

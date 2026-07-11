@@ -1,9 +1,10 @@
-# Spark-repo validation gate. The workflow is intentionally a thin wrapper:
-# `spark doctor` is the superset local gate (layout, JSON, frontmatter,
-# bash -n, doc links, enforcement parity), and CI runs the exact same
-# command so the two can never drift. Do not add check logic here — extend
-# doctor instead. See ADR-0005 (amended) for how this differs from
-# Cosmic-generated build CI.
+# Spark-repo validation gate. The workflow is intentionally a thin wrapper
+# around two locally-runnable commands, so CI and a contributor's machine can
+# never drift: `spark doctor` is the static superset gate (layout, JSON,
+# frontmatter, bash -n, doc links, enforcement parity) and `tests/run.sh` is
+# the behavioral gate (the CLI flows and hooks exercised against temp repos).
+# Do not add check logic here — extend doctor or add a tests/test-*.sh suite.
+# See ADR-0005 (amended) for how this differs from Cosmic-generated build CI.
 name: validate
 
 on:
@@ -15,3 +16,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: ./plugins/spark/bin/spark doctor
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash tests/run.sh
