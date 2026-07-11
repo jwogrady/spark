@@ -57,25 +57,38 @@ on-ramp guide.
 
 ## v0.6 — The carry-in front door
 
-**Status:** In flight (release pending)
+**Status:** Shipped (`v0.6.0`)
 
 One command arms a repo: `spark setup` composes the git hooks, permission
 baseline, and resolved standard with a truthful aggregate summary (ADR-0012).
-In flight under the same milestone: setup reliability hardening, the
-solo-developer force-multiplier repositioning of the README, and this
+The same milestone carried the setup reliability hardening, the
+solo-developer force-multiplier repositioning of the README, and the
 release-record truth pass.
 
 ---
 
 ## v0.7 — Consolidation
 
-**Status:** Planned (milestone open)
+**Status:** Shipped (`v0.7.0`)
 
 The plugin ships only what carries the standard (ADR-0013): one `audit`
-skill replaces `review` + `cleanup` and acts directly; `docit` and `connect`
-are extracted to become separate products (`shred-env` stays); the operator
-decisions store is deferred until a reader exists; `agents-md` drops its
-pre-plugin relics; the work state gets a defined loop close.
+skill replaced `review` + `cleanup` and acts directly; `docit` and `connect`
+were extracted into the `spark-docs` and `spark-connect` companion plugins
+(`shred-env` moved with `connect`); the operator decisions store is deferred
+until a reader exists; `agents-md` dropped its pre-plugin relics; the work
+state got a defined loop close.
+
+---
+
+## v0.8 — Companion release trains
+
+**Status:** Shipped (`v0.8.0`; companions `v0.2.0`)
+
+Every plugin releases mechanically: Release Please runs in multi-package
+mode (ADR-0016), giving each companion its own version, component tag, and
+in-plugin changelog while the core keeps the `vX.Y.Z` train — one combined
+release PR, one human merge. The same release fixed the `commit-msg` hook
+rejecting git-generated merge/revert messages.
 
 ---
 
