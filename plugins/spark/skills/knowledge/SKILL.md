@@ -46,7 +46,7 @@ that hides an unknown is worse than a rough one that names it.
 7. **Show the diff first** — for any overwrite of an existing doc, present the diff
    and get a go-ahead before writing.
 8. **Promote deliberately (optional)** — if the librarian flagged operator-level
-   candidates (vocabulary or standing decisions that transcend this project),
+   candidates (vocabulary that transcends this project),
    present them and, only on explicit go-ahead, have the librarian append them
    with provenance to `~/.config/spark/knowledge/`. Never copy silently; the
    project-local entry stays put and wins on conflict. Rules and layout:

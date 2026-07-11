@@ -48,6 +48,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
   approval gate, and acts instead of emitting a copy-paste orchestrator
   prompt. Skill count drops from 12 to 11 and the native `/review` name
   collision (finding F1) is resolved.
+- **Consolidation hygiene** (#141): the operator knowledge store is
+  `glossary.md` only — the `decisions.md` half is deferred until a shipped
+  surface reads it (existing stores untouched on disk); the `agents-md`
+  pre-plugin relics (`references/system-prompt.md`, `references/io-schema.yaml`,
+  `references/examples.md`, `agents/openai.yaml`) are deleted and the PR
+  template now asks for a `SKILL.md` with valid frontmatter instead of
+  `agents/openai.yaml`; and the work-state loop now closes — when the recorded
+  PR is merged, `spark resume` presents the loop restart instead of the stale
+  `next_action` (documented in `docs/reference/state.md`).
 
 ### Fixed
 
