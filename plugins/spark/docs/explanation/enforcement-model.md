@@ -83,7 +83,7 @@ Two honest boundaries:
 - **Enforcement is not the same as quality assurance.** The hooks cover commit
   conventions, trunk discipline, force-push safety, attribution honesty, and
   artifact well-formedness. They do **not** test that a skill behaves correctly.
-  CI and automated regression on skill behavior are a known gap at v0.3.1; the
+  CI and automated regression on skill behavior are a standing known gap; the
   mechanical model is the intentional quality mechanism for a Bash/Markdown
   project, not a complete one.
 - **The git hooks are opt-in per repo.** The PreToolUse guard works as soon as the
