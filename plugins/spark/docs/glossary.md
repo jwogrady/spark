@@ -36,8 +36,9 @@ terms; do not coin near-synonyms. See adr/0008-information-architecture.md.
 ### operator knowledge home (`~/.config/spark/knowledge/`)
 
 The Operator layer's knowledge store: a plain directory holding `glossary.md`
-(operator vocabulary) and `decisions.md` (standing decisions), sitting beside
-the operator preferences file and honoring `XDG_CONFIG_HOME` the same way.
+(operator vocabulary), sitting beside the operator preferences file and
+honoring `XDG_CONFIG_HOME` the same way. A `decisions.md` half (standing
+decisions) is deferred until a shipped surface reads it.
 Written only through the `knowledge` skill's explicit, user-approved promotion
 step (Project → Operator carry-forward) — never by silent copying — and
 created lazily on first promotion. Project-local glossaries win over it on
