@@ -1,7 +1,8 @@
 # ADR: Companions release through Release Please multi-package mode
 
 Date: 2026-07-11
-Status: Accepted; answers ADR-0014's open question
+Status: Accepted; answers ADR-0014's open question. Amended 2026-07-11:
+root-only GitHub Releases (see addendum)
 Owner: jwogrady
 
 ## Context
@@ -77,6 +78,24 @@ inside the installed plugin.
   remains the operator's explicit merge (ADR-0009, unchanged).
 - Doctor is untouched: the catalog still references directories, which is
   what doctor validates.
+
+## Addendum (2026-07-11): root-only GitHub Releases
+
+GitHub Releases are repo-wide, not package-aware: "Latest" is simply the most
+recently created release, so a companion release (`spark-docs-v0.2.0`)
+displaced the core `v0.8.0` as the repo's Latest — misleading for users, since
+the core plugin is the product. Of the clean options — always re-mark the root
+release as latest, stop companion Release pages, or split companions into
+their own repositories — we chose **root-only GitHub Releases**:
+
+- Companions keep independent versions, per-plugin changelogs, and
+  `spark-<name>-vX.Y.Z` tags. They lose only the GitHub Release page.
+- `skip-github-release: true` in the config suppresses the companion Release
+  pages, but per its contract it also stops Release Please's own tagging —
+  so the release workflow gains a `tag companions` step that creates any
+  missing companion tag from `.release-please-manifest.json`, idempotently.
+  Those tags are what Release Please anchors the next version range on.
+- The rest of the multi-package decision above is unchanged.
 
 ## Open Questions
 
