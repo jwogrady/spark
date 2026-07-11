@@ -39,6 +39,26 @@ The same marketplace also carries the companion plugins — `spark-audit`,
 `spark-connect`, and `spark-docs` — each installable with
 `/plugin install <name>` when you need it.
 
+This whole path is verified end to end from a clean environment — including
+companion install, marketplace update, and a real skill invocation — by
+`tests/e2e-marketplace-install.sh` in the Spark repo, which doubles as the
+release-readiness check.
+
+### If the install misbehaves
+
+- **`marketplace add` fails** — it clones the repo, so it needs network and
+  GitHub access (an SSH key, or use the HTTPS form above). Retry with the
+  explicit URL.
+- **Plugins or skills look stale or missing** — refresh the marketplace and
+  reinstall: `/plugin marketplace update spark`, then `/plugin install spark`
+  again (also available headlessly: `claude plugin marketplace update spark`).
+- **Start over cleanly** — remove and re-add:
+  `/plugin marketplace remove spark`, then `/plugin marketplace add
+  jwogrady/spark` and reinstall the plugins you use.
+- **`spark` not on `$PATH`** — the CLI rides the plugin; confirm the plugin is
+  enabled (`/plugin` → installed list, or `claude plugin list`) and start a
+  new session.
+
 ## 2. Review the defaults, override what isn't yours
 
 Spark works with zero setup because a full set of defaults ships inside the

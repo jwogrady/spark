@@ -14,8 +14,10 @@ Spark becomes a Claude Code plugin organized around the
 the five lifecycle skills, the supporting skills, the two-door enforcement
 (PreToolUse guard + git hooks), the `spark` CLI, and Diátaxis docs.
 
-- [ ] Validate install end-to-end from a *published* marketplace (still open;
-      the Git-URL / local-clone path is the verified install)
+- [x] Validate install end-to-end from a *published* marketplace — verified
+      2026-07-11 from a clean environment (marketplace add → core + companion
+      install → discovery → `spark doctor` → a real skill invocation), and
+      repeatable as `tests/e2e-marketplace-install.sh` (#177)
 
 ---
 
