@@ -29,6 +29,26 @@ Validates the whole marketplace and reports health. Checks:
 Exit code is non-zero if any error is found. JSON validation uses `jq` or
 `python3` if present, and is skipped (not failed) if neither is available.
 
+### `spark doctor --requirements [--json]`
+
+Environment readiness, grouped by the capability each dependency serves —
+the structural checks above prove the plugin is intact; this answers whether
+the *environment* can perform each Spark capability:
+
+| Group | Dependencies | When it matters |
+| --- | --- | --- |
+| Core local workflow | `bash`, `git` | Everything — required |
+| GitHub delivery | `gh`, authenticated | `plan`/`ship`/`validate` create issues and PRs |
+| JSON tooling | `jq` or `python3` | Merging the permission baseline into an existing `.claude/settings.json`; everything else degrades gracefully |
+| Release pipeline | repo wiring | `release-please-config.json` + workflow present when the resolved `release.mechanism` is `release-please`; other mechanisms are the operator's own |
+
+Each missing or unauthenticated dependency prints one remediation line
+(`gh auth login`, `spark preferences --apply`, …). The exit code is non-zero
+only when a *core* tool is missing: optional integrations never fail the run,
+so a conservative local-only environment stays healthy. `--json` emits the
+same facts as one machine-readable object (built without any JSON parser)
+for CI gates and troubleshooting.
+
 ## `spark list-skills`
 
 Lists every available skill with its one-line description, read from each
