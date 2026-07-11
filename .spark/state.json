@@ -1,10 +1,10 @@
 {
-  "stage": "idle",
-  "problem_statement": "",
-  "issue": "",
-  "branch": "",
+  "stage": "ship",
+  "problem_statement": "Truth-up engineering preferences and glossary against the shipped core (#179)",
+  "issue": "179",
+  "branch": "docs/179-truth-up-preferences-glossary",
   "pr": "",
   "blockers": "",
-  "next_action": "",
+  "next_action": "Human merges the PR closing #179; #180 (ADR audit) unblocks on merge",
   "updated": "2026-07-11"
 }

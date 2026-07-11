@@ -7,7 +7,12 @@
 > Spark is domain- and stack-neutral by design. This glossary holds only
 > Spark-internal mechanism terms — not project- or product-specific vocabulary. A
 > fork captures its own domain terms in its own project-local glossary, which
-> wins over the seed in `skills/knowledge/references/glossary.md`.
+> wins over the seed in
+> [../skills/knowledge/references/glossary.md](../skills/knowledge/references/glossary.md).
+>
+> Links below either resolve to a doc that ships with the plugin, or are
+> explicitly labeled `(developer-only)` with a full GitHub URL into this repo's
+> dev-only `docs/` tree (never shipped, read only if you're working in this repo).
 
 ### the three layers (Operator / Project / Session)
 
@@ -19,8 +24,8 @@ overrides. **Project** — belongs to one repo and is committed to it
 to one working conversation and is ephemeral unless explicitly promoted
 (scratch, unpromoted review notes). Promotion between layers is always
 explicit: commit/PR/issue moves Session → Project; the `knowledge` skill's
-deliberate promotion moves Project → Operator. See
-adr/0008-information-architecture.md.
+deliberate promotion moves Project → Operator. See (developer-only)
+[ADR-0008 — information architecture](https://github.com/jwogrady/spark/blob/master/docs/adr/0008-information-architecture.md).
 
 ### carry-in / carry-through / carry-forward
 
@@ -31,7 +36,8 @@ the brief's `load` step on entry). **Carry-through** — within the Project
 layer: the lifecycle (Ideate → Plan → Codify → Validate → Ship) moves work
 between stages. **Carry-forward** — Session → Project (work state survives the
 session) and Project → Operator (knowledge promotion). Prefer these exact
-terms; do not coin near-synonyms. See adr/0008-information-architecture.md.
+terms; do not coin near-synonyms. See (developer-only)
+[ADR-0008 — information architecture](https://github.com/jwogrady/spark/blob/master/docs/adr/0008-information-architecture.md).
 
 ### operator knowledge home (`~/.config/spark/knowledge/`)
 
@@ -42,7 +48,8 @@ decisions) is deferred until a shipped surface reads it.
 Written only through the `knowledge` skill's explicit, user-approved promotion
 step (Project → Operator carry-forward) — never by silent copying — and
 created lazily on first promotion. Project-local glossaries win over it on
-conflict. See skills/knowledge/references/operator-knowledge.md.
+conflict. See
+[skills/knowledge/references/operator-knowledge.md](../skills/knowledge/references/operator-knowledge.md).
 
 ### two-doors enforcement model
 
@@ -52,8 +59,8 @@ a git operation reaches git by two paths and a plugin hook only sees one of them
 Claude-driven path. **Door 2 — the git hooks** (`commit-msg`, `pre-commit`,
 installed via `spark install-git-hooks`) cover the human-driven path. Both doors,
 same intent. Prefer "two doors" over "two layers" / "two gates". See
-[reference/hooks.md](reference/hooks.md) and
-adr/0003-zero-dependency-bash-and-enforcement-hooks.md.
+[reference/hooks.md](reference/hooks.md) and (developer-only)
+[ADR-0003 — zero-dependency bash and enforcement hooks](https://github.com/jwogrady/spark/blob/master/docs/adr/0003-zero-dependency-bash-and-enforcement-hooks.md).
 
 ### Ideate → Plan → Codify → Validate → Ship
 
@@ -76,16 +83,16 @@ A multi-role set of subagents (`agents/<crew>/*.md`) that a Spark skill
 dispatches to produce a complex artifact. The core plugin ships one crew:
 **knowledge** (3 inward-facing roles — intake, author, librarian-editor — for
 internal-knowledge capture). The `spark-docs` companion plugin carries its own
-outward-facing author crew behind `docit`. See
-architecture/spark-internals.md.
+outward-facing author crew behind `docit`. See (developer-only)
+[architecture/spark-internals.md](https://github.com/jwogrady/spark/blob/master/docs/architecture/spark-internals.md).
 
 ### shared-notes orchestration
 
 How a subagent crew coordinates: the skill in the main conversation is the **sole
 orchestrator** and dispatches each role; roles never dispatch each other. Roles
 coordinate by reading the prior phase's notes and writing their own (e.g. the
-`.knowledge-notes/` files), not by direct messaging. See
-architecture/spark-internals.md.
+`.knowledge-notes/` files), not by direct messaging. See (developer-only)
+[architecture/spark-internals.md](https://github.com/jwogrady/spark/blob/master/docs/architecture/spark-internals.md).
 
 ### distribution vs inception
 
@@ -95,20 +102,27 @@ job (`/plugin install spark`); it forks nothing. **Inception** — "start a
 brand-new project" — is `/plugin install spark` followed by the `bootstrap`
 skill; in a repo that already exists, `spark setup` is the one-command
 carry-in of the same standard. See
-[explanation/additive.md](explanation/additive.md) and
-adr/0001-plugin-not-framework.md.
+[explanation/additive.md](explanation/additive.md) and (developer-only)
+[ADR-0001 — plugin, not framework](https://github.com/jwogrady/spark/blob/master/docs/adr/0001-plugin-not-framework.md).
 
 ### generated project
 
 The unit Spark generates: a standardized GitHub repository produced by the
-`bootstrap` skill and conforming to the operator's engineering-preferences
-standard. Every generated project inherits the standard from the single
-in-plugin source of truth, so projects stop drifting from each other. The
-containerized per-client environment (infra, runtime, telemetry) is a planned
-destination, not the current rung. See
-adr/0015-generated-projects-without-the-cosmic-model.md for the vocabulary and
-ADR-0004 through ADR-0007 for the CI, release, and stack defaults a generated
-project carries.
+`bootstrap` skill and conforming to the operator's engineering standard as
+materialized from `preferences/defaults.json` — how that resolution works is
+described in
+[engineering-preferences.md](reference/engineering-preferences.md), not
+duplicated here. This is what keeps generated projects from drifting from
+each other. The containerized per-client
+environment (infra, runtime, telemetry) is a planned destination, not the
+current rung. See (developer-only)
+[ADR-0015 — generated projects, without the Cosmic model](https://github.com/jwogrady/spark/blob/master/docs/adr/0015-generated-projects-without-the-cosmic-model.md)
+for the vocabulary, and ADR-0004 through ADR-0007 (developer-only:
+[0004](https://github.com/jwogrady/spark/blob/master/docs/adr/0004-cosmic-is-the-generated-unit.md) ·
+[0005](https://github.com/jwogrady/spark/blob/master/docs/adr/0005-cosmics-ship-ci-spark-stays-ci-free.md) ·
+[0006](https://github.com/jwogrady/spark/blob/master/docs/adr/0006-cosmics-use-release-please.md) ·
+[0007](https://github.com/jwogrady/spark/blob/master/docs/adr/0007-default-stack-python-uv.md))
+for the CI, release, and stack defaults a generated project carries.
 
 ### additive (to Anthropic's spec)
 
@@ -116,5 +130,5 @@ Spark's governing scope rule: it *references* Anthropic's skill/plugin spec and
 *reuses* the built-in `/code-review`, `/security-review`, and `verify` rather than
 inventing competing versions. Spark adds only the human-facing usage/doctrine
 layer. See
-[explanation/additive.md](explanation/additive.md) and
-adr/0002-additive-to-anthropic-spec.md.
+[explanation/additive.md](explanation/additive.md) and (developer-only)
+[ADR-0002 — additive to Anthropic's spec](https://github.com/jwogrady/spark/blob/master/docs/adr/0002-additive-to-anthropic-spec.md).
