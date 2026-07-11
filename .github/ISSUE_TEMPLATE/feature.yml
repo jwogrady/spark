@@ -7,32 +7,6 @@ body:
       value: |
         One atomic feature per issue. If you have two ideas, open two issues.
 
-  - type: input
-    id: feature_id
-    attributes:
-      label: Feature ID
-      description: "e.g. FEAT-SPARK-FOO-001"
-      placeholder: FEAT-SPARK-FOO-001
-    validations:
-      required: false
-
-  - type: input
-    id: namespace
-    attributes:
-      label: Namespace
-      description: "e.g. spark.skills.foo"
-      placeholder: spark.skills.foo
-    validations:
-      required: false
-
-  - type: input
-    id: bounded_context
-    attributes:
-      label: Bounded Context
-      description: The domain this feature belongs to.
-    validations:
-      required: false
-
   - type: textarea
     id: problem
     attributes:

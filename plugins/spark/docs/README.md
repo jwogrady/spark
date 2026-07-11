@@ -35,23 +35,22 @@ New here? Start with one idea taken through all five stages, end to end:
 
 ## How-to guides
 
-Task-oriented recipes — the lifecycle stages in order, then setup, authorship,
-and the supporting skills:
+Task-oriented recipes — get in, then the lifecycle stages in order, then the
+supporting skills:
 
+- [how-to/get-started.md](how-to/get-started.md) — install the plugin, make the standard yours, arm a repo with `spark setup`.
+- [how-to/bootstrap.md](how-to/bootstrap.md) — `/spark:bootstrap` · scaffold a new project's runtime (Bun / uv) into the lifecycle.
 - [how-to/ideate.md](how-to/ideate.md) — `/spark:ideate` · frame a fuzzy idea into a written problem statement.
 - [how-to/plan.md](how-to/plan.md) — `/spark:plan` · decompose the problem into scoped work items.
 - [how-to/codify.md](how-to/codify.md) — `/spark:codify` · implement one work item on a feature branch.
 - [how-to/validate.md](how-to/validate.md) — `/spark:validate` · review and harden the change until it's ready.
 - [how-to/ship.md](how-to/ship.md) — `/spark:ship` · commit, push, and open a focused PR.
-- [how-to/install.md](how-to/install.md) — install the plugin and apply the permission baseline.
-- [how-to/carry-your-preferences-in.md](how-to/carry-your-preferences-in.md) — declare your standard bag once (preferences + permission baseline) and carry it into every project.
-- [how-to/bootstrap.md](how-to/bootstrap.md) — `/spark:bootstrap` · scaffold a project runtime (Bun / uv).
-- [how-to/connect.md](how-to/connect.md) — `/spark:connect` · wire up services and secrets via 1Password.
-- [how-to/docit.md](how-to/docit.md) — `/spark:docit` · glow up the public docs through author personas.
 - [how-to/knowledge.md](how-to/knowledge.md) — `/spark:knowledge` · capture internal knowledge as durable docs.
 - [how-to/agents-md.md](how-to/agents-md.md) — `/spark:agents-md` · maintain and sync `CLAUDE.md` + `AGENTS.md`.
-- [how-to/audit.md](how-to/audit.md) — `/spark:audit` · assess whole-project health, or purge proven-dead code and false docs.
 - [how-to/resume.md](how-to/resume.md) — `spark resume` · pick up where a past session left off via the committed work state.
+
+The companion plugins — `spark-audit`, `spark-connect`, `spark-docs` — ship
+their own docs inside their own plugin directories.
 
 ## Reference
 
@@ -75,8 +74,7 @@ choices (Explanation mode):
 - [explanation/philosophy.md](explanation/philosophy.md) — what Spark stands for and the doctrine behind the rules
 - [explanation/enforcement-model.md](explanation/enforcement-model.md) — why enforcement is mechanical, not advisory
 - [explanation/sdlc-doctrine.md](explanation/sdlc-doctrine.md) — why the five-stage lifecycle is the spine
-- [explanation/scope-and-upstream.md](explanation/scope-and-upstream.md) — what Spark adds and what it leaves to Anthropic's spec
-- [explanation/why-a-plugin.md](explanation/why-a-plugin.md) — why Spark ships as a plugin, not a framework
+- `explanation/additive.md` — what Spark adds, what it leaves to Anthropic's spec, and why it ships as a plugin
 
 > Building or contributing to Spark itself? The developer docs — architecture,
 > ADRs, and packaging reference — live in the repository root under `docs/`, and

@@ -6,15 +6,13 @@
   "files.trimFinalNewlines": true,
 
   "[python]": {
-    "editor.defaultFormatter": "ms-python.black-formatter",
+    "editor.defaultFormatter": "charliermarsh.ruff",
     "editor.formatOnSave": true
   },
 
   "ruff.enable": true,
   "ruff.lint.enable": true,
   "ruff.organizeImports": true,
-
-  "black-formatter.args": ["--line-length", "88"],
 
   "[markdown]": {
     "editor.wordWrap": "on",

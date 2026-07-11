@@ -5,31 +5,26 @@
 
 ## Mission
 
-**Spark is the layer between your intent and Claude's tools** — you bring the
-judgment (definitions, priorities, preferences), Claude brings the tools, and
-Spark owns the sequence, the gaps, and your standards. The full identity lives in
+**Spark turns a Claude subscription and a GitHub subscription into a software
+delivery system.** Claude can write and review code; GitHub can organize,
+preserve, and ship it; Spark supplies the project engineering between them —
+your standards loaded once, one traceable lifecycle, durable GitHub artifacts,
+and mechanically enforced guardrails. The full identity lives in
 [`plugins/spark/docs/explanation/identity.md`](plugins/spark/docs/explanation/identity.md).
-
-In practice it is a portable project-inception and software-delivery system for
-AI-assisted development: it turns raw project intent into durable repo artifacts,
-scoped GitHub issues, implementation branches, reviews, commits, and pull
-requests. The methodology is portable; the current
-implementation ships as a Claude Code plugin you install once and carry into
-every project. It puts one opinionated lifecycle at your fingertips and enforces
-the guardrails that keep work clean:
 
 ```
 Ideate → Plan → Codify → Validate → Ship
 ```
 
-You install it (`/plugin marketplace add jwogrady/spark` → `/plugin install spark`)
-and every project gets the same versioned toolkit — skills, enforcement hooks,
-and the `spark` CLI.
+You install it (`/plugin marketplace add jwogrady/spark` → `/plugin install spark`),
+run `spark setup` in a repo, and every project gets the same versioned toolkit —
+skills, enforcement hooks, and the `spark` CLI.
 
 ## Repo Purpose
 
-This repo *is* the Spark plugin. Changes here ship to every project that has the
-plugin installed. It is additive: it builds on Anthropic's skill/plugin spec and
+This repo is a plugin marketplace: the focused core plugin (`spark`) plus three
+companion plugins. Changes here ship to every project that has a plugin
+installed. It is additive: it builds on Anthropic's skill/plugin spec and
 reuses Claude Code's built-in tools (`/code-review`, `/security-review`,
 `verify`) rather than reinventing them.
 
@@ -37,17 +32,20 @@ reuses Claude Code's built-in tools (`/code-review`, `/security-review`,
 
 ```
 .claude-plugin/
-└── marketplace.json    # marketplace catalog — points at ./plugins/spark
-plugins/spark/          # the installable plugin (everything that ships to users)
+└── marketplace.json    # marketplace catalog — lists the core + three companions
+plugins/spark/          # the core plugin (the shipping loop)
 ├── .claude-plugin/plugin.json  # plugin manifest
-├── skills/<name>/SKILL.md      # lifecycle + carried-over skills, run as /spark:<name>
-├── agents/<crew>/*.md          # real subagents for the docit + knowledge crews
+├── skills/<name>/SKILL.md      # the eight core skills, run as /spark:<name>
+├── agents/knowledge/           # real subagents for the knowledge crew
 ├── hooks/
 │   ├── hooks.json              # PreToolUse wiring
 │   └── guard-bash.sh           # blocks force-push and pushes to trunk
 ├── scripts/hooks/              # git hook sources (commit-msg, pre-commit)
-├── bin/spark                   # the CLI (doctor, list-skills, new-skill, install-git-hooks, shred-env, version)
+├── bin/spark                   # the CLI (doctor, list-skills, new-skill, setup, install-git-hooks, apply-permissions, preferences, resume, version, brief, help)
 └── docs/                       # USER docs (ship with the plugin), organized by Diátaxis
+plugins/spark-audit/    # companion: whole-project assessment + evidence-backed cleanup
+plugins/spark-connect/  # companion: services, credentials, 1Password, shred-env
+plugins/spark-docs/     # companion: public docs and positioning via author personas
 docs/                   # DEV docs (repo root, never shipped): ADRs, architecture, packaging reference
 .github/                # PR + issue templates (the plan skill uses these)
 CLAUDE.md               # this file (maintained by the agents-md skill)
@@ -56,7 +54,7 @@ AGENTS.md               # tool-agnostic agent guide (maintained by agents-md ski
 
 ## The Skills
 
-The 11 skills group into four categories. The canonical taxonomy lives in
+The core plugin ships 8 skills in three categories. The canonical taxonomy lives in
 [`plugins/spark/docs/reference/skills.md`](plugins/spark/docs/reference/skills.md); this list mirrors it.
 
 **Lifecycle** — the five stages:
@@ -69,19 +67,25 @@ The 11 skills group into four categories. The canonical taxonomy lives in
 | Validate | `validate` | Orchestrate built-in reviews, then fix |
 | Ship | `ship` | Conventional commit, then a focused PR |
 
-The remaining six:
+The remaining three:
 
-- **Setup** — `bootstrap` (scaffold a project runtime), `connect` (services + secrets via 1Password).
-- **Authorship** — `docit` (glow up public docs through author personas), `knowledge` (capture internal knowledge through an author crew).
-- **Supporting** — `agents-md` (maintains `CLAUDE.md` + `AGENTS.md`), `audit` (whole-project audit run in-session: assess reports health with evidence, purge removes proven-dead code and false docs behind an approval gate).
+- **Setup** — `bootstrap` (scaffold a new project's runtime, then run `spark setup` to wire it into the lifecycle).
+- **Supporting** — `knowledge` (capture internal knowledge through an author crew), `agents-md` (maintains `CLAUDE.md` + `AGENTS.md`).
+
+The companion plugins carry everything else, each under its own namespace:
+`spark-audit` (`/spark-audit:audit` — whole-project assessment and
+evidence-backed cleanup), `spark-connect` (`/spark-connect:connect` — services,
+secrets, 1Password, shred-env), and `spark-docs` (`/spark-docs:docit` — public
+docs through author personas).
 
 ## Development Workflow
 
 1. Work on a feature branch. Never commit directly to `master`. Name it by
    type: `feat/…`, `fix/…`, `docs/…`, or `chore/…`.
 2. Open a PR for every change, even small ones. One concern per PR.
-3. Run `spark doctor` before pushing — it validates the plugin layout, the
-   manifest/hook JSON, and every skill's frontmatter.
+3. Run `spark doctor` before pushing — it validates the whole marketplace: the
+   plugin layouts, the manifest/hook JSON, and every skill's frontmatter,
+   companions included.
 4. Syntax-check shell scripts (`bash -n <file>`) before pushing.
 5. Update `CHANGELOG.md` when behavior changes.
 

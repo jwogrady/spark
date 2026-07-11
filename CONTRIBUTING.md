@@ -11,6 +11,9 @@ once per clone:
 ./plugins/spark/bin/spark install-git-hooks
 ```
 
+(`spark setup` runs the same install as part of its one-command carry-in, so if
+you have already armed the repo with it, the hooks are in place.)
+
 `spark doctor` fails inside this repo until the hooks are installed, so a
 skipped install cannot go unnoticed.
 
@@ -67,6 +70,14 @@ Subject line: imperative mood, under 72 characters, no trailing period.
 Body: explain why, not what. Reference issues when relevant.
 
 Do not rewrite published history. Do not force push to shared branches.
+
+## Changelog policy
+
+Hand-curated changelog entries go only under the `[Unreleased]` heading in
+`CHANGELOG.md`. Release Please owns the released sections: on each release it
+moves unreleased entries under a version heading and adds the generated notes.
+Never edit a released section by hand — it is the historical record of what
+shipped.
 
 ## Proposing a skill
 
