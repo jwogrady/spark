@@ -40,6 +40,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ### Fixed
 
+- `spark setup` now reports write failures truthfully, continues through its
+  consolidated summary, and exits nonzero when any arming step fails.
 - Restored the `spark apply-permissions` verb lost in a merge-conflict
   resolution; docs and CLI agree again.
 
