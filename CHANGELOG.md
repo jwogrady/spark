@@ -20,7 +20,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 ### Bug Fixes
 
 * harden the push guard against option and refspec bypasses ([#170](https://github.com/jwogrady/spark/issues/170)) ([ca00a03](https://github.com/jwogrady/spark/commit/ca00a03808fa5404539627f53e14797de954dac4))
-* keep the core release as the repo's Latest ([#195](https://github.com/jwogrady/spark/issues/195)) ([f3e6e60](https://github.com/jwogrady/spark/commit/f3e6e60a294fc87a8addd10653b46e974927ce46)), closes [#185](https://github.com/jwogrady/spark/issues/185)
+* keep the core release as the repo's Latest ([#195](https://github.com/jwogrady/spark/issues/195)) ([f3e6e60](https://github.com/jwogrady/spark/commit/f3e6e60a294fc87a8addd10653b46e974927ce46)), refs [#185](https://github.com/jwogrady/spark/issues/185)
 * validate spark new-skill names before creating paths ([#171](https://github.com/jwogrady/spark/issues/171)) ([4358a67](https://github.com/jwogrady/spark/commit/4358a672d00bc4dd1622c64736345371d0069674)), closes [#164](https://github.com/jwogrady/spark/issues/164)
 
 ## [0.8.0](https://github.com/jwogrady/spark/compare/v0.7.0...v0.8.0) (2026-07-11)
