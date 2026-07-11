@@ -33,7 +33,8 @@ reuses the host tool's built-in capabilities rather than reinventing them.
 - Scripts are POSIX-friendly Bash with `set -euo pipefail` and no runtime
   dependencies; degrade gracefully when `jq`/`python3` are missing.
 - No commented-out code. No debug output left in.
-- Before pushing: run `spark doctor` and `bash -n` on any changed script.
+- Before pushing: run `spark doctor`, `bash -n` on any changed script, and
+  `tests/run.sh` when enforcement hooks or other tested scripts changed.
 
 ### Documentation
 - Update `CHANGELOG.md` when behavior changes.

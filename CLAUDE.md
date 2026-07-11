@@ -47,6 +47,7 @@ plugins/spark-audit/    # companion: whole-project assessment + evidence-backed 
 plugins/spark-connect/  # companion: services, credentials, 1Password, shred-env
 plugins/spark-docs/     # companion: public docs and positioning via author personas
 docs/                   # DEV docs (repo root, never shipped): ADRs, architecture, packaging reference
+tests/                  # behavioral tests for shipped scripts (run with tests/run.sh)
 .github/                # PR + issue templates (the plan skill uses these)
 CLAUDE.md               # this file (maintained by the agents-md skill)
 AGENTS.md               # tool-agnostic agent guide (maintained by agents-md skill)
@@ -87,10 +88,13 @@ docs through author personas).
    plugin layouts, the manifest/hook JSON, and every skill's frontmatter,
    companions included.
 4. Syntax-check shell scripts (`bash -n <file>`) before pushing.
-5. Update `CHANGELOG.md` when behavior changes.
+5. Run `tests/run.sh` when changing enforcement hooks or other tested scripts —
+   it executes every `tests/test-*.sh` suite and fails non-zero on any failure.
+6. Update `CHANGELOG.md` when behavior changes.
 
-There is no test suite, build step, or package manager — this repo is Bash plus
-Markdown. `spark doctor` and `bash -n` are the only validation gates.
+There is no build step or package manager — this repo is Bash plus Markdown.
+The validation gates are `spark doctor`, `bash -n`, and the behavioral suites
+under `tests/`.
 
 ## Coding Standards
 
