@@ -44,8 +44,9 @@ If it fails, report the output — don't proceed on a broken scaffold.
 
 ## 5. Layer Spark on top
 
+- `spark setup` — one run arms the repo: git hooks, permission baseline,
+  resolved standard.
 - Generate `CLAUDE.md` + `AGENTS.md` (the `agents-md` skill).
-- `spark install-git-hooks`.
 - Connect services + secrets with `/spark:connect`.
 - Start the lifecycle at `/spark:ideate`.
 

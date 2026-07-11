@@ -82,10 +82,11 @@ marketplace listing is still open — tracked in `ROADMAP.md`.) Once installed,
 every project you open gets the skills and the `spark` CLI.
 
 **2 — Arm a repo.** The PreToolUse guard is active everywhere automatically.
-The git-level door activates per repo:
+Everything per-repo — git hooks, permission baseline, resolved standard —
+lands in one run:
 
 ```bash
-spark install-git-hooks
+spark setup           # idempotent; granular verbs still exist for each step
 spark doctor          # ends with: Healthy — 0 errors, N warning(s)
 ```
 
@@ -192,10 +193,10 @@ built-ins, reusing the built-in reviewers rather than reinventing them.
 hook); `commit-msg` and `pre-commit` live under `plugins/spark/scripts/hooks/`
 (git hooks) — two directories because they are two enforcement doors.
 
-**The `spark` CLI:** `doctor`, `list-skills`, `new-skill`, `install-git-hooks`,
-`apply-permissions`, `preferences`, `brief`, `resume`, `shred-env`, `version`,
-`help`. Pure POSIX-friendly Bash, zero runtime dependencies, graceful
-degradation when `jq`/`python3` are absent.
+**The `spark` CLI:** `doctor`, `list-skills`, `new-skill`, `setup`,
+`install-git-hooks`, `apply-permissions`, `preferences`, `brief`, `resume`,
+`shred-env`, `version`, `help`. Pure POSIX-friendly Bash, zero runtime
+dependencies, graceful degradation when `jq`/`python3` are absent.
 
 ## Contributing
 

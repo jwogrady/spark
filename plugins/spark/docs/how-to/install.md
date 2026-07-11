@@ -52,10 +52,26 @@ or clone — has not been validated end-to-end yet. It is tracked as an open ite
 in [`ROADMAP.md`](https://github.com/jwogrady/spark/blob/master/ROADMAP.md).
 Until it lands, use the Git URL or local-clone path above.
 
-## Install the git hooks (per repo)
+## Arm a repo (per repo)
 
-The plugin's PreToolUse guard covers commands Claude runs. To also enforce the
-commit rules when *you* commit by hand, install the git hooks in a repo:
+The plugin's PreToolUse guard covers commands Claude runs everywhere. The rest
+of the carry-in — git hooks, permission baseline, resolved standard — is armed
+per repo with one command:
+
+```bash
+spark setup
+```
+
+It runs three steps in order — the git hooks and permission baseline covered
+below, then the resolved engineering standard (see
+[carry your preferences in](carry-your-preferences-in.md)) — is idempotent (a
+second run reports everything as already present), and takes `--yes` to skip
+the permission-merge confirmation. The granular commands remain for partial
+application.
+
+## Install the git hooks (granular step)
+
+To enforce the commit rules when *you* commit by hand:
 
 ```bash
 spark install-git-hooks
@@ -64,7 +80,7 @@ spark install-git-hooks
 This copies `commit-msg` and `pre-commit` into the repo's `.git/hooks/`. Existing
 non-Spark hooks are left untouched.
 
-## Apply the permission baseline (optional)
+## Apply the permission baseline (granular step, optional)
 
 A plugin can't bundle a full `settings.json`, so Spark ships its recommended
 allowlist as a versioned artifact —

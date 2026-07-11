@@ -17,6 +17,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ### Added
 
+- **`spark setup` — the one-command carry-in** (#131, ADR-0012): one
+  idempotent run arms a repo completely — git hooks, permission baseline,
+  resolved standard — by composing the existing verbs, with a `--yes`
+  passthrough for the permission-merge confirmation and one consolidated
+  report. The granular commands are unchanged; `install-git-hooks` now
+  reports an already-current Spark hook instead of re-copying it. The docs'
+  primary arm-a-repo path is now `spark setup`.
 - **Carry-in shipped** (#61, #63): `preferences/defaults.json` is the machine
   form of the engineering standard; `spark preferences` shows the resolved
   three-tier standard (defaults → operator → project, ADR-0010) and `--apply`

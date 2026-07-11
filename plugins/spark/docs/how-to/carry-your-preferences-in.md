@@ -65,7 +65,7 @@ spark apply-permissions
 To carry the same allowlist into *every* project, merge the baseline into
 `~/.claude/settings.json` instead. Flags, merge rules, and what the baseline
 deliberately excludes are covered in
-[install.md](install.md#apply-the-permission-baseline-optional).
+[install.md](install.md#apply-the-permission-baseline-granular-step-optional).
 
 ## 4. Enter a project
 
@@ -74,9 +74,13 @@ nothing copies itself silently:
 
 - **New project** — `/spark:bootstrap` resolves all three tiers at
   generation, so the repo conforms to your standard from commit one.
-- **Existing repo** — run `spark preferences --apply` from inside it. The
-  apply is create-only: what the repo already has is kept and reported, never
-  overwritten (`+ created`, `= exists, kept`, `! needs a manual decision`).
+- **Existing repo** — run `spark setup` from inside it: one run installs the
+  git hooks, applies the permission baseline, and materializes the resolved
+  standard (create-only: what the repo already has is kept and reported,
+  never overwritten — `+ created`, `= exists, kept`, `! needs a manual
+  decision`). For a single step on its own, the granular verbs
+  (`install-git-hooks`, `apply-permissions`, `preferences --apply`) still
+  work unchanged.
 
 When one project must deviate ("this one is TypeScript because it is a
 frontend"), record only the exception in that repo's committed
