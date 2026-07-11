@@ -2,7 +2,7 @@
 
 > Reference — Spark-internal vocabulary. Canonical definitions for the terms that
 > recur across Spark's docs, so they don't drift into near-synonyms. Status
-> `current`. Attribution `jwogrady` / Status26.
+> `current`. Attribution `jwogrady`.
 >
 > Spark is domain- and stack-neutral by design. This glossary holds only
 > Spark-internal mechanism terms — not project- or product-specific vocabulary. A
@@ -14,7 +14,7 @@
 Every artifact Spark reads or writes belongs to exactly one layer. **Operator**
 — travels with the person across all projects (preferences, permission
 baseline, portable knowledge); canonical home is the plugin plus operator
-overrides. **Project** — belongs to one repo/Cosmic and is committed to it
+overrides. **Project** — belongs to one repo and is committed to it
 (config, ADRs, problem statement, backlog, work state). **Session** — belongs
 to one working conversation and is ephemeral unless explicitly promoted
 (scratch, unpromoted review notes). Promotion between layers is always
@@ -36,8 +36,9 @@ terms; do not coin near-synonyms. See adr/0008-information-architecture.md.
 ### operator knowledge home (`~/.config/spark/knowledge/`)
 
 The Operator layer's knowledge store: a plain directory holding `glossary.md`
-(operator vocabulary) and `decisions.md` (standing decisions), sitting beside
-the operator preferences file and honoring `XDG_CONFIG_HOME` the same way.
+(operator vocabulary), sitting beside the operator preferences file and
+honoring `XDG_CONFIG_HOME` the same way. A `decisions.md` half (standing
+decisions) is deferred until a shipped surface reads it.
 Written only through the `knowledge` skill's explicit, user-approved promotion
 step (Project → Operator carry-forward) — never by silent copying — and
 created lazily on first promotion. Project-local glossaries win over it on
@@ -72,9 +73,10 @@ tool; runs `hooks/guard-bash.sh`, which blocks force-push and trunk pushes (exit
 ### subagent crew
 
 A multi-role set of subagents (`agents/<crew>/*.md`) that a Spark skill
-dispatches to produce a complex artifact. Spark ships two mirror crews: **knowledge**
-(6 inward-facing roles — internal-knowledge capture) and **docit** (13
-outward-facing roles — public docs). See
+dispatches to produce a complex artifact. The core plugin ships one crew:
+**knowledge** (3 inward-facing roles — intake, author, librarian-editor — for
+internal-knowledge capture). The `spark-docs` companion plugin carries its own
+outward-facing author crew behind `docit`. See
 architecture/spark-internals.md.
 
 ### shared-notes orchestration
@@ -91,20 +93,22 @@ Two cleanly separated needs that the old `.spark/`-folder design tangled togethe
 **Distribution** — "make my toolkit available in this project" — is the plugin's
 job (`/plugin install spark`); it forks nothing. **Inception** — "start a
 brand-new project" — is `/plugin install spark` followed by the `bootstrap`
-skill. See
-[explanation/scope-and-upstream.md](explanation/scope-and-upstream.md) and
+skill; in a repo that already exists, `spark setup` is the one-command
+carry-in of the same standard. See
+[explanation/additive.md](explanation/additive.md) and
 adr/0001-plugin-not-framework.md.
 
-### Cosmic
+### generated project
 
-The unit Spark generates: a per-client instance container, produced by the
+The unit Spark generates: a standardized GitHub repository produced by the
 `bootstrap` skill and conforming to the operator's engineering-preferences
-standard. Today a Cosmic is a standardized GitHub repository; the containerized
-per-client environment (infra, runtime, telemetry) is the planned destination,
-not the current rung. Every Cosmic inherits the standard from the single
-in-plugin source of truth, so projects stop drifting from each other. See
-adr/0004-cosmic-is-the-generated-unit.md (and ADR-0005 through ADR-0007 for the
-CI, release, and stack defaults a Cosmic carries).
+standard. Every generated project inherits the standard from the single
+in-plugin source of truth, so projects stop drifting from each other. The
+containerized per-client environment (infra, runtime, telemetry) is a planned
+destination, not the current rung. See
+adr/0015-generated-projects-without-the-cosmic-model.md for the vocabulary and
+ADR-0004 through ADR-0007 for the CI, release, and stack defaults a generated
+project carries.
 
 ### additive (to Anthropic's spec)
 
@@ -112,5 +116,5 @@ Spark's governing scope rule: it *references* Anthropic's skill/plugin spec and
 *reuses* the built-in `/code-review`, `/security-review`, and `verify` rather than
 inventing competing versions. Spark adds only the human-facing usage/doctrine
 layer. See
-[explanation/scope-and-upstream.md](explanation/scope-and-upstream.md) and
+[explanation/additive.md](explanation/additive.md) and
 adr/0002-additive-to-anthropic-spec.md.

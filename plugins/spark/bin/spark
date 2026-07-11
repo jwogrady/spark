@@ -30,7 +30,6 @@ setup|cmd_setup|Arm this repo in one run: git hooks, permission baseline, resolv
 install-git-hooks|cmd_install_git_hooks|Install Spark'\''s git hooks into the current repo
 apply-permissions|cmd_apply_permissions|Merge the permission baseline into .claude/settings.json
 preferences|cmd_preferences|Show the resolved engineering standard; --apply carries it into this repo
-shred-env|cmd_shred_env|Securely delete a transient secrets file (e.g. .env)
 resume|cmd_resume|Rebuild where the lifecycle left off from .spark/state.json
 version|cmd_version|Print the Spark plugin version
 brief|cmd_brief|Print the session brief: orient, locate, load (--short for the SessionStart hook)
@@ -403,6 +402,62 @@ cmd_doctor() {
     [ "$found_agent" -eq 0 ] && { yellow "  ! agents/ exists but has no agent .md files"; warnings=$((warnings+1)); }
   fi
 
+  # Taxonomy parity: every shipped skill must appear in the canonical
+  # taxonomy (reference/skills.md), so the inventory and its documentation
+  # cannot drift apart — the mechanical form of the one-canonical-source rule.
+  if [ -f "$SPARK_ROOT/docs/reference/skills.md" ] && [ -d "$SPARK_ROOT/skills" ]; then
+    echo
+    echo "Taxonomy parity (skills/ vs reference/skills.md):"
+    local tax_ok=1
+    for d in "$SPARK_ROOT"/skills/*/; do
+      [ -d "$d" ] || continue
+      name="$(basename "$d")"
+      if ! grep -q "\`$name\`" "$SPARK_ROOT/docs/reference/skills.md"; then
+        red "  ✗ $name ships but is missing from reference/skills.md"; errors=$((errors+1)); tax_ok=0
+      fi
+    done
+    [ "$tax_ok" -eq 1 ] && green "  ✓ every shipped skill is in the canonical taxonomy"
+  fi
+
+  # Companion plugins (ADR-0014): inside the marketplace repo, the validation
+  # gate covers every listed plugin, not only the core — manifest JSON, skill
+  # frontmatter, and script syntax per companion.
+  if [ -f "$SPARK_ROOT/../../.claude-plugin/marketplace.json" ]; then
+    local mroot sib sibname f2
+    mroot="$(cd "$SPARK_ROOT/../.." && pwd)"
+    echo
+    echo "Companion plugins:"
+    for sib in "$mroot"/plugins/*/; do
+      [ -d "$sib" ] || continue
+      [ "$(cd "$sib" && pwd)" = "$SPARK_ROOT" ] && continue
+      sibname="$(basename "$sib")"
+      if [ ! -f "$sib/.claude-plugin/plugin.json" ]; then
+        red "  ✗ $sibname: missing .claude-plugin/plugin.json"; errors=$((errors+1)); continue
+      fi
+      if ! check_json "$sib/.claude-plugin/plugin.json"; then
+        red "  ✗ $sibname: plugin.json is not valid JSON"; errors=$((errors+1)); continue
+      fi
+      for d in "$sib"skills/*/; do
+        [ -d "$d" ] || continue
+        name="$(basename "$d")"
+        if [ ! -f "$d/SKILL.md" ]; then
+          red "  ✗ $sibname/$name: missing SKILL.md"; errors=$((errors+1)); continue
+        fi
+        lint_skill_md "$d/SKILL.md" "$sibname/$name"
+        errors=$((errors+lint_errors)); warnings=$((warnings+lint_warnings))
+      done
+      while IFS= read -r f2; do
+        grep -q '^name:' "$f2" && grep -q '^description:' "$f2" \
+          || { red "  ✗ $sibname/${f2#"$sib"}: agent missing name/description frontmatter"; errors=$((errors+1)); }
+      done < <(find "$sib" -path '*/agents/*' -type f -name '*.md' 2>/dev/null | sort)
+      while IFS= read -r f2; do
+        bash -n "$f2" 2>/dev/null \
+          || { red "  ✗ $sibname/${f2#"$sib"}: syntax error (bash -n)"; errors=$((errors+1)); }
+      done < <(find "$sib" -type f -name '*.sh' 2>/dev/null | sort)
+      green "  ✓ $sibname"
+    done
+  fi
+
   # Shell syntax: every shipped script must parse. A script is anything with a
   # .sh suffix or a sh/bash shebang — location-independent, so new scripts are
   # covered without touching this list.
@@ -446,7 +501,7 @@ cmd_doctor() {
         red "  ✗ ${md#"$doc_root"/}: broken link → $target"; errors=$((errors+1)); broken=1
       fi
     done < <(grep -oE '\]\([^)]+\)' "$md" 2>/dev/null || true)
-  done < <(find "$doc_root" -type f -name '*.md' ! -path '*/.git/*' ! -path '*/node_modules/*' | sort)
+  done < <(find "$doc_root" -type f -name '*.md' ! -path '*/.git/*' ! -path '*/node_modules/*' ! -path '*/.claude/*' | sort)
   [ "$broken" -eq 0 ] && green "  ✓ no broken relative links"
 
   # Enforcement parity: Spark deliberately states each rule on more than one
@@ -649,10 +704,6 @@ cmd_list_skills() {
       printf "  %-20s %s\n" "/$name" "${desc:-(no description)}"
     fi
   done
-}
-
-cmd_shred_env() {
-  "$SPARK_ROOT/scripts/shred-env.sh" "$@"
 }
 
 # spark brief [--short] — the brief-on-entry (ADR-0008's carry-in and
@@ -1075,15 +1126,16 @@ cmd_resume() {
 
   # Facts the repo contradicts are flagged and counted — the repo wins over
   # the state file, always.
-  local drift=0
+  local drift=0 loop_closed=0
   note() { yellow "    ! $1"; drift=$((drift+1)); }
 
   echo "Where you were${updated:+ (recorded $updated)}:"
   case "$stage" in
     ideate|plan|codify|validate|ship) echo "  stage:    $stage" ;;
+    idle) echo "  stage:    idle (between loops)" ;;
     "") note "no stage recorded" ;;
     *)  echo "  stage:    $stage"
-        note "not a lifecycle stage (expected ideate|plan|codify|validate|ship)" ;;
+        note "not a lifecycle stage (expected ideate|plan|codify|validate|ship|idle)" ;;
   esac
 
   if [ -n "$problem" ]; then
@@ -1117,7 +1169,8 @@ cmd_resume() {
       prstate="$(gh pr view "$pr" --json state --jq .state 2>/dev/null || true)"
       echo "  pr:       #$pr${prstate:+ ($prstate)}"
       case "$prstate" in
-        MERGED) note "already merged — the recorded stage is behind; the loop restarts at ideate" ;;
+        MERGED) note "already merged — this state describes a finished loop"
+                loop_closed=1 ;;
         CLOSED) note "closed unmerged — decide whether this work is abandoned" ;;
         "")     note "could not reach GitHub — treat the PR's state as unverified" ;;
       esac
@@ -1131,7 +1184,17 @@ cmd_resume() {
 
   echo
   echo "What's next:"
-  if [ -n "$next" ]; then
+  # A merged recorded PR closes the loop: whatever next_action says predates
+  # the merge, so presenting it would send you back into finished work. An
+  # idle stage is the same fact recorded deliberately at close-out.
+  if [ "$loop_closed" -eq 1 ]; then
+    echo "  This loop is closed — PR #$pr merged. Start the next problem, or"
+    echo "  re-frame from docs/problem-statement.md. The next stage close-out"
+    echo "  rewrites .spark/state.json."
+  elif [ "$stage" = "idle" ]; then
+    echo "  Between loops — frame the next problem. The next stage close-out"
+    echo "  rewrites .spark/state.json."
+  elif [ -n "$next" ]; then
     echo "  $next"
   else
     yellow "  (no next_action recorded — decide from the stage above)"

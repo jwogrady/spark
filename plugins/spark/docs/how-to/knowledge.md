@@ -5,8 +5,8 @@
 Use this to turn raw input — founder notes, architecture decisions, ops
 know-how, Claude Code session discoveries — into clean, durable, searchable
 internal docs: ADRs, system docs, product specs, SOPs/runbooks, onboarding
-guides, glossary entries. For outward-facing docs and README glow-ups, use
-[`docit`](docit.md) instead.
+guides, glossary entries. For outward-facing docs and README glow-ups, use the
+`docit` skill from the `spark-docs` companion plugin instead.
 
 1. Invoke `/spark:knowledge` from the repo root, pointing it at the raw input
    (notes, a file, a transcript, a session summary, or a described topic).

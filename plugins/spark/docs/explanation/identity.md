@@ -3,7 +3,13 @@
 > *Authoritative — Spark's product identity. Everything else in these docs serves
 > this. Owner: `jwogrady`.*
 
-**Spark is the layer between your intent and Claude's tools.**
+**Spark turns your Claude and GitHub subscriptions into a software delivery
+system.** It is a force multiplier for the solo developer: one operator, many
+projects, all run to the same standard — not more AI activity, more finished
+software.
+
+The mechanism behind that promise: **Spark is the layer between your intent and
+Claude's tools.**
 
 You bring the judgment a tool can't: definitions, priorities, decisions,
 preferences, opinions. Claude brings the capability: a growing set of great tools
@@ -82,13 +88,21 @@ runs in — that is the project's own concern, not Spark's.
 ## Shipped vs. building toward
 
 Honest today: Spark ships the lifecycle skills, the mechanical guardrails (the two
-doors), and a canonical engineering-standard the projects conform to — the seed of
-the standard bag.
+doors), a canonical engineering standard the projects conform to, the **brief on
+entry** (orient / locate / load — `spark brief`, plus `resume` for picking work
+back up), and the **load-once** mechanism (`spark setup`, the one-command
+carry-in that arms a repo with the git hooks, permission baseline, and resolved
+standard). The standard bag is no longer a seed; it loads.
 
-Building toward, not yet shipped: the **brief on entry** (orient / locate / load)
-that lets the caddy read the course automatically, and the **load-once** mechanism
-that applies the standard bag to a new project without re-loading it by hand.
-These are the north star — named here so they are never mistaken for what exists.
+Capabilities that are real but not the shipping loop ride as **companion
+plugins** in the same marketplace — whole-project auditing (`spark-audit`),
+service connectivity and secrets (`spark-connect`), and public docs authorship
+(`spark-docs`). The core stays the loop; the companions carry the rest.
+
+Building toward, not yet shipped: generated projects growing from a
+standardized repository into a full per-client environment — infra, runtime,
+telemetry. That is the north star — named here so it is never mistaken for what
+exists.
 
 ## The name
 
@@ -101,4 +115,4 @@ another delivery vehicle.
 
 - [sdlc-doctrine.md](sdlc-doctrine.md) — the lifecycle spine this identity runs on
 - [philosophy.md](philosophy.md) — the values beneath the identity
-- [scope-and-upstream.md](scope-and-upstream.md) — the additive stance, in detail
+- [additive.md](additive.md) — the additive stance, in detail

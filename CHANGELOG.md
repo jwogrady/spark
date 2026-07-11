@@ -6,6 +6,49 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ---
 
+## [Unreleased]
+
+### Changed
+
+- **The marketplace reshaped into a focused core and companion plugins**
+  (#140, ADR-0014, ADR-0015). The core plugin now ships only the shipping
+  loop — `setup`, `bootstrap`, the five lifecycle skills, three-tier
+  preferences, `brief`/`resume` with a new `idle` work-state stage, the two
+  enforcement doors, `doctor`, and Release Please scaffolding — plus a
+  slimmed `knowledge` crew (three roles) and `agents-md`. Three companion
+  plugins are installable from the same marketplace: `spark-audit` (the
+  audit skill moves there), `spark-connect` (the connect skill and
+  `shred-env`, which leaves the core CLI), and `spark-docs` (the public-docs
+  crew, slimmed to five personas with the Issue Council removed). All moves
+  are history-preserving; `doctor` now validates every listed plugin and
+  enforces taxonomy parity, and the docs — README, taxonomy, identity,
+  glossary, onboarding — describe the new shape. The internal "Cosmic"
+  product vocabulary is retired from public docs.
+- **`review` + `cleanup` consolidated into one `audit` skill** (#139). Both
+  skills are removed; `/spark:audit` runs the whole-project audit directly
+  in-session with at most five dispatched roles — **assess** keeps review's
+  six health dimensions and produces an evidence-cited report; **purge**
+  keeps cleanup's evidence table, deletion-safety categories, and human
+  approval gate, and acts instead of emitting a copy-paste orchestrator
+  prompt. Skill count drops from 12 to 11 and the native `/review` name
+  collision (finding F1) is resolved.
+- **Consolidation hygiene** (#141): the operator knowledge store is
+  `glossary.md` only — the `decisions.md` half is deferred until a shipped
+  surface reads it (existing stores untouched on disk); the `agents-md`
+  pre-plugin relics (`references/system-prompt.md`, `references/io-schema.yaml`,
+  `references/examples.md`, `agents/openai.yaml`) are deleted and the PR
+  template now asks for a `SKILL.md` with valid frontmatter instead of
+  `agents/openai.yaml`; and the work-state loop now closes — when the recorded
+  PR is merged, `spark resume` presents the loop restart instead of the stale
+  `next_action` (documented in `docs/reference/state.md`).
+
+## [0.6.0](https://github.com/jwogrady/spark/compare/v0.5.0...v0.6.0) (2026-07-11)
+
+
+### Features
+
+* add a spark setup verb that runs the whole carry-in ([#132](https://github.com/jwogrady/spark/issues/132)) ([e2b61db](https://github.com/jwogrady/spark/commit/e2b61db71ae3f72d831f80c1d46fd37f87ef03b5))
+
 ## [0.5.0](https://github.com/jwogrady/spark/compare/v0.4.0...v0.5.0) (2026-07-09)
 
 
@@ -13,17 +56,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 * carry-in and carry-forward — the v0.4 milestone five ([#129](https://github.com/jwogrady/spark/issues/129)) ([d9ff8fe](https://github.com/jwogrady/spark/commit/d9ff8feca87ce23ed90408b71d924b3138ef1c66))
 
-## [Unreleased]
-
 ### Added
 
-- **`spark setup` — the one-command carry-in** (#131, ADR-0012): one
-  idempotent run arms a repo completely — git hooks, permission baseline,
-  resolved standard — by composing the existing verbs, with a `--yes`
-  passthrough for the permission-merge confirmation and one consolidated
-  report. The granular commands are unchanged; `install-git-hooks` now
-  reports an already-current Spark hook instead of re-copying it. The docs'
-  primary arm-a-repo path is now `spark setup`.
 - **Carry-in shipped** (#61, #63): `preferences/defaults.json` is the machine
   form of the engineering standard; `spark preferences` shows the resolved
   three-tier standard (defaults → operator → project, ADR-0010) and `--apply`

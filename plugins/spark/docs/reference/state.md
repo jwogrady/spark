@@ -20,7 +20,7 @@ ignored. Values are lowercase machine values — readers print them verbatim.
 
 | Key | Meaning | Format |
 |---|---|---|
-| `stage` | The lifecycle stage whose close-out wrote this state | `ideate` \| `plan` \| `codify` \| `validate` \| `ship` |
+| `stage` | The lifecycle stage whose close-out wrote this state, or `idle` between loops | `ideate` \| `plan` \| `codify` \| `validate` \| `ship` \| `idle` |
 | `problem_statement` | The active problem statement | repo-relative path, normally `docs/problem-statement.md` |
 | `issue` | The active work item | GitHub issue number as digits, no `#` (e.g. `"66"`) |
 | `branch` | The working branch | branch name (e.g. `feat/resume-state`) |
@@ -71,3 +71,20 @@ fact it prints — branch existence and checkout via git, PR and issue state via
 `gh` when available, problem-statement existence on disk — and flags what
 drifted instead of trusting it. The schema is deliberately these eight keys
 and no more: anything richer belongs to the knowledge layer, not work state.
+
+## The loop close
+
+A merged recorded PR means the state describes a **finished loop**: every
+value in the file — stage, branch, `next_action` — predates the merge, so the
+recorded next action would send the next session back into finished work.
+When `gh` reports the recorded PR as merged, `spark resume` still prints the
+drift notes but replaces the stale `next_action` with the loop restart:
+start the next problem, or re-frame from `docs/problem-statement.md`. The
+state file itself is not rewritten by `resume` — the next lifecycle stage's
+close-out rewrites it, as always.
+
+The close can also be recorded deliberately: after merging the PR, set
+`stage` to `idle` (clearing `issue`, `branch`, `pr`, and `next_action` to
+`""`). An idle state says "between loops" without needing a network check —
+`resume` presents the restart directly, and the next stage's close-out
+overwrites it.

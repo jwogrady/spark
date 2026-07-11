@@ -27,7 +27,7 @@ toolkit is then available in every project under the `/spark:<name>` namespace.
 A plugin is Anthropic's *official* mechanism for a portable, opinionated toolkit
 carried into every project. It bundles skills, the PreToolUse hook, the `bin/`
 CLI, and agent crews, versioned in one place. The narrative reasoning is in
-[../explanation/why-a-plugin.md](../../plugins/spark/docs/explanation/why-a-plugin.md).
+[../explanation/why-a-plugin.md](../../plugins/spark/docs/explanation/additive.md).
 
 ## Alternatives Considered
 
@@ -48,13 +48,13 @@ CLI, and agent crews, versioned in one place. The narrative reasoning is in
 - **Bundling limits:** a plugin can't carry everything (notably git hooks aren't
   a plugin primitive, and `settings.json` is only partially honored) — see "What
   a plugin can't carry" in
-  [../explanation/why-a-plugin.md](../../plugins/spark/docs/explanation/why-a-plugin.md). Practical
+  [../explanation/why-a-plugin.md](../../plugins/spark/docs/explanation/additive.md). Practical
   consequence: git hooks ship via `spark install-git-hooks` and the permission
   baseline is applied separately.
 - *Project inception* (scaffold a new repo) is no longer a separate skill — it is
   `/plugin install spark` plus the `bootstrap` skill, not toolkit distribution —
   see ADR 0002 and
-  [../explanation/scope-and-upstream.md](../../plugins/spark/docs/explanation/scope-and-upstream.md).
+  [../explanation/scope-and-upstream.md](../../plugins/spark/docs/explanation/additive.md).
 
 ## Open Questions
 
@@ -64,7 +64,7 @@ CLI, and agent crews, versioned in one place. The narrative reasoning is in
 
 ## Related Docs
 
-- [../explanation/why-a-plugin.md](../../plugins/spark/docs/explanation/why-a-plugin.md)
+- [../explanation/why-a-plugin.md](../../plugins/spark/docs/explanation/additive.md)
 - [../reference/plugin-manifest.md](../reference/plugin-manifest.md)
 - [0002-additive-to-anthropic-spec.md](0002-additive-to-anthropic-spec.md)
 - [../architecture/spark-internals.md](../architecture/spark-internals.md)

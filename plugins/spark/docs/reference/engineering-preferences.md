@@ -1,12 +1,12 @@
 # Reference — engineering preferences
 
-> *Authoritative — the engineering standard every Spark-generated project (Cosmic)
+> *Authoritative — the engineering standard every Spark-generated project
 > conforms to. Owner: `jwogrady`. Single source of truth: edit here once; every
-> Cosmic inherits it.*
+> generated project inherits it.*
 
 This is the operator's standing engineering standard. It exists so preferences are
 **loaded once, not re-stated per project**. `bootstrap` reads this at generation
-and applies it to a new Cosmic.
+and applies it to a new project.
 
 This document is the canonical **prose** form — the *why* behind each
 convention. The machine-resolvable form is decided in ADR-0010:
@@ -35,20 +35,20 @@ You never re-state these — Spark already holds them.
 | Design before code · acceptance criteria before dev | [`ideate`](../reference/skills.md) · [`plan`](../reference/skills.md) · [codify-readiness](../reference/codify-readiness.md) |
 | One problem / one issue / one PR | [scope doctrine](../explanation/philosophy.md) |
 | ADRs · decisions explicit and traceable | `docs/adr/` |
-| Documentation describes reality | [honesty principle](../explanation/philosophy.md) · `docit` · `cleanup` |
-| README says *what* before *how* · standard doc set | `docit` · this repo's own layout |
-| Minimize dependencies · secrets via `op`, never committed | [zero-dependency principle](../explanation/philosophy.md) · [`connect`](../reference/skills.md) · `SECURITY.md` |
+| Documentation describes reality | [honesty principle](../explanation/philosophy.md) · the spark-audit companion |
+| README says *what* before *how* · standard doc set | the spark-docs companion · this repo's own layout |
+| Minimize dependencies · secrets via `op`, never committed | [zero-dependency principle](../explanation/philosophy.md) · the spark-connect companion · `SECURITY.md` |
 
 ---
 
 ## The standard Spark applies at generation
 
-The layer Spark does not yet carry. This is what makes a generated Cosmic
+The layer Spark does not yet carry. This is what makes a generated project
 *yours* from commit one.
 
 ### Stack
 - **Python + `uv`** is the default (runtime, dependencies, project management). — *ADR-0007*
-- **TypeScript / Bun** only when a Cosmic needs a frontend.
+- **TypeScript / Bun** only when a project needs a frontend.
 - **OpenTofu / Terraform** for infrastructure.
 - **API-first**, **CLI-first**, **WSL / Linux-first** development.
 
@@ -57,12 +57,12 @@ The layer Spark does not yet carry. This is what makes a generated Cosmic
 - `ship` defers to it: `ship` does the commit + PR, Release Please does the release.
 
 ### CI & automation
-- **GitHub Actions** scaffolded into every Cosmic — validation on every push. — *ADR-0005*
+- **GitHub Actions** scaffolded into every generated project — validation on every push. — *ADR-0005*
 - Automate the repetitive: validation pipelines, dependency updates, doc generation.
-- *(Spark itself stays CI-free; CI is a Cosmic default, not a Spark-self rule.)*
+- *(Spark itself stays CI-free; CI is a generated-project default, not a Spark-self rule.)*
 
 ### Documentation
-- Every Cosmic ships: `README.md`, `CHANGELOG.md`, `CONTRIBUTING.md`, `LICENSE`, `ROADMAP.md`.
+- Every generated project ships: `README.md`, `CHANGELOG.md`, `CONTRIBUTING.md`, `LICENSE`, `ROADMAP.md`.
 - When warranted: architecture docs, ADRs, API docs, deployment docs, onboarding.
 - Documentation always reflects reality.
 

@@ -1,7 +1,7 @@
 # ADR: A Cosmic is Spark's generated unit; engineering preferences are its standard
 
 Date: 2026-07-08
-Status: Accepted
+Status: Accepted; vocabulary superseded by [ADR-0015](0015-generated-projects-without-the-cosmic-model.md) — "Cosmic" is retired from the public docs
 Owner: jwogrady
 
 ## Context
