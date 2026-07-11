@@ -50,8 +50,9 @@ kept, and left for a human decision. Running it twice changes nothing.
   without `jq`/`python3` — the same rules as every shipped script.
 - Composition only: the individual verbs remain the single implementation of
   each step; `setup` must not fork their logic.
-- Exit non-zero only when there is no git repo to arm; advisory items are
-  decisions, not failures.
+- For a valid invocation, exit non-zero only when there is no git repo to
+  arm; advisory items are decisions, not failures. Invalid arguments are
+  usage errors and also exit non-zero.
 
 ## Non-goals
 

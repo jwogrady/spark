@@ -31,9 +31,10 @@ remains future work, but the mechanical composition is buildable now.
 - **Prompting is preserved, `--yes` passes through.** The permission-merge
   confirmation is the one interactive moment; `setup --yes` forwards the
   existing flag rather than inventing a second consent model.
-- **Exit semantics mirror `preferences --apply`:** non-zero only outside a
-  git repo; advisory (`!`) items are decisions for the operator, not
-  failures.
+- **Exit semantics mirror `preferences --apply`:** for a valid invocation,
+  non-zero only outside a git repo — advisory (`!`) items inside a repo are
+  decisions for the operator, not failures. Invalid options or excess
+  arguments are usage errors and also exit non-zero.
 
 Why: the three steps are one motion — carry-in (ADR-0008) — and a motion
 deserves one verb. Composing the existing functions honors the additive

@@ -62,12 +62,12 @@ per repo with one command:
 spark setup
 ```
 
-It runs three steps in order — the git hooks and permission baseline covered
+It runs three steps in order: the git hooks and permission baseline covered
 below, then the resolved engineering standard (see
-[carry your preferences in](carry-your-preferences-in.md)) — is idempotent (a
-second run reports everything as already present), and takes `--yes` to skip
-the permission-merge confirmation. The granular commands remain for partial
-application.
+[carry your preferences in](carry-your-preferences-in.md)). The run is
+idempotent — a second pass reports everything as already present — and
+`--yes` skips the permission-merge confirmation. The granular commands remain
+for partial application.
 
 ## Install the git hooks (granular step)
 

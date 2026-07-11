@@ -44,9 +44,10 @@ already installed, the baseline as already applied, and the standard as kept.
 
 `--yes` forwards to the permission-merge confirmation; without it, merging
 into an existing `.claude/settings.json` still prompts. A declined or
-unmergeable permission step is reported and the run continues — the exit is
-non-zero only outside a git repo. The granular verbs below remain the
-supported path for partial application.
+unmergeable permission step is reported and the run continues — for a valid
+invocation, the exit is non-zero only outside a git repo (invalid options or
+excess arguments are usage errors and also exit non-zero). The granular verbs
+below remain the supported path for partial application.
 
 ## `spark install-git-hooks`
 
