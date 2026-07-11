@@ -23,7 +23,7 @@ yellow(){ printf '\033[33m%s\033[0m\n' "$1"; }
 
 # Verb table — the single source for both usage() and dispatch, so the help
 # text cannot drift from what is implemented. Rows: verb|handler|description.
-VERBS='doctor|cmd_doctor|Validate the Spark plugin layout and report health
+VERBS='doctor|cmd_doctor|Validate the plugin layout; --requirements checks environment readiness
 list-skills|cmd_list_skills|List all available skills with descriptions
 new-skill|cmd_new_skill|Scaffold a new skill under skills/<name>/
 setup|cmd_setup|Arm this repo in one run: git hooks, permission baseline, resolved standard
@@ -296,7 +296,158 @@ lint_skill_md() {
   return 0
 }
 
+# doctor --requirements: capability-aware environment readiness. The
+# structural checks in cmd_doctor prove the plugin is intact; this mode
+# answers a different question — can this environment perform each Spark
+# capability? Tools are grouped by the capability they serve, so a missing
+# optional tool names what degrades instead of failing the run. Only a
+# missing core tool (git) exits non-zero: optional integrations must never
+# become mandatory for basic local use.
+doctor_requirements() {
+  local usage_line="usage: spark doctor --requirements [--json]"
+  local as_json=0
+  case "${1:-}" in
+    '') ;;
+    --json) as_json=1 ;;
+    -h|--help) echo "$usage_line"; return 0 ;;
+    *) red "unknown option: $1"; echo "$usage_line"; return 1 ;;
+  esac
+  [ "$#" -le 1 ] || { red "too many arguments"; echo "$usage_line"; return 1; }
+
+  # Gather every fact before rendering anything, so the text and JSON
+  # renderers can never disagree about what was observed.
+  local bash_v="${BASH_VERSION%%(*}"
+  local git_v="" gh_v="" gh_auth=0 jq_ok=0 py_ok=0
+  if command -v git >/dev/null 2>&1; then
+    git_v="$(git --version 2>/dev/null | head -n1)"
+    [ -n "$git_v" ] || git_v="git (version unknown)"
+  fi
+  if command -v gh >/dev/null 2>&1; then
+    gh_v="$(gh --version 2>/dev/null | head -n1)"
+    [ -n "$gh_v" ] || gh_v="gh (version unknown)"
+    gh auth status >/dev/null 2>&1 && gh_auth=1
+  fi
+  command -v jq >/dev/null 2>&1 && jq_ok=1
+  command -v python3 >/dev/null 2>&1 && py_ok=1
+
+  # Release-pipeline readiness is repo wiring, not tool presence — and only
+  # the shipped mechanism (Release Please) is Spark's to assess; any other
+  # resolved release.mechanism is the operator's own machinery.
+  local top="" in_repo=0 mech="" rp_config=0 rp_wf=0
+  [ -n "$git_v" ] && top="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  if [ -n "$top" ]; then
+    in_repo=1
+    mech="$(pref_get release.mechanism || true)"
+    [ -f "$top/release-please-config.json" ] && rp_config=1
+    [ -f "$top/.github/workflows/release-please.yml" ] && rp_wf=1
+  fi
+
+  local core_ready=0 github_ready=0 json_ready=0 release_ready=0
+  [ -n "$git_v" ] && core_ready=1
+  [ -n "$gh_v" ] && [ "$gh_auth" -eq 1 ] && github_ready=1
+  { [ "$jq_ok" -eq 1 ] || [ "$py_ok" -eq 1 ]; } && json_ready=1
+  if [ "$in_repo" -eq 1 ]; then
+    if [ "$mech" = "release-please" ]; then
+      [ "$rp_config" -eq 1 ] && [ "$rp_wf" -eq 1 ] && release_ready=1
+    else
+      release_ready=1
+    fi
+  fi
+
+  if [ "$as_json" -eq 1 ]; then
+    # Zero-dependency JSON: a fixed shape emitted with printf, strings
+    # stripped of quotes and backslashes so the output always parses. The
+    # readiness report must not itself require a JSON parser.
+    js()   { printf '%s' "$1" | tr -d '"\\'; }
+    bool() { [ "$1" -eq 1 ] && printf 'true' || printf 'false'; }
+    printf '{\n'
+    printf '  "core": {"ready": %s, "bash": "%s", "git": "%s"},\n' \
+      "$(bool "$core_ready")" "$(js "$bash_v")" "$(js "$git_v")"
+    printf '  "github": {"ready": %s, "gh": "%s", "authenticated": %s},\n' \
+      "$(bool "$github_ready")" "$(js "$gh_v")" "$(bool "$gh_auth")"
+    printf '  "json": {"ready": %s, "jq": %s, "python3": %s},\n' \
+      "$(bool "$json_ready")" "$(bool "$jq_ok")" "$(bool "$py_ok")"
+    printf '  "release": {"ready": %s, "assessed": %s, "mechanism": "%s", "config": %s, "workflow": %s}\n' \
+      "$(bool "$release_ready")" "$(bool "$in_repo")" "$(js "$mech")" \
+      "$(bool "$rp_config")" "$(bool "$rp_wf")"
+    printf '}\n'
+    [ "$core_ready" -eq 1 ]
+    return
+  fi
+
+  echo "Spark doctor — environment readiness"
+  echo
+  echo "Core local workflow (required — the CLI, hooks, and lifecycle run here):"
+  green "  ✓ bash $bash_v"
+  if [ -n "$git_v" ]; then
+    green "  ✓ $git_v"
+  else
+    red "  ✗ git not found — nothing in Spark works without it; install git and re-run"
+  fi
+  echo
+  echo "GitHub delivery (capability: issues and PRs — plan, ship, validate):"
+  if [ -z "$gh_v" ]; then
+    yellow "  ! gh not found — install the GitHub CLI (https://cli.github.com); the local loop still works without it"
+  elif [ "$gh_auth" -ne 1 ]; then
+    yellow "  ! $gh_v installed but not authenticated — run: gh auth login"
+  else
+    green "  ✓ $gh_v, authenticated"
+  fi
+  echo
+  echo "JSON tooling (capability: safe settings merges; optional elsewhere):"
+  [ "$jq_ok" -eq 1 ] && green "  ✓ jq"
+  [ "$py_ok" -eq 1 ] && green "  ✓ python3"
+  if [ "$json_ready" -ne 1 ]; then
+    yellow "  ! neither jq nor python3 found — install one; merging the permission"
+    yellow "    baseline into an existing .claude/settings.json needs it, and"
+    yellow "    preference reading degrades to a line-based parser"
+  fi
+  echo
+  echo "Release pipeline (capability: versioned releases from the trunk):"
+  if [ "$in_repo" -ne 1 ]; then
+    echo "  - not inside a git repo — repo wiring not assessed"
+  elif [ "$mech" != "release-please" ]; then
+    echo "  - release.mechanism=$mech — operator machinery, not Spark's to assess"
+  else
+    [ "$rp_config" -eq 1 ] \
+      && green "  ✓ release-please-config.json" \
+      || yellow "  ! release-please-config.json missing — run: spark preferences --apply"
+    [ "$rp_wf" -eq 1 ] \
+      && green "  ✓ .github/workflows/release-please.yml" \
+      || yellow "  ! .github/workflows/release-please.yml missing — run: spark preferences --apply"
+  fi
+  echo
+
+  if [ "$core_ready" -ne 1 ]; then
+    red "Not ready for basic local use — install the core tools above."
+    return 1
+  fi
+  local degraded=""
+  [ "$github_ready" -eq 1 ] || degraded="$degraded github"
+  [ "$json_ready" -eq 1 ]   || degraded="$degraded json"
+  [ "$release_ready" -eq 1 ] || degraded="$degraded release"
+  if [ -n "$degraded" ]; then
+    yellow "Ready for basic local use; degraded:${degraded}."
+  else
+    green "Ready — every Spark capability has what it needs."
+  fi
+  return 0
+}
+
 cmd_doctor() {
+  local usage_line="usage: spark doctor [--requirements [--json]]"
+  case "${1:-}" in
+    '') ;;
+    --requirements)
+      shift
+      local rc=0
+      doctor_requirements "$@" || rc=$?
+      return "$rc"
+      ;;
+    -h|--help) echo "$usage_line"; return 0 ;;
+    *) red "unknown option: $1"; echo "$usage_line"; return 1 ;;
+  esac
+
   local errors=0 warnings=0
 
   check_json() {
