@@ -6,6 +6,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ---
 
+## [Unreleased]
+
+Nothing yet.
+
 ## [0.6.0](https://github.com/jwogrady/spark/compare/v0.5.0...v0.6.0) (2026-07-11)
 
 
@@ -20,17 +24,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 * carry-in and carry-forward — the v0.4 milestone five ([#129](https://github.com/jwogrady/spark/issues/129)) ([d9ff8fe](https://github.com/jwogrady/spark/commit/d9ff8feca87ce23ed90408b71d924b3138ef1c66))
 
-## [Unreleased]
-
 ### Added
 
-- **`spark setup` — the one-command carry-in** (#131, ADR-0012): one
-  idempotent run arms a repo completely — git hooks, permission baseline,
-  resolved standard — by composing the existing verbs, with a `--yes`
-  passthrough for the permission-merge confirmation and one consolidated
-  report. The granular commands are unchanged; `install-git-hooks` now
-  reports an already-current Spark hook instead of re-copying it. The docs'
-  primary arm-a-repo path is now `spark setup`.
 - **Carry-in shipped** (#61, #63): `preferences/defaults.json` is the machine
   form of the engineering standard; `spark preferences` shows the resolved
   three-tier standard (defaults → operator → project, ADR-0010) and `--apply`
