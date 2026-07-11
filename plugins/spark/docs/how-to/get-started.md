@@ -6,6 +6,10 @@ Do this once. Spark's promise is your standards **loaded once, carried
 everywhere** — this is the loading. Four steps: install the plugin, make the
 shipped standard yours, arm a repo, run the lifecycle.
 
+Before starting, check the machine meets the
+[supported-environment contract](../reference/compatibility.md) — or just run
+`spark doctor --requirements` after step 1 and follow its remediation lines.
+
 ## 1. Install the plugin
 
 Point `/plugin marketplace add` at the Spark repo — the repo carries its own

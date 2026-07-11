@@ -174,7 +174,10 @@ want to apply or inspect each step separately.
 ```
 
 **Prerequisites:** a Git repository, Claude Code, and an authenticated GitHub
-CLI (`gh`) for issue and pull-request creation.
+CLI (`gh`) for issue and pull-request creation — the full contract, including
+what degrades gracefully without optional tools, is the
+[supported-environment matrix](plugins/spark/docs/reference/compatibility.md).
+`spark doctor --requirements` checks your machine against it.
 
 ## The plugin family
 
@@ -225,6 +228,7 @@ occasional breaking changes while the project matures; the
 | [Get started](plugins/spark/docs/how-to/get-started.md) | [Choose a Spark skill](plugins/spark/docs/reference/skills.md) | [What Spark is](plugins/spark/docs/explanation/identity.md) |
 | [Build your first project](plugins/spark/docs/tutorials/build-your-first-project.md) | [CLI reference](plugins/spark/docs/reference/cli.md) | [Roadmap](ROADMAP.md) |
 | | [Engineering preferences](plugins/spark/docs/reference/engineering-preferences.md) | [Changelog](CHANGELOG.md) |
+| | [Supported environments](plugins/spark/docs/reference/compatibility.md) | |
 
 ---
 
