@@ -1072,9 +1072,10 @@ cmd_resume() {
   echo "Where you were${updated:+ (recorded $updated)}:"
   case "$stage" in
     ideate|plan|codify|validate|ship) echo "  stage:    $stage" ;;
+    idle) echo "  stage:    idle (between loops)" ;;
     "") note "no stage recorded" ;;
     *)  echo "  stage:    $stage"
-        note "not a lifecycle stage (expected ideate|plan|codify|validate|ship)" ;;
+        note "not a lifecycle stage (expected ideate|plan|codify|validate|ship|idle)" ;;
   esac
 
   if [ -n "$problem" ]; then
@@ -1124,10 +1125,14 @@ cmd_resume() {
   echo
   echo "What's next:"
   # A merged recorded PR closes the loop: whatever next_action says predates
-  # the merge, so presenting it would send you back into finished work.
+  # the merge, so presenting it would send you back into finished work. An
+  # idle stage is the same fact recorded deliberately at close-out.
   if [ "$loop_closed" -eq 1 ]; then
     echo "  This loop is closed — PR #$pr merged. Start the next problem, or"
     echo "  re-frame from docs/problem-statement.md. The next stage close-out"
+    echo "  rewrites .spark/state.json."
+  elif [ "$stage" = "idle" ]; then
+    echo "  Between loops — frame the next problem. The next stage close-out"
     echo "  rewrites .spark/state.json."
   elif [ -n "$next" ]; then
     echo "  $next"

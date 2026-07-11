@@ -20,7 +20,7 @@ ignored. Values are lowercase machine values — readers print them verbatim.
 
 | Key | Meaning | Format |
 |---|---|---|
-| `stage` | The lifecycle stage whose close-out wrote this state | `ideate` \| `plan` \| `codify` \| `validate` \| `ship` |
+| `stage` | The lifecycle stage whose close-out wrote this state, or `idle` between loops | `ideate` \| `plan` \| `codify` \| `validate` \| `ship` \| `idle` |
 | `problem_statement` | The active problem statement | repo-relative path, normally `docs/problem-statement.md` |
 | `issue` | The active work item | GitHub issue number as digits, no `#` (e.g. `"66"`) |
 | `branch` | The working branch | branch name (e.g. `feat/resume-state`) |
@@ -82,3 +82,9 @@ drift notes but replaces the stale `next_action` with the loop restart:
 start the next problem, or re-frame from `docs/problem-statement.md`. The
 state file itself is not rewritten by `resume` — the next lifecycle stage's
 close-out rewrites it, as always.
+
+The close can also be recorded deliberately: after merging the PR, set
+`stage` to `idle` (clearing `issue`, `branch`, `pr`, and `next_action` to
+`""`). An idle state says "between loops" without needing a network check —
+`resume` presents the restart directly, and the next stage's close-out
+overwrites it.
