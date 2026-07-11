@@ -9,6 +9,9 @@ shipped standard yours, arm a repo, run the lifecycle.
 Before starting, check the machine meets the
 [supported-environment contract](../reference/compatibility.md) — or just run
 `spark doctor --requirements` after step 1 and follow its remediation lines.
+And before arming a repo, `spark profiles` shows the available setup profiles
+— pick one with `spark setup --profile <name>` when the shipped Python + uv
+default isn't the project's stack.
 
 ## 1. Install the plugin
 
