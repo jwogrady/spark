@@ -56,7 +56,7 @@ AGENTS.md               # tool-agnostic agent guide (maintained by agents-md ski
 
 ## The Skills
 
-The 12 skills group into four categories. The canonical taxonomy lives in
+The 11 skills group into four categories. The canonical taxonomy lives in
 [`plugins/spark/docs/reference/skills.md`](plugins/spark/docs/reference/skills.md); this list mirrors it.
 
 **Lifecycle** — the five stages:
@@ -69,11 +69,11 @@ The 12 skills group into four categories. The canonical taxonomy lives in
 | Validate | `validate` | Orchestrate built-in reviews, then fix |
 | Ship | `ship` | Conventional commit, then a focused PR |
 
-The remaining seven:
+The remaining six:
 
 - **Setup** — `bootstrap` (scaffold a project runtime), `connect` (services + secrets via 1Password).
 - **Authorship** — `docit` (glow up public docs through author personas), `knowledge` (capture internal knowledge through an author crew).
-- **Supporting** — `agents-md` (maintains `CLAUDE.md` + `AGENTS.md`), `review` (multi-agent whole-project audit), `cleanup` (purge proven-dead code and false docs; emits an orchestrator prompt).
+- **Supporting** — `agents-md` (maintains `CLAUDE.md` + `AGENTS.md`), `audit` (whole-project audit run in-session: assess reports health with evidence, purge removes proven-dead code and false docs behind an approval gate).
 
 ## Development Workflow
 

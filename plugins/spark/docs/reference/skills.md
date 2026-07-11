@@ -22,7 +22,7 @@ flowchart TD
     Q -->|Write the code| C([codify])
     Q -->|Check a change| R{How much<br/>are you checking?}
     R -->|One diff / branch / PR| FI([validate<br/>wraps /code-review + /security-review])
-    R -->|The whole project| RV([review])
+    R -->|The whole project| RV([audit — assess mode])
     Q -->|Commit & open a PR| S([ship])
     Q -->|Write docs| D{Who reads them?}
     D -->|The public| DO([docit])
@@ -31,7 +31,7 @@ flowchart TD
     SU -->|Runtime / stack| B([bootstrap])
     SU -->|Services & secrets| CN([connect])
     Q -->|CLAUDE.md / AGENTS.md| AM([agents-md])
-    Q -->|Purge dead code / stale docs| CL([cleanup])
+    Q -->|Purge dead code / stale docs| CL([audit — purge mode])
 ```
 
 Or scan by intent:
@@ -41,16 +41,16 @@ Or scan by intent:
 | Turn a fuzzy idea into a written problem statement | `ideate` | — |
 | Break a problem into issues + a milestone | `plan` | — |
 | Write the code for one planned issue | `codify` | — |
-| Harden **one** diff/branch/PR before shipping | `validate` | not `review` (that's whole-project) |
-| Review just one diff with no orchestration | native `/code-review`, `/security-review` | not `review` |
-| Audit the **whole** project (release readiness) | `review` | not `validate` (one diff) |
+| Harden **one** diff/branch/PR before shipping | `validate` | not `audit` (that's whole-project) |
+| Review just one diff with no orchestration | native `/code-review`, `/security-review` | not `audit` |
+| Audit the **whole** project (release readiness) | `audit` (assess mode) | not `validate` (one diff) |
 | Commit a finished change + open a PR | `ship` | — |
 | Write/refresh **public** docs (README, positioning) | `docit` | not `knowledge` |
 | Capture **internal** knowledge (ADRs, SOPs, specs) | `knowledge` | not `docit` |
 | Scaffold a new project's runtime/stack | `bootstrap` | not `connect` |
 | Wire services + secrets via 1Password | `connect` | not `bootstrap` |
 | Create or maintain `CLAUDE.md` / `AGENTS.md` | `agents-md` (net-new `CLAUDE.md` → native `/init` first) | — |
-| Purge proven-dead code, false docs, or stale branches | `cleanup` | not `review` (that assesses, doesn't remove) |
+| Purge proven-dead code, false docs, or stale branches | `audit` (purge mode) | not assess mode (that grades, doesn't remove) |
 
 ## Lifecycle skills
 
@@ -81,8 +81,7 @@ Or scan by intent:
 | Skill | Purpose |
 |---|---|
 | `agents-md` | Maintains and audits a project's `CLAUDE.md` and `AGENTS.md`, keeping the two in sync. |
-| `review` | Multi-agent **whole-project** audit by specialist agents collaborating via shared notes. Not a single-diff reviewer — for one diff/PR use the native `/code-review` + `/security-review`, or `validate` to orchestrate them. |
-| `cleanup` | Repo hygiene pass — removes what's proven dead or false (stale code, stale branches, untrue docs) and emits a copy-paste orchestrator prompt. Removes rather than assesses; for a health report use `review`. |
+| `audit` | **Whole-project** audit run directly in-session by a small dispatched crew. **Assess** mode produces an evidence-cited health report across six dimensions; **purge** mode removes what's proven dead or false (stale code, stale branches, untrue docs) behind a human approval gate. Not a single-diff reviewer — for one diff/PR use the native `/code-review` + `/security-review`, or `validate` to orchestrate them. |
 
 ## Skill layout
 

@@ -4,8 +4,8 @@ How the personas run as **real subagents** and how the skill orchestrates them.
 Each persona is a plugin agent under [`agents/docit/`](../../../agents/docit/)
 (registered as `spark:docit:<name>`). They draft in parallel, every persona
 evaluates its related neighbors, and the feedback is folded back in before a single
-Editor-in-Chief voice ships. It borrows `review`'s shared-notes mechanism but,
-unlike `review`, is **not strictly sequential**: only ground truth blocks; the rest
+Editor-in-Chief voice ships. It borrows `audit`'s shared-notes mechanism but,
+unlike `audit`, is **not strictly sequential**: only ground truth blocks; the rest
 of the team runs concurrently and reconciles through a cross-evaluation round.
 
 ---

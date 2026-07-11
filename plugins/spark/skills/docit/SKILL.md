@@ -23,7 +23,7 @@ barrier, while the agents coordinate only through shared notes in `.docit-notes/
 A persona is dispatched **fresh once per phase** it takes part in — its agent
 definition holds the durable identity, the orchestrator's brief names the phase.
 
-The pattern borrows [`review`](../review/SKILL.md)'s shared-notes mechanism but
+The pattern borrows [`audit`](../audit/SKILL.md)'s shared-notes mechanism but
 is **not strictly sequential**. Only the Cartographer's ground truth is a hard
 barrier; after that the team works as a multi-phase process — parallel drafts →
 cross-evaluation against each persona's dependency-graph neighbors → revise in
@@ -157,7 +157,7 @@ Each owns one section through a distinct perspective:
 
 `docit` is a **Ship**-stage amplifier: once something real exists and works,
 it makes the world want to use it. It also runs standalone whenever the README has
-drifted from reality or a launch is coming. Pair it with [`review`](../review/SKILL.md)
+drifted from reality or a launch is coming. Pair it with [`audit`](../audit/SKILL.md)
 first — audit the substance, then sell it. And it **closes the loop back to Plan**:
 the gaps it files as `proposed` issues (step 8) flow into [`plan`](../plan/SKILL.md),
 so a glow-up seeds the next milestone instead of dead-ending.

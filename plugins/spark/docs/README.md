@@ -50,8 +50,7 @@ and the supporting skills:
 - [how-to/docit.md](how-to/docit.md) — `/spark:docit` · glow up the public docs through author personas.
 - [how-to/knowledge.md](how-to/knowledge.md) — `/spark:knowledge` · capture internal knowledge as durable docs.
 - [how-to/agents-md.md](how-to/agents-md.md) — `/spark:agents-md` · maintain and sync `CLAUDE.md` + `AGENTS.md`.
-- [how-to/review.md](how-to/review.md) — `/spark:review` · run the multi-agent project audit.
-- [how-to/cleanup.md](how-to/cleanup.md) — `/spark:cleanup` · purge proven-dead code and false docs.
+- [how-to/audit.md](how-to/audit.md) — `/spark:audit` · assess whole-project health, or purge proven-dead code and false docs.
 - [how-to/resume.md](how-to/resume.md) — `spark resume` · pick up where a past session left off via the committed work state.
 
 ## Reference
