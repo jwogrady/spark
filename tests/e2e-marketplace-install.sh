@@ -27,6 +27,30 @@ ok()   { pass=$((pass + 1)); printf '  ✓ %s\n' "$1"; }
 bad()  { fail=$((fail + 1)); printf '  ✗ %s\n' "$1"; }
 note() { skip=$((skip + 1)); printf '  - %s\n' "$1"; }
 
+# Bounded execution for the live skill invocation. GNU `timeout` is not on
+# stock macOS, so pick what the platform has: `timeout` → `gtimeout`
+# (coreutils) → a bare run. The bare run is a documented soft bound, not a
+# hang risk: `claude -p --max-turns` already limits the work.
+bounded_runner() {
+  if command -v timeout >/dev/null 2>&1; then echo "timeout"
+  elif command -v gtimeout >/dev/null 2>&1; then echo "gtimeout"
+  else echo "none"
+  fi
+}
+
+run_bounded() {
+  local secs="$1"; shift
+  case "$(bounded_runner)" in
+    timeout)  timeout "$secs" "$@" ;;
+    gtimeout) gtimeout "$secs" "$@" ;;
+    *)        "$@" ;;
+  esac
+}
+
+# Offline test hook: tests/test-e2e-bounded-run.sh sources only the helpers
+# above — nothing below runs (and nothing below may assume it did).
+if [ "${SPARK_E2E_LIB_ONLY:-0}" = "1" ]; then return 0 2>/dev/null || exit 0; fi
+
 command -v claude >/dev/null 2>&1 || { echo "claude CLI not found — install Claude Code first"; exit 1; }
 
 # The invoking user's home, captured before the clean-HOME override — the
@@ -95,8 +119,10 @@ echo "[6/6] core skill invocation (needs credentials)"
 CRED="${SPARK_E2E_CREDENTIALS:-$ORIG_HOME/.claude/.credentials.json}"
 if [ -f "$CRED" ]; then
   cp "$CRED" "$CLEAN/.claude/.credentials.json"
+  [ "$(bounded_runner)" = "none" ] && \
+    note "no timeout/gtimeout on PATH — invocation bounded only by --max-turns (install coreutils for a hard bound)"
   proj="$(mktemp -d "$CLEAN/proj-XXXX")"
-  reply="$( (cd "$proj" && git init -q && timeout 240 claude -p --max-turns 8 \
+  reply="$( (cd "$proj" && git init -q && run_bounded 240 claude -p --max-turns 8 \
     "Invoke the /spark:ideate skill. As soon as the skill content loads, stop and reply with exactly: SKILL-LOADED <first heading of the skill file>. Do not do any other work." \
     < /dev/null) 2>/dev/null || true)"
   case "$reply" in

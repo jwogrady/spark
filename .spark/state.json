@@ -1,10 +1,10 @@
 {
-  "stage": "idle",
-  "problem_statement": "",
-  "issue": "",
-  "branch": "",
+  "stage": "ship",
+  "problem_statement": "Make marketplace e2e release check portable to macOS (#193)",
+  "issue": "193",
+  "branch": "fix/193-macos-e2e-timeout",
   "pr": "",
   "blockers": "",
-  "next_action": "",
+  "next_action": "Human merges the PR closing #193",
   "updated": "2026-07-11"
 }
