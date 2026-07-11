@@ -14,6 +14,7 @@ Defined in `hooks/hooks.json`, fires on Claude Code's `PreToolUse` event for the
 |---|---|---|
 | Force-push | `--force`, `-f` (also inside short-option bundles like `-fu`), or a `+refspec` | `--force-with-lease` |
 | Push to trunk | any push whose refspec *destination* resolves to `master`/`main` — bare names, `HEAD:main`, `feat:master`, `refs/heads/…` forms, and deletes (`:main`) | Push a feature branch |
+| Hand-cut release | `git tag <name>` (creation forms, including `-a`/`-s`/`-m`), `gh release create`, a push refspec targeting `refs/tags/…` (create, update, or delete), `git push --tags`/`--follow-tags`, or `git update-ref refs/tags/…` — **only when Release Please is configured** (`release-please-config.json` or a `release-please` workflow at the repo root). Non-creating local tag forms (`git tag`, `-l`, `-v`, `-d`) and non-creating `gh release` subcommands stay allowed | Merge the Release Please release PR — that human merge is the release act. Repos without the marker keep the ship skill's manual fallback |
 
 The guard tokenizes the command rather than substring-matching, so it sees
 through leading git options (`git -C <path> push`, `-c k=v`, `--git-dir …`),
@@ -25,9 +26,17 @@ The enforcement boundary, precisely: the guard analyzes the command *text*.
 It cannot know the current branch, so a bare `git push` (no refspec) while
 standing on trunk is allowed here — that push is caught by the `pre-commit`
 door and branch discipline. Git aliases and commands assembled at runtime
-(`$(…)`) are likewise out of scope. Ambiguity resolves toward blocking: a
-quoted argument that splits oddly or a remote literally named `main` can
-over-block, never under-block.
+(`$(…)`) are likewise out of scope, as are raw API paths (`gh api …/releases`)
+and refs fed over stdin (`git update-ref --stdin`).
+Ambiguity resolves toward blocking: a quoted argument that splits oddly or a
+remote literally named `main` can over-block, never under-block.
+
+The release rule is deliberately conditional: it fires only where a
+`release-please-config.json` or a `release-please` workflow marks tags and
+Releases as Release Please's (the same two markers the ship skill names,
+resolved from the repo root via `git rev-parse`, so it holds from any
+subdirectory). Everywhere else the ship skill's documented manual fallback —
+tag and Release with explicit human go-ahead — remains available.
 
 Protocol: the guard reads the tool call as JSON on stdin, extracts
 `.tool_input.command`, and exits `2` to block (feeding the reason back to
@@ -109,3 +118,4 @@ posture then rides the same three-tier resolution as every other standard
 
 - Why two doors — the decision and its scope: ../adr/0003-zero-dependency-bash-and-enforcement-hooks.md
 - The architectural view of the two-doors model: ../architecture/spark-internals.md
+- Why the hand-cut-release guard exists and how the boundary plays out: [../explanation/release-ownership.md](../explanation/release-ownership.md)

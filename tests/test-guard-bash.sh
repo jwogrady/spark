@@ -8,10 +8,10 @@ set -euo pipefail
 guard="$(cd "$(dirname "$0")/.." && pwd)/plugins/spark/hooks/guard-bash.sh"
 pass=0 fail=0
 
-check() {
-  local want="$1" desc="$2" cmd="$3" payload rc=0
+check_in() {
+  local dir="$1" want="$2" desc="$3" cmd="$4" payload rc=0
   payload="$(printf '{"tool_input":{"command":%s}}' "$(printf '%s' "$cmd" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')")"
-  printf '%s' "$payload" | bash "$guard" >/dev/null 2>&1 || rc=$?
+  printf '%s' "$payload" | (cd "$dir" && bash "$guard") >/dev/null 2>&1 || rc=$?
   if [ "$rc" -eq "$want" ]; then
     pass=$((pass + 1))
   else
@@ -19,6 +19,8 @@ check() {
     echo "  ✖ $desc — want exit $want, got $rc: $cmd"
   fi
 }
+
+check() { check_in "$PWD" "$@"; }
 
 allow() { check 0 "$1" "$2"; }
 deny()  { check 2 "$1" "$2"; }
@@ -71,6 +73,58 @@ allow "two clean pushes"                   "git push origin feat/x && git push o
 # --- push options that take arguments must not be misread as refspecs
 allow "-o option value main"               "git push -o main origin feat/x"
 allow "--push-option main"                 "git push --push-option main origin feat/x"
+
+# --- Release Please boundary (conditional on release-please-config.json)
+# The rule depends on the repo the command runs in, so build one repo with
+# the config and one without instead of relying on the enclosing checkout.
+rp_repo="$(mktemp -d)" plain_repo="$(mktemp -d)"
+trap 'rm -rf "$rp_repo" "$plain_repo"' EXIT
+git -C "$rp_repo" init -q
+: > "$rp_repo/release-please-config.json"
+mkdir -p "$rp_repo/sub"
+git -C "$plain_repo" init -q
+
+allow_in() { check_in "$1" 0 "$2" "$3"; }
+deny_in()  { check_in "$1" 2 "$2" "$3"; }
+
+deny_in  "$rp_repo" "tag create with RP config"          "git tag v1.0.0"
+deny_in  "$rp_repo" "annotated tag with RP config"       "git tag -a v1.0.0 -m 'release'"
+deny_in  "$rp_repo" "signed tag with RP config"          "git tag -s v1.0.0"
+deny_in  "$rp_repo" "tag create after &&"                "git add . && git tag v2.0.0"
+deny_in  "$rp_repo/sub" "tag create from subdirectory"   "git tag v1.0.0"
+deny_in  "$rp_repo" "gh release create with RP config"   "gh release create v1.0.0"
+deny_in  "$rp_repo" "gh -R release create"               "gh -R jwogrady/spark release create v1.0.0"
+allow_in "$rp_repo" "bare git tag lists"                 "git tag"
+allow_in "$rp_repo" "git tag -l"                         "git tag -l 'v*'"
+allow_in "$rp_repo" "git tag --list"                     "git tag --list"
+allow_in "$rp_repo" "git tag delete"                     "git tag -d v1.0.0"
+allow_in "$rp_repo" "git tag verify"                     "git tag -v v1.0.0"
+allow_in "$rp_repo" "gh release list"                    "gh release list"
+allow_in "$rp_repo" "gh release view"                    "gh release view v1.0.0"
+allow_in "$rp_repo" "feature push unaffected"            "git push origin feat/x"
+deny_in  "$rp_repo" "trunk push still blocked"           "git push origin master"
+deny_in  "$rp_repo" "companion-style tag create"         "git tag spark-audit-v0.2.1"
+deny_in  "$rp_repo" "-c config tag create"               "git -c user.name=x tag v1.0.0"
+deny_in  "$rp_repo" "refspec tag push"                   "git push origin HEAD:refs/tags/v1.0.0"
+deny_in  "$rp_repo" "forced refspec tag push"            "git push origin +HEAD:refs/tags/v1.0.0"
+deny_in  "$rp_repo" "remote tag delete refspec"          "git push origin :refs/tags/v1.0.0"
+deny_in  "$rp_repo" "push --tags"                        "git push --tags origin feat/x"
+deny_in  "$rp_repo" "push --follow-tags"                 "git push --follow-tags origin feat/x"
+deny_in  "$rp_repo" "update-ref tag write"               "git update-ref refs/tags/v1.0.0 HEAD"
+allow_in "$rp_repo" "update-ref non-tag ref"             "git update-ref refs/notes/x HEAD"
+allow_in "$plain_repo" "tag create without RP config"    "git tag v1.0.0"
+allow_in "$plain_repo" "gh release create without config" "gh release create v1.0.0"
+allow_in "$plain_repo" "refspec tag push without config" "git push origin HEAD:refs/tags/v1.0.0"
+
+# Workflow-only marker: the ship skill treats a release-please workflow as the
+# same signal as the config file, so the guard must too.
+wf_repo="$(mktemp -d)"
+trap 'rm -rf "$rp_repo" "$plain_repo" "$wf_repo"' EXIT
+git -C "$wf_repo" init -q
+mkdir -p "$wf_repo/.github/workflows"
+: > "$wf_repo/.github/workflows/release-please.yml"
+deny_in  "$wf_repo" "tag create with RP workflow only"   "git tag v1.0.0"
+deny_in  "$wf_repo" "gh release create with RP workflow" "gh release create v1.0.0"
 
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
