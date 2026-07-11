@@ -4,7 +4,7 @@
 
 Spark has one organizing spine: a software-development lifecycle for building
 projects on GitHub. The five lifecycle skills each map to exactly one stage; the
-other seven skills (setup, authorship, supporting) serve that spine without being
+other three skills (setup, supporting) serve that spine without being
 stages of it — see [`../reference/skills.md`](../reference/skills.md).
 
 ```

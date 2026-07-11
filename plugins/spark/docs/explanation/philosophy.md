@@ -98,8 +98,8 @@ The future Spark is building toward is one where AI-assisted development is
 *indistinguishable from disciplined development* — where the speed and the rigor
 are the same thing, not alternatives. The lifecycle does not slow you down; it is
 the track that makes the speed safe. That future is not guaranteed by capability
-alone. It requires tooling that encodes the right habits mechanically. The v0.3
-release line is the current proof of concept; the architecture is set, the gaps are
+alone. It requires tooling that encodes the right habits mechanically. The current
+release line is the proof of concept; the architecture is set, the gaps are
 documented.
 
 ## See also

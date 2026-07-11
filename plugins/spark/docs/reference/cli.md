@@ -7,12 +7,23 @@ own location (following symlinks), so subcommands work from any directory.
 
 ## `spark doctor`
 
-Validates the Spark layout and reports health. Checks:
+Validates the whole marketplace and reports health. Checks:
 
 - `.claude-plugin/plugin.json` and `marketplace.json` are valid JSON
 - `hooks/hooks.json` is valid JSON and `guard-bash.sh` is executable
+- `preferences/defaults.json` is valid JSON and the templates carry the full
+  standard set
 - every directory under `skills/` has a `SKILL.md` with `name:` and
-  `description:` frontmatter
+  `description:` frontmatter, and every agent file carries frontmatter too
+- taxonomy parity: every shipped skill appears in the canonical
+  [skills.md](skills.md) tables
+- every companion plugin listed in the marketplace catalog passes the same
+  manifest and skill checks as the core
+- shell syntax: `bash -n` over `bin/spark`, the guard, and both git hooks
+- doc links: every relative Markdown link in the shipped docs resolves
+- enforcement parity: the commit types, AI-attribution ban, trunk protection,
+  and force-push rules agree across the hooks and the contract files
+  (CLAUDE.md, AGENTS.md)
 - whether Spark's git hooks are installed in the current repo
 
 Exit code is non-zero if any error is found. JSON validation uses `jq` or
@@ -129,6 +140,10 @@ resolution table.
 `--short` is the SessionStart hook path (see [hooks.md](hooks.md)): at most
 three plain-text lines, no color codes, no network calls. Outside a git repo
 it prints nothing and exits `0`, so non-project sessions start clean.
+
+## `spark version`
+
+Prints the Spark plugin version, read from `.claude-plugin/plugin.json`.
 
 ## `spark help`
 
