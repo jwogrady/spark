@@ -6,6 +6,35 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ---
 
+## [Unreleased]
+
+### Changed
+
+- **`review` + `cleanup` consolidated into one `audit` skill** (#139). Both
+  skills are removed; `/spark:audit` runs the whole-project audit directly
+  in-session with at most five dispatched roles — **assess** keeps review's
+  six health dimensions and produces an evidence-cited report; **purge**
+  keeps cleanup's evidence table, deletion-safety categories, and human
+  approval gate, and acts instead of emitting a copy-paste orchestrator
+  prompt. Skill count drops from 12 to 11 and the native `/review` name
+  collision (finding F1) is resolved.
+- **Consolidation hygiene** (#141): the operator knowledge store is
+  `glossary.md` only — the `decisions.md` half is deferred until a shipped
+  surface reads it (existing stores untouched on disk); the `agents-md`
+  pre-plugin relics (`references/system-prompt.md`, `references/io-schema.yaml`,
+  `references/examples.md`, `agents/openai.yaml`) are deleted and the PR
+  template now asks for a `SKILL.md` with valid frontmatter instead of
+  `agents/openai.yaml`; and the work-state loop now closes — when the recorded
+  PR is merged, `spark resume` presents the loop restart instead of the stale
+  `next_action` (documented in `docs/reference/state.md`).
+
+## [0.6.0](https://github.com/jwogrady/spark/compare/v0.5.0...v0.6.0) (2026-07-11)
+
+
+### Features
+
+* add a spark setup verb that runs the whole carry-in ([#132](https://github.com/jwogrady/spark/issues/132)) ([e2b61db](https://github.com/jwogrady/spark/commit/e2b61db71ae3f72d831f80c1d46fd37f87ef03b5))
+
 ## [0.5.0](https://github.com/jwogrady/spark/compare/v0.4.0...v0.5.0) (2026-07-09)
 
 
@@ -13,17 +42,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 * carry-in and carry-forward — the v0.4 milestone five ([#129](https://github.com/jwogrady/spark/issues/129)) ([d9ff8fe](https://github.com/jwogrady/spark/commit/d9ff8feca87ce23ed90408b71d924b3138ef1c66))
 
-## [Unreleased]
-
 ### Added
 
-- **`spark setup` — the one-command carry-in** (#131, ADR-0012): one
-  idempotent run arms a repo completely — git hooks, permission baseline,
-  resolved standard — by composing the existing verbs, with a `--yes`
-  passthrough for the permission-merge confirmation and one consolidated
-  report. The granular commands are unchanged; `install-git-hooks` now
-  reports an already-current Spark hook instead of re-copying it. The docs'
-  primary arm-a-repo path is now `spark setup`.
 - **Carry-in shipped** (#61, #63): `preferences/defaults.json` is the machine
   form of the engineering standard; `spark preferences` shows the resolved
   three-tier standard (defaults → operator → project, ADR-0010) and `--apply`
@@ -38,16 +58,6 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
   written only through the librarian's explicit promotion step.
 - **On-ramp** (#80): `how-to/carry-your-preferences-in.md`.
 
-### Changed
-
-- **`review` + `cleanup` consolidated into one `audit` skill** (#139). Both
-  skills are removed; `/spark:audit` runs the whole-project audit directly
-  in-session with at most five dispatched roles — **assess** keeps review's
-  six health dimensions and produces an evidence-cited report; **purge**
-  keeps cleanup's evidence table, deletion-safety categories, and human
-  approval gate, and acts instead of emitting a copy-paste orchestrator
-  prompt. Skill count drops from 12 to 11 and the native `/review` name
-  collision (finding F1) is resolved.
 
 ### Fixed
 

@@ -1,10 +1,10 @@
 {
-  "stage": "ship",
+  "stage": "plan",
   "problem_statement": "docs/problem-statement.md",
-  "issue": "131",
-  "branch": "feat/setup-verb",
-  "pr": "132",
+  "issue": "138",
+  "branch": "",
+  "pr": "",
   "blockers": "",
-  "next_action": "Merge the pull request for issue 131 when ready",
+  "next_action": "Implement issue 138 (release-record truth pass); 139 and 141 run in parallel",
   "updated": "2026-07-11"
 }
