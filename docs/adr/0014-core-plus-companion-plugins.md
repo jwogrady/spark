@@ -3,7 +3,8 @@
 Date: 2026-07-11
 Status: Accepted; answers ADR-0013's open question and supersedes its
 extraction-as-removal disposition — extractions are moves into companion
-plugins in this repository
+plugins in this repository; its own open question (per-companion release
+automation) is answered by ADR-0016
 Owner: jwogrady
 
 ## Context

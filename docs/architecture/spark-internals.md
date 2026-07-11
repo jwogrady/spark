@@ -202,9 +202,11 @@ motion left the core for a companion.
   enforcement-parity check watches it. See ADR 0003 and ADR 0011.
 - **Zero-dependency Bash tradeoff.** Portability buys reach into any forked project
   at the cost of richer tooling; JSON handling degrades gracefully. See ADR 0003.
-- **Per-companion releases are deferred.** Release Please versions the core;
-  companion release automation waits until a companion needs a release. See
-  ADR 0014.
+- **Commit paths drive companion versions.** Release Please runs in
+  multi-package mode: the root train versions the core, and each companion
+  releases from the commits touching its `plugins/<name>/` directory — so a
+  commit that strays across plugin boundaries mis-attributes a bump. See
+  ADR 0016.
 
 ## Related Docs
 
