@@ -71,3 +71,14 @@ fact it prints — branch existence and checkout via git, PR and issue state via
 `gh` when available, problem-statement existence on disk — and flags what
 drifted instead of trusting it. The schema is deliberately these eight keys
 and no more: anything richer belongs to the knowledge layer, not work state.
+
+## The loop close
+
+A merged recorded PR means the state describes a **finished loop**: every
+value in the file — stage, branch, `next_action` — predates the merge, so the
+recorded next action would send the next session back into finished work.
+When `gh` reports the recorded PR as merged, `spark resume` still prints the
+drift notes but replaces the stale `next_action` with the loop restart:
+start the next problem, or re-frame from `docs/problem-statement.md`. The
+state file itself is not rewritten by `resume` — the next lifecycle stage's
+close-out rewrites it, as always.

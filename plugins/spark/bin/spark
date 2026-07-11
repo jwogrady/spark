@@ -1015,7 +1015,7 @@ cmd_resume() {
 
   # Facts the repo contradicts are flagged and counted — the repo wins over
   # the state file, always.
-  local drift=0
+  local drift=0 loop_closed=0
   note() { yellow "    ! $1"; drift=$((drift+1)); }
 
   echo "Where you were${updated:+ (recorded $updated)}:"
@@ -1057,7 +1057,8 @@ cmd_resume() {
       prstate="$(gh pr view "$pr" --json state --jq .state 2>/dev/null || true)"
       echo "  pr:       #$pr${prstate:+ ($prstate)}"
       case "$prstate" in
-        MERGED) note "already merged — the recorded stage is behind; the loop restarts at ideate" ;;
+        MERGED) note "already merged — this state describes a finished loop"
+                loop_closed=1 ;;
         CLOSED) note "closed unmerged — decide whether this work is abandoned" ;;
         "")     note "could not reach GitHub — treat the PR's state as unverified" ;;
       esac
@@ -1071,7 +1072,13 @@ cmd_resume() {
 
   echo
   echo "What's next:"
-  if [ -n "$next" ]; then
+  # A merged recorded PR closes the loop: whatever next_action says predates
+  # the merge, so presenting it would send you back into finished work.
+  if [ "$loop_closed" -eq 1 ]; then
+    echo "  This loop is closed — PR #$pr merged. Start the next problem, or"
+    echo "  re-frame from docs/problem-statement.md. The next stage close-out"
+    echo "  rewrites .spark/state.json."
+  elif [ -n "$next" ]; then
     echo "  $next"
   else
     yellow "  (no next_action recorded — decide from the stage above)"
