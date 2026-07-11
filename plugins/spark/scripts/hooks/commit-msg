@@ -25,6 +25,13 @@ if printf '%s' "$body" | grep -iEq '(generated|written|authored|assisted) (with|
   fail "AI attribution is not allowed in commit messages."
 fi
 
+# Git-generated subjects (merge, revert, autosquash) are exempt from the
+# style rules below — git writes them, not the author — but never from the
+# attribution rules above.
+if printf '%s' "$subject" | grep -Eq '^(Merge |Revert "|fixup! |squash! )'; then
+  exit 0
+fi
+
 # 2. Conventional commit type prefix.
 if ! printf '%s' "$subject" | grep -Eq '^(feat|fix|docs|chore|refactor|test)(\([a-z0-9_-]+\))?!?: .+'; then
   fail "subject must start with a conventional type: feat|fix|docs|chore|refactor|test. Got: '$subject'"
