@@ -7,13 +7,15 @@ This guide applies to any AI coding agent working in this repo, regardless of to
 
 ## What This Repo Is
 
-Spark is a portable project-inception and software-delivery system for
-AI-assisted development. It turns raw project intent into durable repo artifacts,
-scoped GitHub issues, implementation branches, reviews, commits, and pull
-requests. The methodology is portable; the current
-implementation ships as a Claude Code plugin that bundles lifecycle skills,
-enforcement hooks, and a `spark` CLI. It is additive: it reuses Claude Code's
-built-in tools rather than reinventing them.
+Spark turns an AI coding assistant and GitHub into a software delivery system:
+your engineering standards loaded once, one traceable lifecycle
+(Ideate → Plan → Codify → Validate → Ship), durable GitHub artifacts, and
+mechanically enforced guardrails. This repo is a plugin marketplace: a focused
+core plugin (`plugins/spark/` — 8 skills, enforcement hooks, and a `spark` CLI)
+plus three companion plugins (`plugins/spark-audit/` for whole-project
+assessment and cleanup, `plugins/spark-connect/` for services and secrets,
+`plugins/spark-docs/` for public docs and positioning). It is additive: it
+reuses the host tool's built-in capabilities rather than reinventing them.
 
 ## Core Rules
 
@@ -35,8 +37,9 @@ built-in tools rather than reinventing them.
 
 ### Documentation
 - Update `CHANGELOG.md` when behavior changes.
-- Docs follow Diátaxis. User-facing docs ship with the plugin under
-  `plugins/spark/docs/{tutorials,how-to,reference,explanation}/`; developer docs
+- Docs follow Diátaxis. User-facing docs ship with the core plugin under
+  `plugins/spark/docs/{tutorials,how-to,reference,explanation}/`; each companion
+  plugin ships its own docs under `plugins/<name>/docs/`; developer docs
   (ADRs, architecture, packaging) stay in the root `docs/`. Put new docs in the
   surface and quadrant that match their purpose.
 - Write docs that explain *why*, not just *what*.
@@ -59,9 +62,9 @@ Never perform these without explicit user confirmation:
 ### GitHub API and Automation
 - Do not call GitHub APIs without explicit user instruction.
 - Do not create tags, releases, or deployments autonomously.
-- No workflows ship today — validation CI is planned (issue #70). If/when
-  workflow files exist, do not modify them without understanding the full
-  pipeline impact.
+- Workflows exist under `.github/workflows/` (`validate.yml` runs the health
+  gate; `release-please.yml` manages releases). Do not modify them without
+  understanding the full pipeline impact.
 
 ### Scope Discipline
 - Do only what was asked. Do not refactor surrounding code opportunistically.

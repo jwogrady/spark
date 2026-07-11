@@ -2,9 +2,13 @@
 
 > How-to — task-oriented.
 
-Use this to stand up a new project's runtime. Runtime/package-manager is fixed —
-**Bun** for TypeScript, **uv** for Python; you choose the framework. Full
-commands: [../../skills/bootstrap/references/profiles.md](../../skills/bootstrap/references/profiles.md).
+`/spark:bootstrap` is the new-project path into Spark: it stands up the
+runtime, then ends by running `spark setup` so the fresh repo enters the
+lifecycle already armed. Runtime/package-manager is fixed — **Bun** for
+TypeScript, **uv** for Python; you choose the framework. Full commands:
+[../../skills/bootstrap/references/profiles.md](../../skills/bootstrap/references/profiles.md).
+(For an existing repo, skip this and run `spark setup` directly — see
+[get-started.md](get-started.md).)
 
 ## 1. Choose the shape
 
@@ -42,13 +46,15 @@ uv run uvicorn app.main:app --reload
 
 If it fails, report the output — don't proceed on a broken scaffold.
 
-## 5. Layer Spark on top
+## 5. Enter the lifecycle
 
-- `spark setup` — one run arms the repo: git hooks, permission baseline,
-  resolved standard.
+- `spark setup` — bootstrap runs this for you at the end: one run arms the
+  repo with git hooks, the permission baseline, and your resolved standard.
 - Generate `CLAUDE.md` + `AGENTS.md` (the `agents-md` skill).
-- Connect services + secrets with `/spark:connect`.
 - Start the lifecycle at `/spark:ideate`.
 
-**Done when** the scaffold builds/boots clean, the lockfile is committed, and the
-project is wired into Spark (CLAUDE.md, hooks, connections).
+Need external services and secrets (API keys, 1Password)? That lives in the
+`spark-connect` companion plugin, installable from the same marketplace.
+
+**Done when** the scaffold builds/boots clean, the lockfile is committed, and
+`spark setup` reports the repo armed (hooks, permissions, standard).
