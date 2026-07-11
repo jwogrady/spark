@@ -27,6 +27,7 @@ How the layers fit together, and the dated record of why Spark is built this way
 - [adr/0013-the-plugin-ships-only-carry-surfaces.md](adr/0013-the-plugin-ships-only-carry-surfaces.md) — the plugin ships only carry surfaces; consolidate the audit, extract the rest
 - [adr/0014-core-plus-companion-plugins.md](adr/0014-core-plus-companion-plugins.md) — one marketplace, a focused core, and three companion plugins
 - [adr/0015-generated-projects-without-the-cosmic-model.md](adr/0015-generated-projects-without-the-cosmic-model.md) — generated projects, without the Cosmic model; private vocabulary leaves the public docs
+- [adr/0016-companion-release-path.md](adr/0016-companion-release-path.md) — companions release through Release Please multi-package mode
 - [adr/0000-template.md](adr/0000-template.md) — the ADR template
 
 ## Packaging reference
