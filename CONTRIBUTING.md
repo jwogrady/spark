@@ -93,6 +93,13 @@ When you change a tested script, run `bash tests/run.sh` before pushing and
 extend the matching suite; a new tested surface gets a new `tests/test-*.sh`
 (the runner picks it up by name).
 
+One check is deliberately outside the runner:
+`bash tests/e2e-marketplace-install.sh` validates the *published* marketplace
+install path end to end from a clean environment (marketplace add, core +
+companion install, discovery, the `spark` CLI, and a real skill invocation).
+It needs network access and the `claude` CLI, so it runs by hand — treat it
+as the release-readiness check before merging a Release Please PR.
+
 ## Changelog policy
 
 Hand-curated changelog entries go only under the `[Unreleased]` heading in
