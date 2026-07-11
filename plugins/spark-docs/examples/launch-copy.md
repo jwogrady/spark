@@ -1,8 +1,6 @@
 # Launch Copy — Spark
 
-> Generated marketing copy (a `docit` output artifact), kept here as an example —
-> not part of the published docs. Regenerate it with the `docit` skill rather than
-> hand-maintaining it; verify every count against the repo before posting.
+> Stale example of a `docit` output artifact — it cites old counts; regenerate it with `/spark-docs:docit` before using any of it.
 
 ## Repo description (≤ 350 chars, search-optimized)
 
