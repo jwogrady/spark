@@ -6,6 +6,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ---
 
+## [0.5.0](https://github.com/jwogrady/spark/compare/v0.4.0...v0.5.0) (2026-07-09)
+
+
+### Features
+
+* carry-in and carry-forward — the v0.4 milestone five ([#129](https://github.com/jwogrady/spark/issues/129)) ([d9ff8fe](https://github.com/jwogrady/spark/commit/d9ff8feca87ce23ed90408b71d924b3138ef1c66))
+
 ## [Unreleased]
 
 ### Added
