@@ -12,7 +12,7 @@ diff/branch/PR, use `validate` (or the native `/code-review` +
 ## 1. Invoke the skill
 
 ```bash
-/spark:audit
+/spark-audit:audit
 ```
 
 Say which mode you want — "assess the project's health" or "purge the dead

@@ -22,7 +22,7 @@ Paste the raw provider keys into a temporary `.env`. This file is short-lived.
 
 ## 3. Ingest into 1Password (you confirm each write)
 
-Invoke `/spark:connect`. For each key it will **show you the `op item create`
+Invoke `/spark-connect:connect`. For each key it will **show you the `op item create`
 command and wait for your confirmation** before writing to your vault. Use a
 per-project vault so this project's keys are independently revocable. It then
 writes a committed `.env.tmpl` of `op://…` references.
