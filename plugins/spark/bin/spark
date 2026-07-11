@@ -27,6 +27,7 @@ VERBS='doctor|cmd_doctor|Validate the plugin layout; --requirements checks envir
 list-skills|cmd_list_skills|List all available skills with descriptions
 new-skill|cmd_new_skill|Scaffold a new skill under skills/<name>/
 setup|cmd_setup|Arm this repo in one run: git hooks, permission baseline, resolved standard
+profiles|cmd_profiles|List the setup profiles: committed project facts, inspectable before setup
 install-git-hooks|cmd_install_git_hooks|Install Spark'\''s git hooks into the current repo
 apply-permissions|cmd_apply_permissions|Merge the permission baseline into .claude/settings.json; --preset picks the trust tier
 preferences|cmd_preferences|Show the resolved engineering standard; --apply carries it into this repo
@@ -1045,6 +1046,53 @@ cmd_install_git_hooks() {
   return "$failed"
 }
 
+# Setup profiles (#176): a profile is a small flat-JSON file of project facts
+# shipped under preferences/profiles/. Selecting one (spark setup --profile)
+# just commits those facts to .spark/preferences.json — the same file a user
+# would write by hand — and the existing three-tier resolution does the rest.
+# No second application engine, so profiles can never drift from --apply.
+cmd_profiles() {
+  case "${1:-}" in
+    '') ;;
+    -h|--help) echo "usage: spark profiles"; return 0 ;;
+    *) red "unknown option: $1"; echo "usage: spark profiles"; return 1 ;;
+  esac
+  local dir="$SPARK_ROOT/preferences/profiles"
+  [ -d "$dir" ] || { red "no profiles shipped: $dir is missing — reinstall the Spark plugin"; return 1; }
+
+  echo "Setup profiles — inspect here, select with: spark setup --profile <name>"
+  echo
+  local f name key value dval stack marker found=0
+  for f in "$dir"/*.json; do
+    [ -f "$f" ] || continue
+    found=1
+    name="$(basename "$f" .json)"
+    # Supported means the shipped templates can actually materialize it.
+    stack="$(read_flat_json "$f" | awk -F'\t' '$1 == "stack.default" { print $2 }')"
+    if [ -n "$stack" ] && [ ! -f "$SPARK_ROOT/preferences/templates/ci/validate-$stack.yml" ]; then
+      yellow "  $name (unsupported — no CI template for stack '$stack')"
+    else
+      echo "  $name"
+    fi
+    while IFS=$'\t' read -r key value; do
+      [ -n "$key" ] || continue
+      dval="$(read_flat_json "$SPARK_ROOT/preferences/defaults.json" \
+        | awk -F'\t' -v k="$key" '$1 == k { print $2 }')"
+      if [ "$value" = "$dval" ]; then
+        marker="(the shipped default)"
+      else
+        marker="(overrides default: $dval)"
+      fi
+      printf '    %-26s %-20s %s\n' "$key" "$value" "$marker"
+    done < <(read_flat_json "$f")
+  done
+  [ "$found" -eq 1 ] || { yellow "  (none shipped)"; return 0; }
+  echo
+  echo "Selecting a profile writes its facts to .spark/preferences.json — a"
+  echo "committed, reviewable project file — before anything materializes."
+  echo "With no profile, setup applies the shipped defaults unchanged."
+}
+
 # The one-command carry-in (ADR-0012): the three arming steps — git hooks,
 # permission baseline, resolved standard — in order, one run. Composition
 # only: each step is the same function its own verb dispatches to, so setup
@@ -1052,21 +1100,64 @@ cmd_install_git_hooks() {
 # permission step is a decision, not a failure — the run continues and the
 # exit is non-zero only outside a git repo, matching preferences --apply.
 cmd_setup() {
-  local usage_line="usage: spark setup [--yes]"
-  local yes=""
-  case "${1:-}" in
-    '') ;;
-    -y|--yes) yes="--yes" ;;
-    -h|--help) echo "$usage_line"; return 0 ;;
-    *) red "unknown option: $1"; echo "$usage_line"; return 1 ;;
-  esac
-  [ "$#" -le 1 ] || { red "too many arguments"; echo "$usage_line"; return 1; }
+  local usage_line="usage: spark setup [--yes] [--profile <name>]"
+  local yes="" profile=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -y|--yes) yes="--yes" ;;
+      --profile) shift; profile="${1:-}" ;;
+      --profile=*) profile="${1#--profile=}" ;;
+      -h|--help) echo "$usage_line"; return 0 ;;
+      *) red "unknown option: $1"; echo "$usage_line"; return 1 ;;
+    esac
+    shift
+  done
 
   # One repo check up front, so the refusal names the command, not a step.
   local top
   if ! top="$(git rev-parse --show-toplevel 2>/dev/null)"; then
     red "spark setup needs a git repo — run it from inside the project."
     return 1
+  fi
+
+  # Profile selection is all-or-nothing and runs before anything
+  # materializes: an unknown profile, an unsupported combination, or a
+  # conflict with existing project facts refuses the whole run, so a repo is
+  # never left partially armed against facts that were about to be rejected.
+  if [ -n "$profile" ]; then
+    local pfile="$SPARK_ROOT/preferences/profiles/$profile.json"
+    if [ ! -f "$pfile" ]; then
+      red "unknown profile: $profile"
+      echo "  available profiles: spark profiles"
+      return 1
+    fi
+    # Supported combination: a profile that names a stack must have a shipped
+    # CI template for it, or --apply would materialize a repo with no CI.
+    local pstack
+    pstack="$(read_flat_json "$pfile" | awk -F'\t' '$1 == "stack.default" { print $2 }')"
+    if [ -n "$pstack" ] && [ ! -f "$SPARK_ROOT/preferences/templates/ci/validate-$pstack.yml" ]; then
+      red "profile $profile is not supported: no CI template for stack '$pstack'"
+      echo "  nothing was written — pick a supported profile (spark profiles)"
+      return 1
+    fi
+    local pdest="$top/.spark/preferences.json"
+    if [ -f "$pdest" ]; then
+      if cmp -s "$pfile" "$pdest"; then
+        echo "Profile $profile: .spark/preferences.json already carries it (kept)."
+      else
+        red "this repo already has committed project facts: .spark/preferences.json"
+        echo "  a profile never overwrites project decisions — edit that file instead,"
+        echo "  or remove it and re-run. Nothing was written."
+        return 1
+      fi
+    else
+      if ! mkdir -p "$top/.spark" || ! cp "$pfile" "$pdest"; then
+        red "could not write $pdest"
+        return 1
+      fi
+      green "Profile $profile: + .spark/preferences.json (committed project facts)"
+    fi
+    echo
   fi
 
   # Every step is ||-guarded: once there is a repo to arm, no step aborts the

@@ -64,7 +64,21 @@ and hyphens, not leading with a hyphen; anything else (path separators, `..`,
 whitespace) is rejected with no filesystem change, since the name becomes a
 path segment under `skills/`.
 
-## `spark setup [--yes]`
+## `spark profiles`
+
+Lists the shipped setup profiles — small, flat-JSON sets of project facts
+under `preferences/profiles/` — so the choice is inspectable *before* any
+file is created. Each profile prints its facts with provenance against the
+shipped defaults (`(the shipped default)` or `(overrides default: …)`), and a
+profile whose stack has no shipped CI template is marked unsupported.
+
+A profile is not a second configuration system: selecting one
+(`spark setup --profile <name>`) just writes those facts to
+`.spark/preferences.json` — the same committed file a user would write by
+hand — and the ordinary three-tier resolution applies them. There is no
+separate application engine to drift.
+
+## `spark setup [--yes] [--profile <name>]`
 
 The one-command carry-in (ADR-0012): arms the current repo in one run by
 composing the three arming steps in order — `install-git-hooks`, then
@@ -76,6 +90,15 @@ merge, and every `!` item from the standard all land in the attention count.
 Each step is the same function its own verb dispatches to, so `setup` and the
 granular commands cannot drift. Re-running is a no-op: hooks report as
 already installed, the baseline as already applied, and the standard as kept.
+
+`--profile <name>` commits a [setup profile](#spark-profiles)'s facts to
+`.spark/preferences.json` before anything materializes, so the standard that
+applies is the selected one. Selection is all-or-nothing: an unknown profile,
+an unsupported combination (a stack with no shipped CI template), or a
+conflict with existing committed project facts refuses the whole run with
+nothing written — a repo is never partially armed against facts that were
+about to be rejected. Re-running with the same profile is a no-op (`kept`),
+and without `--profile` behavior is exactly the shipped defaults, unchanged.
 
 `--yes` forwards to the permission-merge confirmation; without it, merging
 into an existing `.claude/settings.json` still prompts. The exit code
