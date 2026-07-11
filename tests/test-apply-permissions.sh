@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Behavioral tests for spark apply-permissions: create, keep, merge, decline,
-# invalid JSON, and the no-parser degradation.
+# invalid JSON, the no-parser degradation, and the trust-tier presets
+# (delivery vs conservative — selection, subset invariant, never-narrows).
 
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
@@ -61,5 +62,56 @@ rc=0; out="$(cd "$repo5" && env PATH="$shim" "$SPARK" apply-permissions --yes 2>
 if [ "$rc" -ne 0 ]; then ok; else bad "no-parser path should return non-zero"; fi
 assert_contains "points at a manual merge" "by hand" "$out"
 [ "$(cat "$repo5/$settings")" = "$(printf '{"permissions":{"allow":["Bash(project-tool:*)"]}}\n' )" ] && ok || bad "no-parser path modified settings"
+
+# --- presets: the shipped default is delivery, and it says so
+repo6="$WORK/preset-default"; make_repo "$repo6"
+rc=0; out="$(cd "$repo6" && "$SPARK" apply-permissions 2>&1)" || rc=$?
+assert_rc "default preset applies" 0 "$rc"
+assert_contains "names the delivery preset" "Permission preset: delivery" "$out"
+assert_contains "delivery grants push" "git push" "$(cat "$repo6/$settings")"
+
+# --- conservative: read-only, nothing push- or write-capable lands
+repo7="$WORK/preset-cons"; make_repo "$repo7"
+rc=0; out="$(cd "$repo7" && "$SPARK" apply-permissions --preset conservative 2>&1)" || rc=$?
+assert_rc "conservative preset applies" 0 "$rc"
+assert_contains "names the conservative preset" "Permission preset: conservative" "$out"
+cons="$(cat "$repo7/$settings")"
+assert_contains "conservative keeps read access" "git status" "$cons"
+case "$cons" in
+  *"git push"*|*"git commit"*|*"gh pr create"*|*"spark setup"*)
+    bad "conservative preset granted a mutating command" ;;
+  *) ok ;;
+esac
+
+# --- subset invariant: every conservative rule exists in delivery, so
+# switching a repo from conservative to delivery only ever adds
+missing="$(jq -r '.permissions.allow[]' "$WORK/plugin/settings/permission-baseline-conservative.json" \
+  | while IFS= read -r rule; do
+      jq -e --arg r "$rule" '.permissions.allow | index($r)' \
+        "$WORK/plugin/settings/permission-baseline.json" >/dev/null || printf '%s\n' "$rule"
+    done)"
+[ -z "$missing" ] && ok || bad "conservative rules missing from delivery: $missing"
+
+# --- never narrows: conservative onto a delivery-armed repo adds nothing
+rc=0; out="$(cd "$repo6" && "$SPARK" apply-permissions --preset conservative --yes 2>&1)" || rc=$?
+assert_rc "conservative over delivery exits 0" 0 "$rc"
+assert_contains "reports nothing to add" "already applied" "$out"
+assert_contains "warns that presets never remove" "never remove" "$out"
+assert_contains "delivery rules survive" "git push" "$(cat "$repo6/$settings")"
+
+# --- the posture is a preference: committed project fact drives selection
+repo8="$WORK/preset-pref"; make_repo "$repo8"
+mkdir -p "$repo8/.spark"
+printf '{"permissions.preset":"conservative"}\n' > "$repo8/.spark/preferences.json"
+rc=0; out="$(cd "$repo8" && "$SPARK" apply-permissions 2>&1)" || rc=$?
+assert_rc "preference-driven preset applies" 0 "$rc"
+assert_contains "project fact selects conservative" "Permission preset: conservative" "$out"
+
+# --- unknown preset: rejected, nothing written
+repo9="$WORK/preset-bogus"; make_repo "$repo9"
+rc=0; out="$(cd "$repo9" && "$SPARK" apply-permissions --preset yolo 2>&1)" || rc=$?
+if [ "$rc" -ne 0 ]; then ok; else bad "unknown preset should fail"; fi
+assert_contains "names the bad preset" "unknown permission preset" "$out"
+[ ! -e "$repo9/$settings" ] && ok || bad "unknown preset still wrote settings"
 
 finish
