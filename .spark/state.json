@@ -1,10 +1,10 @@
 {
-  "stage": "plan",
-  "problem_statement": "docs/problem-statement.md",
-  "issue": "138",
+  "stage": "idle",
+  "problem_statement": "",
+  "issue": "",
   "branch": "",
   "pr": "",
   "blockers": "",
-  "next_action": "Implement issue 138 (release-record truth pass); 139 and 141 run in parallel",
+  "next_action": "",
   "updated": "2026-07-11"
 }
