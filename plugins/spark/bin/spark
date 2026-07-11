@@ -603,6 +603,14 @@ cmd_doctor() {
 cmd_new_skill() {
   local name="${1:-}"
   [ -n "$name" ] || { red "usage: spark new-skill <name>"; return 1; }
+  # The name becomes a path segment; anything but a plain slug could escape
+  # skills/ (../x, a/b) or create names the skill loader can't address.
+  case "$name" in
+    *[!a-z0-9-]*|-*)
+      red "invalid skill name '$name': use lowercase letters, digits, and hyphens (not leading)"
+      red "usage: spark new-skill <name>"
+      return 1 ;;
+  esac
   local dir="$SPARK_ROOT/skills/$name"
   [ -e "$dir" ] && { red "skill '$name' already exists at $dir"; return 1; }
   mkdir -p "$dir"

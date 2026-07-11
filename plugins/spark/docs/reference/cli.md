@@ -38,7 +38,10 @@ provides.
 ## `spark new-skill <name>`
 
 Scaffolds `skills/<name>/SKILL.md` with a frontmatter stub. Refuses to overwrite
-an existing skill.
+an existing skill. The name must be a plain slug — lowercase letters, digits,
+and hyphens, not leading with a hyphen; anything else (path separators, `..`,
+whitespace) is rejected with no filesystem change, since the name becomes a
+path segment under `skills/`.
 
 ## `spark setup [--yes]`
 
