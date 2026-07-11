@@ -6,6 +6,23 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ---
 
+## [0.9.0](https://github.com/jwogrady/spark/compare/v0.8.0...v0.9.0) (2026-07-11)
+
+
+### Features
+
+* add capability-aware readiness checks to spark doctor ([#181](https://github.com/jwogrady/spark/issues/181)) ([45b189a](https://github.com/jwogrady/spark/commit/45b189abc4c253fd7f273b73ccb9e6d115be8cd1)), closes [#174](https://github.com/jwogrady/spark/issues/174)
+* add delivery and conservative permission presets ([#187](https://github.com/jwogrady/spark/issues/187)) ([645ee4c](https://github.com/jwogrady/spark/commit/645ee4cd9ca83f6bb893c36212c18119f6774ec2)), closes [#178](https://github.com/jwogrady/spark/issues/178)
+* give Spark a visual identity ([#168](https://github.com/jwogrady/spark/issues/168)) ([b1f5fe2](https://github.com/jwogrady/spark/commit/b1f5fe2531cccfbfe32aeb0ef4121f946190ddb1)), closes [#160](https://github.com/jwogrady/spark/issues/160)
+* offer explicit setup profiles before materializing defaults ([#189](https://github.com/jwogrady/spark/issues/189)) ([ab4a14f](https://github.com/jwogrady/spark/commit/ab4a14f45ba79f57e0d273c8f631c5d3ec5e09e6)), closes [#176](https://github.com/jwogrady/spark/issues/176)
+
+
+### Bug Fixes
+
+* harden the push guard against option and refspec bypasses ([#170](https://github.com/jwogrady/spark/issues/170)) ([ca00a03](https://github.com/jwogrady/spark/commit/ca00a03808fa5404539627f53e14797de954dac4))
+* keep the core release as the repo's Latest ([#195](https://github.com/jwogrady/spark/issues/195)) ([f3e6e60](https://github.com/jwogrady/spark/commit/f3e6e60a294fc87a8addd10653b46e974927ce46)), refs [#185](https://github.com/jwogrady/spark/issues/185)
+* validate spark new-skill names before creating paths ([#171](https://github.com/jwogrady/spark/issues/171)) ([4358a67](https://github.com/jwogrady/spark/commit/4358a672d00bc4dd1622c64736345371d0069674)), closes [#164](https://github.com/jwogrady/spark/issues/164)
+
 ## [0.8.0](https://github.com/jwogrady/spark/compare/v0.7.0...v0.8.0) (2026-07-11)
 
 
