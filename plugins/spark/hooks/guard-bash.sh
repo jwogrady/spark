@@ -63,7 +63,10 @@ is_protected_dst() {
   local dst="${1#+}"
   case "$dst" in *:*) dst="${dst#*:}" ;; esac
   dst="${dst#refs/heads/}"
-  [ "$dst" = "master" ] || [ "$dst" = "main" ]
+  case "$dst" in
+    master|main) return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
 i=0
