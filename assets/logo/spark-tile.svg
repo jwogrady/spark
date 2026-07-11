@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Spark icon">
+  <!-- self-contained tile for app icons, favicons, and social avatars -->
+  <rect x="4" y="4" width="120" height="120" rx="28" fill="#0F172A"/>
+  <polyline points="30,46 56,64 30,82" fill="none" stroke="#F8FAFC" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M84,32 C87,46 96,55 110,58 C96,61 87,70 84,84 C81,70 72,61 58,58 C72,55 81,46 84,32 Z" fill="#F97316"/>
+  <circle cx="100" cy="92" r="5" fill="#F97316"/>
+</svg>
