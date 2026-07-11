@@ -6,6 +6,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ---
 
+## [0.7.0](https://github.com/jwogrady/spark/compare/v0.6.0...v0.7.0) (2026-07-11)
+
+
+### Features
+
+* consolidate review and cleanup into one audit skill ([#144](https://github.com/jwogrady/spark/issues/144)) ([d793cc6](https://github.com/jwogrady/spark/commit/d793cc68c0a26eb8b92cb0adcf0c1d76fe3b5a69))
+* consolidation hygiene — defer decisions, drop relics, close loop ([#143](https://github.com/jwogrady/spark/issues/143)) ([bf7398c](https://github.com/jwogrady/spark/commit/bf7398ced2c94044bcfb8f879cb61a835bacf469))
+* reshape the marketplace into a focused core and companions ([#146](https://github.com/jwogrady/spark/issues/146)) ([b1a73ea](https://github.com/jwogrady/spark/commit/b1a73ea5aa2d4c2c9842383be046ea3cf0c7c474))
+
+
+### Bug Fixes
+
+* make spark setup reliable ([#137](https://github.com/jwogrady/spark/issues/137)) ([79a42a4](https://github.com/jwogrady/spark/commit/79a42a4bc8fd83d7ecb050de8a4c98a6820ea7c8))
+
 ## [Unreleased]
 
 ### Changed
