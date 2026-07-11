@@ -1,0 +1,10 @@
+{
+  "stage": "ship",
+  "problem_statement": "docs/problem-statement.md",
+  "issue": "131",
+  "branch": "feat/setup-verb",
+  "pr": "132",
+  "blockers": "",
+  "next_action": "Merge the pull request for issue 131 when ready",
+  "updated": "2026-07-11"
+}

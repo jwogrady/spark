@@ -29,12 +29,33 @@ provides.
 Scaffolds `skills/<name>/SKILL.md` with a frontmatter stub. Refuses to overwrite
 an existing skill.
 
+## `spark setup [--yes]`
+
+The one-command carry-in (ADR-0012): arms the current repo in one run by
+composing the three arming steps in order — `install-git-hooks`, then
+`apply-permissions`, then the `preferences --apply` engine — and ending with
+one aggregate line across all three steps:
+`Setup: N created, N kept, N need attention.` (green only when nothing needs
+attention). Skipped conflicting hooks, a declined or impossible permission
+merge, and every `!` item from the standard all land in the attention count.
+Each step is the same function its own verb dispatches to, so `setup` and the
+granular commands cannot drift. Re-running is a no-op: hooks report as
+already installed, the baseline as already applied, and the standard as kept.
+
+`--yes` forwards to the permission-merge confirmation; without it, merging
+into an existing `.claude/settings.json` still prompts. A declined or
+unmergeable permission step is reported and the run continues — for a valid
+invocation, the exit is non-zero only outside a git repo (invalid options or
+excess arguments are usage errors and also exit non-zero). The granular verbs
+below remain the supported path for partial application.
+
 ## `spark install-git-hooks`
 
 Copies `scripts/hooks/{commit-msg,pre-commit}` into the current repo's
-`.git/hooks/` and marks them executable. If a hook already exists and is not a
-Spark hook, it is left untouched and a warning is printed — move it aside first
-if you want Spark's.
+`.git/hooks/` and marks them executable. A hook that is already Spark's and
+current is reported and left as-is; if a hook exists and is not a Spark hook,
+it is left untouched and a warning is printed — move it aside first if you
+want Spark's.
 
 ## `spark apply-permissions [--yes]`
 

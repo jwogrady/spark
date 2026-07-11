@@ -34,12 +34,13 @@ Concrete per-framework commands and quality-gate defaults live in
 6. **Carry the standard in.** Record deviations from the resolved defaults as
    committed project facts — e.g. a frontend Cosmic writes
    `.spark/preferences.json` with `{"stack.default": "typescript-bun"}` so the
-   exception is visible in review. Then run `spark preferences --apply` and
-   relay its report verbatim (`+` created, `=` kept, `!` needs a decision).
-   Resolve every `!` with the user — the LICENSE choice always is one.
+   exception is visible in review. Then run `spark setup` — one run installs
+   the git hooks, applies the permission baseline, and materializes the
+   resolved standard — and relay its report verbatim (`+` created, `=` kept,
+   `!` needs a decision). Resolve every `!` with the user — the LICENSE
+   choice always is one.
 7. **Layer Spark on top:**
    - Generate `CLAUDE.md` and `AGENTS.md` with [`agents-md`](../agents-md/SKILL.md).
-   - Install the git hooks: `spark install-git-hooks`.
    - Connect services and secrets with [`connect`](../connect/SKILL.md).
    - Land at [`ideate`](../ideate/SKILL.md).
 
