@@ -23,7 +23,7 @@ thing, how to use it in a real GitHub workflow, and why.
 Reinventing upstream standards creates drift, duplicates maintenance, and fights
 the host tool. The durable value Spark adds is judgment and orchestration, not a
 second copy of primitives Anthropic already maintains. Narrative in
-[../explanation/scope-and-upstream.md](../../plugins/spark/docs/explanation/scope-and-upstream.md).
+[../explanation/scope-and-upstream.md](../../plugins/spark/docs/explanation/additive.md).
 
 ## Alternatives Considered
 
@@ -49,7 +49,7 @@ second copy of primitives Anthropic already maintains. Narrative in
 
 ## Related Docs
 
-- [../explanation/scope-and-upstream.md](../../plugins/spark/docs/explanation/scope-and-upstream.md)
+- [../explanation/scope-and-upstream.md](../../plugins/spark/docs/explanation/additive.md)
 - [../explanation/sdlc-doctrine.md](../../plugins/spark/docs/explanation/sdlc-doctrine.md)
 - [0001-plugin-not-framework.md](0001-plugin-not-framework.md)
 - [../architecture/spark-internals.md](../architecture/spark-internals.md)

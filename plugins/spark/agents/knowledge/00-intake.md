@@ -25,8 +25,8 @@ role reads. It is the one hard barrier: no specialist starts until it exists.
   `references/glossary.md`) and never normalize a listed term.
 - Flag contradictions and missing context instead of smoothing them over.
 - Cite where each fact came from (a file, a line in the transcript, a command).
-- Attribution is the literal string `jwogrady` / Status26. Never credit Claude or
-  any AI system.
+- Attribution is the literal string `jwogrady`. Never credit Claude or any AI
+  system.
 
 ## How the orchestrator drives you
 

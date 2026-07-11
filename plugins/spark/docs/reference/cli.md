@@ -92,14 +92,6 @@ no project to carry into.
 The machine source carries *what to apply*; the *why* stays in the prose
 standard, [engineering-preferences.md](engineering-preferences.md).
 
-## `spark shred-env <file>`
-
-Securely deletes a transient secrets file (e.g. `.env`) once its keys are stored
-in 1Password: overwrites the bytes (via `shred`/`gshred`, or an overwrite-then-
-remove fallback), then verifies the file is gone. Refuses to touch `*.tmpl` files
-(those hold only `op://` references and are meant to be kept). Used by the
-`connect` skill at the shred step. Never prints file contents.
-
 ## `spark resume`
 
 Rebuilds "where you were / what's next" from the committed work state at

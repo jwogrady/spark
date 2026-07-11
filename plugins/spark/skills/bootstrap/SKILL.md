@@ -1,6 +1,6 @@
 ---
 name: bootstrap
-description: Scaffold a new project's runtime with config options — choose frontend/backend and framework, run the canonical scaffolder with Bun (TypeScript) or uv (Python) defaults, and wire it into the Spark lifecycle. Use when starting a new project, scaffolding a runtime, or setting up a frontend/backend stack. Not for wiring services or secrets (`connect`), nor framing/planning the work (`ideate`/`plan`).
+description: Scaffold a new project's runtime with config options — choose frontend/backend and framework, run the canonical scaffolder with Bun (TypeScript) or uv (Python) defaults, and wire it into the Spark lifecycle. Use when starting a new project, scaffolding a runtime, or setting up a frontend/backend stack. Not for wiring services or secrets (the spark-connect companion plugin), nor framing/planning the work (`ideate`/`plan`).
 ---
 
 # bootstrap — runtime scaffold
@@ -32,7 +32,7 @@ Concrete per-framework commands and quality-gate defaults live in
    `uv run …`) and confirm it works before moving on. If it fails, report the
    output plainly; don't paper over it.
 6. **Carry the standard in.** Record deviations from the resolved defaults as
-   committed project facts — e.g. a frontend Cosmic writes
+   committed project facts — e.g. a frontend project writes
    `.spark/preferences.json` with `{"stack.default": "typescript-bun"}` so the
    exception is visible in review. Then run `spark setup` — one run installs
    the git hooks, applies the permission baseline, and materializes the
@@ -41,7 +41,6 @@ Concrete per-framework commands and quality-gate defaults live in
    choice always is one.
 7. **Layer Spark on top:**
    - Generate `CLAUDE.md` and `AGENTS.md` with [`agents-md`](../agents-md/SKILL.md).
-   - Connect services and secrets with [`connect`](../connect/SKILL.md).
    - Land at [`ideate`](../ideate/SKILL.md).
 
 ## Guardrails
@@ -60,6 +59,7 @@ Concrete per-framework commands and quality-gate defaults live in
 
 ## Fits the lifecycle
 
-`bootstrap` and [`connect`](../connect/SKILL.md) are the two project-setup skills:
-runtime + connectivity. Run them first, then enter
-`Ideate → Plan → Codify → Validate → Ship`.
+`bootstrap` is the new-project path into Spark: scaffold the runtime, carry
+the standard in with `spark setup`, then enter
+`Ideate → Plan → Codify → Validate → Ship`. Service connectivity and secrets
+are the spark-connect companion plugin's job.

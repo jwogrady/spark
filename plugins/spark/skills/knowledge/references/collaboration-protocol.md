@@ -1,139 +1,64 @@
 # knowledge — collaboration protocol
 
-How the crew runs as **real subagents** and how the skill orchestrates them. Each
-role is a plugin agent under [`agents/knowledge/`](../../../agents/knowledge/)
-(registered as `spark:knowledge:<name>`). It borrows `docit`'s shared-notes mechanism
-but is **routed, not fixed**: intake classifies the input, the orchestrator
-dispatches only the specialists that doc type needs, and the editor synthesizes.
-
----
-
-## Who orchestrates
-
-The skill — the main loop — is the sole orchestrator: a subagent cannot spawn
-another, so every dispatch and barrier is the main loop's job, and the agents
-coordinate only through shared notes in `.knowledge-notes/`, never by calling each
-other. That general pattern is documented once in
-the architecture map;
-below is what's specific to `knowledge`.
-
-A role is **dispatched fresh once per phase it takes part in** — the agent
-definition under `agents/knowledge/` holds the durable identity; the orchestrator's
-per-dispatch brief names the phase and (for the editor) whether the doc is internal
-or external.
-
----
+How the three-role crew runs. Each role is a real plugin agent under
+[`agents/knowledge/`](../../../agents/knowledge/) (registered as
+`spark:knowledge:<name>`). The skill — the main loop — is the sole orchestrator:
+a subagent cannot spawn another, so every dispatch and barrier is the main
+loop's job. Agents coordinate only through shared notes in `.knowledge-notes/`
+(gitignored scratch, never committed), each dispatched fresh per phase with a
+brief naming the phase and, for the librarian-editor, whether the doc is
+internal or external.
 
 ## The roles
 
 ```
-00 intake      → reads raw input, writes the fact base. Barrier. Read by everyone.
-01 architect   → ADRs, system docs, service maps, data-model/integration notes.
-02 product     → product specs, feature briefs, user stories, acceptance criteria.
-03 ops         → SOPs, checklists, runbooks, escalation/onboarding/role guides.
-04 librarian   → placement, filenames, dedup, cross-links, glossary upkeep.
-05 editor      → polish, internal-vs-external voice, files the doc, reports.   (lead)
+00 intake            → reads raw input, writes the fact base, names the doc type. Barrier.
+01 author            → drafts per doc type: ADR / system doc / product spec / SOP-runbook.
+02 librarian-editor  → placement, dedup, cross-links, glossary; final synthesis + filing. (lead)
 ```
 
-01/02/03 are the **specialists** — only the ones the intake's doc type calls for
-are dispatched. 04 and 05 run on every request.
+The doc type (`adr | system-doc | product-spec | sop | runbook | onboarding |
+glossary | mixed`) selects the author's template from
+[`templates.md`](templates.md). There is no routing table anymore — one author
+handles every type; a `mixed` request means the author drafts each slice under
+its own template.
 
----
-
-## Request routing
-
-When knowledge receives a request, classify it (this is the intake's job, confirmed
-by the orchestrator) as one or more of:
-
-| Doc type           | Specialist(s)        | Template                     |
-|--------------------|----------------------|------------------------------|
-| `adr`              | architect            | Decision Record              |
-| `system-doc`       | architect            | Technical System Doc         |
-| `product-spec`     | product              | Product Spec                 |
-| `sop` / `runbook`  | ops                  | SOP / Process Doc            |
-| `onboarding`/`role`| ops                  | SOP / Process Doc            |
-| `glossary`         | librarian            | Glossary entry               |
-| `mixed`            | two or more, parallel| one per slice                |
-
-For `mixed`, the intake names each slice and the doc type it maps to; the
-orchestrator dispatches those specialists **concurrently** in Phase 1.
-
----
-
-## The phases — what the orchestrator dispatches
+## The phases
 
 ```
 Phase 0 — Intake (barrier)
-  Dispatch ONE agent: spark:knowledge:intake.
-  It writes .knowledge-notes/00-intake.md alone, ending with a Recommended Doc Type.
-  Wait for it. Nothing else starts until this exists.
-        ↓ .knowledge-notes/00-intake.md
+  Dispatch spark:knowledge:intake alone. It writes .knowledge-notes/00-intake.md,
+  ending with a Recommended Doc Type. Nothing else starts until it exists.
 
-Phase 1 — Draft (route)
-  Read the Recommended Doc Type. Dispatch ONLY the specialist(s) it names —
-  architect and/or product and/or ops — CONCURRENTLY when more than one. Each
-  reads the intake and drafts into .knowledge-notes/ using its template. Wait for all.
-        ↓ .knowledge-notes/architecture.md | product.md | ops.md
+Phase 1 — Draft
+  Dispatch spark:knowledge:author. It reads the intake and drafts into
+  .knowledge-notes/ with the template its doc type calls for — one note per
+  slice when the type is mixed.
 
-Phase 2 — Review + shelve (parallel)
-  Dispatch spark:knowledge:editor (edit feedback on each draft) and
-  spark:knowledge:librarian (placement, dedup, cross-links, glossary,
-  promotion candidates) CONCURRENTLY. Wait for both.
-        ↓ feedback appended to drafts; .knowledge-notes/librarian.md
+Phase 2 — Review + shelve
+  Dispatch spark:knowledge:librarian-editor. It appends feedback to each draft
+  and writes .knowledge-notes/librarian.md: placement, filename, duplicates,
+  cross-links, glossary changes, and promotion candidates (or "none").
 
-Phase 3 — Revise in place (parallel)
-  Re-dispatch the Phase 1 specialist(s) with a "revise" brief; each folds in the
-  editor/librarian feedback and resolves or defers its open questions. Re-dispatch
-  intake only if a contradiction with the fact base surfaced. Wait for all.
+Phase 3 — Revise
+  Re-dispatch spark:knowledge:author with a "revise" brief; it folds the
+  feedback in and resolves or defers each open question. Re-dispatch intake
+  only if a draft contradicted the fact base.
 
 Phase 4 — Synthesize + file (barrier)
-  Dispatch ONE agent: spark:knowledge:editor. It reads every revised note and the
-  librarian's recommendation, writes the final doc in one voice to the recommended
-  path, and writes .knowledge-notes/editor-log.md. Before any overwrite, the
-  orchestrator shows the user a diff and gets go-ahead. Then re-dispatch
-  spark:knowledge:librarian to update the glossary / index so the doc is findable
-  — and, for any promotion candidates the user explicitly approved, to append
-  them to the operator store with provenance
-  (references/operator-knowledge.md).
-        ↓ the final doc in docs/…, .knowledge-notes/editor-log.md
+  Dispatch spark:knowledge:librarian-editor. It writes the final doc in one
+  voice to the recommended path — the orchestrator shows the user a diff and
+  gets go-ahead before any overwrite — updates the glossary/index so the doc
+  is findable, appends any explicitly user-approved promotion candidates to
+  the operator store with provenance (operator-knowledge.md), and writes
+  .knowledge-notes/editor-log.md.
 ```
 
-Small requests collapse cleanly: a one-paragraph SOP is intake → ops → editor,
-skipping nothing essential but never spinning up architect or product.
+## Shared notes
 
----
-
-## Shared notes structure
-
-Each role writes one markdown file to `.knowledge-notes/`. Use consistent sections so
-the editor can cross-reference and specialists can absorb feedback.
-
-- **Source** — what input this note draws on (links/citations).
-- **Draft** — the doc content this role owns.
-- **Facts vs assumptions** — kept separate, per the one rule.
-- **Open questions** — unresolved/contradictory items.
-- **Feedback** — left by the editor/librarian in Phase 2; the owner resolves each
-  in Phase 3 and marks it done.
-
-`00-intake.md` follows the Intake Summary template instead.
-
----
-
-## The one rule
-
-**Capture truth; mark uncertainty.** Knowledge never invents company facts. Every
-role keeps facts separate from assumptions, separates current state from intended
-state, and flags what it doesn't know rather than smoothing it over. A clean doc
-that hides an unknown is worse than a slightly rough one that names it.
-
----
-
-## Output and handoff
-
-- Final docs land in the repo (`docs/…`), not in `.knowledge-notes/`.
-- The editor presents a diff and waits for go-ahead before overwriting an existing
-  doc.
-- `.knowledge-notes/` is scratch — gitignored, not committed. It holds the
-  reasoning (intake, drafts, feedback, the editor log) for the duration of a run;
-  the published docs and their git history are the durable record.
-- Hand the change to [`ship`](../../ship/SKILL.md) to commit and open a PR.
+Each note in `.knowledge-notes/` uses consistent sections — **Source**,
+**Draft**, **Facts vs assumptions**, **Open questions**, **Feedback** (left in
+Phase 2, resolved in Phase 3) — except `00-intake.md`, which follows the Intake
+Summary template. Final docs land in the repo (`docs/…`); the scratch holds the
+run's reasoning, and the published docs plus git history are the durable record.
+Hand the change to [`ship`](../../ship/SKILL.md) to commit and open a PR.

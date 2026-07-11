@@ -86,4 +86,4 @@ promise literally true.
 
 - [0008-information-architecture.md](0008-information-architecture.md) — the motion test this applies
 - [0002-additive-to-anthropic-spec.md](0002-additive-to-anthropic-spec.md) — why diff review stays native
-- `docs/architecture/conformance.md` — the audit whose verdicts this implements
+- `docs/architecture/spark-internals.md` — the audit whose verdicts this implements (its durable conformance section)

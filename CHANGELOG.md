@@ -10,6 +10,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ### Changed
 
+- **The marketplace reshaped into a focused core and companion plugins**
+  (#140, ADR-0014, ADR-0015). The core plugin now ships only the shipping
+  loop — `setup`, `bootstrap`, the five lifecycle skills, three-tier
+  preferences, `brief`/`resume` with a new `idle` work-state stage, the two
+  enforcement doors, `doctor`, and Release Please scaffolding — plus a
+  slimmed `knowledge` crew (three roles) and `agents-md`. Three companion
+  plugins are installable from the same marketplace: `spark-audit` (the
+  audit skill moves there), `spark-connect` (the connect skill and
+  `shred-env`, which leaves the core CLI), and `spark-docs` (the public-docs
+  crew, slimmed to five personas with the Issue Council removed). All moves
+  are history-preserving; `doctor` now validates every listed plugin and
+  enforces taxonomy parity, and the docs — README, taxonomy, identity,
+  glossary, onboarding — describe the new shape. The internal "Cosmic"
+  product vocabulary is retired from public docs.
 - **`review` + `cleanup` consolidated into one `audit` skill** (#139). Both
   skills are removed; `/spark:audit` runs the whole-project audit directly
   in-session with at most five dispatched roles — **assess** keeps review's
@@ -57,7 +71,6 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 - **Portable operator knowledge** (#67): `~/.config/spark/knowledge/` home,
   written only through the librarian's explicit promotion step.
 - **On-ramp** (#80): `how-to/carry-your-preferences-in.md`.
-
 
 ### Fixed
 

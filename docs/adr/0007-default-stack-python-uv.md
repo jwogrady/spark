@@ -1,7 +1,7 @@
 # ADR: Default Cosmic stack is Python + `uv`; TypeScript/Bun only for a frontend
 
 Date: 2026-07-08
-Status: Accepted
+Status: Accepted; vocabulary superseded by [ADR-0015](0015-generated-projects-without-the-cosmic-model.md) — "Cosmic" is retired from the public docs
 Owner: jwogrady
 
 ## Context
