@@ -47,7 +47,8 @@ Each missing or unauthenticated dependency prints one remediation line
 only when a *core* tool is missing: optional integrations never fail the run,
 so a conservative local-only environment stays healthy. `--json` emits the
 same facts as one machine-readable object (built without any JSON parser)
-for CI gates and troubleshooting.
+for CI gates and troubleshooting. The human-readable contract behind this
+check is the [supported-environment matrix](compatibility.md).
 
 ## `spark list-skills`
 
