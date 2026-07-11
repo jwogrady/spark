@@ -14,18 +14,21 @@ guides, glossary entries. For outward-facing docs and README glow-ups, use the
    questions into `.knowledge-notes/00-intake.md` and recommends a doc type.
    The one rule is **capture truth; mark uncertainty** — unknowns are named,
    never smoothed over.
-3. The right specialist drafts — Architect (ADRs, system docs), Product (specs,
-   feature briefs), or Ops (SOPs, runbooks); multiple run concurrently for a
-   mixed request.
-4. The Editor and Librarian review concurrently: edit feedback, placement,
-   dedup, cross-links, and glossary. The specialist folds the feedback in and
+3. The Author drafts with the template the doc type calls for — ADR, system
+   doc, product spec, or SOP/runbook. A mixed request means it drafts each
+   slice.
+4. The Librarian-Editor reviews: draft feedback plus placement, dedup,
+   cross-links, and glossary changes. The Author folds the feedback in and
    resolves or defers each open question.
-5. The Editor writes the final doc in one voice to the Librarian's recommended
+5. The Librarian-Editor writes the final doc in one voice to the recommended
    path — inside the repo's existing docs structure (`docs/adr/`, `docs/ops/`,
-   …), never a parallel scheme — and the Librarian updates the glossary/index.
+   …), never a parallel scheme — and updates the glossary/index.
 6. For any overwrite of an existing doc, review the diff and give a go-ahead
    before it's written.
-7. Hand the result to `/spark:ship` to commit and open a PR. Commit only the
+7. If operator-level vocabulary candidates were flagged, they are presented
+   for promotion to `~/.config/spark/knowledge/` — nothing is copied without
+   your explicit go-ahead, and the project-local entry stays put.
+8. Hand the result to `/spark:ship` to commit and open a PR. Commit only the
    published docs; keep `.knowledge-notes/` gitignored — it's process exhaust.
 
 **Done when** the doc is filed where the team will find it, every fact is
