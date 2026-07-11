@@ -1,6 +1,6 @@
 ---
 name: validate
-description: Review and harden one change — run Claude Code's built-in /code-review and /security-review on the current branch's diff, triage the findings, and fix them until the issue's acceptance criteria hold. Use after codify to harden a single change/branch/PR, resolve review findings, or get a diff ready to ship. For a whole-codebase audit rather than one diff, use review instead.
+description: Review and harden one change — run Claude Code's built-in /code-review and /security-review on the current branch's diff, triage the findings, and fix them until the issue's acceptance criteria hold. Use after codify to harden a single change/branch/PR, resolve review findings, or get a diff ready to ship. For a whole-codebase audit rather than one diff, use audit instead.
 ---
 
 # validate — Stage 4 of the Spark lifecycle

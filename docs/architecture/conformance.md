@@ -14,7 +14,7 @@ carry-through, carry-forward), which **layer** does it touch
 what is its explicit disposition (**support** with rationale, reclassify,
 or deprecate)? "Neither, with no disposition" is a failing verdict.
 
-## Skills (12)
+## Skills (11)
 
 | Skill | Motion | Layer touched | Verdict |
 |---|---|---|---|
@@ -28,8 +28,7 @@ or deprecate)? "Neither, with no disposition" is a failing verdict.
 | `knowledge` | carry-forward — Project → Operator knowledge promotion (portability completed by #67) | Project → Operator | fits |
 | `docit` | none | Project | **support** — materializes Project-layer knowledge outward as public docs; serves carry-through quality, is not itself a motion |
 | `agents-md` | none | Project | **support** — maintains the Project-layer context files (CLAUDE.md / AGENTS.md) that brief any agent; adjacent to carry-in but scoped to one repo |
-| `review` | none | Project / Session | **support** — Validate-adjacent whole-project audit; findings promote Session → Project via issues/PRs |
-| `cleanup` | none | Project | **support** — enforces docs-describe-reality (truth hygiene) across the Project layer |
+| `audit` | none | Project / Session | **support** — Validate-adjacent whole-project audit: assess promotes findings Session → Project via issues/PRs; purge enforces docs-describe-reality (truth hygiene) across the Project layer |
 
 ## CLI verbs (shipped)
 

@@ -36,21 +36,22 @@ Relationship vocabulary:
 | `bootstrap` | — | none | Wraps the official runtime scaffolder (Bun / uv). No built-in scaffolds runtimes. |
 | `connect` | — | none | Secrets + service connectivity via `op` (1Password). No built-in covers this. |
 | `agents-md` | `/init` | delegates-to | Defers net-new `CLAUDE.md` creation to `/init`; owns maintenance, audit, drift-check, and `AGENTS.md` (which `/init` never writes). |
-| `review` | `/review`, `/code-review`, `/security-review` | stays-out-of-lane | Whole-**project** audit by specialist agents. The built-ins review **one diff/PR**. Different unit of work — see finding F1. |
-| `cleanup` | `simplify` | stays-out-of-lane | Removes what's proven dead or false across the **whole repo** (stale code, branches, untrue docs) and emits an orchestrator prompt. `simplify` improves quality on the **changed diff**. Different unit of work; neither reviews for bugs. |
+| `audit` | `/review`, `/code-review`, `/security-review`, `simplify` | stays-out-of-lane | Whole-**project** audit run in-session: assess mode reports health, purge mode removes what's proven dead or false. The built-ins review or simplify **one diff/PR**. Different unit of work; the description sends single-diff users to the native reviewers (resolves finding F1). |
 
-## Findings to resolve
+## Findings
 
-These are the only items where the boundary is real but not yet visible at skill
-selection time (Claude sees only the `description` frontmatter). They are
-resolved by clarifying descriptions in **#29**, not by changing behavior.
+These are the only items where the boundary was real but not visible at skill
+selection time (Claude sees only the `description` frontmatter). F1 was
+initially mitigated by a clarified description (**#29**) and fully resolved by
+the `audit` consolidation (**#139**).
 
-- **F1 — `review` name collision.** Spark's `review` shares the word "review"
-  with native `/review` and `/code-review`. The scope differs cleanly
-  (whole codebase across 8 dimensions vs. a single diff/PR), but a user picking
-  a skill can't see that. Resolution: the `review` description must point
-  single-diff/PR users to the native review tools (and to `validate` for one
-  branch). No rename (per the clarify-only constraint).
+- **F1 — `review` name collision. Resolved (#139).** Spark's former `review`
+  skill shared the word "review" with native `/review` and `/code-review`. The
+  scope differed cleanly (whole codebase vs. a single diff/PR), but a user
+  picking a skill couldn't see that. Resolved by consolidating `review` and
+  `cleanup` into the `audit` skill: the collision is gone from the name
+  itself, and the `audit` description still points single-diff/PR users to
+  the native review tools (and to `validate` for one branch).
 - **F2 — `codify` under-leverage (opportunity, not overlap).** `codify` does not
   currently invoke `verify`/`run` to confirm the change behaves. This is a
   complement, not a duplication; noted here so it isn't mistaken for a gap.

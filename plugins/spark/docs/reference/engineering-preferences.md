@@ -35,7 +35,7 @@ You never re-state these — Spark already holds them.
 | Design before code · acceptance criteria before dev | [`ideate`](../reference/skills.md) · [`plan`](../reference/skills.md) · [codify-readiness](../reference/codify-readiness.md) |
 | One problem / one issue / one PR | [scope doctrine](../explanation/philosophy.md) |
 | ADRs · decisions explicit and traceable | `docs/adr/` |
-| Documentation describes reality | [honesty principle](../explanation/philosophy.md) · `docit` · `cleanup` |
+| Documentation describes reality | [honesty principle](../explanation/philosophy.md) · `docit` · `audit` |
 | README says *what* before *how* · standard doc set | `docit` · this repo's own layout |
 | Minimize dependencies · secrets via `op`, never committed | [zero-dependency principle](../explanation/philosophy.md) · [`connect`](../reference/skills.md) · `SECURITY.md` |
 

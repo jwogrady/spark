@@ -38,6 +38,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
   written only through the librarian's explicit promotion step.
 - **On-ramp** (#80): `how-to/carry-your-preferences-in.md`.
 
+### Changed
+
+- **`review` + `cleanup` consolidated into one `audit` skill** (#139). Both
+  skills are removed; `/spark:audit` runs the whole-project audit directly
+  in-session with at most five dispatched roles — **assess** keeps review's
+  six health dimensions and produces an evidence-cited report; **purge**
+  keeps cleanup's evidence table, deletion-safety categories, and human
+  approval gate, and acts instead of emitting a copy-paste orchestrator
+  prompt. Skill count drops from 12 to 11 and the native `/review` name
+  collision (finding F1) is resolved.
+
 ### Fixed
 
 - Restored the `spark apply-permissions` verb lost in a merge-conflict

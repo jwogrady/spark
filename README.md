@@ -109,13 +109,13 @@ issue and PR creation.
 
 ## The skills, grouped
 
-Spark's 12 skills fall into four categories (canonical list:
+Spark's 11 skills fall into four categories (canonical list:
 [`plugins/spark/docs/reference/skills.md`](plugins/spark/docs/reference/skills.md)):
 
 - **Lifecycle** — `ideate`, `plan`, `codify`, `validate`, `ship` (the five stages above).
 - **Setup** — `bootstrap` (scaffold a runtime), `connect` (services + secrets via 1Password).
 - **Authorship** — `docit` (public docs), `knowledge` (internal knowledge).
-- **Supporting** — `agents-md` (`CLAUDE.md` + `AGENTS.md`), `review` (whole-project audit), `cleanup` (stale-code + doc-truth hygiene).
+- **Supporting** — `agents-md` (`CLAUDE.md` + `AGENTS.md`), `audit` (whole-project health assessment + evidence-gated purge).
 
 Not sure which one? Follow the
 **[skill chooser](plugins/spark/docs/reference/skills.md#which-skill-do-i-use)** — a
@@ -174,7 +174,7 @@ built-ins, reusing the built-in reviewers rather than reinventing them.
 ├──────────────────────────────────────────────────────────────┤
 │                Spark plugin (you install once)               │
 │  skills/          hooks/               bin/spark             │
-│  12 SKILL.md      PreToolUse           doctor  list-skills   │
+│  11 SKILL.md      PreToolUse           doctor  list-skills   │
 │  files            guard-bash.sh        new-skill  version    │
 │  agents/          SessionStart         install-git-hooks     │
 │  docit (13)       spark brief          apply-permissions     │

@@ -116,7 +116,7 @@ the decision and its scope in
 
 ## The subagent-orchestration pattern
 
-The knowledge/docs skills (`knowledge`, `docit`) and the `review` audit are
+The knowledge/docs skills (`knowledge`, `docit`) and the `audit` skill are
 multi-agent. They share one pattern:
 
 - **The main loop is the sole orchestrator.** Subagents do not dispatch each
