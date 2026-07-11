@@ -1,63 +1,73 @@
-# Problem statement — one command to arm a repo
+# Problem statement — the plugin ships more than its identity claims
 
 > Authoritative — the problem this effort solves. Owner: `jwogrady`.
 
 ## Problem
 
-Carrying the operator's standard into a repo takes three separately-discovered
-commands — `spark install-git-hooks`, `spark apply-permissions`,
-`spark preferences --apply` — documented across the install guide, the
-preferences on-ramp, and the bootstrap flow. Nothing runs them together, so a
-repo is easy to leave half-armed: hooks installed but no permission baseline,
-or the standard applied but the human-driven enforcement door still open. The
-operator must remember the full sequence in every new or existing repo, which
-is exactly the re-loading cost Spark exists to remove.
+Spark's identity is one thing: the operator's standards, loaded once and
+carried into every project. The plugin ships twelve skills, but the
+architecture conformance audit classifies four of them — the whole-project
+reviewer, the cleanup generator, the public-docs crew, and the secrets
+bootstrap — as support that serves none of the three carry motions. Those
+four bring nineteen subagent definitions, three near-duplicate orchestration
+protocols, a skill that emits a prompt instead of acting, dead reference
+files from a pre-plugin era, and an operator decisions store nothing reads.
+Every one of them is surface the operator must understand, doctor must
+validate, and the docs must explain — dilution that makes the core promise
+harder to see and costlier to maintain.
 
 ## Outcome
 
-One idempotent command arms a repo completely: run it in any git repository
-and the git hooks, the permission baseline, and the resolved engineering
-standard are all in place, with one consolidated report of what was created,
-kept, and left for a human decision. Running it twice changes nothing.
+The plugin contains only what carries the standard: the five lifecycle
+skills, project inception, internal knowledge capture, the agent-contract
+maintainer, and one evidence-based audit capability that acts directly.
+Everything removed is deliberate, recorded, and recoverable from history.
+The remaining surfaces are truthful: the work state defines its own loop
+close, and the one-command carry-in covers the whole permission baseline.
 
 ## Success criteria
 
-1. `spark setup` in a fresh repo installs both git hooks, applies the
-   permission baseline, and materializes the resolved standard in one run.
-2. A second `spark setup` run reports everything as already present and
-   writes nothing (idempotent, create-only throughout).
-3. `spark setup --yes` completes without prompting; without the flag, the
-   existing permission-merge confirmation is preserved.
-4. The three individual commands still work unchanged, and `spark help`
-   lists the new verb.
-5. `spark doctor` passes, and the install/preferences/bootstrap docs present
-   the single command as the primary path.
+1. One `audit` skill replaces `review` and `cleanup`, keeps the evidence
+   table and deletion-safety discipline, and performs its audit directly —
+   no copy-paste orchestrator prompt.
+2. The public-docs crew and the secrets bootstrap are out of the plugin;
+   `shred-env` remains; the skill taxonomy, doctor, and every doc surface
+   agree on the reduced inventory.
+3. The unread operator decisions store is deferred out of the shipped
+   docs/protocol until a reader exists; glossary promotion is unaffected.
+4. The agent-contract skill carries no dead reference files, and no repo
+   template demands artifacts that skills do not ship.
+5. Work state has a defined close: after the recorded pull request merges,
+   the next brief/resume names the loop restart instead of a stale action.
 
 ## Prior art & reusable assets
 
-- All three verbs exist in `bin/spark` and are already idempotent:
-  `cmd_install_git_hooks` (skips non-Spark hooks), `cmd_apply_permissions`
-  (append-only merge, `--yes`), and `apply_standard` (create-only engine).
-  `setup` composes them; it reimplements nothing.
-- `ROADMAP.md` v0.6 already names a `spark setup` flow — this is that item's
-  mechanical half, brought forward.
-- The verb table in `bin/spark` drives both dispatch and help, so the new
-  verb self-documents.
+- The conformance audit (`docs/architecture/conformance.md`) already
+  classifies every component; this effort implements its verdicts.
+- Precedent: `caveman`, `handoff`, and `commit` were removed or folded in
+  earlier releases — dropping skills is an established, changelogged move.
+- The cleanup skill's evidence table, confidence levels, and deletion-safety
+  categories carry into the new audit skill; the reviewer's dimension list
+  informs its assess mode.
+- Extraction is removal-with-record: extracted skills' new homes are
+  separate products seeded from this repo's git history.
+- The one-command carry-in and its composition pattern (result counters,
+  create-only application) are the model for any new CLI behavior.
 
 ## Constraints
 
-- POSIX-friendly Bash, zero runtime dependencies, graceful degradation
-  without `jq`/`python3` — the same rules as every shipped script.
-- Composition only: the individual verbs remain the single implementation of
-  each step; `setup` must not fork their logic.
-- For a valid invocation, exit non-zero only when there is no git repo to
-  arm; advisory items are decisions, not failures. Invalid arguments are
-  usage errors and also exit non-zero.
+- POSIX-friendly Bash, zero runtime dependencies; skills are Markdown.
+- One concern per branch and pull request; every removal lands reviewable.
+- Doctor stays the single validation gate and must pass after every change.
+- Nothing already merged regresses: setup, preferences, brief, resume, and
+  the enforcement doors keep their behavior.
 
 ## Non-goals
 
-- No changes to what the hooks, baseline, or standard contain.
-- No removal or deprecation of the three individual commands.
-- No stack-aware baseline curation (the rest of ROADMAP v0.6) and no
-  interactive wizard.
-- No release; the change lands as one pull request and stops there.
+- No new homes built here for the extracted products — separate repos,
+  separate efforts.
+- No changes to the five lifecycle skills' behavior or the enforcement
+  rules.
+- No team-coordination features, no bundled MCP servers.
+- No release; the milestone ships as reviewed pull requests, and the
+  release mechanism rolls them up on its own.
