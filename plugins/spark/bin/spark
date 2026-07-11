@@ -108,16 +108,16 @@ pref_get() {
 # is a project choice, so it is kept and reported, never overwritten — which
 # is what makes every run idempotent by construction.
 # Report lanes:  + created   = exists, kept   ! needs a manual decision
-# Exit: 0 on success even with ! items (they are decisions, not failures);
-# 1 only when there is no git repo to carry the standard into.
+# Exit: 0 on success even with ! decision items; 1 when there is no git repo
+# or an artifact could not be written.
 apply_standard() {
   # Result counters for composing callers (setup): deliberately global,
   # re-initialized per call so a stale value never leaks between runs.
-  APPLY_STANDARD_CREATED=0 APPLY_STANDARD_KEPT=0 APPLY_STANDARD_ATTENTION=0
+  APPLY_STANDARD_CREATED=0 APPLY_STANDARD_KEPT=0 APPLY_STANDARD_ATTENTION=0 APPLY_STANDARD_FAILED=0
   local top="${1:-}"
   [ -n "$top" ] || top="$(git rev-parse --show-toplevel 2>/dev/null || true)"
   [ -n "$top" ] || { red "apply_standard: not inside a git repo"; return 1; }
-  local name created=0 kept=0 attention=0
+  local name created=0 kept=0 attention=0 failed=0
   name="$(basename "$top")"
 
   # place <relpath> — write stdin to the repo path unless it already exists.
@@ -126,8 +126,16 @@ apply_standard() {
     if [ -e "$dest" ]; then
       echo "  = $1 (exists — kept)"; kept=$((kept+1))
     else
-      mkdir -p "$(dirname "$dest")"
-      cat > "$dest"
+      if ! mkdir -p "$(dirname "$dest")"; then
+        red "  ! $1 — could not create its parent directory"
+        attention=$((attention+1)); failed=1
+        return 1
+      fi
+      if ! cat > "$dest"; then
+        red "  ! $1 — could not write the file"
+        attention=$((attention+1)); failed=1
+        return 1
+      fi
       green "  + $1"; created=$((created+1))
     fi
   }
@@ -139,7 +147,7 @@ apply_standard() {
       place "$1" < "$src"
     else
       yellow "  ! $1 — template $2 missing from the plugin (reinstall, or write it by hand)"
-      attention=$((attention+1))
+      attention=$((attention+1)); failed=1
     fi
   }
 
@@ -238,6 +246,10 @@ EOF
   APPLY_STANDARD_CREATED=$created
   APPLY_STANDARD_KEPT=$kept
   APPLY_STANDARD_ATTENTION=$attention
+  # FAILED marks mechanical failures only (a file that could not be written,
+  # a missing template) — never operator decisions like the LICENSE choice.
+  APPLY_STANDARD_FAILED=$failed
+  return "$failed"
 }
 
 cmd_version() {
@@ -825,15 +837,25 @@ cmd_brief() {
 cmd_install_git_hooks() {
   # Result counters for composing callers (setup): deliberately global,
   # re-initialized per call so a stale value never leaks between runs.
-  INSTALL_GIT_HOOKS_CREATED=0 INSTALL_GIT_HOOKS_KEPT=0 INSTALL_GIT_HOOKS_ATTENTION=0
+  INSTALL_GIT_HOOKS_CREATED=0 INSTALL_GIT_HOOKS_KEPT=0 INSTALL_GIT_HOOKS_ATTENTION=0 INSTALL_GIT_HOOKS_FAILED=0
   git rev-parse --git-dir >/dev/null 2>&1 || { red "not inside a git repo"; return 1; }
-  local hooksdir; hooksdir="$(git rev-parse --git-path hooks)"
-  mkdir -p "$hooksdir"
+  local hooksdir failed=0
+  if ! hooksdir="$(git rev-parse --git-path hooks)"; then
+    red "could not resolve the git hooks directory"
+    INSTALL_GIT_HOOKS_ATTENTION=1 INSTALL_GIT_HOOKS_FAILED=1
+    return 1
+  fi
+  if ! mkdir -p "$hooksdir"; then
+    red "could not create the git hooks directory: $hooksdir"
+    INSTALL_GIT_HOOKS_ATTENTION=1 INSTALL_GIT_HOOKS_FAILED=1
+    return 1
+  fi
   for h in commit-msg pre-commit; do
     local src="$SPARK_ROOT/scripts/hooks/$h"
     if [ ! -f "$src" ]; then
       yellow "! $h not found in Spark, skipping"
       INSTALL_GIT_HOOKS_ATTENTION=$((INSTALL_GIT_HOOKS_ATTENTION+1))
+      failed=1; INSTALL_GIT_HOOKS_FAILED=1
       continue
     fi
     if [ -f "$hooksdir/$h" ] && ! grep -q 'spark' "$hooksdir/$h" 2>/dev/null; then
@@ -846,11 +868,22 @@ cmd_install_git_hooks() {
       INSTALL_GIT_HOOKS_KEPT=$((INSTALL_GIT_HOOKS_KEPT+1))
       continue
     fi
-    cp "$src" "$hooksdir/$h"
-    chmod +x "$hooksdir/$h"
+    if ! cp "$src" "$hooksdir/$h"; then
+      red "! could not install $h in $hooksdir"
+      INSTALL_GIT_HOOKS_ATTENTION=$((INSTALL_GIT_HOOKS_ATTENTION+1))
+      failed=1; INSTALL_GIT_HOOKS_FAILED=1
+      continue
+    fi
+    if ! chmod +x "$hooksdir/$h"; then
+      red "! installed $h but could not make it executable"
+      INSTALL_GIT_HOOKS_ATTENTION=$((INSTALL_GIT_HOOKS_ATTENTION+1))
+      failed=1; INSTALL_GIT_HOOKS_FAILED=1
+      continue
+    fi
     green "✓ installed $h"
     INSTALL_GIT_HOOKS_CREATED=$((INSTALL_GIT_HOOKS_CREATED+1))
   done
+  return "$failed"
 }
 
 # The one-command carry-in (ADR-0012): the three arming steps — git hooks,
@@ -877,13 +910,15 @@ cmd_setup() {
     return 1
   fi
 
-  # Every step is ||-guarded: once there is a repo to arm, a failing step is
-  # an attention item in the summary, never a mid-run abort — the promised
-  # exit semantics hold even under set -e. Each step function re-initializes
-  # its result counters, so the aggregate below never reads a stale value.
-  # A nonzero return counts as one attention item only when the step didn't
-  # already report its failure in its own attention counter.
-  local created=0 kept=0 attention=0 rc
+  # Every step is ||-guarded: once there is a repo to arm, no step aborts the
+  # run mid-way, even under set -e. Each step function re-initializes its
+  # result counters, so the aggregate below never reads a stale value. Two
+  # distinct outcomes feed the exit code: FAILED counts mechanical failures
+  # (a file that could not be written, broken tooling) and drives a nonzero
+  # exit; ATTENTION counts operator decisions (a declined merge, the LICENSE
+  # choice) and never fails the run. A nonzero return adds one attention item
+  # only when the step didn't already count its own.
+  local created=0 kept=0 attention=0 failed=0 rc
 
   echo "Spark setup — arming $top"
   echo
@@ -892,6 +927,7 @@ cmd_setup() {
   created=$((created + INSTALL_GIT_HOOKS_CREATED))
   kept=$((kept + INSTALL_GIT_HOOKS_KEPT))
   attention=$((attention + INSTALL_GIT_HOOKS_ATTENTION))
+  failed=$((failed + INSTALL_GIT_HOOKS_FAILED))
   [ "$rc" -eq 0 ] || [ "$INSTALL_GIT_HOOKS_ATTENTION" -gt 0 ] || attention=$((attention+1))
   echo
   echo "[2/3] Permission baseline"
@@ -900,6 +936,7 @@ cmd_setup() {
   created=$((created + APPLY_PERMISSIONS_CREATED))
   kept=$((kept + APPLY_PERMISSIONS_KEPT))
   attention=$((attention + APPLY_PERMISSIONS_ATTENTION))
+  failed=$((failed + APPLY_PERMISSIONS_FAILED))
   [ "$rc" -eq 0 ] || [ "$APPLY_PERMISSIONS_ATTENTION" -gt 0 ] || attention=$((attention+1))
   echo
   echo "[3/3] Engineering standard"
@@ -907,8 +944,13 @@ cmd_setup() {
   created=$((created + APPLY_STANDARD_CREATED))
   kept=$((kept + APPLY_STANDARD_KEPT))
   attention=$((attention + APPLY_STANDARD_ATTENTION))
+  failed=$((failed + APPLY_STANDARD_FAILED))
   [ "$rc" -eq 0 ] || [ "$APPLY_STANDARD_ATTENTION" -gt 0 ] || attention=$((attention+1))
   echo
+  if [ "$failed" -gt 0 ]; then
+    yellow "Setup: $created created, $kept kept, $attention need attention — repo not fully armed ($failed step failure(s))."
+    return 1
+  fi
   if [ "$attention" -gt 0 ]; then
     yellow "Setup: $created created, $kept kept, $attention need attention."
   else
@@ -919,14 +961,14 @@ cmd_setup() {
 cmd_apply_permissions() {
   # Result counters for composing callers (setup): deliberately global,
   # re-initialized per call so a stale value never leaks between runs.
-  APPLY_PERMISSIONS_CREATED=0 APPLY_PERMISSIONS_KEPT=0 APPLY_PERMISSIONS_ATTENTION=0
+  APPLY_PERMISSIONS_CREATED=0 APPLY_PERMISSIONS_KEPT=0 APPLY_PERMISSIONS_ATTENTION=0 APPLY_PERMISSIONS_FAILED=0
   local assume_yes=0
   case "${1:-}" in -y|--yes) assume_yes=1 ;; esac
 
   local baseline="$SPARK_ROOT/settings/permission-baseline.json"
   if [ ! -f "$baseline" ]; then
     red "✗ baseline not found: $baseline"
-    APPLY_PERMISSIONS_ATTENTION=1
+    APPLY_PERMISSIONS_ATTENTION=1 APPLY_PERMISSIONS_FAILED=1
     return 1
   fi
 
@@ -939,8 +981,16 @@ cmd_apply_permissions() {
   local target="$root/.claude/settings.json"
 
   if [ ! -f "$target" ]; then
-    mkdir -p "$root/.claude"
-    cp "$baseline" "$target"
+    if [ -e "$target" ]; then
+      red "✗ $target exists but is not a regular file"
+      APPLY_PERMISSIONS_ATTENTION=1 APPLY_PERMISSIONS_FAILED=1
+      return 1
+    fi
+    if ! mkdir -p "$root/.claude" || ! cp "$baseline" "$target"; then
+      red "✗ could not create $target from Spark's permission baseline"
+      APPLY_PERMISSIONS_ATTENTION=1 APPLY_PERMISSIONS_FAILED=1
+      return 1
+    fi
     green "✓ created $target from Spark's permission baseline"
     APPLY_PERMISSIONS_CREATED=1
     return 0
@@ -973,10 +1023,14 @@ cmd_apply_permissions() {
 
   local additions
   if [ "$have_jq" -eq 1 ]; then
-    additions="$(jq -r --slurpfile cur "$target" \
-      '(.permissions.allow // []) - ($cur[0].permissions.allow // []) | .[]' "$baseline")"
+    if ! additions="$(jq -r --slurpfile cur "$target" \
+      '(.permissions.allow // []) - ($cur[0].permissions.allow // []) | .[]' "$baseline")"; then
+      red "✗ could not compare $target with Spark's permission baseline"
+      APPLY_PERMISSIONS_ATTENTION=1 APPLY_PERMISSIONS_FAILED=1
+      return 1
+    fi
   else
-    additions="$(python3 - "$target" "$baseline" <<'PY'
+    if ! additions="$(python3 - "$target" "$baseline" <<'PY'
 import json, sys
 cur, base = (json.load(open(p)) for p in sys.argv[1:3])
 have = cur.get("permissions", {}).get("allow", [])
@@ -984,7 +1038,11 @@ for rule in base.get("permissions", {}).get("allow", []):
     if rule not in have:
         print(rule)
 PY
-)"
+)"; then
+      red "✗ could not compare $target with Spark's permission baseline"
+      APPLY_PERMISSIONS_ATTENTION=1 APPLY_PERMISSIONS_FAILED=1
+      return 1
+    fi
   fi
 
   if [ -z "$additions" ]; then
@@ -1005,14 +1063,19 @@ PY
     esac
   fi
 
-  local tmp; tmp="$(mktemp "$target.XXXXXX")"
+  local tmp
+  if ! tmp="$(mktemp "$target.XXXXXX")"; then
+    red "✗ could not create a temporary settings file"
+    APPLY_PERMISSIONS_ATTENTION=1
+    return 1
+  fi
   if [ "$have_jq" -eq 1 ]; then
     jq --slurpfile base "$baseline" \
       '(.permissions.allow // []) as $have
        | .permissions.allow = ($have + (($base[0].permissions.allow // []) - $have))' \
-      "$target" > "$tmp" || { rm -f "$tmp"; red "✗ merge failed"; APPLY_PERMISSIONS_ATTENTION=1; return 1; }
+      "$target" > "$tmp" || { rm -f "$tmp"; red "✗ merge failed"; APPLY_PERMISSIONS_ATTENTION=1; APPLY_PERMISSIONS_FAILED=1; return 1; }
   else
-    python3 - "$target" "$baseline" > "$tmp" <<'PY' || { rm -f "$tmp"; red "✗ merge failed"; APPLY_PERMISSIONS_ATTENTION=1; return 1; }
+    python3 - "$target" "$baseline" > "$tmp" <<'PY' || { rm -f "$tmp"; red "✗ merge failed"; APPLY_PERMISSIONS_ATTENTION=1; APPLY_PERMISSIONS_FAILED=1; return 1; }
 import json, sys
 cur, base = (json.load(open(p)) for p in sys.argv[1:3])
 have = cur.setdefault("permissions", {}).setdefault("allow", [])
@@ -1020,7 +1083,12 @@ have += [r for r in base.get("permissions", {}).get("allow", []) if r not in hav
 print(json.dumps(cur, indent=2))
 PY
   fi
-  mv "$tmp" "$target"
+  if ! mv "$tmp" "$target"; then
+    rm -f "$tmp"
+    red "✗ could not replace $target with the merged settings"
+    APPLY_PERMISSIONS_ATTENTION=1
+    return 1
+  fi
   green "✓ merged the Spark baseline into $target"
   APPLY_PERMISSIONS_CREATED=1
 }

@@ -43,11 +43,15 @@ granular commands cannot drift. Re-running is a no-op: hooks report as
 already installed, the baseline as already applied, and the standard as kept.
 
 `--yes` forwards to the permission-merge confirmation; without it, merging
-into an existing `.claude/settings.json` still prompts. A declined or
-unmergeable permission step is reported and the run continues — for a valid
-invocation, the exit is non-zero only outside a git repo (invalid options or
-excess arguments are usage errors and also exit non-zero). The granular verbs
-below remain the supported path for partial application.
+into an existing `.claude/settings.json` still prompts. The exit code
+distinguishes decisions from failures: operator decisions — a declined merge,
+a pending LICENSE choice, a merge no available tool can perform — are
+reported, counted as attention, and exit `0`; **mechanical failures** — a
+file that could not be written, an uncreatable hooks directory, broken
+tooling — are counted separately, the summary says the repo is not fully
+armed, and the exit is non-zero. Outside a git repo, and for invalid options
+or excess arguments, the exit is also non-zero. The granular verbs below
+remain the supported path for partial application.
 
 ## `spark install-git-hooks`
 
@@ -55,7 +59,9 @@ Copies `scripts/hooks/{commit-msg,pre-commit}` into the current repo's
 `.git/hooks/` and marks them executable. A hook that is already Spark's and
 current is reported and left as-is; if a hook exists and is not a Spark hook,
 it is left untouched and a warning is printed — move it aside first if you
-want Spark's.
+want Spark's (a decision, exit `0`). The exit is non-zero on a mechanical
+failure: a hook source missing from the plugin, an uncreatable hooks
+directory, or a copy that could not be written.
 
 ## `spark apply-permissions [--yes]`
 
@@ -86,8 +92,9 @@ same create-only engine `bootstrap` uses, reporting each item as `+ created`,
 `= exists, kept`, or `! needs a manual decision`, with a summary line. An
 existing file is a project choice and is never overwritten, so re-running is
 a no-op once everything is in place; attention items are advisory and do not
-fail the run — the exit is non-zero only outside a git repo, where there is
-no project to carry into.
+fail the run. The exit is non-zero outside a git repo (no project to carry
+into) and on a mechanical failure — an artifact that could not be written or
+a template missing from the plugin.
 
 The machine source carries *what to apply*; the *why* stays in the prose
 standard, [engineering-preferences.md](engineering-preferences.md).

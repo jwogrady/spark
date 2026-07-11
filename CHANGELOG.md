@@ -42,6 +42,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
   PR is merged, `spark resume` presents the loop restart instead of the stale
   `next_action` (documented in `docs/reference/state.md`).
 
+### Fixed
+
+- **`spark setup` distinguishes decisions from failures** (#137). Mechanical
+  failures — a file that could not be written, an uncreatable hooks
+  directory, broken tooling — are now caught at every step, reported, and
+  drive a non-zero exit with a "repo not fully armed" summary; operator
+  decisions (a declined merge, the LICENSE choice) still exit 0. The granular
+  verbs gain the same failure handling, and the permission baseline now
+  allows the `spark setup` carry-in path itself.
+
 ## [0.6.0](https://github.com/jwogrady/spark/compare/v0.5.0...v0.6.0) (2026-07-11)
 
 
