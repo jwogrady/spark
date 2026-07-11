@@ -40,6 +40,18 @@ Nothing yet.
   written only through the librarian's explicit promotion step.
 - **On-ramp** (#80): `how-to/carry-your-preferences-in.md`.
 
+### Changed
+
+- **Consolidation hygiene** (#141): the operator knowledge store is
+  `glossary.md` only — the `decisions.md` half is deferred until a shipped
+  surface reads it (existing stores untouched on disk); the `agents-md`
+  pre-plugin relics (`references/system-prompt.md`, `references/io-schema.yaml`,
+  `references/examples.md`, `agents/openai.yaml`) are deleted and the PR
+  template now asks for a `SKILL.md` with valid frontmatter instead of
+  `agents/openai.yaml`; and the work-state loop now closes — when the recorded
+  PR is merged, `spark resume` presents the loop restart instead of the stale
+  `next_action` (documented in `docs/reference/state.md`).
+
 ### Fixed
 
 - Restored the `spark apply-permissions` verb lost in a merge-conflict

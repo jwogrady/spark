@@ -12,18 +12,22 @@ Operator knowledge lives at `~/.config/spark/knowledge/` — beside the operator
 preferences file `~/.config/spark/preferences.json`, and like it, optional.
 Both honor `XDG_CONFIG_HOME` the same way
 (`${XDG_CONFIG_HOME:-$HOME/.config}/spark/`), so the knowledge home always
-sits beside the preferences file. Two files, nothing else:
+sits beside the preferences file. One file, nothing else:
 
 | File | Holds |
 |---|---|
 | `glossary.md` | Operator vocabulary — terms used in every project, in the entry format of [`glossary.md`](glossary.md) |
-| `decisions.md` | Standing decisions that transcend any one project |
 
-The librarian creates the directory and files on first promotion; their absence
+The librarian creates the directory and file on first promotion; their absence
 is normal, and everything degrades to the shipped seed plus project-local
-behavior. Nothing reads `decisions.md` yet — it accumulates until a reader
-earns its place. There is no sync or merge tooling across machines — the store
-is a plain directory on one machine until it proves itself.
+behavior. There is no sync or merge tooling across machines — the store is a
+plain directory on one machine until it proves itself.
+
+A `decisions.md` half (standing decisions that transcend any one project) was
+part of this store's original definition but is **deferred**: nothing shipped
+reads it, and Spark does not accumulate state without a reader.
+Standing-decision promotion returns when a shipped surface reads it. Existing
+operator stores are left untouched on disk.
 
 ## Operator-level or project-level?
 
@@ -37,8 +41,10 @@ Two questions decide the layer:
 | Operator-level | Project-level |
 |---|---|
 | Vocabulary you would re-explain in every new repo | Terms defined by this repo's domain or product |
-| Standing decisions about how you work ("squash-merge always") | Decisions about this codebase — those are ADRs in `docs/adr/` |
 | Conventions no single preferences key captures | Facts a teammate on this project needs but a stranger project doesn't |
+
+Decisions about this codebase are never candidates either way — those are ADRs
+in `docs/adr/`.
 
 When in doubt, it is project-level. Promoting later is cheap; un-promoting a
 project fact from the shared store is not.
@@ -65,20 +71,15 @@ Promotion is deliberate and logged — never silent copying (ADR-0008):
 2. **Approve.** The orchestrator presents the candidates to the user; nothing
    is written without an explicit go-ahead, per candidate or as a batch.
 3. **Append and log.** In its maintain pass the librarian appends each
-   approved entry to `glossary.md` or `decisions.md`, carrying a provenance
-   line — that line *is* the log, durable and traveling with the entry.
+   approved entry to `glossary.md`, carrying a provenance line — that line
+   *is* the log, durable and traveling with the entry.
 
-### Entry formats
+### Entry format
 
-Glossary entries use the format in [`glossary.md`](glossary.md) plus the
-provenance line. Decisions:
+Glossary entries use the format in [`glossary.md`](glossary.md) plus a
+provenance line:
 
 ```
-### <decision title>
-
-**Decision:** <one sentence, imperative>
-**Why:** <the reason it transcends a project>
-**Status:** current | superseded
 **Promoted:** YYYY-MM-DD from <repo>
 ```
 

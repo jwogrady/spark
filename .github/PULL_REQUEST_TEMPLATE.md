@@ -13,7 +13,7 @@
 ## Test plan
 
 - [ ] Reviewed all changed files
-- [ ] Skill files include `SKILL.md` and `agents/openai.yaml`
+- [ ] Skill files include `SKILL.md` with valid frontmatter
 - [ ] No invented commands or fake integrations
 - [ ] No AI attribution in any file, commit, or comment
 - [ ] `CHANGELOG.md` updated if behavior changed
