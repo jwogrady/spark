@@ -20,6 +20,10 @@ Ship stage — commit, push, and PR.
    review closely. It links the issue (`Closes #N`).
 6. It reports the PR URL.
 
+**Releases:** ship's job stops at the open PR. Release Please owns the
+version bump, changelog, tag, and GitHub Release from there — see
+[explanation/release-ownership.md](../explanation/release-ownership.md).
+
 **Done when** the PR is open and linked to its issue.
 
 **Guardrails:** never force-push (the PreToolUse guard blocks it; use

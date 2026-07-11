@@ -31,7 +31,7 @@ You never re-state these — Spark already holds them.
 | GitHub Flow · never commit to `master` · PRs only | [`hooks/guard-bash.sh`](../reference/hooks.md) + `pre-commit` |
 | Conventional Commits · subject ≤72 · one logical change | [`commit-msg`](../reference/hooks.md) |
 | Never AI attribution | `commit-msg` + every skill |
-| Semantic Versioning · bump from commit type | [`ship`](../reference/skills.md) |
+| Semantic Versioning · bump derived from commit type | Release Please (scaffolded by [`preferences`](../reference/cli.md); `ship` defers — see [Releases](#releases) below) |
 | Design before code · acceptance criteria before dev | [`ideate`](../reference/skills.md) · [`plan`](../reference/skills.md) · [codify-readiness](../reference/codify-readiness.md) |
 | One problem / one issue / one PR | [scope doctrine](../explanation/philosophy.md) |
 | ADRs · decisions explicit and traceable | `docs/adr/` |
@@ -55,6 +55,7 @@ The layer Spark does not yet carry. This is what makes a generated project
 ### Releases
 - **Release Please** owns versioning, changelog, GitHub Releases, and annotated tags. — *ADR-0006*
 - `ship` defers to it: `ship` does the commit + PR, Release Please does the release.
+- See [release-ownership](../explanation/release-ownership.md) for how this plays out in Spark's own repo — the root package plus three independently versioned companions.
 
 ### CI & automation
 - **GitHub Actions** scaffolded into every generated project — validation on every push. — *ADR-0005*

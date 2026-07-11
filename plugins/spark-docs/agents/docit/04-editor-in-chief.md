@@ -33,8 +33,8 @@ The orchestrator runs every prior phase before dispatching you.
   and log the decision to `.docit-notes/04-editor-log.md`. Then assemble:
   - `README.md` — hero → quickstart → positioning → trust badges → contributing
     pointer → links to philosophy and the Diátaxis docs.
-  - `docs/PHILOSOPHY.md`, the `docs/` Diátaxis tree, `CHANGELOG.md`, and
-    `examples/launch-copy.md`.
+  - `docs/PHILOSOPHY.md`, the `docs/` Diátaxis tree, the `[Unreleased]`
+    section of `CHANGELOG.md`, and `examples/launch-copy.md`.
   Enforce one voice, remove duplication, ensure `jwogrady`-only attribution.
   **Present a diff to the human and wait for go-ahead before overwriting any
   existing docs.**

@@ -17,8 +17,9 @@ personas** — each a **real subagent** under
   (every command copy-paste real), and honest positioning vs the alternatives.
 - **02 Educator** — philosophy (`docs/PHILOSOPHY.md`), the four
   [Diátaxis](https://diataxis.fr/) docs under `docs/`, and the contributing path.
-- **03 Promoter** — trust signals, `CHANGELOG.md` and the upgrade story,
-  SEO/topics/description, and launch copy — all citation-bound.
+- **03 Promoter** — trust signals, `[Unreleased]` changelog entries and the
+  upgrade story, SEO/topics/description, and launch copy — all
+  citation-bound.
 - **04 Editor-in-Chief** — the lead: fuses every note into one voice, verifies
   every claim against ground truth, and files verified gaps as
   `proposed`-labeled GitHub issues for the human to triage.
