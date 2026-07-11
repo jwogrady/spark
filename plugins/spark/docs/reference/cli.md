@@ -98,16 +98,30 @@ want Spark's (a decision, exit `0`). The exit is non-zero on a mechanical
 failure: a hook source missing from the plugin, an uncreatable hooks
 directory, or a copy that could not be written.
 
-## `spark apply-permissions [--yes]`
+## `spark apply-permissions [--yes] [--preset delivery|conservative]`
 
-Merges `settings/permission-baseline.json` — Spark's conservative
-`permissions.allow` list — into the current project's `.claude/settings.json`
-(anchored at the git repo root when inside one). Copies the baseline as-is when
-no settings file exists; otherwise lists the missing rules and appends them only
-after confirmation (`--yes` skips the prompt). Existing entries are never
-changed, removed, or reordered, so re-running is a no-op once every rule is
-present. Merging into an existing file requires `jq` or `python3`; without
-either, it prints the baseline's path for a manual merge.
+Merges the selected permission baseline into the current project's
+`.claude/settings.json` (anchored at the git repo root when inside one).
+Copies the baseline as-is when no settings file exists; otherwise lists the
+missing rules and appends them only after confirmation (`--yes` skips the
+prompt). Existing entries are never changed, removed, or reordered, so
+re-running is a no-op once every rule is present — and switching presets never
+narrows an armed repo; removing rules is always a manual act. Merging into an
+existing file requires `jq` or `python3`; without either, it prints the
+baseline's path for a manual merge.
+
+Two trust tiers ship as presets:
+
+| Preset | Baseline | Grants |
+| --- | --- | --- |
+| `delivery` (default) | `settings/permission-baseline.json` | The full shipping loop: read commands plus `git add`/`commit`/`push`, `gh pr create`, `spark setup`. Push access is deliberately broad because the `PreToolUse` guard blocks the disallowed subset — force-pushes and pushes to trunk — including option, refspec, and compound-command forms (see [hooks.md](hooks.md#the-permission--guard-trust-boundary)). |
+| `conservative` | `settings/permission-baseline-conservative.json` | Read-only inspection: `git status`/`log`/`diff`/`show`/`rev-parse`/`fetch`, `gh` views and lists, `spark doctor`, `bash -n`. Nothing that writes the repo or GitHub runs without a per-command prompt. |
+
+The tier resolves like every other standard — an explicit `--preset` wins,
+then the three-tier `permissions.preset` preference, then the shipped default
+(`delivery`). Committing `{"permissions.preset": "conservative"}` to
+`.spark/preferences.json` makes a project's posture a durable, reviewable
+fact; the applied `.claude/settings.json` is itself the reviewable artifact.
 
 ## `spark preferences [--show | --apply]`
 

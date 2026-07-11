@@ -74,9 +74,36 @@ Rejects a commit made directly on `master` or `main`.
 ## Relationship to settings
 
 A plugin cannot bundle a full `settings.json`. The PreToolUse guard ships *in*
-the plugin; the permission baseline ships as `settings/permission-baseline.json`
-and is applied separately by `spark apply-permissions` (see
+the plugin; the permission baselines ship under `settings/` and are applied
+separately by `spark apply-permissions` (see
 [../how-to/get-started.md](../how-to/get-started.md)).
+
+## The permission ↔ guard trust boundary
+
+The `delivery` preset allows `Bash(git push:*)` — deliberately broader than
+the rules it wants enforced. That is not an oversight; it is a two-layer
+design:
+
+- **Permissions** decide what Claude may attempt without a prompt. Rules are
+  prefix-shaped, so no permission rule can express "push, but never to trunk
+  and never forced."
+- **The guard** decides what actually runs. Every `Bash` call passes through
+  `guard-bash.sh` before execution, which blocks exactly that subset —
+  through leading git options, full refspecs, bundled short options,
+  per-refspec forces, and compound commands (the table above).
+
+So the broad allow is safe *only because* the guard is load-bearing, and the
+guard's behavior is pinned by its regression suite
+(`tests/test-guard-bash.sh`) and doctor's enforcement-parity checks. A
+push-capable preset must never ship without both.
+
+The `conservative` preset does not rely on the guard at all: nothing
+push-capable is pre-approved, and every mutating command falls back to Claude
+Code's per-command permission prompt. Choose it with
+`spark apply-permissions --preset conservative`, or commit
+`{"permissions.preset": "conservative"}` to `.spark/preferences.json` — the
+posture then rides the same three-tier resolution as every other standard
+(see [cli.md](cli.md)).
 
 ## See also
 

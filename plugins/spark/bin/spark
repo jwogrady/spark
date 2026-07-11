@@ -28,7 +28,7 @@ list-skills|cmd_list_skills|List all available skills with descriptions
 new-skill|cmd_new_skill|Scaffold a new skill under skills/<name>/
 setup|cmd_setup|Arm this repo in one run: git hooks, permission baseline, resolved standard
 install-git-hooks|cmd_install_git_hooks|Install Spark'\''s git hooks into the current repo
-apply-permissions|cmd_apply_permissions|Merge the permission baseline into .claude/settings.json
+apply-permissions|cmd_apply_permissions|Merge the permission baseline into .claude/settings.json; --preset picks the trust tier
 preferences|cmd_preferences|Show the resolved engineering standard; --apply carries it into this repo
 resume|cmd_resume|Rebuild where the lifecycle left off from .spark/state.json
 version|cmd_version|Print the Spark plugin version
@@ -1121,10 +1121,34 @@ cmd_apply_permissions() {
   # Result counters for composing callers (setup): deliberately global,
   # re-initialized per call so a stale value never leaks between runs.
   APPLY_PERMISSIONS_CREATED=0 APPLY_PERMISSIONS_KEPT=0 APPLY_PERMISSIONS_ATTENTION=0 APPLY_PERMISSIONS_FAILED=0
-  local assume_yes=0
-  case "${1:-}" in -y|--yes) assume_yes=1 ;; esac
+  local usage_line="usage: spark apply-permissions [--yes] [--preset delivery|conservative]"
+  local assume_yes=0 preset=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -y|--yes) assume_yes=1 ;;
+      --preset) shift; preset="${1:-}" ;;
+      --preset=*) preset="${1#--preset=}" ;;
+      -h|--help) echo "$usage_line"; return 0 ;;
+      *) red "unknown option: $1"; echo "$usage_line"
+         APPLY_PERMISSIONS_ATTENTION=1 APPLY_PERMISSIONS_FAILED=1; return 1 ;;
+    esac
+    shift
+  done
 
-  local baseline="$SPARK_ROOT/settings/permission-baseline.json"
+  # The trust tier resolves like every other standard: an explicit flag wins,
+  # then the three-tier preference (permissions.preset), then the shipped
+  # default. Committing {"permissions.preset": "conservative"} to
+  # .spark/preferences.json makes a project's posture a reviewable fact.
+  [ -n "$preset" ] || preset="$(pref_get permissions.preset || true)"
+  [ -n "$preset" ] || preset="delivery"
+  local baseline
+  case "$preset" in
+    delivery)     baseline="$SPARK_ROOT/settings/permission-baseline.json" ;;
+    conservative) baseline="$SPARK_ROOT/settings/permission-baseline-conservative.json" ;;
+    *) red "✗ unknown permission preset: $preset (expected delivery or conservative)"
+       APPLY_PERMISSIONS_ATTENTION=1 APPLY_PERMISSIONS_FAILED=1; return 1 ;;
+  esac
+  echo "Permission preset: $preset"
   if [ ! -f "$baseline" ]; then
     red "✗ baseline not found: $baseline"
     APPLY_PERMISSIONS_ATTENTION=1 APPLY_PERMISSIONS_FAILED=1
@@ -1157,6 +1181,12 @@ cmd_apply_permissions() {
 
   # An existing file means project-specific settings we must not clobber:
   # parse it, append only the rules that are missing, and only after a yes.
+  # Presets only ever add — switching an armed repo to a narrower preset is
+  # a manual act, so no project is silently narrowed (or broadened).
+  if [ "$preset" = "conservative" ]; then
+    echo "  note: presets never remove rules — anything broader already in"
+    echo "  $target stays; review it if you meant to narrow."
+  fi
   local have_jq=0 have_py=0
   command -v jq >/dev/null 2>&1 && have_jq=1
   command -v python3 >/dev/null 2>&1 && have_py=1
