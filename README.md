@@ -1,4 +1,7 @@
-# Spark
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/logo/spark-lockup-dark.svg">
+  <img src="assets/logo/spark-lockup.svg" alt="Spark" width="320">
+</picture>
 
 > **Turn your Claude and GitHub subscriptions into a software delivery system.**
 

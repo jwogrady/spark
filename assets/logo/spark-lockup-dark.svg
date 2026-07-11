@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 128" role="img" aria-label="Spark">
+  <!-- horizontal lockup, dark-background variant -->
+  <g>
+    <polyline points="24,40 56,64 24,88" fill="none" stroke="#F8FAFC" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M86,26 C90,42 100,52 116,56 C100,60 90,70 86,86 C82,70 72,60 56,56 C72,52 82,42 86,26 Z" fill="#F97316"/>
+    <circle cx="104" cy="94" r="6" fill="#F97316"/>
+  </g>
+  <text x="138" y="88" font-family="Ubuntu Sans, DejaVu Sans, -apple-system, Segoe UI, sans-serif" font-size="68" font-weight="700" letter-spacing="-1" fill="#F8FAFC">Spark</text>
+</svg>
