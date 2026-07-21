@@ -775,6 +775,57 @@ cmd_doctor() {
     fi
   fi
 
+  # Standards boundary (#200, ADR-0020): #182 makes the prose standards docs the
+  # readable contract and .spark/preferences.json the machine layer, linked by a
+  # `<!-- spark:pref key=value -->` marker on every machine-backed line. This is
+  # the mechanical guardian of that seam — every marker must name a real
+  # preference key and assert the value that key currently resolves to, or the
+  # prose and the configuration drift the way docs drift from code. Unlike
+  # enforcement parity, this is PROJECT-scoped, not a Spark-repo self-check: the
+  # boundary lives in every armed repo, so the check runs wherever the docs do
+  # (and stays silent in the Spark repo, which ships no CONVENTIONS.md). The docs
+  # are create-only and optional (ADR-0008), so their absence is an informational
+  # skip, never an error. Marker parsing is pure grep/sed for zero-dependency
+  # operation; pref_get already degrades gracefully when jq/python3 are absent.
+  # Only markers anchored at end-of-line count — the templates describe the
+  # marker format inline (in backticks, mid-sentence), and that prose example
+  # must not be mistaken for a live assertion.
+  if git rev-parse --show-toplevel >/dev/null 2>&1; then
+    local std_root; std_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+    local std_doc std_present=0
+    for std_doc in CONVENTIONS.md ENGINEERING-STANDARDS.md; do
+      [ -f "$std_root/$std_doc" ] && std_present=1
+    done
+    echo
+    echo "Standards boundary (prose ↔ preferences):"
+    if [ "$std_present" -eq 0 ]; then
+      green "  ✓ no standards documents present (CONVENTIONS.md / ENGINEERING-STANDARDS.md are create-only and optional — nothing to verify)"
+    else
+      local std_hit std_lineno std_marker std_key std_val std_resolved std_ok std_count
+      for std_doc in CONVENTIONS.md ENGINEERING-STANDARDS.md; do
+        [ -f "$std_root/$std_doc" ] || continue
+        std_ok=1 std_count=0
+        # grep -n keeps the line number so a finding names the exact location;
+        # || true so a doc with no markers doesn't trip pipefail.
+        while IFS= read -r std_hit; do
+          std_lineno="${std_hit%%:*}"
+          std_marker="${std_hit#*:}"
+          # key: between "spark:pref " and the first "="; value: from that "="
+          # to the trailing " -->" (values may contain spaces, e.g. a taxonomy).
+          std_key="$(printf '%s\n' "$std_marker" | sed -E 's/.*<!-- spark:pref ([^=]+)=.*/\1/')"
+          std_val="$(printf '%s\n' "$std_marker" | sed -E 's/.*<!-- spark:pref [^=]+=(.*) -->[[:space:]]*$/\1/')"
+          std_count=$((std_count+1))
+          if ! std_resolved="$(pref_get "$std_key" 2>/dev/null)"; then
+            red "  ✗ $std_doc:$std_lineno — marker names unknown preference key '$std_key' (dangling reference; add it to .spark/preferences.json or fix the marker)"; errors=$((errors+1)); std_ok=0
+          elif [ "$std_resolved" != "$std_val" ]; then
+            red "  ✗ $std_doc:$std_lineno — '$std_key' drifted: prose asserts '$std_val' but preferences resolve to '$std_resolved' (align the prose, or change the preference in .spark/preferences.json)"; errors=$((errors+1)); std_ok=0
+          fi
+        done < <(grep -nE '<!-- spark:pref [^=]+=.*-->[[:space:]]*$' "$std_root/$std_doc" 2>/dev/null || true)
+        [ "$std_ok" -eq 1 ] && green "  ✓ $std_doc — $std_count machine-backed fact(s) resolve and match .spark/preferences.json"
+      done
+    fi
+  fi
+
   # Git hooks installed in the current repo? In an arbitrary project this is
   # advice (warning). Inside the Spark repo itself the hooks *are* the
   # enforcement door, so their absence is an error — except in CI, where a
