@@ -1,10 +1,10 @@
 {
   "stage": "ship",
-  "problem_statement": "Make marketplace e2e release check portable to macOS (#193)",
-  "issue": "193",
-  "branch": "fix/193-macos-e2e-timeout",
+  "problem_statement": "Truth-up engineering preferences and glossary against the shipped core (#179)",
+  "issue": "179",
+  "branch": "docs/179-truth-up-preferences-glossary",
   "pr": "",
   "blockers": "",
-  "next_action": "Human merges the PR closing #193",
+  "next_action": "Human merges the PR closing #179; #180 (ADR audit) unblocks on merge",
   "updated": "2026-07-11"
 }
