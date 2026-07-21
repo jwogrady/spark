@@ -34,6 +34,7 @@ How the layers fit together, and the dated record of why Spark is built this way
 - [adr/0020-project-local-prose-standards.md](adr/0020-project-local-prose-standards.md) — seed `CONVENTIONS.md` + `ENGINEERING-STANDARDS.md` as human-owned prose; the `spark:pref` marker keeps prose from being silent config
 - [adr/0021-first-run-entry-point.md](adr/0021-first-run-entry-point.md) — the first-run entry point is a hybrid: the `/spark:onboard` skill guides the narrative over the mechanical `spark setup` verbs it calls
 - [adr/0022-orient-first-classification.md](adr/0022-orient-first-classification.md) — orient first: classify a repo as new, existing, or ambiguous before Spark may scaffold or set up
+- [adr/0023-lifecycle-orchestration-topology.md](adr/0023-lifecycle-orchestration-topology.md) — **Proposed** (research): the Shape / Build / Assure & Deliver three-group execution topology — lead roles, artifact handoffs, human gates, and no-subagent/single-model fallbacks
 - [adr/0000-template.md](adr/0000-template.md) — the ADR template
 
 ## Packaging reference
