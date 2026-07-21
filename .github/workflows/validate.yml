@@ -4,7 +4,8 @@
 # frontmatter, bash -n, doc links, enforcement parity) and `tests/run.sh` is
 # the behavioral gate (the CLI flows and hooks exercised against temp repos).
 # Do not add check logic here — extend doctor or add a tests/test-*.sh suite.
-# See ADR-0005 (amended) for how this differs from Cosmic-generated build CI.
+# The two gates: ADR-0011 (doctor, the static gate) and ADR-0018 (tests/run.sh,
+# the behavioral gate). ADR-0005 covers how this differs from generated build CI.
 name: validate
 
 on:

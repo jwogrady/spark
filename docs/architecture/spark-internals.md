@@ -15,6 +15,14 @@ methodology is portable; the current implementation ships as a **Claude Code
 plugin marketplace** (author `jwogrady`, MIT) you add once and carry into every
 project.
 
+**The product model (ADR-0019): four parties in fixed roles.** The **human** is
+the directing force — intent, judgment, acceptance, and the release decision.
+**Spark** is the orchestration layer — the lifecycle sequence, the operator's
+standards, and the durable workflow. **Claude** supplies the capability — the
+tools and the know-how, arranged rather than reinvented. **GitHub** is the
+system of record — the review/delivery surface and the durable memory where
+issues, branches, pull requests, and releases persist across sessions.
+
 Who it is for: the solo operator directing an increasingly agent-run,
 human-supervised workflow. The portable core is domain- and stack-neutral *as a
 fact of the design*, not a market being pitched; outward positioning is the

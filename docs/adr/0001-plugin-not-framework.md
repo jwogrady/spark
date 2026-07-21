@@ -41,8 +41,9 @@ CLI, and agent crews, versioned in one place. The narrative reasoning is in
 
 - Commands are namespaced `/spark:<name>` — never collides with a project's own
   skills; obvious provenance.
-- Install-once, available-everywhere; one version to maintain (`plugin.json`
-  v0.2.0).
+- Install-once, available-everywhere; a single versioned install to maintain
+  (the core `plugin.json` version — companions version independently, per
+  ADR-0016).
 - Guardrails ship with the toolkit: installing the lifecycle also installs the
   enforcement, so discipline is the default, not a per-project chore.
 - **Bundling limits:** a plugin can't carry everything (notably git hooks aren't
