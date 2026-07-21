@@ -1,0 +1,10 @@
+# Shape answer key — objectively checkable items a good framing must contain.
+# correctness = (rows marked caught) / (total rows). Equal weight.
+# id	description
+S1	Separates the two conflated needs: (a) what setup changed, (b) where the project is in the lifecycle.
+S2	States success criteria in observable terms (e.g. operator can answer "what changed / where am I" without re-running anything).
+S3	Names the zero-dependency / POSIX-bash constraint (ADR-0003) so proposed issues cannot assume a new runtime.
+S4	Surveys existing assets rather than proposing greenfield: cites at least `spark brief`, `spark resume`, and `.spark/state.json`.
+S5	Decomposes into at least two independently shippable issues, each with explicit acceptance criteria.
+S6	Assigns the issues to a milestone (or an explicit backlog decision) and preserves the human as approver — no scope is auto-accepted.
+S7	Does not prematurely commit to one implementation; the problem statement stays solution-neutral.

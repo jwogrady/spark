@@ -1,0 +1,9 @@
+# Build — single-agent baseline: run facts feeding latency + cost.
+# tokens_* and latency are ESTIMATES for this baseline (see BASELINE.md).
+# key	value
+model	claude-opus-4-8
+tokens_in	25000
+tokens_out	3500
+tokens_method	estimate
+latency_seconds	150
+latency_method	estimate

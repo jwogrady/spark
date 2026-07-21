@@ -1,0 +1,10 @@
+# Model price table used to DERIVE the cost metric. USD per 1,000,000 tokens.
+# Source: Anthropic published model pricing, as recorded 2026-06-24.
+# These are inputs to a formula, not measurements — update this file when
+# pricing changes, then re-run `run.sh score` to recompute cost. Adding a model
+# here is how you measure a candidate topology that uses a different model.
+# model	input_usd_per_mtok	output_usd_per_mtok
+claude-opus-4-8	5.00	25.00
+claude-opus-4-7	5.00	25.00
+claude-sonnet-4-6	3.00	15.00
+claude-haiku-4-5	1.00	5.00

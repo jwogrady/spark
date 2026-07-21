@@ -1,0 +1,7 @@
+# Assure & Deliver answer key — the seeded defects in seeded.diff.
+# correctness = (rows marked caught) / (total rows). Equal weight.
+# id	description
+AD1	Inverted logic in validate_run_dir: it returns 1 for a valid dir and 0 for an invalid one (comment says the opposite), so prune() skips invalid dirs and prunes valid ones — the guard is backwards.
+AD2	Unsafe destructive op: `rm -rf $scratch_root/scratch/` is unquoted and unguarded; an empty/space-bearing/glob value expands into an unintended rm -rf target.
+AD3	Non-POSIX comparison: `[ "$(basename "$f")" == "state.json" ]` uses the bash-only `==`; the repo standard is POSIX-friendly bash (`=`).
+AD4	Commented-out code left in main(): the old-behaviour for-loop block violates the standard "No commented-out code. Delete it."

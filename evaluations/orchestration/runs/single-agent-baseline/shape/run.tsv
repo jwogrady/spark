@@ -1,0 +1,10 @@
+# Shape — single-agent baseline: run facts feeding latency + cost.
+# tokens_* and latency are ESTIMATES for this baseline (see BASELINE.md
+# "Measurement limits"); the harness computes cost exactly from them.
+# key	value
+model	claude-opus-4-8
+tokens_in	40000
+tokens_out	9000
+tokens_method	estimate
+latency_seconds	300
+latency_method	estimate

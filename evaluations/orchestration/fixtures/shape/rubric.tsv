@@ -1,0 +1,8 @@
+# Shape quality rubric — graded dimensions, each scored 0..max by a human grader.
+# quality = (sum of scores) / (sum of max). Subjective; grader records a note per row.
+# id	max	description
+Q1	2	Problem statement is sharp and reads as a real problem, not a restatement of the request.
+Q2	2	Framing is grounded in verifiable repo facts (assets cited actually exist and do what is claimed).
+Q3	2	Issue decomposition is well-scoped: each issue is one concern, independently reviewable, not a mega-issue.
+Q4	2	Acceptance criteria are testable, not vague ("clearer" is not a criterion).
+Q5	2	No overreach: the plan does not invent a platform, a new dependency, or scope the request cannot justify.

@@ -1,0 +1,6 @@
+# Assure & Deliver — single-agent baseline: which seeded defects the review caught.
+# id	caught	note
+AD1	1	Code review flagged the inverted validate_run_dir return vs. its comment.
+AD2	1	Security review flagged the unquoted, unguarded `rm -rf $scratch_root/scratch/`.
+AD3	1	Portability check flagged `==` inside `[ ]` as non-POSIX.
+AD4	0	Missed. Leftover commented-out block was not reported — "no commented-out code" is a Spark-specific standard the native review does not enforce.
