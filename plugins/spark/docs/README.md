@@ -63,6 +63,7 @@ Information-oriented — what each piece is and how it behaves:
 - [reference/engineering-preferences.md](reference/engineering-preferences.md) — the operator rationale behind the engineering standard; the machine-applied form is `preferences/defaults.json`.
 - [reference/state.md](reference/state.md) — the committed work state (`.spark/state.json`) and its schema.
 - [reference/release-docs-checklist.md](reference/release-docs-checklist.md) — the pre-release review that keeps README, docs, changelog, and roadmap coherent; the roadmap status vocabulary.
+- [reference/metadata-governance.md](reference/metadata-governance.md) — GitHub-native issue/metadata governance: the source-of-truth model, category taxonomy, milestone rules, and the metadata-completeness audit.
 - [glossary.md](glossary.md) — Spark vocabulary.
 
 
