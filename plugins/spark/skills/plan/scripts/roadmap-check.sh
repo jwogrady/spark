@@ -13,9 +13,10 @@
 # Read-only by design: release decisions are human calls, so the checker only
 # reports gaps (one `GAP: …` line each, exit 1) and never fixes them.
 #
-# Exit codes: 0 complete, 1 gaps, 2 usage/input error, 3 not assessed
-# (neither jq nor python3 — mirrors doctor's skip-not-fail philosophy while
-# staying distinguishable from a pass).
+# Exit codes: 0 complete, 1 gaps, 2 usage/input error, 3 not assessed —
+# neither jq nor python3 is available, OR the open-feature inventory could not
+# be retrieved (no --issues and gh missing/failing). Exit 3 is never a clean
+# pass: an unassessed inventory must not read as "complete" (#224).
 
 set -euo pipefail
 
@@ -110,22 +111,24 @@ else
 fi
 
 # --- issues (check C) --------------------------------------------------------
-issues_source=""
+issues_source="" issues_assessed=0
 if [ -n "$issues_file" ]; then
   [ -f "$issues_file" ] || { echo "issues file not found: $issues_file" >&2; exit 2; }
-  issues_source="$issues_file"
+  issues_source="$issues_file"; issues_assessed=1
 elif command -v gh >/dev/null 2>&1; then
   tmp="$(mktemp)"
   trap 'rm -f "$tmp"' EXIT
   if gh issue list --state open --json number,title,labels,milestone,body --limit 200 > "$tmp" 2>/dev/null; then
-    issues_source="$tmp"
+    issues_source="$tmp"; issues_assessed=1
   else
-    # gh exists but can't list (offline, unauthenticated, no remote): degrade
-    # like the no-gh path rather than failing a purely-local run.
-    echo "issues: not assessed (no gh and no --issues)"
+    # gh is present but could not list — offline, unauthenticated, or no GitHub
+    # remote. This is NOT the same as "no open features": the inventory was not
+    # assessed, so the run is incomplete (exit 3 below), never a clean pass
+    # (#224). Report an actionable, credential-free reason.
+    echo "issues: NOT assessed — 'gh issue list' failed (offline, unauthenticated, or no GitHub remote?). Run 'gh auth status', or pass --issues FILE."
   fi
 else
-  echo "issues: not assessed (no gh and no --issues)"
+  echo "issues: NOT assessed — no --issues file and gh is not installed. Install gh, or pass --issues FILE."
 fi
 
 # classify_features <file> — one "number<TAB>class" line per open `feature`
@@ -205,4 +208,14 @@ if [ -n "$issues_source" ]; then
 fi
 
 echo "roadmap-check: $gaps gap(s)"
-[ "$gaps" -eq 0 ]
+# Definitive gaps always fail. Otherwise, a run that could not assess the open
+# feature inventory is incomplete — exit 3 (not assessed), never a clean 0
+# (#224); only a fully-assessed, gap-free run passes.
+if [ "$gaps" -gt 0 ]; then
+  exit 1
+fi
+if [ "$issues_assessed" -eq 0 ]; then
+  echo "roadmap-check: incomplete — the open-feature inventory was not assessed, so this is NOT a clean pass (exit 3)."
+  exit 3
+fi
+exit 0
