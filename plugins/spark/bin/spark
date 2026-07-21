@@ -723,6 +723,47 @@ cmd_doctor() {
     [ "$ok" -eq 1 ] && green "  ✓ force-push rules implemented (guard-bash.sh) and documented (CLAUDE.md, AGENTS.md)"
   fi
 
+  # Issue metadata governance (#192): category labels are governed by
+  # issue.taxonomy (preferences/defaults.json). Every issue form must carry one
+  # taxonomy category and must not use the deprecated `enhancement` alias. Like
+  # enforcement parity, this is a Spark-repo self-check (both surfaces present).
+  local tmpl_dir="$repo_root/.github/ISSUE_TEMPLATE"
+  local taxo_file="$SPARK_ROOT/preferences/defaults.json"
+  if [ -n "$repo_root" ] && [ -d "$tmpl_dir" ] && [ -f "$taxo_file" ]; then
+    echo
+    echo "Issue metadata governance:"
+    local taxo
+    taxo="$(grep -oE '"issue\.taxonomy"[[:space:]]*:[[:space:]]*"[^"]*"' "$taxo_file" \
+      | sed -E 's/.*:[[:space:]]*"([^"]*)"/\1/' || true)"
+    if [ -z "$taxo" ]; then
+      yellow "  ! could not read issue.taxonomy from preferences/defaults.json — skipping label parity"; warnings=$((warnings+1))
+    else
+      local tmpl base labels_line found_cat bad_alias tok
+      for tmpl in "$tmpl_dir"/*.yml; do
+        [ -e "$tmpl" ] || continue
+        base="$(basename "$tmpl")"
+        [ "$base" = "config.yml" ] && continue
+        labels_line="$(grep -E '^labels:' "$tmpl" | head -n1 || true)"
+        if [ -z "$labels_line" ]; then
+          yellow "  ! $base carries no labels: line"; warnings=$((warnings+1)); continue
+        fi
+        found_cat=0 bad_alias=0
+        while IFS= read -r tok; do
+          [ -n "$tok" ] || continue
+          [ "$tok" = "enhancement" ] && bad_alias=1
+          case " $taxo " in *" $tok "*) found_cat=1 ;; esac
+        done < <(printf '%s\n' "$labels_line" | grep -oE '"[^"]+"' | tr -d '"')
+        if [ "$bad_alias" -eq 1 ]; then
+          red "  ✗ $base uses the deprecated 'enhancement' label — use an issue.taxonomy category (e.g. feature)"; errors=$((errors+1))
+        elif [ "$found_cat" -eq 0 ]; then
+          red "  ✗ $base carries no issue.taxonomy category label (one of: $taxo)"; errors=$((errors+1))
+        else
+          green "  ✓ $base carries a taxonomy category label"
+        fi
+      done
+    fi
+  fi
+
   # Git hooks installed in the current repo? In an arbitrary project this is
   # advice (warning). Inside the Spark repo itself the hooks *are* the
   # enforcement door, so their absence is an error — except in CI, where a

@@ -1,6 +1,6 @@
 name: Skill
 description: Propose a new Spark skill.
-labels: ["skill", "enhancement"]
+labels: ["feature"]
 body:
   - type: markdown
     attributes:

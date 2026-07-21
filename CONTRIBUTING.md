@@ -128,6 +128,25 @@ Either way, run the
 before a release is approved, so README, docs, changelog, roadmap, and release
 metadata stay coherent (ADR-0006, ADR-0009).
 
+## Planning & issue metadata
+
+Work is tracked with GitHub-native metadata, one canonical location per fact —
+category on a taxonomy label, release target on a milestone, dependencies on
+native blocked-by/sub-issue links, priority on `P0`–`P3`. The full model,
+category taxonomy, milestone rules, and the metadata-completeness audit live in
+[metadata-governance.md](plugins/spark/docs/reference/metadata-governance.md).
+The essentials:
+
+- **One category per issue** from `issue.taxonomy` (`feature bug documentation
+  chore tech-debt research infrastructure`); never the old `enhancement` alias.
+  `spark doctor` checks the issue forms against the taxonomy.
+- **A milestone is release scope**, and issue order within it is delivery
+  priority. A `vX.Y …` milestone maps to the `X.Y.*` release.
+- **No feature starts without a release decision** — milestone, backlog+reason,
+  or blocked+decision — and Spark proposes rather than silently assigns.
+- **Each milestone has one release-readiness issue** that carries its scope as
+  native sub-issues and closes last.
+
 ## Proposing a skill
 
 To add a new skill:
