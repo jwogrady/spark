@@ -35,7 +35,7 @@ reuses Claude Code's built-in tools (`/code-review`, `/security-review`,
 └── marketplace.json    # marketplace catalog — lists the core + three companions
 plugins/spark/          # the core plugin (the shipping loop)
 ├── .claude-plugin/plugin.json  # plugin manifest
-├── skills/<name>/SKILL.md      # the eight core skills, run as /spark:<name>
+├── skills/<name>/SKILL.md      # the nine core skills, run as /spark:<name>
 ├── agents/knowledge/           # real subagents for the knowledge crew
 ├── hooks/
 │   ├── hooks.json              # PreToolUse wiring
@@ -55,7 +55,7 @@ AGENTS.md               # tool-agnostic agent guide (maintained by agents-md ski
 
 ## The Skills
 
-The core plugin ships 8 skills in three categories. The canonical taxonomy lives in
+The core plugin ships 9 skills in three categories. The canonical taxonomy lives in
 [`plugins/spark/docs/reference/skills.md`](plugins/spark/docs/reference/skills.md); this list mirrors it.
 
 **Lifecycle** — the five stages:
@@ -68,9 +68,9 @@ The core plugin ships 8 skills in three categories. The canonical taxonomy lives
 | Validate | `validate` | Orchestrate built-in reviews, then fix |
 | Ship | `ship` | Conventional commit, then a focused PR |
 
-The remaining three:
+The remaining four:
 
-- **Setup** — `bootstrap` (scaffold a new project's runtime, then run `spark setup` to wire it into the lifecycle).
+- **Setup** — `onboard` (the guided first run: orient → profile → seed → brief, sequencing the CLI verbs and stopping at each human decision) and `bootstrap` (scaffold a new project's runtime, then run `spark setup` to wire it into the lifecycle).
 - **Supporting** — `knowledge` (capture internal knowledge through an author crew), `agents-md` (maintains `CLAUDE.md` + `AGENTS.md`).
 
 The companion plugins carry everything else, each under its own namespace:

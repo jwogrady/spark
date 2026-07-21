@@ -159,6 +159,18 @@ trust.
 
 **2. Carry Spark into a repository**
 
+The guided first run is one command — it orients on the repo, helps you choose a
+setup profile, seeds hooks + permissions + the standards docs, and ends with a
+brief of what was created, kept, and still open:
+
+```text
+/spark:onboard
+```
+
+It stops at each human decision (an ambiguous repo, the profile choice, the
+LICENSE) rather than guessing. Prefer the raw verbs? `/spark:onboard` just
+sequences them, and each stands alone:
+
 ```bash
 spark setup           # hooks + permissions + resolved standards, one command
 spark doctor          # confirm the repo is armed
@@ -186,18 +198,18 @@ install a companion only when you need its job.
 
 | Plugin | Job | Entry point | Install |
 | --- | --- | --- | --- |
-| **spark** | The shipping loop: the five lifecycle skills plus `bootstrap`, `knowledge`, `agents-md`, the CLI, and both enforcement doors | `/spark:<skill>` | `/plugin install spark` |
+| **spark** | The shipping loop: the five lifecycle skills plus `onboard`, `bootstrap`, `knowledge`, `agents-md`, the CLI, and both enforcement doors | `/spark:<skill>` | `/plugin install spark` |
 | **spark-audit** | Whole-project assessment and evidence-backed cleanup | `/spark-audit:audit` | `/plugin install spark-audit` |
 | **spark-connect** | Service connectivity and secrets via 1Password, including plaintext shredding | `/spark-connect:connect` | `/plugin install spark-connect` |
 | **spark-docs** | Public docs and positioning through author personas | `/spark-docs:docit` | `/plugin install spark-docs` |
 
 Each plugin versions independently and ships its own documentation and
-changelog. The core's eight skills in one line:
+changelog. The core's nine skills in one line:
 
 | Category | Skills | Purpose |
 | --- | --- | --- |
 | **Lifecycle** | `ideate`, `plan`, `codify`, `validate`, `ship` | Move work from intent to pull request |
-| **Setup** | `bootstrap` | Scaffold a new project's runtime and wire it into the lifecycle |
+| **Setup** | `onboard`, `bootstrap` | Guide a repo's first run start to finish; scaffold a new project's runtime and wire it into the lifecycle |
 | **Supporting** | `knowledge`, `agents-md` | Preserve internal knowledge; maintain `CLAUDE.md` and `AGENTS.md` |
 
 Spark reuses Claude Code's native capabilities — including code review,

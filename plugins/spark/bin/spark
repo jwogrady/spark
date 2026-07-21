@@ -1128,7 +1128,7 @@ cmd_brief() {
     echo "  class     $recorded_cls${recorded_date:+ (established $recorded_date)}"
     [ "$stale" -eq 1 ] && yellow "            ! may be stale — recorded 'new' but the repo now looks 'existing'; re-orient with 'spark orient'"
   else
-    echo "  class     unclassified — establish it with 'spark orient' (the first-run flow)"
+    echo "  class     unclassified — run the guided first run /spark:onboard (or 'spark orient' directly)"
   fi
   echo
   echo "Locate"
@@ -1601,6 +1601,17 @@ cmd_setup() {
 
   echo "Spark setup — arming $top"
   echo
+  # Routing hint (#199, ADR-0021): setup is the mechanical seed; the guided
+  # first run is /spark:onboard, which orients before it arms. When this repo
+  # has never been oriented and no profile was chosen, name that flow rather
+  # than silently arming as if orientation had already happened. Purely
+  # additive — setup still arms below. onboard records the classification (via
+  # 'orient --set') before it calls setup, so the flow it drives never trips
+  # this hint on itself.
+  if [ -z "$profile" ] && [ -z "$(pref_get project.classification || true)" ]; then
+    yellow "First run here? /spark:onboard guides orient → profile → seed → brief and stops at each decision."
+    echo
+  fi
   echo "[1/3] Git hooks (the human-driven enforcement door)"
   rc=0; cmd_install_git_hooks || rc=$?
   created=$((created + INSTALL_GIT_HOOKS_CREATED))
