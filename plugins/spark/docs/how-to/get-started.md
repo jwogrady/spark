@@ -6,6 +6,13 @@ Do this once. Spark's promise is your standards **loaded once, carried
 everywhere** — this is the loading. Four steps: install the plugin, make the
 shipped standard yours, arm a repo, run the lifecycle.
 
+Inside a repo, the first move is always `spark orient` — it classifies the repo
+as **new** (safe to scaffold), **existing** (discover and adopt create-only,
+never scaffold over), or **ambiguous** (it asks rather than guess). This guide
+follows the new-project path; orient keeps you honest about which path you are
+on before anything is written. See [cli.md](../reference/cli.md#spark-orient---set-newexisting)
+for the full breakdown.
+
 Before starting, check the machine meets the
 [supported-environment contract](../reference/compatibility.md) — or just run
 `spark doctor --requirements` after step 1 and follow its remediation lines.

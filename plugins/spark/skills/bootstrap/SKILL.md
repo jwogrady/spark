@@ -17,7 +17,12 @@ Concrete per-framework commands and quality-gate defaults live in
 
 ## Do this
 
-1. **Decide the shape** — frontend, backend, or both. If a problem statement from
+1. **Orient first, then decide the shape.** Before scaffolding anything, run
+   `spark orient`. bootstrap is the *new-project* path: proceed only on a `new`
+   verdict, or on an `ambiguous` one a human explicitly resolves and records
+   with `spark orient --set new`. An `existing` verdict means **stop** —
+   discover the repo's conventions instead of scaffolding over them. Then
+   decide the shape — frontend, backend, or both. If a problem statement from
    [`ideate`](../ideate/SKILL.md) exists, infer from it; otherwise ask.
 2. **Pick a framework** for each side (the only real config choice). The
    resolved standard names the default stack — `spark preferences` shows it

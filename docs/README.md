@@ -31,6 +31,7 @@ How the layers fit together, and the dated record of why Spark is built this way
 - [adr/0017-permission-trust-tiers.md](adr/0017-permission-trust-tiers.md) — permission baselines are selectable trust tiers (`delivery`/`conservative`), default `delivery`, additive-only
 - [adr/0018-behavioral-tests-are-the-second-ci-gate.md](adr/0018-behavioral-tests-are-the-second-ci-gate.md) — the behavioral test suite (`tests/run.sh`) is the second CI gate alongside doctor
 - [adr/0019-human-directed-product-model.md](adr/0019-human-directed-product-model.md) — the four-party model: human directs, Spark orchestrates, Claude supplies capability, GitHub is the record
+- [adr/0022-orient-first-classification.md](adr/0022-orient-first-classification.md) — orient first: classify a repo as new, existing, or ambiguous before Spark may scaffold or set up
 - [adr/0000-template.md](adr/0000-template.md) — the ADR template
 
 ## Packaging reference
