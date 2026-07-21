@@ -25,15 +25,15 @@ is documented in the Spark reference `project-standards.md`.
 
 ## Branching
 
-- GitHub Flow: short-lived feature branches off the trunk; never commit to the
-  trunk directly. <!-- spark:pref branch.model=github-flow -->
+- Branch model `{{branch.model}}`: short-lived feature branches off the trunk;
+  never commit to the trunk directly. <!-- spark:pref branch.model={{branch.model}} -->
 - Name branches by type: `feat/…`, `fix/…`, `docs/…`, `chore/…`.
 
 ## Commits
 
-- Conventional Commits. <!-- spark:pref commit.convention=conventional-commits -->
-- Subject line in the imperative mood, under 72 characters, no trailing
-  period. <!-- spark:pref commit.subject-max=72 -->
+- Commit convention: `{{commit.convention}}`. <!-- spark:pref commit.convention={{commit.convention}} -->
+- Subject line in the imperative mood, under `{{commit.subject-max}}` characters,
+  no trailing period. <!-- spark:pref commit.subject-max={{commit.subject-max}} -->
 - The body explains *why*, not *what*. One logical change per commit.
 
 ## Pull requests & review
@@ -45,14 +45,13 @@ is documented in the Spark reference `project-standards.md`.
 
 ## Issue tracking
 
-- Track work across these categories: feature bug documentation chore tech-debt
-  research infrastructure. <!-- spark:pref issue.taxonomy=feature bug documentation chore tech-debt research infrastructure -->
+- Track work across these categories: `{{issue.taxonomy}}`. <!-- spark:pref issue.taxonomy={{issue.taxonomy}} -->
 - `[ADAPT]` Any project-specific labels or milestone rules layered on top.
 
 ## Collaboration boundaries
 
-- Permission trust tier — the baseline of what automation may do in this repo
-  without a per-command prompt. <!-- spark:pref permissions.preset=delivery -->
+- Permission trust tier `{{permissions.preset}}` — the baseline of what
+  automation may do in this repo without a per-command prompt. <!-- spark:pref permissions.preset={{permissions.preset}} -->
 - Do not close or comment on issues/PRs, and do not cut releases or tags,
   without explicit human instruction.
 - `[ADAPT]` Team boundaries: who owns merges, deploy windows, and who to ask

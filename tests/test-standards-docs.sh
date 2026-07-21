@@ -46,4 +46,35 @@ assert_contains "rerun keeps ENGINEERING-STANDARDS.md" \
 [ "$conv_before" = "$(cat "$repo/CONVENTIONS.md")" ] && ok || bad "rerun changed CONVENTIONS.md"
 [ "$eng_before" = "$(cat "$repo/ENGINEERING-STANDARDS.md")" ] && ok || bad "rerun changed ENGINEERING-STANDARDS.md"
 
+# --- #241 regression: EVERY shipped profile must seed standards whose prose and
+# spark:pref markers reflect the *resolved* preferences, so a freshly onboarded
+# repo passes doctor's boundary check — not just the default python-uv profile,
+# whose value happened to match the old static template.
+for prof in "$WORK"/plugin/preferences/profiles/*.json; do
+  [ -e "$prof" ] || continue
+  name="$(basename "$prof" .json)"
+  pr="$WORK/profile-$name"; make_repo "$pr"
+  rc=0; (cd "$pr" && "$SPARK" setup --profile "$name" --yes) >/dev/null 2>&1 || rc=$?
+  assert_rc "setup --profile $name exits 0" 0 "$rc"
+  # No unrendered placeholder may survive in either seeded doc.
+  case "$(cat "$pr/CONVENTIONS.md" "$pr/ENGINEERING-STANDARDS.md" 2>/dev/null)" in
+    *'{{'*) bad "profile $name left an unrendered {{placeholder}}" ;;
+    *) ok ;;
+  esac
+  # doctor's standards-boundary check green == every marker matches the resolved
+  # preference (the #241 failure was doctor going red here for typescript-bun).
+  rc=0; (cd "$pr" && "$SPARK" doctor) >/dev/null 2>&1 || rc=$?
+  assert_rc "doctor green after --profile $name (no prose/marker drift)" 0 "$rc"
+done
+
+# The typescript-bun profile is the exact #241 case: prose AND marker both
+# render the resolved stack, not the hard-coded python-uv default.
+tsb="$WORK/profile-typescript-bun/ENGINEERING-STANDARDS.md"
+if [ -f "$tsb" ]; then
+  body="$(cat "$tsb")"
+  assert_contains "#241 prose renders the resolved stack" "Default stack: \`typescript-bun\`" "$body"
+  assert_contains "#241 marker renders the resolved stack" "spark:pref stack.default=typescript-bun" "$body"
+  case "$body" in *"python-uv"*) bad "#241 typescript-bun doc still contains the python-uv default" ;; *) ok ;; esac
+fi
+
 finish

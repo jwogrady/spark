@@ -10,8 +10,6 @@ set -euo pipefail
 
 sandbox_init
 
-conv_tmpl="$repo_root/plugins/spark/preferences/templates/standards/conventions.md"
-
 # --- green: a freshly seeded project passes with matching markers.
 repo="$WORK/seeded"; make_repo "$repo"
 ( cd "$repo" && "$SPARK" setup --yes >/dev/null 2>&1 )
@@ -27,8 +25,9 @@ assert_rc "doctor is green on a freshly seeded project" 0 "$rc"
 # --- drift: edit a machine-backed fact in the prose without changing the
 # preference. Doctor names the exact key and the document location, and fails.
 repo="$WORK/drift"; make_repo "$repo"
-cp "$conv_tmpl" "$repo/CONVENTIONS.md"
-# branch.model resolves to github-flow (shipped default); assert a stale value.
+( cd "$repo" && "$SPARK" setup --yes >/dev/null 2>&1 )   # seed a rendered doc
+# branch.model resolved to github-flow (shipped default); drift the marker to a
+# stale value while leaving the preference unchanged.
 sed -i 's/branch.model=github-flow/branch.model=trunk-based/' "$repo/CONVENTIONS.md"
 if out="$( cd "$repo" && "$SPARK" doctor 2>&1 )"; then rc=0; else rc=$?; fi
 assert_contains "drift names the exact key" "'branch.model' drifted" "$out"
@@ -40,7 +39,7 @@ assert_rc "doctor fails on prose/preference drift" 1 "$rc"
 # --- dangling: a marker referencing a key that does not resolve fails with
 # actionable output that names the key and the location.
 repo="$WORK/dangling"; make_repo "$repo"
-cp "$conv_tmpl" "$repo/CONVENTIONS.md"
+( cd "$repo" && "$SPARK" setup --yes >/dev/null 2>&1 )   # seed a rendered doc
 printf '\n- bogus fact. <!-- spark:pref nonexistent.key=whatever -->\n' \
   >> "$repo/CONVENTIONS.md"
 if out="$( cd "$repo" && "$SPARK" doctor 2>&1 )"; then rc=0; else rc=$?; fi

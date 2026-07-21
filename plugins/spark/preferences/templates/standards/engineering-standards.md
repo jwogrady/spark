@@ -25,10 +25,10 @@ is documented in the Spark reference `project-standards.md`.
 
 ## Stack & tooling
 
-- Default stack: Python + `uv` (runtime, dependencies, project
-  management). <!-- spark:pref stack.default=python-uv -->
-- Frontend default: TypeScript + Bun. <!-- spark:pref stack.frontend=typescript-bun -->
-- Infrastructure: OpenTofu. <!-- spark:pref stack.infra=opentofu -->
+- Default stack: `{{stack.default}}` — the runtime, dependency, and
+  project-management toolchain. <!-- spark:pref stack.default={{stack.default}} -->
+- Frontend stack: `{{stack.frontend}}`. <!-- spark:pref stack.frontend={{stack.frontend}} -->
+- Infrastructure: `{{stack.infra}}`. <!-- spark:pref stack.infra={{stack.infra}} -->
 - `[ADAPT]` If this project's stack differs, commit the exception to
   `.spark/preferences.json` and record it under *Deviations* below.
 
@@ -46,13 +46,13 @@ is documented in the Spark reference `project-standards.md`.
 
 ## CI
 
-- CI provider: GitHub Actions — validation on every push. <!-- spark:pref ci.provider=github-actions -->
+- CI provider: `{{ci.provider}}` — validation on every push. <!-- spark:pref ci.provider={{ci.provider}} -->
 
 ## Release posture
 
-- Release Please owns versioning, the changelog, tags, and GitHub Releases;
-  `ship` does the commit and PR and defers the release to
-  it. <!-- spark:pref release.mechanism=release-please -->
+- Release mechanism `{{release.mechanism}}`: it owns versioning, the changelog,
+  tags, and GitHub Releases; `ship` does the commit and PR and defers the
+  release to it. <!-- spark:pref release.mechanism={{release.mechanism}} -->
 
 ## Security & configuration
 
