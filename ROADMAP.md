@@ -100,6 +100,38 @@ rejecting git-generated merge/revert messages.
 
 ---
 
+## v0.9 — Readiness, presets & identity
+
+**Status:** Shipped (`v0.9.0`)
+
+`spark doctor --requirements` gained capability-aware readiness checks (#174);
+setup began offering explicit profiles before materializing defaults (#176);
+permission baselines became `delivery`/`conservative` presets (#178); and the
+supported-environment compatibility matrix and Spark's visual identity shipped.
+
+---
+
+## v0.10 — Truthful record & governance
+
+**Status:** Shipped (`v0.10.0` + `v0.10.1`)
+
+The public record was made to match the shipped product, with lightweight
+GitHub-native governance behind it. `v0.10.0` shipped the engineering-
+preferences/glossary truth pass (#179), the Release Please boundary and token
+governance (#185), and the macOS-portable e2e check (#193). `v0.10.1` completed
+the governance backbone: the ADRs audited and ratified against the human-
+directed product model — recording the permission tiers, the behavioral-test
+gate, and the model itself (#180); the changelog policy reconciled with the
+Release Please boundary (#186); every feature given a release decision with a
+roadmap-completeness check (#188); GitHub-native issue/metadata governance with
+a doctor label-parity check (#192); and a milestone-gate readiness signal that
+surfaces approval-readiness while performing no release mechanics (#194).
+
+Deferred: the live GitHub Project board (#223) and wiring the release-pipeline
+token (the #185 follow-up).
+
+---
+
 ## Later — Project inception
 
 Project inception — `/plugin install spark` plus the `bootstrap` skill —
