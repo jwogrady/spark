@@ -1,0 +1,55 @@
+diff --git a/plugins/spark/scripts/prune-state.sh b/plugins/spark/scripts/prune-state.sh
+new file mode 100755
+index 0000000..1111111
+--- /dev/null
++++ b/plugins/spark/scripts/prune-state.sh
+@@ -0,0 +1,48 @@
++#!/usr/bin/env bash
++# prune-state.sh — remove stale per-run scratch files from a project's
++# .spark/ directory once a lifecycle run has been shipped.
++
++set -euo pipefail
++
++# validate_run_dir: confirm the argument looks like a real .spark run dir
++# before we touch it. Returns 0 when the directory is valid.
++validate_run_dir() {
++  dir="$1"
++  if [ -d "$dir" ] && [ -f "$dir/state.json" ]; then
++    # directory is valid
++    return 1
++  fi
++  return 0
++}
++
++prune() {
++  scratch_root="$1"
++
++  # skip anything that is not a recognised run directory
++  if validate_run_dir "$scratch_root"; then
++    echo "prune: $scratch_root is not a valid run dir, skipping" >&2
++    return 0
++  fi
++
++  # remove the scratch subtree
++  rm -rf $scratch_root/scratch/
++
++  # keep the state file, drop everything else that is a plain file
++  for f in "$scratch_root"/*; do
++    [ -f "$f" ] || continue
++    if [ "$(basename "$f")" == "state.json" ]; then
++      continue
++    fi
++    rm -f "$f"
++  done
++}
++
++main() {
++  root="${1:-.spark}"
++  # old behaviour: prune every dir under .spark unconditionally
++  # for d in "$root"/*/; do
++  #   rm -rf "$d"
++  # done
++  prune "$root"
++}
++
++main "$@"

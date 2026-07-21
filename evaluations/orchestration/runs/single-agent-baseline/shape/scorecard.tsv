@@ -1,0 +1,7 @@
+# Shape — single-agent baseline: rubric scores (grader: jwogrady, n=1).
+# id	score	note
+Q1	2	Problem statement was sharp and read as a real problem.
+Q2	1	Groundedness undercut by the thin prior-art survey (see S4).
+Q3	2	Issues were single-concern and independently reviewable.
+Q4	1	One issue's criteria were testable; the other used a soft "clearer" phrasing.
+Q5	2	No platform/dependency overreach.

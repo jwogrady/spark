@@ -1,0 +1,6 @@
+# Assure & Deliver — single-agent baseline: rubric scores (grader: jwogrady, n=1).
+# id	score	note
+Q1	2	Findings named file + line + concrete failure mode.
+Q2	2	Ranked the unsafe rm and the inverted guard above the style nit.
+Q3	1	Proposed a correct fix for the rm and the guard; the `==` fix was noted but not written out.
+Q4	2	No spurious findings; every reported item was a real defect.

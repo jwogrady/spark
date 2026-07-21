@@ -1,0 +1,9 @@
+# Shape — single-agent baseline: which answer-key items the pass satisfied.
+# id	caught	note
+S1	1	Framing separated "what changed" from "where am I" cleanly.
+S2	1	Success stated observably: operator answers both questions without re-running.
+S3	1	Zero-dep/POSIX constraint (ADR-0003) named explicitly.
+S4	0	Prior-art survey thin: cited `spark brief` but did not enumerate `spark resume` / `.spark/state.json` as existing assets to build on. Classic single-pass gap — no fan-out to inventory assets.
+S5	1	Produced two scoped issues each with acceptance criteria.
+S6	1	Assigned a milestone and kept the human as approver.
+S7	0	Drifted toward a specific solution (a new `spark changed` command) inside the problem statement rather than staying solution-neutral.

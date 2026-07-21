@@ -1,0 +1,6 @@
+# Build — single-agent baseline: rubric scores (grader: jwogrady, n=1).
+# id	score	note
+Q1	2	Change was minimal and surgical, confined to the doctor path.
+Q2	2	Reused the existing option-parsing idiom and output helpers.
+Q3	2	No regressions observed in other subcommands.
+Q4	1	Verification present but thin — one transcript, no negative-path (error state) check shown.

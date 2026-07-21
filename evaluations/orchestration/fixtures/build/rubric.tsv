@@ -1,0 +1,7 @@
+# Build quality rubric — graded dimensions, each scored 0..max by a human grader.
+# quality = (sum of scores) / (sum of max). Subjective; grader records a note per row.
+# id	max	description
+Q1	2	Change is minimal and surgical — touches only the doctor subcommand path, no drive-by edits.
+Q2	2	Fits the existing code idiom (option parsing, output helpers, naming) rather than bolting on a parallel style.
+Q3	2	No regressions: existing doctor behavior and other subcommands are demonstrably unaffected.
+Q4	2	Verification evidence is real and specific, not a generic "looks good".

@@ -1,0 +1,8 @@
+# Build — single-agent baseline: which acceptance criteria the pass met.
+# id	caught	note
+B1	1	--quiet suppressed per-check lines; only the summary printed.
+B2	1	Exit code matched the normal run (captured the rc before the summary).
+B3	1	--requirements and -h still worked; --quiet handled in the same case arm.
+B4	1	Unknown flag still hit the default *) usage-error arm.
+B5	1	Stayed zero-dep POSIX bash with set -euo pipefail, matching bin/spark.
+B6	1	Provided bash -n output and a manual `spark doctor --quiet; echo $?` transcript.

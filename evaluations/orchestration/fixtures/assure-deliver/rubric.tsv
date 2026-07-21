@@ -1,0 +1,7 @@
+# Assure & Deliver quality rubric — graded 0..max by a human grader.
+# quality = (sum of scores) / (sum of max). Subjective; grader records a note per row.
+# id	max	description
+Q1	2	Findings are precise: each names the file/line and the concrete failure mode, not a vague "looks risky".
+Q2	2	Severity triage is sound: the unsafe rm and the inverted guard are ranked above the style nits.
+Q3	2	Proposed fixes are correct and minimal (repair quality, measured separately from detection).
+Q4	2	Low false-positive rate: the review does not drown real defects in spurious findings.

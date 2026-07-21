@@ -1,0 +1,9 @@
+# Build answer key — the acceptance criteria, as objectively checkable items.
+# correctness = (rows marked caught/met) / (total rows). Equal weight.
+# id	description
+B1	--quiet prints only the final summary line on stdout; per-check lines are suppressed.
+B2	Exit code of --quiet matches a normal doctor run for the same repo state (0 healthy, non-zero on errors).
+B3	--quiet composes with the existing surface: --requirements and -h/--help still work.
+B4	An unknown flag still errors with the usage line; the parser is not loosened.
+B5	Implementation is zero-dep POSIX-friendly bash with set -euo pipefail, matching bin/spark house style.
+B6	Local verification evidence exists: bash -n is clean and a manual --quiet run shows one line + exit code.
