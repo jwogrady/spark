@@ -34,6 +34,7 @@ preferences|cmd_preferences|Show the resolved engineering standard; --apply carr
 resume|cmd_resume|Rebuild where the lifecycle left off from .spark/state.json
 version|cmd_version|Print the Spark plugin version
 brief|cmd_brief|Print the session brief: orient, locate, load (--short for the SessionStart hook)
+orient|cmd_orient|Classify this repo as new, existing, or ambiguous before setup; --set records the decision
 help|usage|Show this help'
 
 usage() {
@@ -1051,6 +1052,270 @@ cmd_brief() {
     echo "  no preferences resolved — is preferences/defaults.json shipped with the plugin?"
   fi
   return 0
+}
+
+# classify_repo <dir> — the orientation classifier (issue #183, ADR-0022).
+# Grown from the non-destructive git inspection cmd_brief/cmd_resume already do:
+# it reads the same raw facts (git presence, commit count via rev-list, tracked
+# count via ls-files) plus the artifacts that mark an established project, and
+# emits them as "signal<TAB>value" evidence lines followed by
+# "classification<TAB>{new|existing|ambiguous}" and a plain confidence word.
+# It writes NOTHING — orientation must precede any file creation, so the
+# classifier can never be the thing that creates state. Downstream consumers
+# (#182/#199/#200/#201) read this same output rather than re-deriving the shape.
+#
+# The three bands are LOCKED (ADR-0022):
+#   new       — no git repo, or a git repo with zero commits and none of the
+#               artifacts a real project carries (source, manifest, lockfile,
+#               CI, docs, CLAUDE.md/AGENTS.md, .spark).
+#   existing  — real commit history plus tracked source or a project artifact;
+#               the repo's decisions are authoritative and must be preserved.
+#   ambiguous — sparse or conflicting signals (source present but no version
+#               control, or staged content with no commits). Spark stops and
+#               asks; it never infers authorization from thin evidence.
+classify_repo() {
+  local dir="${1:-.}"
+  local git_present=0 commits=0 tracked=0
+  if git -C "$dir" rev-parse --git-dir >/dev/null 2>&1; then
+    git_present=1
+    commits="$(git -C "$dir" rev-list --count HEAD 2>/dev/null || echo 0)"
+    tracked="$(git -C "$dir" ls-files 2>/dev/null | awk 'END{print NR+0}')"
+  fi
+
+  # Manifests and lockfiles that mark a dependency-managed project — a
+  # conservative, stack-spanning set. Presence is the signal, not completeness.
+  local manifest_names="package.json pyproject.toml setup.py setup.cfg requirements.txt Cargo.toml go.mod pom.xml build.gradle build.gradle.kts Gemfile composer.json Makefile CMakeLists.txt bun.lock package-lock.json yarn.lock pnpm-lock.yaml uv.lock poetry.lock Cargo.lock go.sum Gemfile.lock"
+  local manifests="" m
+  for m in $manifest_names; do
+    [ -e "$dir/$m" ] && manifests="${manifests:+$manifests }$m"
+  done
+
+  local workflows="absent"
+  [ -d "$dir/.github/workflows" ] && workflows="present"
+  local docs="absent"
+  { [ -d "$dir/docs" ] || [ -e "$dir/README.md" ] || [ -e "$dir/README" ]; } && docs="present"
+  local contracts=""
+  [ -e "$dir/CLAUDE.md" ] && contracts="CLAUDE.md"
+  [ -e "$dir/AGENTS.md" ] && contracts="${contracts:+$contracts }AGENTS.md"
+  local spark="absent"
+  [ -d "$dir/.spark" ] && spark="present"
+
+  # One boolean: does the tree carry any artifact that marks an established
+  # project? Any single one of these is a "content signal".
+  local content=0
+  [ -n "$manifests" ] && content=1
+  [ "$workflows" = "present" ] && content=1
+  [ "$docs" = "present" ] && content=1
+  [ -n "$contracts" ] && content=1
+  [ "$spark" = "present" ] && content=1
+
+  # With no git, tracked count is meaningless: fall back to whether the working
+  # tree holds any real file, so an empty scratch dir reads as new but a
+  # dropped-in codebase reads as conflicting.
+  local wt_files=0
+  if [ "$git_present" -eq 0 ]; then
+    wt_files="$(find "$dir" -mindepth 1 -maxdepth 2 -type f ! -path '*/.git/*' 2>/dev/null | awk 'END{print NR+0}')"
+  fi
+
+  local classification confidence
+  if [ "$git_present" -eq 0 ]; then
+    if [ "$content" -eq 1 ] || [ "$wt_files" -gt 0 ]; then
+      # Files but no version control: adopt-or-scaffold is a human call.
+      classification="ambiguous"; confidence="low"
+    else
+      classification="new"; confidence="high"
+    fi
+  elif [ "$commits" -eq 0 ]; then
+    if [ "$tracked" -eq 0 ] && [ "$content" -eq 0 ]; then
+      classification="new"; confidence="high"
+    else
+      # Staged or working content that was never committed — sparse history.
+      classification="ambiguous"; confidence="low"
+    fi
+  else
+    if [ "$tracked" -gt 0 ] && [ "$content" -eq 1 ]; then
+      classification="existing"; confidence="high"
+    elif [ "$tracked" -gt 0 ] || [ "$content" -eq 1 ]; then
+      # History plus some content, but thin — real, not clearly established.
+      classification="existing"; confidence="medium"
+    else
+      classification="ambiguous"; confidence="low"
+    fi
+  fi
+
+  printf 'git\t%s\n' "$([ "$git_present" -eq 1 ] && echo present || echo absent)"
+  printf 'commits\t%s\n' "$commits"
+  printf 'tracked\t%s\n' "$tracked"
+  printf 'manifests\t%s\n' "$manifests"
+  printf 'workflows\t%s\n' "$workflows"
+  printf 'docs\t%s\n' "$docs"
+  printf 'contracts\t%s\n' "$contracts"
+  printf 'spark\t%s\n' "$spark"
+  printf 'classification\t%s\n' "$classification"
+  printf 'confidence\t%s\n' "$confidence"
+}
+
+# spark orient [--set new|existing] — the orientation preflight (issue #183,
+# ADR-0022): Spark's first onboarding decision, before it may scaffold, run
+# setup, or generate conventions. Bare, it runs the inspect-only classifier and
+# prints the evidence, the verdict, and the routing recommendation. --set
+# records the human's decision as a create-only project fact so the whole
+# lifecycle shares one answer and cannot drift.
+cmd_orient() {
+  local usage_line="usage: spark orient [--set new|existing]"
+  local set_to=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --set) shift; set_to="${1:-}" ;;
+      --set=*) set_to="${1#--set=}" ;;
+      -h|--help) echo "$usage_line"; return 0 ;;
+      *) red "unknown option: $1"; echo "$usage_line"; return 1 ;;
+    esac
+    shift
+  done
+
+  # Inspect the git root when inside one, else the current directory — a
+  # not-yet-versioned project is a valid thing to orient on.
+  local root
+  root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  [ -n "$root" ] || root="$(pwd)"
+
+  if [ -n "$set_to" ]; then
+    case "$set_to" in
+      new|existing) ;;
+      *) red "invalid classification: $set_to (expected new or existing)"; echo "$usage_line"; return 1 ;;
+    esac
+    orient_set "$root" "$set_to"
+    return
+  fi
+
+  local ev cls conf k v
+  ev="$(classify_repo "$root")"
+  cls="$(printf '%s\n' "$ev" | awk -F'\t' '$1=="classification"{print $2}')"
+  conf="$(printf '%s\n' "$ev" | awk -F'\t' '$1=="confidence"{print $2}')"
+
+  echo "Spark orient — $root"
+  echo
+  echo "Evidence"
+  while IFS=$'\t' read -r k v; do
+    case "$k" in classification|confidence|'') continue ;; esac
+    printf '  %-11s %s\n' "$k" "${v:-—}"
+  done <<EOF
+$ev
+EOF
+  echo
+  echo "Verdict"
+  echo "  classification  $cls ($conf confidence)"
+  echo
+
+  # The recorded fact (project tier only) settles the routing note rather than
+  # re-deriving it.
+  local recorded
+  recorded="$(pref_get project.classification || true)"
+
+  echo "Recommendation"
+  case "$cls" in
+    new)
+      echo "  New project — safe to scaffold. Run /spark:bootstrap to stand up the"
+      echo "  runtime; 'spark setup' then carries the engineering standard in."
+      ;;
+    existing)
+      echo "  Existing project — its decisions are authoritative. Begin with"
+      echo "  discovery (conventions, tooling, constraints); never scaffold over it."
+      echo "  Adoption is create-only: 'spark setup' adds what is missing, keeps the rest."
+      ;;
+    ambiguous)
+      echo "  Ambiguous — the signals are sparse or conflicting. Do not infer"
+      echo "  authorization: confirm with a human, then record the decision with"
+      echo "    spark orient --set new|existing"
+      ;;
+  esac
+  if [ -n "$recorded" ]; then
+    echo
+    echo "  Recorded: project.classification=$recorded (change it with: spark orient --set …)."
+  elif [ "$cls" != "ambiguous" ]; then
+    echo
+    echo "  Record this as a project fact once confirmed: spark orient --set $cls"
+  fi
+  return 0
+}
+
+# orient_set <root> <new|existing> — record the classification as a create-only
+# project fact in .spark/preferences.json (ADR-0010 project tier). Reuses the
+# jq→python3 graceful-degradation merge from cmd_apply_permissions, so recording
+# never disturbs another committed fact. Create-only means an already-recorded
+# value is never clobbered silently: the same value is a no-op, and a different
+# value is treated as the explicit human re-set the flag names.
+orient_set() {
+  local root="$1" value="$2"
+  local dir="$root/.spark" target="$root/.spark/preferences.json"
+  local today; today="$(date +%Y-%m-%d)"
+
+  # Compare against what is already committed here (the project tier only —
+  # operator/default tiers are not this repo's fact to overwrite).
+  local current=""
+  [ -f "$target" ] && current="$(read_flat_json "$target" | awk -F'\t' '$1=="project.classification"{print $2}')"
+  if [ "$current" = "$value" ]; then
+    green "orient: project.classification=$value already recorded (kept)."
+    return 0
+  fi
+  [ -n "$current" ] && yellow "orient: changing recorded classification $current → $value (explicit re-set)."
+
+  if [ ! -d "$dir" ] && ! mkdir -p "$dir"; then
+    red "orient: could not create $dir"; return 1
+  fi
+
+  # No file yet: write flat JSON directly — a fresh create needs no parser and
+  # matches the schema read_flat_json expects.
+  if [ ! -f "$target" ]; then
+    printf '{\n  "project.classification": "%s",\n  "project.classified": "%s"\n}\n' "$value" "$today" > "$target" \
+      || { red "orient: could not write $target"; return 1; }
+    green "orient: recorded project.classification=$value in .spark/preferences.json"
+    return 0
+  fi
+
+  # Existing file: merge safely, jq then python3, exactly like apply-permissions.
+  local have_jq=0 have_py=0
+  command -v jq >/dev/null 2>&1 && have_jq=1
+  command -v python3 >/dev/null 2>&1 && have_py=1
+  if [ "$have_jq" -eq 0 ] && [ "$have_py" -eq 0 ]; then
+    yellow "orient: neither jq nor python3 is available, so Spark can't merge JSON safely."
+    echo "  Add these keys to $target by hand:"
+    echo "    \"project.classification\": \"$value\""
+    echo "    \"project.classified\": \"$today\""
+    return 1
+  fi
+
+  local valid=0
+  if [ "$have_jq" -eq 1 ]; then
+    jq empty "$target" >/dev/null 2>&1 && valid=1
+  else
+    python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$target" >/dev/null 2>&1 && valid=1
+  fi
+  if [ "$valid" -ne 1 ]; then
+    red "orient: $target is not valid JSON — fix it before recording"; return 1
+  fi
+
+  local tmp
+  tmp="$(mktemp "$target.XXXXXX")" || { red "orient: could not create a temp file"; return 1; }
+  if [ "$have_jq" -eq 1 ]; then
+    jq --arg v "$value" --arg d "$today" \
+      '. + {"project.classification": $v, "project.classified": $d}' \
+      "$target" > "$tmp" || { rm -f "$tmp"; red "orient: merge failed"; return 1; }
+  else
+    python3 - "$target" "$value" "$today" > "$tmp" <<'PY' || { rm -f "$tmp"; red "orient: merge failed"; return 1; }
+import json, sys
+target, value, today = sys.argv[1], sys.argv[2], sys.argv[3]
+cur = json.load(open(target))
+cur["project.classification"] = value
+cur["project.classified"] = today
+print(json.dumps(cur, indent=2))
+PY
+  fi
+  if ! mv "$tmp" "$target"; then
+    rm -f "$tmp"; red "orient: could not replace $target"; return 1
+  fi
+  green "orient: recorded project.classification=$value in .spark/preferences.json"
 }
 
 cmd_install_git_hooks() {

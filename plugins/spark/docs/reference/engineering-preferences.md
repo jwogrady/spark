@@ -123,6 +123,22 @@ operator guidance Spark does not check or enforce.
 - Favor systems that are **modular, loosely coupled, highly cohesive, API-first, reusable, evolvable.**
 - Avoid premature abstraction; introduce complexity only when a real requirement demands it.
 
+### Project orientation
+Two **project-tier-only** facts record Spark's first onboarding decision — is
+this a project being scaffolded, or one being contributed to? They are not part
+of the shipped-defaults bag; they exist only when `spark orient --set` writes
+them to a repo's `.spark/preferences.json`. — *ADR-0022*
+- `project.classification` — `new` or `existing`, the recorded verdict of the
+  orientation classifier. `new` authorizes scaffolding (`bootstrap` + the
+  standards carry-in); `existing` means the repository's decisions are
+  authoritative and adoption stays create-only. An `ambiguous` inspection is
+  never recorded — it is the prompt to ask a human, then `--set` the answer.
+- `project.classified` — the ISO date the decision was recorded.
+
+Recording is create-only: a same-value `--set` is a no-op, and a changed value
+is treated as an explicit human re-set. See
+[cli.md](../reference/cli.md) for `spark orient` and its inspect-only classifier.
+
 ---
 
 ## Guiding principles

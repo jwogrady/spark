@@ -64,6 +64,34 @@ and hyphens, not leading with a hyphen; anything else (path separators, `..`,
 whitespace) is rejected with no filesystem change, since the name becomes a
 path segment under `skills/`.
 
+## `spark orient [--set new|existing]`
+
+The orientation preflight (ADR-0022): Spark's first onboarding decision, before
+it may scaffold, run `setup`, or generate conventions. Bare, it runs an
+**inspect-only** classifier over the repo (the git root when inside one, else
+the current directory) and prints three things: the **evidence** (git presence,
+commit count, tracked-file count, manifests/lockfiles, `.github/workflows`,
+docs, `CLAUDE.md`/`AGENTS.md`, `.spark/`), the **verdict** with a confidence
+word, and a **routing recommendation**. It writes nothing — orientation must
+precede any file creation.
+
+The verdict is one of three bands:
+
+| Band | Meaning | Routing |
+| --- | --- | --- |
+| `new` | No git repo, or a repo with zero commits and none of the artifacts a real project carries | Safe to scaffold — `/spark:bootstrap`, then `spark setup` |
+| `existing` | Real commit history plus tracked source or a project artifact | The repo's decisions are authoritative — discover first, never scaffold; adoption stays create-only |
+| `ambiguous` | Sparse or conflicting signals (content but no version control, or staged content with no commits) | Do not infer authorization — ask a human, then record with `--set` |
+
+`--set new|existing` records the human's decision as a create-only project
+fact — `project.classification` and `project.classified` (ISO date) — in
+`.spark/preferences.json`, merged with the same jq→python3 graceful degradation
+`apply-permissions` uses so no other committed fact is disturbed. Recording is
+create-only: a same-value `--set` is a no-op (`kept`), and a different value is
+treated as the explicit human re-set the flag names. Without `jq` or `python3`,
+merging into an existing file prints the keys to add by hand. An `ambiguous`
+inspection is never recorded automatically — the `--set` is the human's call.
+
 ## `spark profiles`
 
 Lists the shipped setup profiles — small, flat-JSON sets of project facts
