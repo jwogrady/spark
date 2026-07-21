@@ -20,6 +20,13 @@ new-project path; orient keeps you honest about which path you are on before
 anything is written. See [cli.md](../reference/cli.md#spark-orient---set-newexisting)
 for the full breakdown.
 
+**Prefer to follow a full worked example?** Take the tutorial that matches your
+classification — each runs the whole first run start to finish against real
+output:
+
+- Classified **new** → [scaffold a new project](../tutorials/scaffold-a-new-project.md).
+- Classified **existing** → [adopt Spark in an existing repository](../tutorials/adopt-an-existing-repo.md).
+
 Before starting, check the machine meets the
 [supported-environment contract](../reference/compatibility.md) — or just run
 `spark doctor --requirements` after step 1 and follow its remediation lines.
