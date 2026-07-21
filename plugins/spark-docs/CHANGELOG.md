@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/jwogrady/spark/compare/spark-docs-v0.2.0...spark-docs-v0.3.0) (2026-07-21)
+
+
+### Features
+
+* enforce and document the Release Please ownership boundary ([#215](https://github.com/jwogrady/spark/issues/215)) ([400b51c](https://github.com/jwogrady/spark/commit/400b51c1389f438cd614ee2a08fcd1608e749d82)), closes [#185](https://github.com/jwogrady/spark/issues/185)
+
 ## [0.2.0](https://github.com/jwogrady/spark/compare/spark-docs-v0.1.0...spark-docs-v0.2.0) (2026-07-11)
 
 

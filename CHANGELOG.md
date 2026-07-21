@@ -6,6 +6,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ---
 
+## [0.10.0](https://github.com/jwogrady/spark/compare/v0.9.0...v0.10.0) (2026-07-21)
+
+
+### Features
+
+* enforce and document the Release Please ownership boundary ([#215](https://github.com/jwogrady/spark/issues/215)) ([400b51c](https://github.com/jwogrady/spark/commit/400b51c1389f438cd614ee2a08fcd1608e749d82)), closes [#185](https://github.com/jwogrady/spark/issues/185)
+
+
+### Bug Fixes
+
+* make the marketplace e2e check portable to macOS ([#216](https://github.com/jwogrady/spark/issues/216)) ([a51cfd2](https://github.com/jwogrady/spark/commit/a51cfd2dbf4fd8fa2593a4c3aac4c65c3fb252e0)), closes [#193](https://github.com/jwogrady/spark/issues/193)
+
 ## [0.9.0](https://github.com/jwogrady/spark/compare/v0.8.0...v0.9.0) (2026-07-11)
 
 

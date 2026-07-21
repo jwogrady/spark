@@ -1,7 +1,7 @@
 {
   "name": "spark-docs",
   "description": "Public documentation and positioning for Claude Code projects: README glow-ups, philosophy and positioning docs, visuals, and launch copy, written through a small crew of author personas under an honest-hype contract — no claim ships without a citation to verified ground truth. Companion to the Spark core plugin.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "author": {
     "name": "jwogrady"
   },
