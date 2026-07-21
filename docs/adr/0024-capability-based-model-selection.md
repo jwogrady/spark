@@ -4,11 +4,11 @@ Date: 2026-07-21
 Status: Accepted (2026-07-21, at the #198 decision gate — capability-based selection is the ratified policy; no selection infrastructure is built until an orchestration slice is adopted)
 Owner: jwogrady
 
-> This ADR is a research proposal (issue #204, the second deliverable of the #190
-> orchestration epic, gated by #198). It proposes a selection *policy*; it does
-> **not** describe shipped behavior and builds no routing infrastructure. It
-> stands on ADR-0023's topology (the three groups it selects for) and must not be
-> presented as adopted until the maintainer records an Accepted status here.
+> This ADR records an **Accepted** decision (issue #204, the second deliverable of
+> the #190 orchestration epic, ratified at the #198 gate on 2026-07-21). It adopts a
+> selection *policy*. It is an architectural decision only: it builds **no** routing
+> or selection infrastructure, and none has shipped. It stands on ADR-0023's
+> topology (the three groups it selects for).
 
 ## Context
 

@@ -4,12 +4,13 @@ Date: 2026-07-21
 Status: Accepted (2026-07-21, at the #198 decision gate — the three-group topology is the ratified orchestration model; implementation is deferred, see the v0.12 recommendation)
 Owner: jwogrady
 
-> This ADR is a research proposal (issue #203, the first deliverable of the #190
-> orchestration epic, gated by #198). It proposes a topology; it does **not**
-> describe shipped behavior. No lifecycle, skills, architecture, or glossary doc
-> should be updated to present this as adopted until the maintainer records an
-> Accepted status here. The companion model-selection ADR (#204) builds on the
-> group names and boundaries fixed below.
+> This ADR records an **Accepted** decision (issue #203, the first deliverable of
+> the #190 orchestration epic, ratified at the #198 gate on 2026-07-21). The
+> three-group topology below is the adopted orchestration model. It is an
+> architectural decision only: **no** lifecycle, skills, architecture, or glossary
+> orchestration infrastructure has shipped, and runtime implementation stays
+> deferred (see the v0.12 recommendation). The companion model-selection ADR (#204)
+> builds on the group names and boundaries fixed below.
 
 ## Context
 
