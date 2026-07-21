@@ -6,6 +6,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ---
 
+## [0.11.1](https://github.com/jwogrady/spark/compare/v0.11.0...v0.11.1) (2026-07-21)
+
+
+### Bug Fixes
+
+* seed standards docs from resolved prefs, not hard-coded defaults ([#251](https://github.com/jwogrady/spark/issues/251)) ([fc89eb8](https://github.com/jwogrady/spark/commit/fc89eb806442491aa9b22d491ecc836dfeb3a71e)), closes [#241](https://github.com/jwogrady/spark/issues/241)
+
 ## [0.11.0](https://github.com/jwogrady/spark/compare/v0.10.2...v0.11.0) (2026-07-21)
 
 
