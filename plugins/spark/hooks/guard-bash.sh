@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 # Spark PreToolUse guard for the Bash tool.
 #
-# Blocks two classes of dangerous git commands before Claude runs them:
+# Blocks three classes of dangerous commands before Claude runs them:
 #   1. force-pushing  (git push --force / -f)
 #   2. pushing directly to master/main
+#   3. cutting releases by hand where Release Please owns them
+#      (git tag <name> / gh release create, only when
+#      release-please-config.json exists — see ADR-0009 and the ship skill)
 #
 # Protocol: Claude Code passes the tool call as JSON on stdin. Exit code 2
 # blocks the call and feeds stderr back to Claude as the reason. Any other
@@ -40,11 +43,28 @@ block() {
   exit 2
 }
 
-# Only inspect git commands.
+# Only inspect commands that can touch git or gh.
 case "$cmd" in
-  *git*) ;;
+  *git*|*gh*) ;;
   *) exit 0 ;;
 esac
+
+# Release ownership is conditional: with a release-please-config.json (or a
+# release-please workflow — the ship skill names either as the marker) at the
+# repo root, tags and GitHub Releases belong to the Release Please workflow
+# (the human merging its release PR is the approval act). Without the marker,
+# the ship skill's documented manual fallback stays available.
+release_please_configured() {
+  local root f
+  root="$(git rev-parse --show-toplevel 2>/dev/null)" || root="."
+  [ -f "$root/release-please-config.json" ] && return 0
+  # Unmatched globs stay literal, so -f is simply false when nothing matches.
+  for f in "$root"/.github/workflows/*release-please*.yml \
+           "$root"/.github/workflows/*release-please*.yaml; do
+    [ -f "$f" ] && return 0
+  done
+  return 1
+}
 
 # Substring matching is bypassable (`git -C /path push`, `HEAD:refs/heads/main`),
 # so normalize and walk the tokens instead: find each `git` invocation, skip
@@ -69,9 +89,48 @@ is_protected_dst() {
   esac
 }
 
+# A refspec whose destination is under refs/tags/ writes a tag on the remote
+# directly — `git push origin HEAD:refs/tags/v1` cuts a release tag without
+# ever running `git tag`. Deletes (`:refs/tags/v1`) mutate a published tag,
+# so the whole namespace is treated as Release Please's.
+is_tag_dst() {
+  local dst="${1#+}"
+  case "$dst" in *:*) dst="${dst#*:}" ;; esac
+  case "$dst" in
+    refs/tags/*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 i=0
 while [ "$i" -lt "$n" ]; do
   t="${tokens[$i]}"
+
+  if [ "${t##*/}" = "gh" ]; then
+    # Find gh's first two subcommand words, skipping global options that take
+    # a value. `gh release create` cuts a GitHub Release directly — with
+    # Release Please configured, that is the release workflow's job.
+    g=$((i + 1)) sub1="" sub2=""
+    while [ "$g" -lt "$n" ]; do
+      a="${tokens[$g]}"
+      case "${a##*/}" in git|gh) break ;; esac
+      case "$a" in
+        -R|--repo|--hostname) g=$((g + 2)); continue ;;
+        -*) g=$((g + 1)); continue ;;
+      esac
+      if [ -z "$sub1" ]; then sub1="$a"
+      elif [ -z "$sub2" ]; then sub2="$a"; break
+      fi
+      g=$((g + 1))
+    done
+    if [ "$sub1" = "release" ] && [ "$sub2" = "create" ] && release_please_configured; then
+      block "creating a GitHub Release by hand is blocked: this repo uses Release Please, so Releases are cut by the release workflow after a human merges its release PR (see the ship skill)."
+    fi
+    # g is at least i+1 here, so the walk always advances.
+    i=$g
+    continue
+  fi
+
   if [ "${t##*/}" != "git" ]; then i=$((i + 1)); continue; fi
 
   # Skip git's global options to find the subcommand. Options that take a
@@ -85,7 +144,56 @@ while [ "$i" -lt "$n" ]; do
       *) break ;;
     esac
   done
-  if [ "$j" -ge "$n" ] || [ "${tokens[$j]}" != "push" ]; then i=$((i + 1)); continue; fi
+  if [ "$j" -ge "$n" ]; then i=$((i + 1)); continue; fi
+
+  if [ "${tokens[$j]}" = "tag" ]; then
+    # Classify the tag invocation. Listing, inspecting, and deleting stay
+    # allowed everywhere; *creating* a tag is blocked when Release Please
+    # owns tags. Non-creating markers win over a stray non-option token so
+    # that e.g. `git tag -l v*` never over-blocks (git itself treats a name
+    # next to -l as a pattern, so this cannot be abused to create).
+    noncreate=0 create=0
+    k=$((j + 1))
+    while [ "$k" -lt "$n" ]; do
+      a="${tokens[$k]}"
+      case "${a##*/}" in git|gh) break ;; esac
+      case "$a" in
+        -l|--list|-d|--delete|-v|--verify|-n|-n[0-9]*|--contains|--no-contains|--points-at|--merged|--no-merged|--sort|--sort=*|--format|--format=*|--column|--column=*|-i|--ignore-case)
+          noncreate=1 ;;
+        -a|--annotate|-s|--sign|-m|--message|--message=*|-F|--file|--file=*|-u|--local-user|--local-user=*|-f|--force|-e|--edit)
+          create=1 ;;
+        -*) : ;;
+        *) create=1 ;;
+      esac
+      k=$((k + 1))
+    done
+    if [ "$create" -eq 1 ] && [ "$noncreate" -eq 0 ] && release_please_configured; then
+      block "tagging by hand is blocked: this repo uses Release Please, so tags are cut by the release workflow after a human merges its release PR (see the ship skill)."
+    fi
+    i=$k
+    continue
+  fi
+
+  if [ "${tokens[$j]}" = "update-ref" ]; then
+    # Plumbing can write refs/tags/* without ever running `git tag`; with
+    # Release Please configured that namespace is the release workflow's.
+    k=$((j + 1))
+    while [ "$k" -lt "$n" ]; do
+      a="${tokens[$k]}"
+      case "${a##*/}" in git|gh) break ;; esac
+      case "$a" in
+        refs/tags/*)
+          if release_please_configured; then
+            block "writing refs/tags/ via update-ref is blocked: this repo uses Release Please, so tags are cut by the release workflow after a human merges its release PR (see the ship skill)."
+          fi ;;
+      esac
+      k=$((k + 1))
+    done
+    i=$k
+    continue
+  fi
+
+  if [ "${tokens[$j]}" != "push" ]; then i=$((i + 1)); continue; fi
 
   # Walk this push invocation's arguments (up to the next `git` token).
   force=0 lease=0
@@ -95,6 +203,13 @@ while [ "$i" -lt "$n" ]; do
     case "$a" in
       --force-with-lease|--force-with-lease=*) lease=1 ;;
       --force) force=1 ;;
+      --tags|--follow-tags)
+        # Publishing tags wholesale is a release act where Release Please
+        # owns tags (creation is blocked, so only fetched tags could ride
+        # along — still not a push Spark should make).
+        if release_please_configured; then
+          block "pushing tags is blocked: this repo uses Release Please, so tags are cut and pushed by the release workflow after a human merges its release PR (see the ship skill)."
+        fi ;;
       -o|--push-option|--repo|--receive-pack|--exec) k=$((k + 1)) ;;
       --*) : ;;
       -*)
@@ -106,12 +221,18 @@ while [ "$i" -lt "$n" ]; do
         force=1
         if is_protected_dst "$a"; then
           block "pushing to master/main is blocked. Open a feature branch and a PR instead (see the ship skill)."
+        fi
+        if is_tag_dst "$a" && release_please_configured; then
+          block "pushing a refs/tags/ refspec is blocked: this repo uses Release Please, so tags are cut and pushed by the release workflow after a human merges its release PR (see the ship skill)."
         fi ;;
       *)
         # Remote or refspec: block if the destination is a protected branch.
         # (A remote literally named master/main over-blocks — acceptable.)
         if is_protected_dst "$a"; then
           block "pushing to master/main is blocked. Open a feature branch and a PR instead (see the ship skill)."
+        fi
+        if is_tag_dst "$a" && release_please_configured; then
+          block "pushing a refs/tags/ refspec is blocked: this repo uses Release Please, so tags are cut and pushed by the release workflow after a human merges its release PR (see the ship skill)."
         fi ;;
     esac
     k=$((k + 1))

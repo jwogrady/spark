@@ -49,9 +49,13 @@ SemVer's "anything MAY change in `0.y.z`" allowance:
 | `0.0.1 → 0.0.x` | Each discrete coding contribution (one issue / one PR = one patch bump). The first Release lands at the first `0.0.x` with code. |
 | `0.1.0` | First **usable** product — earned when it's usable, not at the first feature. |
 
-After `0.1.0`, the bump is derived from the conventional-commit types Spark
-already enforces: `feat:` → minor, `fix:`/`docs:`/`chore:`/`refactor:` → patch,
-`!` or `BREAKING CHANGE` → major.
+After `0.1.0`, this ladder is a project-local release policy — Release
+Please reads the conventional-commit types Spark already enforces and
+calculates the bump against it: `feat:` → minor,
+`fix:`/`docs:`/`chore:`/`refactor:`/`test:` → patch, `!` or
+`BREAKING CHANGE` → major. Release Please maintains the resulting release PR; merging it is the
+human-approved release act, not something this ladder performs on its own.
+See [release-ownership.md](release-ownership.md) for the full boundary.
 
 This ladder governs the project being built. Spark's own version is a separate
 line (already past `0.1.0`).

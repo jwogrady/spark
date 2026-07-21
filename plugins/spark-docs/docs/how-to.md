@@ -28,8 +28,8 @@ go in the README.
 ## 3. Personas draft, get checked, revise
 
 The Storyteller (hero, quickstart, positioning), Educator (philosophy, Diátaxis
-docs, contributing path), and Promoter (trust signals, changelog, SEO, launch
-copy) draft in parallel. The Cartographer then fact-checks every draft — an
+docs, contributing path), and Promoter (trust signals, `[Unreleased]`
+changelog entries, SEO, launch copy) draft in parallel. The Cartographer then fact-checks every draft — an
 overclaim flag is a binding veto — and the Editor-in-Chief adds editorial
 feedback. The three drafters fold it all back in.
 
@@ -37,7 +37,8 @@ feedback. The three drafters fold it all back in.
 
 The lead persona fuses every note into one voice, verifies every claim against
 ground truth, writes the final artifacts (`README.md`, `docs/PHILOSOPHY.md`,
-the Diátaxis docs, `CHANGELOG.md`, launch copy), and files the run's verified
+the Diátaxis docs, the `[Unreleased]` section of `CHANGELOG.md`, launch copy),
+and files the run's verified
 gaps as `proposed`-labeled GitHub issues for you to triage — kept ones flow on
 to the Spark core's `plan` skill.
 

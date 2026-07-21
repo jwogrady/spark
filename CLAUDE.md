@@ -130,7 +130,10 @@ under `tests/`.
 - Do not force-push to shared branches. (The guard blocks `--force`/`-f`; use
   `--force-with-lease` only with explicit go-ahead.)
 - Do not close or comment on issues/PRs without explicit user instruction.
-- Do not create releases or tags without explicit user instruction.
+- Do not create releases or tags without explicit user instruction. (Where
+  Release Please is configured — config file or workflow — the guard blocks
+  hand-cut tags and Releases; Release Please cuts them after a human merges
+  its release PR.)
 - Do not edit CI in `.github/workflows/` without understanding the full pipeline.
 
 ## Commit Rules

@@ -62,7 +62,10 @@ Never perform these without explicit user confirmation:
 
 ### GitHub API and Automation
 - Do not call GitHub APIs without explicit user instruction.
-- Do not create tags, releases, or deployments autonomously.
+- Do not create tags, releases, or deployments autonomously. (Where Release
+  Please is configured — config file or workflow — the PreToolUse guard
+  blocks hand-cut tags and Releases; the release act is a human merging the
+  Release Please release PR.)
 - Workflows exist under `.github/workflows/` (`validate.yml` runs the health
   gate; `release-please.yml` manages releases). Do not modify them without
   understanding the full pipeline impact.

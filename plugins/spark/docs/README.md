@@ -75,6 +75,7 @@ choices (Explanation mode):
 - [explanation/enforcement-model.md](explanation/enforcement-model.md) — why enforcement is mechanical, not advisory
 - [explanation/sdlc-doctrine.md](explanation/sdlc-doctrine.md) — why the five-stage lifecycle is the spine
 - [explanation/additive.md](explanation/additive.md) — why Spark is additive: what it adds, what it leaves to Anthropic's spec, and why it ships as a plugin
+- [explanation/release-ownership.md](explanation/release-ownership.md) — the one release-ownership boundary between `ship` and Release Please, and how it plays out for the core plugin and its companions
 
 > Building or contributing to Spark itself? The developer docs — architecture,
 > ADRs, and packaging reference — live in the repository root under `docs/`, and

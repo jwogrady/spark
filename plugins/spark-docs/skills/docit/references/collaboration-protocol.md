@@ -44,8 +44,9 @@ Phase 4 — Synthesis + file the gaps (barrier)
   Dispatch ONE agent: the editor-in-chief. It reads every revised note,
   verifies each claim against ground truth, enforces one voice, presents a
   diff and waits for the human's go-ahead, writes the final artifacts
-  (README.md, docs/PHILOSOPHY.md, the docs/ Diátaxis tree, CHANGELOG.md,
-  examples/launch-copy.md), logs cuts to 04-editor-log.md, and files the
+  (README.md, docs/PHILOSOPHY.md, the docs/ Diátaxis tree, the `[Unreleased]`
+  section of CHANGELOG.md, examples/launch-copy.md), logs cuts to
+  04-editor-log.md, and files the
   run's verified gaps as `proposed`-labeled GitHub issues via
   .docit-notes/05-proposed-issues.md.
 ```
