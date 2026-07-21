@@ -1,0 +1,35 @@
+# Milestone-gate readiness signal (ADR-0009 boundary, #194). When a release's
+# milestone is complete and validation is green, this posts an evidence-backed
+# "ready for human approval" signal on the Release Please PR. It is a
+# VERIFICATION surface only: it never merges the PR, creates a tag, or
+# publishes a Release — the human merge remains the release act (#185), and
+# Release Please owns the mechanics. The permissions below deliberately grant
+# no write access to repository contents, so this workflow cannot push a tag or
+# a merge even in principle. Decision logic lives in .github/scripts/, never
+# in this YAML.
+name: milestone-gate
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+  issues:
+    types: [closed, reopened, milestoned, demilestoned]
+  workflow_dispatch:
+
+permissions:
+  contents: read        # read the manifest at the PR head
+  issues: read          # list the milestone's issues
+  checks: read          # read the validate conclusions
+  statuses: write        # post the milestone-gate commit status
+  pull-requests: write   # upsert the readiness summary comment
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: evaluate milestone gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: bash .github/scripts/gate-runner.sh

@@ -64,6 +64,28 @@ epic:
   release evidence is assembled (see the
   [release-docs checklist](release-docs-checklist.md)).
 
+### The milestone gate
+
+A workflow (`.github/workflows/milestone-gate.yml`) turns this convention into a
+signal on the Release Please PR. It maps the PR's proposed version `X.Y.*` to
+the milestone titled `vX.Y …` and posts a `milestone-gate` commit status:
+
+- **blocked** while the milestone has open issues (it names them) or validation
+  is not green;
+- **ready** once every mapped issue is closed and validation is green — with a
+  summary that says *ready for human approval — merge to release*;
+- **neutral** when no milestone maps to the version (release behavior unchanged).
+
+The gate is a **verification surface only**. It never merges the PR, creates a
+tag, or publishes a Release — its workflow is granted no write access to
+repository contents, so it cannot even in principle. The human merge remains
+the release act (ADR-0009, #185); Release Please owns the mechanics. Reopening a
+milestone issue withdraws the ready state. The decision logic is offline-tested
+via fixtures (`tests/test-milestone-gate.sh`); its **ready (green)** path
+depends on validation running on the Release Please PR, which in turn needs the
+release-pipeline token wired (the #185 follow-up) — until then the gate reports
+the milestone complete but validation not-yet-green.
+
 ## The metadata-completeness audit
 
 Spark runs this audit during Ideate/Plan and before release approval. It is a
