@@ -11,7 +11,7 @@ Spark turns an AI coding assistant and GitHub into a software delivery system:
 your engineering standards loaded once, one traceable lifecycle
 (Ideate → Plan → Codify → Validate → Ship), durable GitHub artifacts, and
 mechanically enforced guardrails. This repo is a plugin marketplace: a focused
-core plugin (`plugins/spark/` — 8 skills, enforcement hooks, and a `spark` CLI)
+core plugin (`plugins/spark/` — 9 skills, enforcement hooks, and a `spark` CLI)
 plus three companion plugins (`plugins/spark-audit/` for whole-project
 assessment and cleanup, `plugins/spark-connect/` for services and secrets,
 `plugins/spark-docs/` for public docs and positioning). It is additive: it

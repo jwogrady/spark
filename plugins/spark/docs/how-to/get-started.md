@@ -6,11 +6,18 @@ Do this once. Spark's promise is your standards **loaded once, carried
 everywhere** — this is the loading. Four steps: install the plugin, make the
 shipped standard yours, arm a repo, run the lifecycle.
 
-Inside a repo, the first move is always `spark orient` — it classifies the repo
-as **new** (safe to scaffold), **existing** (discover and adopt create-only,
-never scaffold over), or **ambiguous** (it asks rather than guess). This guide
-follows the new-project path; orient keeps you honest about which path you are
-on before anything is written. See [cli.md](../reference/cli.md#spark-orient---set-newexisting)
+Inside a repo, the canonical first run is the guided flow **`/spark:onboard`**.
+It sequences the whole first run as one narrative — orient the repo, choose a
+setup profile, seed hooks + permissions + the standards docs, and close with a
+brief of what was created, kept, and still open — stopping at each human
+decision rather than guessing. It drives the same CLI verbs this guide walks
+through by hand below, so you can run either.
+
+The flow always opens with `spark orient` — it classifies the repo as **new**
+(safe to scaffold), **existing** (discover and adopt create-only, never scaffold
+over), or **ambiguous** (it asks rather than guess). This guide follows the
+new-project path; orient keeps you honest about which path you are on before
+anything is written. See [cli.md](../reference/cli.md#spark-orient---set-newexisting)
 for the full breakdown.
 
 Before starting, check the machine meets the
@@ -34,9 +41,10 @@ The shorthand resolves to the repo's Git URL; the explicit equivalent is
 `/plugin marketplace add https://github.com/jwogrady/spark.git`. A local clone
 works the same way: `/plugin marketplace add ~/src/spark`.
 
-After install, the eight core skills are available everywhere
-(`/spark:ideate` … `/spark:ship`, `/spark:bootstrap`, `/spark:knowledge`,
-`/spark:agents-md`) and the `spark` CLI is on your `$PATH`. Verify:
+After install, the nine core skills are available everywhere
+(`/spark:ideate` … `/spark:ship`, `/spark:onboard`, `/spark:bootstrap`,
+`/spark:knowledge`, `/spark:agents-md`) and the `spark` CLI is on your `$PATH`.
+Verify:
 
 ```bash
 spark doctor
@@ -105,7 +113,9 @@ key you left out keeps its shipped default. You never fork the whole bag.
 ## 3. Arm a repo: `spark setup`
 
 Carrying your standard into a repo is always an explicit motion — nothing
-copies itself silently. From inside the repo:
+copies itself silently. The guided `/spark:onboard` flow runs this step for you
+(and orients + briefs around it); the raw verb below is what it calls. From
+inside the repo:
 
 ```bash
 spark setup

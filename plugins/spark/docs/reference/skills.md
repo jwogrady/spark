@@ -6,7 +6,7 @@
 
 All core skills are invoked namespaced under the plugin: `/spark:<name>`.
 
-This page is the **canonical skill taxonomy** for the core plugin — eight
+This page is the **canonical skill taxonomy** for the core plugin — nine
 skills in three categories: Lifecycle, Setup, Supporting. `CLAUDE.md` and
 `README.md` use the same grouping; if they ever disagree, this page wins.
 `spark doctor` enforces the parity mechanically: every skill that ships must
@@ -51,6 +51,7 @@ Or scan by intent:
 | Commit a finished change + open a PR | `ship` | — |
 | Capture **internal** knowledge (ADRs, SOPs, specs) | `knowledge` | not public docs |
 | Write/refresh **public** docs (README, positioning) | install the spark-docs companion, `/spark-docs:docit` | not `knowledge` |
+| Arm a repo for the first time, start to finish | `onboard` | not a runtime scaffold (`bootstrap`) |
 | Scaffold a new project's runtime/stack | `bootstrap` | not services/secrets |
 | Wire services + secrets via 1Password | install the spark-connect companion, `/spark-connect:connect` | not `bootstrap` |
 | Create or maintain `CLAUDE.md` / `AGENTS.md` | `agents-md` (net-new `CLAUDE.md` → native `/init` first) | — |
@@ -69,11 +70,12 @@ Or scan by intent:
 
 | Skill | Purpose |
 |---|---|
+| `onboard` | Guide a repository's first run as one narrative — orient, choose a profile, seed hooks + permissions + standards, and close with a brief — sequencing the CLI verbs and stopping at each human decision. |
 | `bootstrap` | Scaffold a project runtime — Bun (TypeScript) or uv (Python) — via the official scaffolder, then wire it into Spark. |
 
 Setup also has a CLI face: `spark setup` is the one-command carry-in (git
-hooks, permission baseline, resolved standard) for a repo that already exists.
-See [cli.md](cli.md).
+hooks, permission baseline, resolved standard) that `onboard` drives; it works
+on its own for a repo that already exists. See [cli.md](cli.md).
 
 ## Supporting skills
 
@@ -114,6 +116,7 @@ Spark never designs around third-party plugins it can't assume are installed.
 | `codify` | `verify`, `run` | stays-out-of-lane — owns implementing one issue; those confirm behavior afterward |
 | `validate` | `/code-review`, `/security-review` | delegates-to — orchestrates both on the branch diff, then triages and fixes; ships no reviewer of its own |
 | `ship` | — | none — wraps `git` (conventional commit) + `gh` (one PR) |
+| `onboard` | — | none — sequences the `spark` CLI verbs (orient/profiles/setup/brief) for the guided first run |
 | `bootstrap` | — | none — wraps the official runtime scaffolder (Bun / uv) |
 | `knowledge` | — | none — no built-in generates internal docs |
 | `agents-md` | `/init` | delegates-to — defers net-new `CLAUDE.md` to `/init`; owns maintenance, audit, drift-check, and `AGENTS.md` |
