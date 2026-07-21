@@ -22,7 +22,10 @@ Ship stage — commit, push, and PR.
 
 **Releases:** ship's job stops at the open PR. Release Please owns the
 version bump, changelog, tag, and GitHub Release from there — see
-[explanation/release-ownership.md](../explanation/release-ownership.md).
+[explanation/release-ownership.md](../explanation/release-ownership.md). Before
+a release PR is approved, run the
+[release-docs checklist](../reference/release-docs-checklist.md) so the public
+record stays coherent.
 
 **Done when** the PR is open and linked to its issue.
 

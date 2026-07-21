@@ -62,6 +62,7 @@ Information-oriented — what each piece is and how it behaves:
 - [reference/hooks.md](reference/hooks.md) — the enforcement hooks and what each blocks.
 - [reference/engineering-preferences.md](reference/engineering-preferences.md) — the operator rationale behind the engineering standard; the machine-applied form is `preferences/defaults.json`.
 - [reference/state.md](reference/state.md) — the committed work state (`.spark/state.json`) and its schema.
+- [reference/release-docs-checklist.md](reference/release-docs-checklist.md) — the pre-release review that keeps README, docs, changelog, and roadmap coherent; the roadmap status vocabulary.
 - [glossary.md](glossary.md) — Spark vocabulary.
 
 
