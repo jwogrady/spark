@@ -23,7 +23,7 @@
           "jsonpath": "$.version"
         }
       ],
-      "skip-github-release": true
+      "prerelease": true
     },
     "plugins/spark-connect": {
       "component": "spark-connect",
@@ -35,7 +35,7 @@
           "jsonpath": "$.version"
         }
       ],
-      "skip-github-release": true
+      "prerelease": true
     },
     "plugins/spark-docs": {
       "component": "spark-docs",
@@ -47,7 +47,7 @@
           "jsonpath": "$.version"
         }
       ],
-      "skip-github-release": true
+      "prerelease": true
     }
   }
 }
