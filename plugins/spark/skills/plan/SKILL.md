@@ -33,8 +33,15 @@ feature, not a task list.
    its target version with the [version ladder](../../docs/explanation/sdlc-doctrine.md):
    a first usable-product milestone targets `0.1.0`; the contributions under it
    ship as `0.0.x`.
-6. **Confirm before creating anything on GitHub.**
-7. **Carry the state forward.** Update `.spark/state.json`
+6. **Give every feature a release decision.** Check roadmap completeness
+   first (`bash scripts/roadmap-check.sh` from this skill's directory), then
+   record one disposition per feature: a named milestone, **Backlog** with the
+   written reason, or **Blocked** naming the exact missing decision — rules in
+   [references/release-assignment.md](references/release-assignment.md). A
+   roadmap gap is a planning blocker: report it with the smallest human
+   decision needed; never guess a priority or version.
+7. **Confirm before creating anything on GitHub.**
+8. **Carry the state forward.** Update `.spark/state.json`
    ([schema](../../docs/reference/state.md)): `stage` `plan`, `issue` the number
    picked for codify (`""` until one is — GitHub owns the backlog),
    `next_action`, `updated`.
@@ -57,6 +64,9 @@ feature, not a task list.
   [Codify-ready](../../docs/reference/codify-readiness.md).
 - Do not create issues, milestones, labels, or projects without explicit
   instruction.
+- Recommend with evidence; the human approves priority and release scope. Never
+  silently retarget an existing issue's milestone, priority, or relationships —
+  propose the change, don't apply it.
 - Keep the milestone honest: if a feature can't be described in a paragraph,
   it's not understood well enough to plan.
 - Do not write project-local copies of the Spark methodology. Link Spark's
