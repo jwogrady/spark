@@ -35,6 +35,7 @@ How the layers fit together, and the dated record of why Spark is built this way
 - [adr/0021-first-run-entry-point.md](adr/0021-first-run-entry-point.md) — the first-run entry point is a hybrid: the `/spark:onboard` skill guides the narrative over the mechanical `spark setup` verbs it calls
 - [adr/0022-orient-first-classification.md](adr/0022-orient-first-classification.md) — orient first: classify a repo as new, existing, or ambiguous before Spark may scaffold or set up
 - [adr/0023-lifecycle-orchestration-topology.md](adr/0023-lifecycle-orchestration-topology.md) — **Proposed** (research): the Shape / Build / Assure & Deliver three-group execution topology — lead roles, artifact handoffs, human gates, and no-subagent/single-model fallbacks
+- [adr/0024-capability-based-model-selection.md](adr/0024-capability-based-model-selection.md) — **Proposed** (research): select each group's model by capability profile (not a hard-coded name) — tiers, the `model.*` preference keys under ADR-0010, observability, and capability-unavailable/single-model fallbacks
 - [adr/0000-template.md](adr/0000-template.md) — the ADR template
 
 ## Packaging reference
