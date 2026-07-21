@@ -149,6 +149,23 @@ completion — milestone and version in lockstep.
 
 ---
 
+## v0.12 — Lifecycle orchestration (research & architecture)
+
+**Status:** Shipped (`v0.12.0`) — research & architecture only
+
+A deliberate, evidence-backed decision rather than a promise to ship a
+multi-agent framework. Two ratified ADRs — the Shape / Build / Assure & Deliver
+execution topology (ADR-0023) and capability-based model selection (ADR-0024) —
+plus a measured single-agent baseline over one fixture per group
+(`evaluations/orchestration/`). The [#198 decision gate](docs/research/v0.12-orchestration-recommendation.md)
+returned **research/architecture only**: the baseline shows Build benefits least
+from multi-agent work, Shape most; the candidate parallel-review slice (#206) is
+**backlogged** until it is built behind a flag and measured to beat the baseline.
+No new runtime orchestration capability shipped — the architecture is decided,
+implementation is gated on evidence.
+
+---
+
 ## Later — Project inception
 
 Project inception — `/plugin install spark` plus the `bootstrap` skill —

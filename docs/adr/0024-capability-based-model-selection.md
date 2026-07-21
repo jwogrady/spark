@@ -1,7 +1,7 @@
 # ADR: Capability-based model selection — profiles per group, not hard-coded names
 
 Date: 2026-07-21
-Status: Proposed
+Status: Accepted (2026-07-21, at the #198 decision gate — capability-based selection is the ratified policy; no selection infrastructure is built until an orchestration slice is adopted)
 Owner: jwogrady
 
 > This ADR is a research proposal (issue #204, the second deliverable of the #190
