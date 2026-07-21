@@ -14,6 +14,12 @@ on:
     types: [opened, reopened, synchronize]
   issues:
     types: [closed, reopened, milestoned, demilestoned]
+  # Re-evaluate once validation finishes, so the gate reads the final doctor/
+  # tests result instead of racing them mid-run and reporting a stale "not
+  # green" that never refreshes.
+  workflow_run:
+    workflows: [validate]
+    types: [completed]
   workflow_dispatch:
 
 permissions:
