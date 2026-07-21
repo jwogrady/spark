@@ -153,6 +153,46 @@ apply_standard() {
     fi
   }
 
+  # place_standard <relpath> <template> — like place_template, but renders the
+  # template's `{{pref.key}}` placeholders (in both prose and the spark:pref
+  # marker) with the *resolved* preference value, so a seeded standards doc
+  # matches the selected profile/overrides instead of a hard-coded default
+  # (#241). Create-only. If any referenced preference does not resolve, it
+  # refuses to write and reports the decision rather than seeding a doc that
+  # would fail the doctor boundary check.
+  place_standard() {
+    local dest="$top/$1" src="$SPARK_ROOT/preferences/templates/$2"
+    if [ -e "$dest" ]; then
+      echo "  = $1 (exists — kept)"; kept=$((kept+1)); return 0
+    fi
+    if [ ! -f "$src" ]; then
+      yellow "  ! $1 — template $2 missing from the plugin (reinstall, or write it by hand)"
+      attention=$((attention+1)); failed=1; return 1
+    fi
+    local content key val esc unresolved=""
+    content="$(cat "$src")"
+    # Each distinct {{pref.key}} the template references must resolve.
+    for key in $(grep -oE '\{\{[a-z][a-z0-9._-]*\}\}' "$src" | sed 's/[{}]//g' | sort -u); do
+      if val="$(pref_get "$key")" && [ -n "$val" ]; then
+        esc="$(printf '%s' "$val" | sed 's/[\\&|]/\\&/g')"      # sed-replacement-safe
+        content="$(printf '%s' "$content" | sed "s|{{$key}}|$esc|g")"
+      else
+        unresolved="${unresolved:+$unresolved }$key"
+      fi
+    done
+    if [ -n "$unresolved" ]; then
+      red "  ! $1 — cannot render; unresolved preference(s): $unresolved (set them in .spark/preferences.json, then rerun)"
+      attention=$((attention+1)); failed=1; return 1
+    fi
+    if ! mkdir -p "$(dirname "$dest")"; then
+      red "  ! $1 — could not create its parent directory"; attention=$((attention+1)); failed=1; return 1
+    fi
+    if ! printf '%s\n' "$content" > "$dest"; then
+      red "  ! $1 — could not write the file"; attention=$((attention+1)); failed=1; return 1
+    fi
+    green "  + $1"; created=$((created+1))
+  }
+
   echo "Applying the engineering standard (three-tier resolve, ADR-0010):"
 
   # Standard doc set, driven by docs.set. Unquoted on purpose: the value is a
@@ -225,8 +265,8 @@ EOF
   # marker naming the resolved preference they assert; that marker is the seam
   # a drift check parses. These are prose the human owns, not a fact store —
   # `.spark/preferences.json` stays the sole machine-resolvable layer.
-  place_template "CONVENTIONS.md" "standards/conventions.md"
-  place_template "ENGINEERING-STANDARDS.md" "standards/engineering-standards.md"
+  place_standard "CONVENTIONS.md" "standards/conventions.md"
+  place_standard "ENGINEERING-STANDARDS.md" "standards/engineering-standards.md"
 
   # Release mechanism: Release Please is the shipped standard; any other
   # resolved value is the operator's own machinery to wire.
