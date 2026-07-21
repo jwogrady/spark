@@ -815,6 +815,33 @@ cmd_doctor() {
     fi
   fi
 
+  # ADR status integrity (#255): once an ADR's Status line reads Accepted, it must
+  # not still carry a live proposal-state banner — "is a research proposal" or
+  # "must not be presented as adopted" — because that contradicts its own header
+  # and misreads ratified architecture as still awaiting approval. Only present-
+  # tense live banners are caught; a past-tense historical mention ("was a research
+  # proposal until …") reads clean, which is the intended escape hatch. Spark-repo
+  # self-check: ADRs are DEV docs that never ship into a user project.
+  local adr_dir="$repo_root/docs/adr"
+  if [ -n "$repo_root" ] && [ -d "$adr_dir" ]; then
+    echo
+    echo "ADR status integrity:"
+    local adr adr_status banner_ok=1
+    for adr in "$adr_dir"/[0-9]*.md; do
+      [ -e "$adr" ] || continue
+      adr_status="$(grep -iE '^Status:' "$adr" | head -n1 || true)"
+      case "$adr_status" in
+        *[Aa]ccepted*) ;;
+        *) continue ;;
+      esac
+      if grep -qiE 'is a research proposal|must not be presented as adopted' "$adr"; then
+        red "  ✗ ${adr#"$repo_root"/}: Accepted ADR still carries a live proposal-state banner — restate it as Accepted or mark the mention historical"
+        errors=$((errors+1)); banner_ok=0
+      fi
+    done
+    [ "$banner_ok" -eq 1 ] && green "  ✓ no Accepted ADR carries a live proposal-state banner"
+  fi
+
   # Standards boundary (#200, ADR-0020): #182 makes the prose standards docs the
   # readable contract and .spark/preferences.json the machine layer, linked by a
   # `<!-- spark:pref key=value -->` marker on every machine-backed line. This is
