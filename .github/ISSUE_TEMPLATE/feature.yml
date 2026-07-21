@@ -1,6 +1,6 @@
 name: Feature
 description: Propose a new feature for Spark.
-labels: ["enhancement"]
+labels: ["feature"]
 body:
   - type: markdown
     attributes:
@@ -87,6 +87,33 @@ body:
       placeholder: |
         Blocked by: #86
         Blocks: #90
+    validations:
+      required: false
+
+  - type: input
+    id: target_release
+    attributes:
+      label: Target release
+      description: >
+        Every feature gets a release decision before implementation begins: a
+        milestone (e.g. "v0.11"), "Backlog" with the reason below, or "Blocked"
+        naming the missing decision below. Leave empty only if you are asking
+        the maintainer to make that call.
+      placeholder: v0.11 · Backlog · Blocked
+    validations:
+      required: false
+
+  - type: textarea
+    id: release_rationale
+    attributes:
+      label: Release rationale
+      description: >
+        The evidence behind the target: the roadmap line it serves, why this
+        release (or why backlog), and the decision that unblocks it if Blocked.
+      placeholder: |
+        Roadmap: "v0.11 — Lifecycle redesign" · needed before #198 because …
+        (or) Backlog: no roadmap line claims it yet
+        (or) Blocked: needs the maintainer to choose X vs Y
     validations:
       required: false
 
