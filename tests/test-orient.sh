@@ -30,6 +30,20 @@ v="$(verdict "$d")"; [ "$v" = "existing" ] && ok || bad "imported repo: want exi
 d="$WORK/ambig"; fixture_ambiguous_repo "$d"
 v="$(verdict "$d")"; [ "$v" = "ambiguous" ] && ok || bad "ambiguous repo: want ambiguous, got '$v'"
 
+# --- #242: unversioned source nested below the old depth-2 cutoff is still
+# real content — ambiguous (stop and ask), never a high-confidence "new".
+d="$WORK/nested-src"; mkdir -p "$d/src/app"
+printf 'print("existing app")\n' > "$d/src/app/main.py"
+v="$(verdict "$d")"; [ "$v" = "ambiguous" ] && ok || bad "#242 nested source: want ambiguous, got '$v'"
+( cd "$d" && "$SPARK" orient ) >/dev/null 2>&1
+[ ! -e "$d/.spark" ] && ok || bad "#242 nested-source orient wrote state (must stay read-only)"
+
+# --- #242: a vendored/build tree alone must not establish a project — those
+# dirs are pruned, so an empty scratch dir with only node_modules reads as new.
+d="$WORK/vendored"; mkdir -p "$d/node_modules/pkg" "$d/dist"
+printf 'x\n' > "$d/node_modules/pkg/index.js"; printf 'y\n' > "$d/dist/bundle.js"
+v="$(verdict "$d")"; [ "$v" = "new" ] && ok || bad "#242 vendored-only: want new (pruned), got '$v'"
+
 # --- the report names its evidence and confidence (acceptance criteria)
 out="$(cd "$WORK/mature" && "$SPARK" orient 2>&1)"
 assert_contains "report shows evidence" "Evidence" "$out"
