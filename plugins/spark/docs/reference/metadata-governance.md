@@ -81,10 +81,11 @@ tag, or publishes a Release — its workflow is granted no write access to
 repository contents, so it cannot even in principle. The human merge remains
 the release act (ADR-0009, #185); Release Please owns the mechanics. Reopening a
 milestone issue withdraws the ready state. The decision logic is offline-tested
-via fixtures (`tests/test-milestone-gate.sh`); its **ready (green)** path
-depends on validation running on the Release Please PR, which in turn needs the
-release-pipeline token wired (the #185 follow-up) — until then the gate reports
-the milestone complete but validation not-yet-green.
+via fixtures (`tests/test-milestone-gate.sh`). Its **ready (green)** path needs
+validation to actually run on the Release Please PR, which is why release-please
+creates that PR under a dedicated token (`RELEASE_PLEASE_TOKEN`, see
+release-token-governance.md); the gate re-evaluates when the `validate` workflow
+completes so it reads the final result rather than racing it.
 
 ## The metadata-completeness audit
 
