@@ -23,7 +23,7 @@ How the layers fit together, and the dated record of why Spark is built this way
 - [adr/0009-spark-release-mechanism.md](adr/0009-spark-release-mechanism.md) — Spark releases manually today, adopts Release Please once validation CI lands (realized: Release Please is now live)
 - [adr/0010-preferences-source-model.md](adr/0010-preferences-source-model.md) — preferences resolve shipped defaults → operator overrides → committed project facts
 - [adr/0011-doctor-is-the-validation-gate.md](adr/0011-doctor-is-the-validation-gate.md) — `spark doctor` is the static validation gate; two-door parity is mechanical (single-gate framing amended by ADR-0018)
-- [adr/0012-setup-is-the-one-command-carry-in.md](adr/0012-setup-is-the-one-command-carry-in.md) — `spark setup` is the one-command carry-in; it composes, never forks, the individual verbs
+- [adr/0012-setup-is-the-one-command-carry-in.md](adr/0012-setup-is-the-one-command-carry-in.md) — `spark setup` is the one-command carry-in; it composes, never forks, the individual verbs (amended 2026-07-21: `setup` offers named profiles before materializing defaults)
 - [adr/0013-the-plugin-ships-only-carry-surfaces.md](adr/0013-the-plugin-ships-only-carry-surfaces.md) — the plugin ships only carry surfaces; consolidate the audit, extract the rest (extraction-as-removal superseded by ADR-0014)
 - [adr/0014-core-plus-companion-plugins.md](adr/0014-core-plus-companion-plugins.md) — one marketplace, a focused core, and three companion plugins
 - [adr/0015-generated-projects-without-the-cosmic-model.md](adr/0015-generated-projects-without-the-cosmic-model.md) — generated projects, without the Cosmic model; private vocabulary leaves the public docs
