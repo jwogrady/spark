@@ -6,6 +6,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ---
 
+## [0.11.0](https://github.com/jwogrady/spark/compare/v0.10.2...v0.11.0) (2026-07-21)
+
+
+### Features
+
+* compose the guided first-run flow as /spark:onboard ([#238](https://github.com/jwogrady/spark/issues/238)) ([5431cca](https://github.com/jwogrady/spark/commit/5431cca28771b728b0c005f12407c71b676a1a60)), closes [#199](https://github.com/jwogrady/spark/issues/199)
+* orient a repo as new, existing, or ambiguous before setup ([#233](https://github.com/jwogrady/spark/issues/233)) ([d0d4269](https://github.com/jwogrady/spark/commit/d0d4269995018ae9eb2c80541d016c57de6835a8)), closes [#183](https://github.com/jwogrady/spark/issues/183)
+* seed editable project conventions and engineering standards ([#235](https://github.com/jwogrady/spark/issues/235)) ([7f44d14](https://github.com/jwogrady/spark/commit/7f44d14a67b81ad66857e99746bf8f1f4d62ca9a)), closes [#182](https://github.com/jwogrady/spark/issues/182)
+* surface classification and standards docs in the session brief ([#237](https://github.com/jwogrady/spark/issues/237)) ([56d290b](https://github.com/jwogrady/spark/commit/56d290bd2e131a18067a304229d5bea6f4b5a4bc)), closes [#201](https://github.com/jwogrady/spark/issues/201)
+* verify the prose-standards to preferences boundary in doctor ([#236](https://github.com/jwogrady/spark/issues/236)) ([6fd60c9](https://github.com/jwogrady/spark/commit/6fd60c97ba1776996dc3cc0f73df65119490c796)), closes [#200](https://github.com/jwogrady/spark/issues/200)
+
 ## [0.10.2](https://github.com/jwogrady/spark/compare/v0.10.1...v0.10.2) (2026-07-21)
 
 
