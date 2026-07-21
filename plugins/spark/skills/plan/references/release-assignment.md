@@ -29,8 +29,12 @@ bash scripts/roadmap-check.sh --roadmap ROADMAP.md --issues issues.json
 It verifies mechanically: a current (shipped) release is named; a next planned
 release exists; every open `feature` issue has one of the three dispositions;
 unshipped roadmap sections link real issues or are explicitly deferred. Exit
-`0` means complete, `1` lists `GAP:` lines, `3` means it could not assess
-(missing `jq`/`python3`).
+`0` means complete, `1` lists `GAP:` lines, `2` is a usage/input error, and `3`
+means **not assessed** — either no JSON parser (`jq`/`python3`), or the open
+feature inventory could not be retrieved (no `--issues` and `gh` is
+missing/failing). Exit `3` is never a clean pass: without the inventory, "every
+feature has a release decision" cannot be confirmed, so pass `--issues` or fix
+`gh` auth before trusting a green result.
 
 **A roadmap gap is a planning blocker, not an invitation to guess.** When the
 check reports gaps, stop and hand the human a concise report: each gap, the

@@ -213,5 +213,37 @@ check 1 "gh object-form unassigned feature is a gap" \
   "$work/complete.md" "$work/issues-gh-form-unassigned.json" \
   "GAP: feature #195"
 
+# --- assessed with zero open features is a clean pass (distinct from #224's
+# "not assessed"): the inventory WAS evaluated and found no features.
+check 0 "assessed-but-no-features is a clean pass" \
+  "$work/complete.md" "$work/issues-empty.json" \
+  "no open feature issues to assess" "roadmap-check: 0 gap(s)"
+
+# --- #224: when the inventory cannot be assessed (no --issues and gh
+# missing/failing), the checker must NOT emit a clean pass — exit 3, never 0.
+# Build restricted PATHs: one with the real tools but no gh, one with a failing
+# gh, so `command -v gh` takes each not-assessed branch.
+mk_bin() {
+  local d="$1"; mkdir -p "$d"; local t s
+  for t in bash sh env awk sed grep cat mktemp rm rmdir sort head tr git find dirname basename wc jq python3; do
+    s="$(command -v "$t" 2>/dev/null || true)"; [ -n "$s" ] && ln -sf "$s" "$d/$t"
+  done
+}
+nogh="$work/nogh-bin"; mk_bin "$nogh"
+failgh="$work/failgh-bin"; mk_bin "$failgh"
+printf '#!/usr/bin/env bash\necho "gh: could not authenticate" >&2\nexit 1\n' > "$failgh/gh"
+chmod +x "$failgh/gh"
+
+# no gh at all, no --issues, structurally complete roadmap → exit 3, not 0.
+rc=0; out="$(env PATH="$nogh" bash "$script" --roadmap "$work/complete.md" 2>&1)" || rc=$?
+if [ "$rc" -eq 3 ]; then pass=$((pass + 1)); else fail=$((fail + 1)); echo "  ✖ #224 no gh + no --issues — want exit 3, got $rc"; fi
+case "$out" in *"NOT assessed"*) pass=$((pass + 1)) ;; *) fail=$((fail + 1)); echo "  ✖ #224 no-gh must report NOT assessed" ;; esac
+case "$out" in *"roadmap-check: 0 gap(s)"*) case "$rc" in 0) fail=$((fail + 1)); echo "  ✖ #224 no-gh printed a clean pass" ;; *) pass=$((pass + 1)) ;; esac ;; *) pass=$((pass + 1)) ;; esac
+
+# gh present but failing (offline/unauthenticated) → also exit 3.
+rc=0; out="$(env PATH="$failgh" bash "$script" --roadmap "$work/complete.md" 2>&1)" || rc=$?
+if [ "$rc" -eq 3 ]; then pass=$((pass + 1)); else fail=$((fail + 1)); echo "  ✖ #224 failing gh — want exit 3, got $rc"; fi
+case "$out" in *"NOT assessed"*) pass=$((pass + 1)) ;; *) fail=$((fail + 1)); echo "  ✖ #224 failing-gh must report NOT assessed" ;; esac
+
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
