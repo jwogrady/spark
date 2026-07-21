@@ -218,6 +218,16 @@ EOF
     esac
   done
 
+  # Project-local prose standards (issue #182, ADR-0020): two repo-root docs
+  # that make the working contract visible and editable. Create-only like every
+  # other artifact — an existing doc is the project's own and is kept, never
+  # overwritten. Machine-backed lines carry a `<!-- spark:pref key=value -->`
+  # marker naming the resolved preference they assert; that marker is the seam
+  # a drift check parses. These are prose the human owns, not a fact store —
+  # `.spark/preferences.json` stays the sole machine-resolvable layer.
+  place_template "CONVENTIONS.md" "standards/conventions.md"
+  place_template "ENGINEERING-STANDARDS.md" "standards/engineering-standards.md"
+
   # Release mechanism: Release Please is the shipped standard; any other
   # resolved value is the operator's own machinery to wire.
   local mech

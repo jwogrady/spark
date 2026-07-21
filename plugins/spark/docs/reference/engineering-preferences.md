@@ -22,6 +22,13 @@ standard*. Where a convention below has no matching key in
 `defaults.json`, it is operator guidance, not a materialized guarantee —
 Spark does not check for it.
 
+A third, project-facing layer sits below this one: `spark setup` seeds
+`CONVENTIONS.md` and `ENGINEERING-STANDARDS.md` at a repo's root as its
+editable, readable working contract. Those docs are prose the project owns —
+never a fact store — and mark their machine-backed lines with a `spark:pref`
+comment so the prose/configuration boundary stays explicit. See
+[project-standards.md](project-standards.md).
+
 It is written **link-don't-paste**: conventions Spark already enforces or codifies
 are *pointed to*, not restated. Only the standard Spark does not yet carry is
 spelled out here.

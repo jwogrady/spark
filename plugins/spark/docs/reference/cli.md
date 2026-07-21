@@ -119,6 +119,12 @@ Each step is the same function its own verb dispatches to, so `setup` and the
 granular commands cannot drift. Re-running is a no-op: hooks report as
 already installed, the baseline as already applied, and the standard as kept.
 
+Among the standard's artifacts are two repo-root docs — `CONVENTIONS.md` and
+`ENGINEERING-STANDARDS.md`, the project's editable, readable working contract
+(see [project-standards.md](project-standards.md)). Both are seeded create-only
+and reported in the same lanes; an existing copy is the project's own and is
+kept.
+
 `--profile <name>` commits a [setup profile](#spark-profiles)'s facts to
 `.spark/preferences.json` before anything materializes, so the standard that
 applies is the selected one. Selection is all-or-nothing: an unknown profile,

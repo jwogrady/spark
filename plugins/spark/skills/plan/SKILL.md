@@ -19,7 +19,9 @@ feature, not a task list.
 2. **Decide the implementation approach.** Pick up the tech choice `ideate`
    deferred: language/runtime, top-level layout, and key dependencies. Record
    each decision as an ADR under `docs/adr/` (use the `0000-template.md`
-   format). A plan with no stack is not a plan `codify` can execute.
+   format). A plan with no stack is not a plan `codify` can execute. Read the
+   repo-root `ENGINEERING-STANDARDS.md` first — it holds the project's stack and
+   quality contract; a deviation belongs in an ADR and its committed preference.
 3. **Decompose into features.** Each feature is independently shippable and maps
    to one issue. Prefer 3–7 features for a first milestone; if you have more,
    the milestone is too big — cut scope.
