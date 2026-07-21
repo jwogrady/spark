@@ -1069,6 +1069,30 @@ cmd_brief() {
     release_pref="$(printf '%s\n' "$prefs" | awk -F'\t' '$1=="release.mechanism"{print $2; exit}')"
   fi
 
+  # Orientation carry-forward (issue #201, building on #183's classifier and
+  # #182's seeded standards). The new/existing verdict decided at first run is
+  # a durable project fact, not a per-session guess — the brief is the reader
+  # that keeps it alive. Read the recorded fact with the standard pref reader,
+  # then re-run the inspect-only classifier to catch drift: a repo recorded
+  # "new" that has since grown real sources now classifies "existing". Flag
+  # that for re-orientation; never silently rewrite the fact — reclassification
+  # is the human's call (ADR-0022).
+  local recorded_cls recorded_date live_cls='' stale=0
+  recorded_cls="$(pref_get project.classification || true)"
+  recorded_date="$(pref_get project.classified || true)"
+  if [ -n "$recorded_cls" ]; then
+    live_cls="$(classify_repo "$root" | awk -F'\t' '$1=="classification"{print $2}')"
+    # Only new→existing is drift worth surfacing: sources appeared under a fact
+    # that promised none. A repo does not shrink back to "new" by growth.
+    [ "$recorded_cls" = "new" ] && [ "$live_cls" = "existing" ] && stale=1
+  fi
+
+  # Project-local prose standards (#182): report which of the two seeded docs
+  # actually exist so the brief points at the working contract by name.
+  local std_docs=""
+  [ -f "$root/CONVENTIONS.md" ] && std_docs="${std_docs:+$std_docs }CONVENTIONS.md"
+  [ -f "$root/ENGINEERING-STANDARDS.md" ] && std_docs="${std_docs:+$std_docs }ENGINEERING-STANDARDS.md"
+
   if [ "$short" -eq 1 ]; then
     # At most three lines, plain text — this lands in Claude's session
     # context, so no color codes and no section headers.
@@ -1080,6 +1104,9 @@ cmd_brief() {
     if [ -n "$prefs" ]; then
       echo "[spark] standards: $total prefs, $overridden overridden${stack_pref:+ · stack=$stack_pref}${release_pref:+ · release=$release_pref}"
     fi
+    # The only orientation detail the one-line summary carries: a single stale
+    # warning when it matters. Everything else stays in full `spark brief`.
+    [ "$stale" -eq 1 ] && echo "[spark] ! orientation may be stale — recorded 'new' but the repo now looks 'existing'; re-orient with spark orient"
     return 0
   fi
 
@@ -1094,6 +1121,15 @@ cmd_brief() {
     echo "  upstream  none tracked"
   fi
   [ -n "$pr" ] && echo "  pr        $pr"
+  # Classification is orientation, so it sits with the other orient facts. Name
+  # the recorded verdict and when it was set; recommend the first-run flow
+  # rather than guessing when the repo was never classified.
+  if [ -n "$recorded_cls" ]; then
+    echo "  class     $recorded_cls${recorded_date:+ (established $recorded_date)}"
+    [ "$stale" -eq 1 ] && yellow "            ! may be stale — recorded 'new' but the repo now looks 'existing'; re-orient with 'spark orient'"
+  else
+    echo "  class     unclassified — establish it with 'spark orient' (the first-run flow)"
+  fi
   echo
   echo "Locate"
   echo "  $located"
@@ -1111,6 +1147,14 @@ cmd_brief() {
     echo "  full resolution: spark preferences"
   else
     echo "  no preferences resolved — is preferences/defaults.json shipped with the plugin?"
+  fi
+  # Project-local prose standards (#182): the working contract in prose. Name
+  # the docs that exist; when neither is present the repo was never armed, so
+  # point at the guided first-run flow rather than implying a standard is set.
+  if [ -n "$std_docs" ]; then
+    echo "  standards docs     $std_docs"
+  else
+    echo "  standards docs     none yet — 'spark setup' seeds CONVENTIONS.md and ENGINEERING-STANDARDS.md"
   fi
   return 0
 }

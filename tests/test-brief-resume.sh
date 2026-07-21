@@ -47,4 +47,51 @@ rc=0; out="$(cd "$repo3" && "$SPARK" resume 2>&1)" || rc=$?
 assert_rc "stale state still exits 0" 0 "$rc"
 assert_contains "drift is flagged" "drift" "$out"
 
+# --- classified repo (issue #201): brief names the recorded classification,
+# the date it was established, and the project-local standards docs present.
+repo4="$WORK/classified"; fixture_mature_repo "$repo4"
+mkdir -p "$repo4/.spark"
+cat > "$repo4/.spark/preferences.json" <<'EOF'
+{
+  "project.classification": "existing",
+  "project.classified": "2026-02-15"
+}
+EOF
+: > "$repo4/CONVENTIONS.md"
+: > "$repo4/ENGINEERING-STANDARDS.md"
+rc=0; out="$(cd "$repo4" && "$SPARK" brief 2>&1)" || rc=$?
+assert_rc "brief in a classified repo exits 0" 0 "$rc"
+assert_contains "names the recorded classification" "existing" "$out"
+assert_contains "names the date it was established" "2026-02-15" "$out"
+assert_contains "lists CONVENTIONS.md" "CONVENTIONS.md" "$out"
+assert_contains "lists ENGINEERING-STANDARDS.md" "ENGINEERING-STANDARDS.md" "$out"
+
+# --- unclassified repo: brief recommends the first-run flow, never a guess.
+repo5="$WORK/unclassified"; make_repo "$repo5"
+rc=0; out="$(cd "$repo5" && "$SPARK" brief 2>&1)" || rc=$?
+assert_rc "brief in an unclassified repo exits 0" 0 "$rc"
+assert_contains "reports the repo as unclassified" "unclassified" "$out"
+assert_contains "recommends the first-run flow" "spark orient" "$out"
+assert_contains "reports no standards docs yet" "none yet" "$out"
+
+# --- stale classification: a repo recorded "new" that now carries real sources
+# is flagged for re-orientation, and the recorded fact is left untouched.
+repo6="$WORK/staleclass"; fixture_mature_repo "$repo6"
+mkdir -p "$repo6/.spark"
+cat > "$repo6/.spark/preferences.json" <<'EOF'
+{
+  "project.classification": "new",
+  "project.classified": "2026-01-01"
+}
+EOF
+rc=0; out="$(cd "$repo6" && "$SPARK" brief 2>&1)" || rc=$?
+assert_rc "brief with a stale classification exits 0" 0 "$rc"
+assert_contains "full brief flags the stale classification" "stale" "$out"
+# flag only: the recorded fact is never silently rewritten on disk
+assert_contains "recorded classification is preserved" '"project.classification": "new"' \
+  "$(cat "$repo6/.spark/preferences.json")"
+rc=0; out="$(cd "$repo6" && "$SPARK" brief --short 2>&1)" || rc=$?
+assert_rc "short brief with a stale classification exits 0" 0 "$rc"
+assert_contains "short brief warns about stale orientation" "stale" "$out"
+
 finish
