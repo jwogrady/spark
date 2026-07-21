@@ -6,6 +6,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ---
 
+## [0.10.2](https://github.com/jwogrady/spark/compare/v0.10.1...v0.10.2) (2026-07-21)
+
+
+### Bug Fixes
+
+* re-evaluate the milestone gate when validation completes ([#231](https://github.com/jwogrady/spark/issues/231)) ([a761263](https://github.com/jwogrady/spark/commit/a761263b60a597acbb503bc6a436058c341fa2f1))
+* wire release-please to a dedicated token so release PRs run CI ([#228](https://github.com/jwogrady/spark/issues/228)) ([4727a05](https://github.com/jwogrady/spark/commit/4727a050840829378327b5dee9c3ba00f41a237a)), closes [#185](https://github.com/jwogrady/spark/issues/185)
+
 ## [0.10.1](https://github.com/jwogrady/spark/compare/v0.10.0...v0.10.1) (2026-07-21)
 
 
