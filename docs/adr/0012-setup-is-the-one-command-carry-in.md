@@ -1,7 +1,7 @@
 # ADR: `spark setup` is the one-command carry-in, and it composes — never forks — the individual verbs
 
 Date: 2026-07-11
-Status: Accepted
+Status: Accepted (amended 2026-07-21 — `setup` now offers named profiles before materializing defaults; see Amendment)
 Owner: jwogrady
 
 ## Context
@@ -61,6 +61,39 @@ that already works.
   composition points — signature changes to them now affect two call sites.
 - The ROADMAP v0.6 `setup` item narrows to its remaining half (stack-aware
   baseline curation).
+
+## Amendment (2026-07-21)
+
+The Consequences above narrowed the ROADMAP v0.6 `setup` item to its remaining
+half — stack-aware baseline curation. That half shipped as **setup profiles**
+(#189: `spark profiles`, `spark setup --profile <name>`), a real decision this
+record did not capture at merge and which #180's ADR audit flagged.
+
+The decision profiles record:
+
+- **`setup` offers named profiles before it materializes defaults.** Two ship
+  today — `python-uv` and `typescript-bun` — each a small flat-JSON file of
+  committed project facts under `preferences/profiles/`. `spark profiles`
+  inspects them (marking the shipped default, overrides, and unsupported
+  combinations) before anything is written; `spark setup --profile <name>`
+  selects one.
+- **Selection resolves *through* the existing tiers, it does not bypass them.**
+  A chosen profile writes its facts to `.spark/preferences.json` — the
+  committed-project-facts tier of ADR-0010 — and the carry-in then resolves
+  shipped defaults → operator overrides → those facts exactly as before. With
+  no profile, `setup` applies the shipped defaults unchanged and invents no
+  project facts. This keeps the composition-only discipline of the decision
+  above: there is no second application engine, so a profile can never drift
+  from `preferences --apply`.
+- **Selection is all-or-nothing and runs first.** An unknown profile, a stack
+  with no shipped CI template, or a conflict with existing committed facts
+  refuses the whole run and materializes nothing — a profile never overwrites
+  a project decision.
+
+Verified against the shipped behavior, not the plan, by
+`tests/test-setup-profiles.sh`: inspection, selection writing the committed
+facts and stack-matched CI, idempotent re-runs, unchanged profile-less
+defaults, and the all-or-nothing refusals.
 
 ## Related Docs
 
