@@ -1,7 +1,7 @@
 # ADR: `spark doctor` is the single validation gate, and two-door parity is mechanical
 
 Date: 2026-07-09
-Status: Accepted
+Status: Accepted (amended 2026-07-21 — the "single gate / CI runs exactly doctor" framing is superseded in part by ADR-0018; see Amendment)
 Owner: jwogrady
 
 ## Context
@@ -69,8 +69,25 @@ enforcement graduated from convention to mechanism.
 - The workflow file is deliberately boring; if it ever accumulates logic,
   that is the regression to catch in review.
 
+## Amendment (2026-07-21)
+
+The behavioral test suite (`tests/run.sh`) shipped as a second CI job in
+`.github/workflows/validate.yml` (#165, #172), so two of this record's claims
+no longer hold literally:
+
+- CI no longer runs *exactly* `spark doctor`: `validate.yml` runs a `doctor`
+  job **and** a `tests` job.
+- Doctor is no longer the *single* gate; it is the **static** superset gate,
+  and `tests/run.sh` is the **behavioral** gate.
+
+The spirit is intact: no check logic lives in the workflow YAML — doctor and
+the `tests/test-*.sh` suites hold it, so the local and CI gates still cannot
+drift. **ADR-0018** records the behavioral gate and supersedes the "single
+gate / runs exactly doctor" framing above; the parity discipline is unchanged.
+
 ## Related Docs
 
 - [0003-zero-dependency-bash-and-enforcement-hooks.md](0003-zero-dependency-bash-and-enforcement-hooks.md) — the enforcement model this updates
 - [0005-cosmics-ship-ci-spark-stays-ci-free.md](0005-cosmics-ship-ci-spark-stays-ci-free.md) — the Cosmic-CI distinction this subsumes and preserves
+- [0018-behavioral-tests-are-the-second-ci-gate.md](0018-behavioral-tests-are-the-second-ci-gate.md) — the behavioral gate that amends this record
 - `plugins/spark/docs/explanation/enforcement-model.md` — the mechanical-enforcement rationale

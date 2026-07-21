@@ -18,13 +18,16 @@ intent into disciplined work by *arranging* Claude's tools, filling the gaps the
 leave, and holding you to your own standards. It does not reinvent what Claude
 already does; it knows **how and when** to reach for what already exists.
 
-## The three parties
+## The four parties
 
 - **You** — the directing force. You supply intent and taste, and you take the shot.
 - **Claude** — the tools and the know-how for using them. Spark leans on Claude for
   the *how*, and never tries to know the host's tools better than the host.
 - **Spark** — the layer that binds them. It owns only three things: the **sequence**
   (the lifecycle), the **gaps** Claude doesn't cover, and **your standards**.
+- **GitHub** — the durable record. Where the work is reviewed, delivered, and
+  remembered: issues, branches, pull requests, and releases outlive any one
+  session.
 
 Native tools have no opinion. You do. **Spark is where your opinions live and get
 applied** — which is why nothing Claude ships can replace it.

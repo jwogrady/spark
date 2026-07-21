@@ -20,14 +20,17 @@ How the layers fit together, and the dated record of why Spark is built this way
 - [adr/0006-cosmics-use-release-please.md](adr/0006-cosmics-use-release-please.md) — generated projects release via Release Please; `ship` defers to it (vocabulary superseded by ADR-0015)
 - [adr/0007-default-stack-python-uv.md](adr/0007-default-stack-python-uv.md) — default generated-project stack is Python + `uv`; TypeScript/Bun only for a frontend (vocabulary superseded by ADR-0015)
 - [adr/0008-information-architecture.md](adr/0008-information-architecture.md) — three layers (Operator/Project/Session), one canonical source per information class, the three carry motions
-- [adr/0009-spark-release-mechanism.md](adr/0009-spark-release-mechanism.md) — Spark releases manually today, adopts Release Please once validation CI lands
+- [adr/0009-spark-release-mechanism.md](adr/0009-spark-release-mechanism.md) — Spark releases manually today, adopts Release Please once validation CI lands (realized: Release Please is now live)
 - [adr/0010-preferences-source-model.md](adr/0010-preferences-source-model.md) — preferences resolve shipped defaults → operator overrides → committed project facts
-- [adr/0011-doctor-is-the-validation-gate.md](adr/0011-doctor-is-the-validation-gate.md) — `spark doctor` is the single validation gate; two-door parity is mechanical
+- [adr/0011-doctor-is-the-validation-gate.md](adr/0011-doctor-is-the-validation-gate.md) — `spark doctor` is the static validation gate; two-door parity is mechanical (single-gate framing amended by ADR-0018)
 - [adr/0012-setup-is-the-one-command-carry-in.md](adr/0012-setup-is-the-one-command-carry-in.md) — `spark setup` is the one-command carry-in; it composes, never forks, the individual verbs
-- [adr/0013-the-plugin-ships-only-carry-surfaces.md](adr/0013-the-plugin-ships-only-carry-surfaces.md) — the plugin ships only carry surfaces; consolidate the audit, extract the rest
+- [adr/0013-the-plugin-ships-only-carry-surfaces.md](adr/0013-the-plugin-ships-only-carry-surfaces.md) — the plugin ships only carry surfaces; consolidate the audit, extract the rest (extraction-as-removal superseded by ADR-0014)
 - [adr/0014-core-plus-companion-plugins.md](adr/0014-core-plus-companion-plugins.md) — one marketplace, a focused core, and three companion plugins
 - [adr/0015-generated-projects-without-the-cosmic-model.md](adr/0015-generated-projects-without-the-cosmic-model.md) — generated projects, without the Cosmic model; private vocabulary leaves the public docs
 - [adr/0016-companion-release-path.md](adr/0016-companion-release-path.md) — companions release through Release Please multi-package mode
+- [adr/0017-permission-trust-tiers.md](adr/0017-permission-trust-tiers.md) — permission baselines are selectable trust tiers (`delivery`/`conservative`), default `delivery`, additive-only
+- [adr/0018-behavioral-tests-are-the-second-ci-gate.md](adr/0018-behavioral-tests-are-the-second-ci-gate.md) — the behavioral test suite (`tests/run.sh`) is the second CI gate alongside doctor
+- [adr/0019-human-directed-product-model.md](adr/0019-human-directed-product-model.md) — the four-party model: human directs, Spark orchestrates, Claude supplies capability, GitHub is the record
 - [adr/0000-template.md](adr/0000-template.md) — the ADR template
 
 ## Packaging reference

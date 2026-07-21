@@ -1,7 +1,7 @@
 # ADR: The plugin ships only carry surfaces — consolidate the audit, extract the rest
 
 Date: 2026-07-11
-Status: Accepted
+Status: Accepted (extraction-as-removal disposition superseded by ADR-0014 — the extracted skills became same-repo companion plugins via `git mv`, not deletions)
 Owner: jwogrady
 
 ## Context
