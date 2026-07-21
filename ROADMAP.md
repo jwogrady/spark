@@ -151,7 +151,9 @@ completion — milestone and version in lockstep.
 
 ## v0.12 — Lifecycle orchestration (research & architecture)
 
-**Status:** Shipped (`v0.12.0`) — research & architecture only
+**Status:** Complete (research & architecture) — no version cut; nothing new to
+run shipped, so Release Please published no release. The deliverables are the
+ratified ADRs and the recorded baseline.
 
 A deliberate, evidence-backed decision rather than a promise to ship a
 multi-agent framework. Two ratified ADRs — the Shape / Build / Assure & Deliver
