@@ -24,6 +24,11 @@ Validates the whole marketplace and reports health. Checks:
 - enforcement parity: the commit types, AI-attribution ban, trunk protection,
   and force-push rules agree across the hooks and the contract files
   (CLAUDE.md, AGENTS.md)
+- standards boundary: in a project with the generated `CONVENTIONS.md` /
+  `ENGINEERING-STANDARDS.md`, every `<!-- spark:pref key=value -->` marker names
+  a real preference key and asserts the value it resolves to (drift and dangling
+  references are errors); the docs are optional, so their absence is reported,
+  not failed
 - whether Spark's git hooks are installed in the current repo
 
 Exit code is non-zero if any error is found. JSON validation uses `jq` or
