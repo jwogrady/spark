@@ -29,7 +29,14 @@ for why this is the spine.
 
 ## Tutorial
 
-New here? Start with one idea taken through all five stages, end to end:
+New here? Start with the first-run journey that matches your repository —
+`spark orient` classifies it, and each tutorial runs that path end to end
+against real output:
+
+- [tutorials/scaffold-a-new-project.md](tutorials/scaffold-a-new-project.md) — an empty repo classified **new**: orient, choose a profile, arm it, and land the standards docs.
+- [tutorials/adopt-an-existing-repo.md](tutorials/adopt-an-existing-repo.md) — an established repo classified **existing**: adopt create-only, proving nothing already there is overwritten.
+
+Both hand off into the orientation-agnostic lifecycle tutorial:
 
 - [tutorials/build-your-first-project.md](tutorials/build-your-first-project.md) — install Spark and run a single idea from Ideate to an open PR.
 
