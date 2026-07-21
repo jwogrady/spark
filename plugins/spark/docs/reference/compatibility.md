@@ -31,6 +31,11 @@ The same four groups `spark doctor --requirements` reports:
 | `jq` (preferred) or `python3` | Capability: safe JSON merges | Merging the permission baseline into an *existing* `.claude/settings.json`; JSON validation in `doctor` | With neither: preference reading degrades to a line-based parser for the documented flat schema, `doctor`'s JSON checks are skipped (not failed), and `apply-permissions` refuses the merge with hand-merge instructions rather than risking the file. Creating a fresh `settings.json` needs no parser. |
 | Release-pipeline wiring | Capability: versioned releases | Release Please turns merged conventional commits into versions, changelogs, tags, and releases | Assessed only when the resolved `release.mechanism` is `release-please`; the wiring (`release-please-config.json` + workflow) is created by `spark preferences --apply` or `spark setup`. Any other mechanism is the operator's own machinery. |
 
+One platform note beyond the groups: GNU `timeout` is not part of stock
+macOS. No shipped Spark surface requires it — the Spark repo's own manual
+release-readiness check selects `timeout` → `gtimeout` (Homebrew coreutils)
+→ a documented soft bound, so macOS remains fully supported.
+
 ## Stack defaults
 
 The shipped preferences name default stacks; the tools only matter in projects
