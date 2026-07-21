@@ -98,7 +98,12 @@ One check is deliberately outside the runner:
 install path end to end from a clean environment (marketplace add, core +
 companion install, discovery, the `spark` CLI, and a real skill invocation).
 It needs network access and the `claude` CLI, so it runs by hand — treat it
-as the release-readiness check before merging a Release Please PR.
+as the release-readiness check before merging a Release Please PR. It runs
+on every documented platform: the live-invocation step bounds itself with
+`timeout`, or `gtimeout` where GNU coreutils is a Homebrew install (macOS),
+and otherwise notes the degraded soft bound (`--max-turns` still limits the
+run). The selection logic is pinned offline by
+`tests/test-e2e-bounded-run.sh`.
 
 ## Changelog policy
 

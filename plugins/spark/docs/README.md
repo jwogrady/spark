@@ -60,7 +60,7 @@ Information-oriented — what each piece is and how it behaves:
 - [reference/codify-readiness.md](reference/codify-readiness.md) — the Plan→Codify readiness gate: the checklist and the health signal.
 - [reference/cli.md](reference/cli.md) — the `spark` CLI and its subcommands.
 - [reference/hooks.md](reference/hooks.md) — the enforcement hooks and what each blocks.
-- [reference/engineering-preferences.md](reference/engineering-preferences.md) — the engineering standard every generated project conforms to.
+- [reference/engineering-preferences.md](reference/engineering-preferences.md) — the operator rationale behind the engineering standard; the machine-applied form is `preferences/defaults.json`.
 - [reference/state.md](reference/state.md) — the committed work state (`.spark/state.json`) and its schema.
 - [glossary.md](glossary.md) — Spark vocabulary.
 
