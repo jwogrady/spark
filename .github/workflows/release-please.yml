@@ -25,6 +25,13 @@ jobs:
     steps:
       - uses: googleapis/release-please-action@v4
         with:
+          # Prefer a dedicated identity so the release PR it opens triggers CI
+          # (the default GITHUB_TOKEN cannot trigger downstream workflows, which
+          # leaves the release PR's validate run held as action_required — see
+          # docs/reference/release-token-governance.md, #185). Falls back to the
+          # default token when the secret is unset, so behavior is unchanged
+          # until RELEASE_PLEASE_TOKEN is added.
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
       # Tag companion versions from the manifest, idempotently: a missing
