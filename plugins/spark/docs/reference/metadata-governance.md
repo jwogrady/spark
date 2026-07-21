@@ -38,6 +38,17 @@ never the deprecated `enhancement` alias, so the forms and the taxonomy cannot
 drift. Theme labels (area, priority `P0`–`P3`) may accompany a category but
 never replace it.
 
+## The `backlog` disposition label
+
+A feature that is deliberately deferred carries the `backlog` label. It is a
+disposition label, not a category — it accompanies the `feature` category, it
+does not replace it. The label is the machine-readable record of the backlog
+decision: `plan/scripts/roadmap-check.sh` reads it to distinguish a deferred
+feature from one with no release decision at all, so a disposition recorded only
+in a comment or a linked recommendation stays invisible to the check. Apply the
+label and keep the *reason* where it belongs (the roadmap, a recommendation doc,
+or the issue body) — the label answers "decided?", the reason answers "why?".
+
 ## Milestone rules
 
 - **A milestone represents release scope** — the set of work a release ships.
