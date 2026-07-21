@@ -44,7 +44,9 @@ lane (Codify, stage 3).
 - Don't add dependencies the issue doesn't require.
 - Don't refactor surrounding code opportunistically — open a separate issue.
 - Follow the project's `CLAUDE.md` standards (types, docstrings, formatter,
-  linter) — run them before handing off.
+  linter) — run them before handing off. `CONVENTIONS.md` and
+  `ENGINEERING-STANDARDS.md` at the repo root hold the project's branching,
+  commit, and stack/quality contract — follow them too.
 - Don't write documentation — that's `docit` (outward) or `knowledge` (internal).
   `codify` writes code.
 

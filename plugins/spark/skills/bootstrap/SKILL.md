@@ -43,7 +43,9 @@ Concrete per-framework commands and quality-gate defaults live in
    the git hooks, applies the permission baseline, and materializes the
    resolved standard — and relay its report verbatim (`+` created, `=` kept,
    `!` needs a decision). Resolve every `!` with the user — the LICENSE
-   choice always is one.
+   choice always is one. Setup seeds `CONVENTIONS.md` and
+   `ENGINEERING-STANDARDS.md` at the repo root — the project's editable working
+   contract; adapt them with the user to fit this project.
 7. **Layer Spark on top:**
    - Generate `CLAUDE.md` and `AGENTS.md` with [`agents-md`](../agents-md/SKILL.md).
    - Land at [`ideate`](../ideate/SKILL.md).

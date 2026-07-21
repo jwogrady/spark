@@ -122,7 +122,16 @@ One idempotent run does the whole carry-in:
 - **Resolved standard** — your three-tier preferences materialize as project
   files, create-only: what the repo already has is kept and reported
   (`+ created`, `= exists, kept`, `! needs a manual decision`), never
-  overwritten.
+  overwritten. This includes two repo-root docs — `CONVENTIONS.md` and
+  `ENGINEERING-STANDARDS.md` — your project's editable working contract.
+
+**Changing your conventions and standards after setup** happens right in those
+two root docs: edit `CONVENTIONS.md` and `ENGINEERING-STANDARDS.md` to match how
+this repository actually works. They are prose you own — Spark never overwrites
+them. A line marked `<!-- spark:pref key=value -->` mirrors a machine fact in
+`.spark/preferences.json`; to change automation, change the preference too, not
+just the prose. See
+[reference/project-standards.md](../reference/project-standards.md).
 
 A second run reports everything as already present. Starting a brand-new
 project instead? `/spark:bootstrap` scaffolds the runtime and ends by running
