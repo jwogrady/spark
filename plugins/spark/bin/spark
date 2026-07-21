@@ -1256,10 +1256,16 @@ classify_repo() {
 
   # With no git, tracked count is meaningless: fall back to whether the working
   # tree holds any real file, so an empty scratch dir reads as new but a
-  # dropped-in codebase reads as conflicting.
+  # dropped-in codebase reads as conflicting. Search at any depth (source often
+  # lives under src/…), but prune dependency/build/cache/VCS trees so vendored
+  # or generated contents alone never establish a project (#242).
   local wt_files=0
   if [ "$git_present" -eq 0 ]; then
-    wt_files="$(find "$dir" -mindepth 1 -maxdepth 2 -type f ! -path '*/.git/*' 2>/dev/null | awk 'END{print NR+0}')"
+    wt_files="$(find "$dir" \
+        \( -type d \( -name .git -o -name node_modules -o -name vendor \
+           -o -name .venv -o -name venv -o -name __pycache__ -o -name .cache \
+           -o -name target -o -name dist -o -name build -o -name .next \) -prune \) \
+        -o -type f -print 2>/dev/null | awk 'END{print NR+0}')"
   fi
 
   local classification confidence
