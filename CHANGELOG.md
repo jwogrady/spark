@@ -6,6 +6,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ---
 
+## [0.10.1](https://github.com/jwogrady/spark/compare/v0.10.0...v0.10.1) (2026-07-21)
+
+
+### Features
+
+* give every planned feature a release decision ([#221](https://github.com/jwogrady/spark/issues/221)) ([e248aa5](https://github.com/jwogrady/spark/commit/e248aa5d29325299cc645c233e04669484b76d4d)), closes [#188](https://github.com/jwogrady/spark/issues/188)
+
+
+### Documentation
+
+* record the v0.10 release and complete the governance milestone ([#227](https://github.com/jwogrady/spark/issues/227)) ([b834c7e](https://github.com/jwogrady/spark/commit/b834c7e1ef053997e4cac65a9201487cbfd2a28c)), closes [#196](https://github.com/jwogrady/spark/issues/196)
+
 ## [0.10.0](https://github.com/jwogrady/spark/compare/v0.9.0...v0.10.0) (2026-07-21)
 
 
