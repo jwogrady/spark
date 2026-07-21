@@ -182,12 +182,12 @@ EOF
       CHANGELOG.md) place "CHANGELOG.md" <<'EOF'
 # Changelog
 
-All notable changes to this project are documented here. Release Please
-maintains the released sections from the conventional commits on the trunk.
+All notable changes to this project are documented here.
 
-## [Unreleased]
-
-Nothing yet.
+Release Please maintains the released sections from the conventional commits on
+the trunk; the open Release Please PR is the canonical view of what is not yet
+released. (A project without Release Please curates a `## [Unreleased]` section
+here by hand and lets `ship` roll it at release time.)
 EOF
         ;;
       CONTRIBUTING.md) place "CONTRIBUTING.md" <<'EOF'
@@ -741,6 +741,24 @@ cmd_doctor() {
         red "✗ Spark git hooks not installed in the Spark repo — run: spark install-git-hooks (see CONTRIBUTING.md)"; errors=$((errors+1))
       else
         yellow "! Spark git hooks not installed here — run: spark install-git-hooks"; warnings=$((warnings+1))
+      fi
+    fi
+  fi
+
+  # Changelog mode (ADR-0006/0009, #186). Where Release Please owns the
+  # changelog (a release-please-config.json at the project root), the sections
+  # are generated from conventional commits and there is no hand-curated
+  # [Unreleased] heading. A stray one means someone edited against the policy.
+  # Projects without Release Please keep [Unreleased], so the check is silent
+  # there.
+  if git rev-parse --show-toplevel >/dev/null 2>&1; then
+    local proj_root; proj_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+    if [ -n "$proj_root" ] && [ -f "$proj_root/release-please-config.json" ] && [ -f "$proj_root/CHANGELOG.md" ]; then
+      echo
+      if grep -qiE '^#+[[:space:]]*\[?unreleased\]?' "$proj_root/CHANGELOG.md"; then
+        red "✗ CHANGELOG.md has a hand-curated [Unreleased] section, but Release Please owns this changelog — conventional commits are the input; remove it (see reference/release-docs-checklist.md)"; errors=$((errors+1))
+      else
+        green "✓ changelog mode matches Release Please (no hand-curated [Unreleased])"
       fi
     fi
   fi

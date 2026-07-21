@@ -3,6 +3,12 @@
 This roadmap reflects current intent, not a commitment or timeline.
 Priorities may shift as the project evolves.
 
+Each entry carries one **Status** backed by evidence — `Planned`,
+`In progress`, `Shipped (vX.Y.Z)`, `Deferred`, or `Backlog`. The vocabulary and
+its evidence rules are defined in
+[the release-docs checklist](plugins/spark/docs/reference/release-docs-checklist.md#roadmap-status-vocabulary);
+an item becomes `Shipped` only once its release exists.
+
 ---
 
 ## v0.2 — Plugin + lifecycle

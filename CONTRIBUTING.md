@@ -107,11 +107,26 @@ run). The selection logic is pinned offline by
 
 ## Changelog policy
 
-Hand-curated changelog entries go only under the `[Unreleased]` heading in
-`CHANGELOG.md`. Release Please owns the released sections: on each release it
-moves unreleased entries under a version heading and adds the generated notes.
-Never edit a released section by hand — it is the historical record of what
-shipped.
+The changelog has one canonical policy with two modes, keyed on whether the
+repo runs Release Please (a `release-please-config.json` at the root):
+
+**Release Please-managed (this repo).** Your **conventional commit types are
+the only changelog input**. Release Please maintains every section of
+`CHANGELOG.md` from the commits on the trunk, and the open Release Please PR is
+the canonical view of unreleased changes — there is no hand-curated
+`[Unreleased]` heading to add to. Never hand-edit `CHANGELOG.md`: released
+sections are the immutable record of what shipped (correct a factual error only
+with clear evidence, never a rewrite). Put the user-facing change in the commit
+subject/body — that is what reaches the changelog.
+
+**Manual (scaffolded projects without Release Please).** Curate
+`## [Unreleased]` by hand; `ship` rolls it into a dated `vX.Y.Z` section at
+release time. This is the fallback the `ship` skill documents.
+
+Either way, run the
+[release-docs checklist](plugins/spark/docs/reference/release-docs-checklist.md)
+before a release is approved, so README, docs, changelog, roadmap, and release
+metadata stay coherent (ADR-0006, ADR-0009).
 
 ## Proposing a skill
 
