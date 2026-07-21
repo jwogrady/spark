@@ -221,20 +221,29 @@ version at session start, see `spark brief`.
 ## `spark brief [--short]`
 
 Prints the session brief in three sections. **Orient** — current branch,
-uncommitted-file count, ahead/behind the tracked upstream, and (full mode
-only) the open PR for the branch via a `gh` fast-path, skipped when `gh` is
-absent. **Locate** — the lifecycle position, read from `.spark/state.json`
-(see [state.md](state.md)) when a lifecycle skill has written it, otherwise
-inferred from repo shape (problem statement present, trunk vs. working branch,
-open PR); `spark resume` gives the full cross-checked view. **Load** — the
-resolved standard bag summarized: how many preference keys resolved, how many
-the operator or project tiers override, plus the `stack.default` and
-`release.mechanism` headlines; `spark preferences` prints the complete
-resolution table.
+uncommitted-file count, ahead/behind the tracked upstream, (full mode only)
+the open PR for the branch via a `gh` fast-path, skipped when `gh` is absent,
+and the recorded new/existing **classification** with the date it was
+established (`spark orient`, [state.md](state.md)); an unclassified repo is
+reported as such with a pointer to the first-run flow rather than a guess.
+Because the classification is a durable fact that can go stale, the brief
+re-runs the inspect-only classifier and flags a repo recorded `new` that has
+since grown real sources (now classifying `existing`) for re-orientation — a
+flag only, never a silent rewrite. **Locate** — the lifecycle position, read
+from `.spark/state.json` (see [state.md](state.md)) when a lifecycle skill has
+written it, otherwise inferred from repo shape (problem statement present,
+trunk vs. working branch, open PR); `spark resume` gives the full
+cross-checked view. **Load** — the resolved standard bag summarized: how many
+preference keys resolved, how many the operator or project tiers override, the
+`stack.default` and `release.mechanism` headlines, and which project-local
+standards docs (`CONVENTIONS.md`, `ENGINEERING-STANDARDS.md`) exist; `spark
+preferences` prints the complete resolution table.
 
 `--short` is the SessionStart hook path (see [hooks.md](hooks.md)): at most
-three plain-text lines, no color codes, no network calls. Outside a git repo
-it prints nothing and exits `0`, so non-project sessions start clean.
+three plain-text lines, no color codes, no network calls, plus a single
+stale-orientation warning line when the recorded classification has drifted.
+Outside a git repo it prints nothing and exits `0`, so non-project sessions
+start clean.
 
 ## `spark version`
 
