@@ -45,19 +45,19 @@ Manifest mode across four packages (`release-please-config.json`,
 - **Three companions** (`plugins/spark-audit`, `plugins/spark-connect`,
   `plugins/spark-docs`) — each an independently versioned nested package: a
   component tag (`spark-<name>-vX.Y.Z`), its own `CHANGELOG.md` inside the
-  plugin directory, its own `plugin.json` bump, and `skip-github-release:
-  true`.
+  plugin directory, its own `plugin.json` bump, and `prerelease: true`.
 - **One combined release PR** covers all four trains — one human merge is
   one release wave.
 
-Companions skip the GitHub Release because GitHub Releases are repo-wide,
-not package-aware: a companion release would otherwise displace the core
-plugin as the repo's "Latest." `skip-github-release` also suppresses Release
-Please's own tagging for those packages, so the **companion tag step** in
-`.github/workflows/release-please.yml` compensates — after the release runs,
-it reads each companion's just-released version out of
-`.release-please-manifest.json` and creates any missing
-`spark-<name>-vX.Y.Z` tag idempotently, a no-op once the tag exists.
+Companions publish as **prereleases** because GitHub Releases are repo-wide,
+not package-aware: GitHub only ever marks a non-prerelease as the repo's
+"Latest", so a prerelease companion release can never displace the core
+plugin. Release Please creates each companion's tag and prerelease Release
+itself, atomically, when it computes the next version range — so the tag
+always exists at anchoring time. (An earlier design used
+`skip-github-release: true`, but that also suppressed Release Please's own
+tagging, forcing a post-hoc tag step that raced the version computation and
+orphaned duplicate release PRs — #248, ADR-0016's 2026-07-21 addendum.)
 
 ## The mechanical backstop
 

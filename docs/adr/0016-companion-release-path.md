@@ -97,6 +97,32 @@ their own repositories — we chose **root-only GitHub Releases**:
   Those tags are what Release Please anchors the next version range on.
 - The rest of the multi-package decision above is unchanged.
 
+## Addendum (2026-07-21): companions publish as prereleases, not skip-github-release
+
+The 2026-07-11 addendum used `skip-github-release: true` to keep companions off
+"Latest". But that flag also stops Release Please's own tagging, which forced a
+post-hoc `tag companions` step in the workflow — and that step created the
+companion tag *after* Release Please had already computed the next release PR in
+the same run. On a release-merge run the just-shipped companion tag did not yet
+exist, so Release Please mis-anchored the companion's version range and
+re-proposed already-shipped work as an orphan release PR (#248, symptom #218). A
+later run reported "no commits" but never closed the orphan.
+
+Fix: companions now carry `prerelease: true` instead of `skip-github-release`.
+Release Please creates each companion's tag **and** a GitHub Release marked
+prerelease, atomically, at the moment it computes the next range — so the tag
+always exists when anchoring, and the race is gone. GitHub never marks a
+prerelease as "Latest", so the invariant this addendum's predecessor protected —
+**Latest always names the core** — still holds; it even holds on a
+companion-only release wave, where no new core Release is created and Latest
+stays on the last core release. The custom `tag companions` workflow step and
+its checkout are removed: Release Please owns companion tagging again.
+
+The trade the predecessor made (companions lose their Release page) is partly
+reversed: companion releases now appear as prereleases. That is an acceptable —
+arguably better — outcome: the companion release history becomes visible without
+ever competing for Latest.
+
 ## Open Questions
 
 - None.
