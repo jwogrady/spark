@@ -132,6 +132,23 @@ token (the #185 follow-up).
 
 ---
 
+## v0.11 — First-run orientation & project standards
+
+**Status:** Shipped (`v0.11.0`)
+
+A safe, guided first run for both new and existing repositories, with visible,
+editable project-local standards. Spark now orients before it acts — classifying
+a repo as new, existing, or ambiguous, and recording the decision as a project
+fact (#183). The `/spark:onboard` guided flow sequences orient → profile → seed
+→ brief (#199), seeding create-only `CONVENTIONS.md` and `ENGINEERING-STANDARDS.md`
+(#182) whose machine-backed lines are guarded against drift by a `spark doctor`
+boundary check (#200). Every session brief surfaces the classification and the
+standards docs (#201), and two tutorials walk the scaffold-new and adopt-existing
+journeys (#202). The whole milestone shipped as one release, cut once at
+completion — milestone and version in lockstep.
+
+---
+
 ## Later — Project inception
 
 Project inception — `/plugin install spark` plus the `bootstrap` skill —
