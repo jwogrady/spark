@@ -1123,6 +1123,28 @@ cmd_doctor() {
     else
       yellow "  ! $cache_summary"; warnings=$((warnings+1))
     fi
+
+    # Reference laziness (#294): progressive disclosure must stay lazy.
+    echo
+    echo "Reference laziness:"
+    local ref_out
+    if ref_out="$(check_reference_laziness "$mroot")"; then
+      green "  ✓ every skill links its references; none loaded eagerly"
+    else
+      red "  ✗ progressive disclosure broken:"; printf '%s\n' "$ref_out"; errors=$((errors+1))
+    fi
+
+    # Capability-traceability templates (#301): the CEF's collection seam must
+    # not silently disappear from the contribution templates.
+    echo
+    echo "Capability-traceability templates:"
+    local tt_out tt_root
+    tt_root="$(cd "$SPARK_ROOT/../.." && pwd)"
+    if tt_out="$(check_traceability_templates "$tt_root")"; then
+      green "  ✓ issue + PR templates carry the traceability seam"
+    else
+      red "  ✗ traceability seam missing from a template:"; printf '%s\n' "$tt_out"; errors=$((errors+1))
+    fi
   fi
 
   # Latency advisory (#213): wall clock is machine-dependent, so this only WARNS
@@ -2316,6 +2338,46 @@ fp_cache_stability() {
   done < <(find "$root/plugins" -type f -name 'SKILL.md' 2>/dev/null | sort)
   if [ -n "$bad" ]; then printf 'volatile bytes in always-loaded surface(s):%s' "$bad"; return 1; fi
   printf 'always-loaded surfaces carry no volatile bytes'
+}
+
+# check_reference_laziness <marketplace-root> — enforce progressive disclosure
+# (#294): a SKILL.md must reach its references by LINK (loaded only when the
+# model follows it), never by an eager "read all references first" instruction,
+# and every reference file it ships must actually be linked (an unlinked
+# reference is reached outside the lazy path, or is dead weight). Echoes one
+# finding per offender; returns 1 if any. Factored out for offline testing.
+check_reference_laziness() {
+  local root="$1" s refdir ref base rc=0
+  local eager='read (all|every|the) references( first)?|load (all|every|the) references|read every file in references'
+  while IFS= read -r s; do
+    [ -f "$s" ] || continue
+    grep -qiE "$eager" "$s" && { echo "  ${s#"$root"/}: instructs eager reference loading"; rc=1; }
+    refdir="$(dirname "$s")/references"
+    [ -d "$refdir" ] || continue
+    for ref in "$refdir"/*; do
+      [ -f "$ref" ] || continue
+      base="$(basename "$ref")"
+      grep -q "references/$base" "$s" || { echo "  ${s#"$root"/}: references/$base is never linked"; rc=1; }
+    done
+  done < <(find "$root/plugins" -type f -name 'SKILL.md' 2>/dev/null | sort)
+  return $rc
+}
+
+# check_traceability_templates <repo-root> — the Capability-Traceability prompt
+# the CEF collects through (#296, ADR-0025/0026) must stay present in the
+# contribution templates, so a later edit cannot silently drop the seam. Verifies
+# the feature + skill issue templates carry the capability_traceability field and
+# the PR template carries the traceability section. Echoes findings; returns 1.
+check_traceability_templates() {
+  local root="$1" rc=0 f
+  for f in "$root/.github/ISSUE_TEMPLATE/feature.yml" "$root/.github/ISSUE_TEMPLATE/skill.yml"; do
+    if [ ! -f "$f" ]; then echo "  missing template: ${f#"$root"/}"; rc=1
+    elif ! grep -q 'capability_traceability' "$f"; then echo "  ${f#"$root"/}: lost the capability_traceability field"; rc=1; fi
+  done
+  f="$root/.github/PULL_REQUEST_TEMPLATE.md"
+  if [ ! -f "$f" ]; then echo "  missing PR template"; rc=1
+  elif ! grep -qi 'Capability traceability' "$f"; then echo "  ${f#"$root"/}: lost the Capability traceability section"; rc=1; fi
+  return $rc
 }
 
 # now_ms — current time in milliseconds. GNU date has %N; macOS/BSD date does
