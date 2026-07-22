@@ -808,13 +808,19 @@ cmd_doctor() {
         cl_all="$(jq -r '.["changelog-sections"][].type' "$rp_config" 2>/dev/null | sort | tr '\n' ' ' || true)"
         cl_vis="$(jq -r '.["changelog-sections"][] | select(.hidden != true) | .type' "$rp_config" 2>/dev/null | sort | tr '\n' ' ' || true)"
         rn_vis="$(grep -E '^VISIBLE_TYPES=' "$rn_check" | sed -E 's/^VISIBLE_TYPES="?([^"]*)"?.*/\1/' | tr ' ' '\n' | sort | tr '\n' ' ' || true)"
+        # The shipped template must carry the same visible set, or generated
+        # projects silently drop it (#271).
+        local tpl="$SPARK_ROOT/preferences/templates/release-please-config.json" tpl_vis=""
+        [ -f "$tpl" ] && tpl_vis="$(jq -r '.["changelog-sections"][]? | select(.hidden != true) | .type' "$tpl" 2>/dev/null | sort | tr '\n' ' ' || true)"
         for t in $cl_all; do case " $hook_types " in *" $t "*) ;; *) missing="$missing $t" ;; esac; done
         if [ -n "$missing" ]; then
           red "  ✗ changelog-sections references type(s) the commit-msg hook rejects:${missing}. Restrict to the committed vocabulary [${hook_types% }]."; errors=$((errors+1))
         elif [ "$cl_vis" != "$rn_vis" ]; then
           red "  ✗ changelog visible set drifts — config: [${cl_vis% }] vs release-notes-check.sh: [${rn_vis% }]. Align them."; errors=$((errors+1))
+        elif [ -f "$tpl" ] && [ "$tpl_vis" != "$cl_vis" ]; then
+          red "  ✗ shipped release-please template visible set [${tpl_vis% }] drifts from the repo config [${cl_vis% }] — generated projects would drop it (#271)."; errors=$((errors+1))
         else
-          green "  ✓ changelog vocabulary ⊆ commit types; visible set matches release-notes-check.sh (${cl_vis% })"
+          green "  ✓ changelog vocabulary ⊆ commit types; visible set matches release-notes-check.sh and the shipped template (${cl_vis% })"
         fi
       else
         yellow "  ! jq absent — skipping the changelog-vocabulary lockstep check"; warnings=$((warnings+1))
