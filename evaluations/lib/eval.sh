@@ -135,8 +135,14 @@ eval_check_scores() {
 # must exist and resolve to numeric in/out rates. Count to stdout; offenders to
 # stderr.
 eval_check_run() {
-  local run="$1" rates="$2" g="$3" key val model rin rout p=0
+  local run="$1" rates="$2" g="$3" key val model rin rout p=0 dup mcount
   local num='^[0-9]+(\.[0-9]+)?$'
+  # Reject ambiguity rather than resolve it silently: eval_kv is first-match, so a
+  # duplicate key would hide a second value. A well-formed run.tsv has each key once.
+  dup="$(awk -F'\t' '/^[[:space:]]*#/{next} /^[[:space:]]*$/{next} {c[$1]++} END{for(k in c) if(c[k]>1) print k}' "$run")"
+  while IFS= read -r key; do
+    [ -n "$key" ] && { echo "  invalid: $g run.tsv duplicate key '$key' (ambiguous; first-match would hide a value)" >&2; p=$((p+1)); }
+  done <<< "$dup"
   model="$(eval_kv "$run" model)"
   [ -n "$model" ] || { echo "  invalid: $g run.tsv missing key 'model'" >&2; p=$((p+1)); }
   for key in tokens_in tokens_out latency_seconds; do
@@ -148,11 +154,15 @@ eval_check_run() {
     fi
   done
   if [ -n "$model" ] && [ -f "$rates" ]; then
-    rin="$(awk -F'\t' -v m="$model" '$1==m{print $2; exit}' "$rates")"
-    rout="$(awk -F'\t' -v m="$model" '$1==m{print $3; exit}' "$rates")"
-    if [ -z "$rin" ]; then
+    # The model must resolve to exactly one rate row — a duplicate is ambiguous.
+    mcount="$(awk -F'\t' -v m="$model" '/^[[:space:]]*#/{next} $1==m{c++} END{print c+0}' "$rates")"
+    if [ "$mcount" -eq 0 ]; then
       echo "  invalid: $g run.tsv model '$model' not in rates table" >&2; p=$((p+1))
+    elif [ "$mcount" -gt 1 ]; then
+      echo "  invalid: $g rates table has $mcount rows for model '$model' (ambiguous)" >&2; p=$((p+1))
     else
+      rin="$(awk -F'\t' -v m="$model" '$1==m{print $2; exit}' "$rates")"
+      rout="$(awk -F'\t' -v m="$model" '$1==m{print $3; exit}' "$rates")"
       printf '%s' "$rin"  | grep -qE "$num" || { echo "  invalid: $g rates in-rate for '$model' non-numeric (\"$rin\")"  >&2; p=$((p+1)); }
       printf '%s' "$rout" | grep -qE "$num" || { echo "  invalid: $g rates out-rate for '$model' non-numeric (\"$rout\")" >&2; p=$((p+1)); }
     fi
@@ -160,8 +170,16 @@ eval_check_run() {
   echo "$p"
 }
 
-eval_validate() {
-  local topology="${1:-$EVAL_DEFAULT_TOPOLOGY}" problems=0 g ak fnd rb sc run f n
+# eval_validate_topology <topology> — the single ACCEPTANCE authority: the one
+# place the structural + value rules live. Runs every check, prints findings to
+# stderr, echoes the problem count to stdout. Both `validate` (reports) and
+# `score` (refuses to compute on rejected evidence) call it.
+# Guarantee (precise): every normal `score` invocation runs this authority
+# immediately before it calculates and refuses anything it rejects. It is NOT a
+# snapshot — validation and the later per-file rereads during calculation are
+# separate reads, so this is an entry-point contract, not a time-of-use lock.
+eval_validate_topology() {
+  local topology="$1" problems=0 g ak fnd rb sc run f n
   [ -f "$EVAL_RATES" ] || { echo "  missing rates table: $EVAL_RATES" >&2; problems=$((problems+1)); }
   for g in $EVAL_GROUPS; do
     ak="$EVAL_FIXTURES/$g/answer-key.tsv"
@@ -188,6 +206,13 @@ eval_validate() {
     # Run facts (#304): required keys present and the model resolvable in rates.
     [ -f "$run" ] && { n="$(eval_check_run "$run" "$EVAL_RATES" "$g")"; problems=$((problems + n)); }
   done
+  echo "$problems"
+}
+
+# eval_validate <topology> — the reporting wrapper over the single authority.
+eval_validate() {
+  local topology="${1:-$EVAL_DEFAULT_TOPOLOGY}" problems
+  problems="$(eval_validate_topology "$topology")"
   if [ "$problems" -eq 0 ]; then
     echo "validate: $topology is well-formed"
   else
@@ -197,9 +222,13 @@ eval_validate() {
 
 eval_score() {
   local topology="${1:-$EVAL_DEFAULT_TOPOLOGY}" g ak rb fnd sc run f
-  local caught total got max model ti to lat lmethod rin rout line
+  local caught total got max model ti to lat lmethod rin rout line problems
   [ -d "$EVAL_RUNS/$topology" ] || eval_die "no recorded runs for topology '$topology'"
-  [ -f "$EVAL_RATES" ] || eval_die "missing rates table: $EVAL_RATES"
+  # Score only VALIDATED evidence — the same authority validate uses. Without
+  # this, `score` could publish a metric (e.g. correctness > 1.00) from data that
+  # validate would reject, because it never re-checked what it consumes.
+  problems="$(eval_validate_topology "$topology")"
+  [ "$problems" -eq 0 ] || eval_die "$problems problem(s) for '$topology' — cannot score invalid evidence (run 'validate' for detail)"
 
   echo "$EVAL_TITLE — topology: $topology"
   [ -n "${EVAL_BANNER:-}" ] && echo "$EVAL_BANNER"
@@ -225,9 +254,10 @@ eval_score() {
     ti="$(eval_kv "$run" tokens_in)"; to="$(eval_kv "$run" tokens_out)"
     lat="$(eval_kv "$run" latency_seconds)"; lmethod="$(eval_kv "$run" latency_method)"
 
+    # rates are guaranteed present + numeric by the validation gate above; resolve
+    # for the cost computation (no second "is it in rates" authority here).
     rin="$(awk -F'\t' -v m="$model" '$1==m{print $2; exit}' "$EVAL_RATES")"
     rout="$(awk -F'\t' -v m="$model" '$1==m{print $3; exit}' "$EVAL_RATES")"
-    [ -n "$rin" ] || eval_die "model '$model' not in rates table"
 
     line="$(awk -v caught="$caught" -v total="$total" -v got="$got" -v max="$max" \
       -v ti="$ti" -v to="$to" -v rin="$rin" -v rout="$rout" \
