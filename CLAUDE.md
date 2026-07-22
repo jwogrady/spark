@@ -111,13 +111,17 @@ under `tests/`.
 - Scaffold a new skill with `spark new-skill <name>`.
 - Each skill needs a `SKILL.md` with `name:` and `description:` frontmatter. The
   `description` is the only thing Claude sees when choosing the skill, so make it
-  earn its place: write in the third person, keep it under 1024 characters, lead
-  with what the skill does, then name concrete triggers ("Use when …"). A vague
-  description ("helps with docs") gives Claude no way to pick it over its peers.
-- Keep `SKILL.md` tight — aim for under ~100 lines. When it outgrows that, or has
-  distinct domains, or carries rarely-needed depth, split the overflow into
-  `references/` (and put real subagents under `agents/`). Both are optional; they
-  are the canonical layout — do not invent `REFERENCE.md`/`EXAMPLES.md` files.
+  earn its place: write in the third person, stay within the **enforced
+  1024-character budget**, lead with what the skill does, then name concrete
+  triggers ("Use when …"). A vague description ("helps with docs") gives Claude
+  no way to pick it over its peers.
+- Keep `SKILL.md` tight — `spark doctor` enforces a **100-line budget** per
+  `SKILL.md` and the 1024-character description budget; a surface over either
+  fails the gate (#209), not just a warning. When a skill outgrows the budget, or
+  has distinct domains, or carries rarely-needed depth, split the overflow into
+  `references/` progressive disclosure (and put real subagents under `agents/`).
+  Both are optional; they are the canonical layout — do not invent
+  `REFERENCE.md`/`EXAMPLES.md` files.
 - Keep references one level deep; don't make Claude chase a chain of links.
 - Add a deterministic helper script only when the operation is mechanical
   (validation, formatting) and would otherwise be regenerated each run.

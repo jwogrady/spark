@@ -87,5 +87,8 @@ plugins/spark/skills/<name>/
 ```
 
 The `description` frontmatter is the only thing Claude sees when deciding whether
-to invoke the skill. Name concrete triggers: "Use when …". Run `spark doctor` to
-confirm the skill is well-formed before merging.
+to invoke the skill. Name concrete triggers: "Use when …". Context budgets are
+enforced facts, not aspirations: `spark doctor` fails when a `SKILL.md` exceeds
+100 lines or a description exceeds 1024 characters — move overflow into
+`references/` progressive disclosure. Run `spark doctor` to confirm the skill is
+well-formed and within budget before merging.
