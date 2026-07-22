@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
-# Routing-boundary guard for the core skill descriptions (#293). The description
-# is the always-loaded selection cost, and trimming it must never cost a routing
-# discriminator. This asserts only the minimum identity each skill needs to be
-# selected correctly and told apart from its neighbours — never whole sentences
-# or exact wording, so descriptions stay free to improve. A failure names the
-# skill and the missing discriminator.
+# Static discriminator-PRESENCE guard for the core skill descriptions (#293).
+# It asserts that the minimum identity tokens each skill needs survive a trim —
+# never whole sentences, so descriptions stay free to improve. A failure names
+# the skill and the missing discriminator.
+#
+# SCOPE (#313): token presence is NOT routing-accuracy evidence — a description
+# could keep every keyword yet mislead a selector. The routing-accuracy evidence
+# lives in the governed evaluation suite (evaluations/skill-routing/): graded
+# before/after runs over a representative prompt fixture, declared for #293 in
+# evaluations/evidence-index.tsv. This file is the cheap CI tripwire; the suite
+# is the evidence.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"

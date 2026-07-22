@@ -1,0 +1,5 @@
+# Routing quality rubric - graded 0..max by the named grader (see task.md).
+# id	max	description
+Q1	2	Clear-trigger prompts (R01-R09) route to their skill without hesitation.
+Q2	2	Boundary pairs (ideate/plan, plan/codify, validate/ship, onboard/bootstrap, knowledge/docit, validate/audit) resolve to the correct side.
+Q3	2	Redundancy margin: cue phrases beyond the minimum discriminators remain (0 = discriminators only, brittle; 2 = ample redundant cues).

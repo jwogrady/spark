@@ -1,0 +1,29 @@
+# Skill-routing answer key — representative prompts -> the constitutionally correct skill.
+# correctness = prompts routed to the expected skill / total. Judged per description set.
+# id	prompt	expected
+R01	I want to build a tool that syncs my notes to a wiki - where do I start?	ideate
+R02	Break this problem statement into GitHub issues and a milestone.	plan
+R03	Start coding issue #42.	codify
+R04	Review and harden the diff on this branch before I open a PR.	validate
+R05	Commit this and open the PR.	ship
+R06	I just installed Spark in this repo - set it up for the first time.	onboard
+R07	Scaffold a new FastAPI backend project.	bootstrap
+R08	Turn these meeting notes into an ADR.	knowledge
+R09	Update CLAUDE.md and AGENTS.md to match the repo.	agents-md
+R10	I have a vague idea for a CLI tool; help me figure out what exactly to build.	ideate
+R11	We know the problem; decide the stack and write the issues.	plan
+R12	Pick up the next planned issue and implement it.	codify
+R13	Is this branch ready to merge? Check it over.	validate
+R14	Write the commit message and push what we have.	ship
+R15	New empty repo - get Spark hooks and standards into it.	onboard
+R16	Stand up a Next.js app and wire it into the lifecycle.	bootstrap
+R17	Write up how our deploy process works for the team.	knowledge
+R18	Polish the README so the project attracts stars.	docit
+R19	Audit the whole codebase for problems.	audit
+R20	Document why we chose Postgres over SQLite.	knowledge
+R21	Write launch copy for Hacker News.	docit
+R22	Add our API keys to 1Password and verify the connections.	connect
+R23	The PR got review comments; fix them.	validate
+R24	Record this decision we just made before we lose it.	knowledge
+R25	How do I start with Spark here?	onboard
+R26	Turn what we discovered in this session into a doc.	knowledge

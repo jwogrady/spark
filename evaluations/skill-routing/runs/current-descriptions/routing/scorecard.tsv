@@ -1,0 +1,5 @@
+# grader: model-judged, n=1 (see task.md).
+# id	score	note
+Q1	2	All nine clear triggers still route.
+Q2	2	All six boundary pairs still resolve; every cession clause survived the trim.
+Q3	1	Four literal cue phrases trimmed (R01/R13/R25/R26 notes) - discriminators intact but redundancy margin reduced; a future trim has less slack. Documented, not a flip.
