@@ -249,7 +249,11 @@ main() {
   fi
 
   work="$(mktemp -d)"
-  trap 'rm -rf "$work"' EXIT
+  # The trap fires at process EXIT — after main has returned and its locals are
+  # gone — so it must expand with a default or set -u kills an otherwise
+  # successful run at the finish line (found live in CI; regression-tested).
+  RELEASE_NOTES_WORK="$work"
+  trap 'rm -rf "${RELEASE_NOTES_WORK:-}"' EXIT
   # GitHub bodies arrive CRLF; strip the CR so line-based parsing sees clean lines.
   printf '%s' "$pr" | jq -r '.body' | tr -d '\r' > "$work/body.md"
 
