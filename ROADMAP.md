@@ -173,6 +173,11 @@ implementation is gated on evidence.
 **Status:** Merged (awaiting release) — all deliverables are on `master`; the
 `v0.13.0` release PR is pending a human merge.
 
+> Released as **`v0.13.0`**, not `0.12.0`: v0.12 (research & architecture) cut no
+> version, so the `0.12.0` tag is intentionally skipped to keep the release
+> version aligned with this milestone. The gap is the honest record of a
+> milestone that shipped decisions, not a release.
+
 Efficiency as a measured discipline: no optimization without a baseline, and
 scripts replace model turns only where the work is mechanical. `spark footprint`
 baselines the per-surface context cost (#208); `spark doctor` enforces SKILL.md
