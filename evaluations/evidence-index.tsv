@@ -1,0 +1,22 @@
+# Capability → evaluation-evidence declaration index (ADR-0026).
+#
+# Tab-separated. Lines starting with '#' and blank lines are ignored.
+# One row per capability that has been given a CEF Q4 determination:
+#
+#   capability_id <TAB> requirement <TAB> suite <TAB> topology
+#
+#   capability_id  originating issue number (e.g. 206) or a stable capability id
+#   requirement    'required'  -> must resolve to valid evidence (gate blocks if not)
+#                  'not-required' -> a deliberate CEF decision that graded
+#                                    evaluation is unnecessary (suite/topology empty)
+#   suite          evaluation suite under evaluations/ (e.g. orchestration)
+#   topology       recorded evidence to validate (suite's runs/<topology>/)
+#
+# States: an ABSENT entry is undeclared (advisory during initial adoption);
+# a 'not-required' entry is a deliberate determination; a 'required' entry must
+# resolve to valid evidence. See docs/reference/evaluation.md and ADR-0026.
+#
+# NOTE: the orchestration suite is RESEARCH EVIDENCE, not a shipped capability,
+# so it is intentionally NOT indexed here.
+#
+# capability_id	requirement	suite	topology
