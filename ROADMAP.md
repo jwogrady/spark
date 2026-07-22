@@ -203,23 +203,28 @@ keeping the one-version-behind-milestone-name skew the v0.13 note records.
 
 ---
 
-## v0.15 — model & context efficiency
+## v0.15 — context efficiency & release hardening
 
-**Status:** Planned
+**Status:** In progress
 
-Efficiency across the two axes the v0.13 audit exposed — model tier (cheaper
-models where quality holds) and context tokens (less loaded every session) —
-sequenced so the cheap, certain wins ship first (#284 tracks it). Ship now:
-retune the crew model tiers for spend by hand (#211, no new infra); reduce the
-always-loaded context surfaces — trim the skill descriptions and move heavy
-bodies to `references/` (#293) — then enforce a total footprint budget ratcheted
-from the v0.13 baseline so it can't creep back (#292); and the deterministic
-issue-wiring manifest helper (#214, gated on one live-repo e2e). Run as a
-measured, time-boxed experiment: validate as parallel review roles, adopted only
-if it beats the single-agent baseline, otherwise killed with the result recorded
-(#206). Deferred to backlog: the ADR-0024 capability-selection *infrastructure*
-(#288) — built only once provider-name churn makes the hand-tuned tiers painful,
-or a second consumer needs it.
+The context axis of the v0.13 audit, delivered and then locked in: the skill
+descriptions trimmed and heavy bodies moved to `references/` (#293, shipped on
+`master`), with before/after routing evidence recorded in the governed
+`evaluations/skill-routing/` suite (#313); a total footprint budget ratcheted
+from the post-trim baseline so the reduction can't creep back, plus laziness
+and traceability guards in doctor (#292/#294/#301); the Evaluation surface
+hardened so malformed evidence cannot validate or score (#304/#306); the
+release-truth engine — per-component, label-aware release-notes verification
+(#291) — and the Platform Compatibility Review completed with capability
+discovery fixed for breaking features and an ADR-status advisory (#312/#305);
+and the deterministic issue-wiring manifest helper for the plan skill (#214).
+#284 tracks it; the hardening PR carries everything unmerged.
+
+The **model axis is descoped to backlog with reasons recorded on each issue**:
+retuning crew tiers (#211) is blocked on measured quality evidence, the
+validate-orchestration experiment (#206) awaits an operator-run measurement
+window, and the ADR-0024 capability-selection infrastructure (#288) stays
+unbuilt until its recorded trigger fires.
 
 ---
 
