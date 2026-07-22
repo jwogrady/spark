@@ -46,3 +46,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: bash .github/scripts/release-notes-runner.sh
+      - name: platform compatibility review (advisory)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: bash .github/scripts/platform-compat-runner.sh
