@@ -2074,13 +2074,16 @@ cmd_resume() {
   note() { yellow "    ! $1"; drift=$((drift+1)); }
 
   echo "Where you were${updated:+ (recorded $updated)}:"
-  case "$stage" in
-    ideate|plan|codify|validate|ship) echo "  stage:    $stage" ;;
-    idle) echo "  stage:    idle (between loops)" ;;
-    "") note "no stage recorded" ;;
-    *)  echo "  stage:    $stage"
-        note "not a lifecycle stage (expected ideate|plan|codify|validate|ship|idle)" ;;
-  esac
+  if [ -z "$stage" ]; then
+    note "no stage recorded"
+  elif [ "$stage" = "idle" ]; then
+    echo "  stage:    idle (between loops)"
+  elif is_stage "$stage"; then
+    echo "  stage:    $stage"
+  else
+    echo "  stage:    $stage"
+    note "not a lifecycle stage (expected ${STATE_STAGES// /|})"
+  fi
 
   if [ -n "$problem" ]; then
     echo "  problem:  $problem"
@@ -2379,6 +2382,10 @@ cmd_footprint() {
 # passes the judgment values as key=value pairs; this writes them canonically,
 # merging into any existing state and always re-stamping `updated`.
 STATE_KEYS="stage problem_statement issue branch pr blockers next_action updated"
+# The stage enum, declared once (#273) so cmd_state's validation and cmd_resume's
+# display read one authority instead of each hard-coding the list.
+STATE_STAGES="ideate plan codify validate ship idle"
+is_stage() { case " $STATE_STAGES " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
 
 cmd_state() {
   local usage_line="usage: spark state [--set key=value ...]"
@@ -2429,10 +2436,9 @@ cmd_state() {
       *) red "unknown state key: $key (valid: $STATE_KEYS)"; return 1 ;;
     esac
     if [ "$key" = "stage" ]; then
-      case " ideate plan codify validate ship idle " in
-        *" $val "*) ;;
-        *) red "invalid stage: $val (one of: ideate plan codify validate ship idle)"; return 1 ;;
-      esac
+      if ! is_stage "$val"; then
+        red "invalid stage: $val (one of: $STATE_STAGES)"; return 1
+      fi
     fi
     eval "$key=\$val"
   done
