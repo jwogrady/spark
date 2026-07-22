@@ -1115,9 +1115,10 @@ cmd_doctor() {
     else
       red "  ✗ $fp_summary — trim, or raise the budget in bin/spark with rationale"; errors=$((errors+1))
     fi
-    # Cache stability: the always-loaded prefix must carry no volatile bytes that
-    # would bust Claude Code's prompt cache. Advisory — a legitimate date is rare
-    # but possible, so flag it for a human rather than hard-fail.
+    # Cache stability (heuristic): the always-loaded prefix should not embed a
+    # volatile token (date / "updated" / "as of N") that would bust Claude Code's
+    # prompt cache. Advisory — a legitimate date is rare but possible, and the scan
+    # is a pattern match, so flag it for a human rather than hard-fail.
     if cache_summary="$(fp_cache_stability "$mroot")"; then
       green "  ✓ $cache_summary"
     else
@@ -2288,9 +2289,9 @@ fp_desc_chars() {
   printf '%s' "$total"
 }
 
-# fp_plugin_bytes <plugindir> — total context bytes for one plugin, summed over
-# the SAME surfaces + primitives cmd_footprint uses, so the #292 gate and the
-# #208 audit can never disagree.
+# fp_plugin_bytes <plugindir> — total context bytes for one plugin. cmd_footprint
+# and the #292 doctor gate both call THIS function for the per-plugin total, so
+# the audit's total and the gate's total are the same value by construction.
 fp_plugin_bytes() {
   local p="$1" surface b bl total=0
   for surface in skill-descriptions skills references agents; do
@@ -2324,10 +2325,12 @@ fp_footprint_gate() {
   printf 'marketplace %sB ≤ %sB; every plugin ≤ %sB' "$grand" "$FOOTPRINT_MARKETPLACE_MAX_BYTES" "$FOOTPRINT_PLUGIN_MAX_BYTES"
 }
 
-# fp_cache_stability <repo-root> — flag volatile bytes in the always-loaded
-# surfaces (root CLAUDE.md + every skill description). A date, "last updated",
-# or "as of <n>" in a prefix that is cached every session busts Claude Code's
-# prompt-cache prefix (#292). Echoes one finding per offender; returns 1 if any.
+# fp_cache_stability <repo-root> — a heuristic scan for a volatile token in the
+# always-loaded surfaces: the root CLAUDE.md and each skill's single-line
+# description (multi-line descriptions and non-matching patterns are out of
+# scope). It matches a date / "last updated" / "as of <n>" — such a token in a
+# prefix cached every session would bust Claude Code's prompt-cache prefix
+# (#292). Echoes one finding per offender; returns 1 if any.
 fp_cache_stability() {
   local root="$1" volatile='20[0-9]{2}-[01][0-9]-[0-3][0-9]|[Ll]ast updated|[Gg]enerated on|[Aa]s of [0-9]' f d bad=""
   [ -f "$root/CLAUDE.md" ] && grep -qE "$volatile" "$root/CLAUDE.md" \
@@ -2340,15 +2343,20 @@ fp_cache_stability() {
   printf 'no volatile date/"updated"/"as of" pattern detected in always-loaded surfaces (heuristic)'
 }
 
-# check_reference_laziness <marketplace-root> — enforce progressive disclosure
-# (#294): a SKILL.md must reach its references by LINK (loaded only when the
-# model follows it), never by an eager "read all references first" instruction,
-# and every reference file it ships must actually be linked (an unlinked
-# reference is reached outside the lazy path, or is dead weight). Echoes one
-# finding per offender; returns 1 if any. Factored out for offline testing.
+# check_reference_laziness <marketplace-root> — a static lint for eager-loading
+# anti-patterns (#294), NOT a proof of runtime laziness. It flags a SKILL.md that
+# carries an eager "read all/every references"/"… first" instruction, or ships a
+# references/ file it never links (reached outside the lazy path, or dead weight).
+# It does not detect paraphrased inlining; large inlining is bounded separately by
+# the #209 SKILL.md line budget. Echoes one finding per offender; returns 1 if
+# any. Factored out for offline testing.
 check_reference_laziness() {
   local root="$1" s refdir ref base rc=0
-  local eager='read (all|every|the) references( first)?|load (all|every|the) references|read every file in references'
+  # Only clearly-EAGER phrasings — "read all/every references", "read the
+  # references first", "load all references". A bare "read the references" is
+  # legitimate lazy guidance ("read the X reference when you need it"), so it must
+  # not trip an ERROR.
+  local eager='read (all|every)( the)? references|read the references first|load (all|every)( the)? references|read every file in references'
   while IFS= read -r s; do
     [ -f "$s" ] || continue
     grep -qiE "$eager" "$s" && { echo "  ${s#"$root"/}: instructs eager reference loading"; rc=1; }
@@ -2365,7 +2373,7 @@ check_reference_laziness() {
 
 # check_traceability_templates <repo-root> — the Capability-Traceability prompt
 # the CEF collects through (#296, ADR-0025/0026) must stay present in the
-# contribution templates, so a later edit cannot silently drop the seam. Verifies
+# contribution templates, so an edit that removes the field/section is caught. Verifies
 # the feature + skill issue templates carry the capability_traceability field and
 # the PR template carries the traceability section. Echoes findings; returns 1.
 check_traceability_templates() {
@@ -2514,16 +2522,18 @@ cmd_footprint() {
         b="${bl% *}"; l="${bl#* }"
       fi
       t=$((b / FOOTPRINT_CPT))
-      p_b=$((p_b + b)); p_l=$((p_l + l))
+      p_l=$((p_l + l))
       if [ -n "$json" ]; then
         json_surfaces="${json_surfaces}${json_surfaces:+,}\"${surface}\":{\"bytes\":${b},\"lines\":${l},\"tokens\":${t}}"
       else
         printf '  %-20s %8s %7s %9s\n' "$surface" "$b" "${l/#0/—}" "$t"
       fi
     done
-    # Totals derive their token estimate from summed bytes, not from summing the
-    # per-surface floors — so total tokens always equals total bytes ÷ 4 and a
-    # budget check (#209) reads one consistent rule.
+    # The per-plugin byte total comes from fp_plugin_bytes — the same function the
+    # #292 doctor gate uses — so the audit and the gate share one summation
+    # authority. Token estimate derives from summed bytes, so the total equals
+    # bytes ÷ FOOTPRINT_CPT and the budget check reads one consistent rule.
+    p_b="$(fp_plugin_bytes "$p")"
     p_t=$((p_b / FOOTPRINT_CPT))
     g_b=$((g_b + p_b)); g_l=$((g_l + p_l))
     if [ -n "$json" ]; then

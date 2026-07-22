@@ -71,4 +71,21 @@ EOF
 rc=0; out="$(fp_cache_stability "$mkt")" || rc=$?
 assert_rc "volatile description is flagged" 1 "$rc"
 
+# --- CONTRACT: gate and audit share ONE summation authority. The sum of
+# fp_plugin_bytes over the plugins (what the #292 gate uses) must equal the
+# marketplace total `spark footprint --root` reports (the audit). Single source
+# → they cannot drift. Rebuild clean fixtures first (the cases above mutated them).
+rm -f "$mkt/CLAUDE.md"
+cat > "$mkt/plugins/p1/skills/a/SKILL.md" <<'EOF'
+---
+name: a
+description: short
+---
+body
+EOF
+sum=0
+for d in "$mkt"/plugins/*/; do sum=$((sum + $(fp_plugin_bytes "$d"))); done
+audit="$("$SPARK" footprint --root "$mkt" --json | sed -E 's/.*"total":\{"bytes":([0-9]+).*/\1/')"
+[ "$sum" = "$audit" ] && ok || bad "gate summation ($sum) != footprint audit total ($audit) — authority drift"
+
 finish

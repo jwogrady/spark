@@ -180,5 +180,32 @@ rc=0; out="$(eval_main validate t1 2>&1)" || rc=$?
   && ok || bad "missing rates table must be caught ($rc: $out)"
 printf 'm1\t3\t6\n' > "$work/rates.tsv"
 
+# ============================================================================
+# CONTRACT (not message) guarantees.
+# ============================================================================
+# score consumes the SAME authority as validate: it must refuse to emit any
+# metric from evidence validate would reject (no bypass / coercion path). This
+# is the guarantee, independent of wording.
+good_findings; good_scorecard; good_run
+printf 'A1\t2\nA2\t0\n' > "$work/runs/t1/g1/findings.tsv"   # caught=2 is invalid
+rc=0; out="$(eval_main score t1 2>&1)" || rc=$?
+if [ "$rc" -eq 0 ]; then bad "score must refuse invalid evidence, exited 0 ($out)"; else ok; fi
+case "$out" in *"Test suite — topology"*) bad "score emitted its metric table on invalid evidence ($out)" ;; *) ok ;; esac
+good_findings
+
+# duplicate key in run.tsv is rejected rather than silently first-match-resolved.
+printf 'model\tm1\nmodel\tm2\ntokens_in\t1\ntokens_out\t1\ntokens_method\testimate\nlatency_seconds\t1\nlatency_method\tmeasured\n' > "$work/runs/t1/g1/run.tsv"
+rc=0; out="$(eval_main validate t1 2>&1)" || rc=$?
+{ [ "$rc" -ne 0 ] && case "$out" in *"duplicate key 'model'"*) true ;; *) false ;; esac; } \
+  && ok || bad "duplicate run.tsv key must be rejected ($rc: $out)"
+good_run
+
+# a duplicate model row in the rates table is rejected (ambiguous).
+printf 'm1\t3\t6\nm1\t9\t9\n' > "$work/rates.tsv"
+rc=0; out="$(eval_main validate t1 2>&1)" || rc=$?
+{ [ "$rc" -ne 0 ] && case "$out" in *"rows for model 'm1' (ambiguous)"*) true ;; *) false ;; esac; } \
+  && ok || bad "duplicate rate row must be rejected ($rc: $out)"
+printf 'm1\t3\t6\n' > "$work/rates.tsv"
+
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

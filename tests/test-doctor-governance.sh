@@ -36,6 +36,18 @@ rc=0; out="$(check_reference_laziness "$root")" || rc=$?
 assert_rc "unlinked reference fails" 1 "$rc"
 assert_contains "names the unlinked reference" "references/r.md is never linked" "$out"
 
+# tightened regex: bare "read the references" is legitimate lazy prose and must
+# NOT trip an ERROR (only clearly-eager phrasings do).
+mk_skill 'When stuck, read the [detail](references/r.md) reference for edge cases.'
+rc=0; out="$(check_reference_laziness "$root")" || rc=$?
+assert_rc "bare 'read the ... reference' does not false-positive" 0 "$rc"
+
+# but an eager "read all references first" still trips.
+mk_skill 'Read all references first. [detail](references/r.md)'
+rc=0; out="$(check_reference_laziness "$root")" || rc=$?
+assert_rc "'read all references first' trips" 1 "$rc"
+assert_contains "names the eager offender" "eager reference loading" "$out"
+
 # ======================= #301 capability-traceability templates =======================
 troot="$WORK/ttrepo"
 mkdir -p "$troot/.github/ISSUE_TEMPLATE"
