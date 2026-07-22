@@ -27,12 +27,12 @@
 set -euo pipefail
 
 # Changelog-visible conventional types, matching the changelog-sections in
-# release-please-config.json (see docs/explanation/release-ownership.md). docs
-# is visible — documentation is part of the product; the build-process types
-# (chore/refactor/test/build/ci/style) stay hidden as noise. Keep this list, the
-# config, and that doc in lockstep: they are the one definition of "user-facing
-# in the changelog".
-VISIBLE_TYPES="feat fix perf revert docs"
+# release-please-config.json (see docs/explanation/release-ownership.md). Spark's
+# committed vocabulary is six types (feat fix docs chore refactor test); of those
+# feat/fix/docs are visible (docs is part of the product) and chore/refactor/test
+# are hidden as build-process noise. Keep this list, the config, and that doc in
+# lockstep — doctor enforces it (#270).
+VISIBLE_TYPES="feat fix docs"
 
 usage() {
   echo "usage: release-notes-check.sh --commits <file> --notes <file>" >&2

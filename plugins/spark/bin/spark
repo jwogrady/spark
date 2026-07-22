@@ -778,18 +778,47 @@ cmd_doctor() {
       red "  ✗ ${2#"$repo_root"/}: $3"; errors=$((errors+1)); return 1
     }
 
-    # (a) The conventional-commit type list must be one set everywhere.
-    local hook_types cm_types am_types
+    # (a) The conventional-commit type list must be one set everywhere it is
+    # stated: the hook that enforces it, both agent contracts, and the hooks
+    # reference that documents it (#270 — hooks.md was previously excluded).
+    local hook_types cm_types am_types hm_types
     # Each extraction ends in || true: with pipefail, a surface that lost its
     # rule would otherwise abort doctor instead of being reported as drift.
     hook_types="$(grep -oE '\(feat\|[a-z|]+\)' "$cmsg" 2>/dev/null | head -n1 | tr -d '()' | tr '|' '\n' | sort | tr '\n' ' ' || true)"
     cm_types="$(grep -i 'conventional commits' "$cm" | grep -oE '`[a-z]+:`' | tr -d '`:' | sort | tr '\n' ' ' || true)"
     am_types="$(grep -i 'conventional commits' "$am" | grep -oE '`[a-z]+:`' | tr -d '`:' | sort | tr '\n' ' ' || true)"
-    if [ -n "$hook_types" ] && [ "$hook_types" = "$cm_types" ] && [ "$hook_types" = "$am_types" ]; then
-      green "  ✓ commit types agree across commit-msg, CLAUDE.md, AGENTS.md (${hook_types% })"
+    hm_types="$(grep -oE 'feat\|[a-z|]+' "$SPARK_ROOT/docs/reference/hooks.md" 2>/dev/null | head -n1 | tr '|' '\n' | sort | tr '\n' ' ' || true)"
+    if [ -n "$hook_types" ] && [ "$hook_types" = "$cm_types" ] && [ "$hook_types" = "$am_types" ] && [ "$hook_types" = "$hm_types" ]; then
+      green "  ✓ commit types agree across commit-msg, CLAUDE.md, AGENTS.md, hooks.md (${hook_types% })"
     else
-      red "  ✗ commit type lists drift — commit-msg: [${hook_types% }] CLAUDE.md: [${cm_types% }] AGENTS.md: [${am_types% }]. Align the list on all three surfaces."
+      red "  ✗ commit type lists drift — commit-msg: [${hook_types% }] CLAUDE.md: [${cm_types% }] AGENTS.md: [${am_types% }] hooks.md: [${hm_types% }]. Align the list on all four surfaces."
       errors=$((errors+1))
+    fi
+
+    # (a2) The release changelog vocabulary must stay in lockstep with the one
+    # commit-type table (#270): every changelog-sections type must be a type the
+    # hook accepts, and the visible subset must equal release-notes-check.sh's
+    # VISIBLE_TYPES. jq-gated — a Spark-repo self-check, skipped (not failed)
+    # without jq, like the other JSON-shape checks.
+    local rp_config="$repo_root/release-please-config.json"
+    local rn_check="$repo_root/.github/scripts/release-notes-check.sh"
+    if [ -f "$rp_config" ] && [ -f "$rn_check" ] && [ -n "$hook_types" ]; then
+      if command -v jq >/dev/null 2>&1; then
+        local cl_all cl_vis rn_vis t missing=""
+        cl_all="$(jq -r '.["changelog-sections"][].type' "$rp_config" 2>/dev/null | sort | tr '\n' ' ' || true)"
+        cl_vis="$(jq -r '.["changelog-sections"][] | select(.hidden != true) | .type' "$rp_config" 2>/dev/null | sort | tr '\n' ' ' || true)"
+        rn_vis="$(grep -E '^VISIBLE_TYPES=' "$rn_check" | sed -E 's/^VISIBLE_TYPES="?([^"]*)"?.*/\1/' | tr ' ' '\n' | sort | tr '\n' ' ' || true)"
+        for t in $cl_all; do case " $hook_types " in *" $t "*) ;; *) missing="$missing $t" ;; esac; done
+        if [ -n "$missing" ]; then
+          red "  ✗ changelog-sections references type(s) the commit-msg hook rejects:${missing}. Restrict to the committed vocabulary [${hook_types% }]."; errors=$((errors+1))
+        elif [ "$cl_vis" != "$rn_vis" ]; then
+          red "  ✗ changelog visible set drifts — config: [${cl_vis% }] vs release-notes-check.sh: [${rn_vis% }]. Align them."; errors=$((errors+1))
+        else
+          green "  ✓ changelog vocabulary ⊆ commit types; visible set matches release-notes-check.sh (${cl_vis% })"
+        fi
+      else
+        yellow "  ! jq absent — skipping the changelog-vocabulary lockstep check"; warnings=$((warnings+1))
+      fi
     fi
 
     # (b) AI-attribution prohibition: implemented in the hook, documented twice.
