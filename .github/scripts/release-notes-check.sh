@@ -70,6 +70,11 @@ has_feature_label() { # has_feature_label <comma-separated-labels>
 notes_lc="$(tr '[:upper:]' '[:lower:]' < "$notes")"
 subject_in_notes() { # subject_in_notes <subject>
   local needle; needle="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+  case "$notes_lc" in *"$needle"*) return 0 ;; esac
+  # A squash-merge subject often ends in " (#NNN)", which Release Please
+  # linkifies to "([#NNN](url))" in the notes — so the literal subject won't
+  # substring-match. Retry with that trailing PR reference stripped.
+  needle="$(printf '%s' "$needle" | sed -E 's/ *\(#[0-9]+\)$//')"
   case "$notes_lc" in *"$needle"*) return 0 ;; *) return 1 ;; esac
 }
 

@@ -55,6 +55,14 @@ fix	stop the crash	bug" \
 * stop the crash (#11)" \
   "omission: docs: rewrite the release-ownership explanation"
 
+# --- a squash-merge subject ending in " (#NNN)" is NOT a false omission: the
+# notes linkify the number, so match must tolerate the decoration.
+check 0 "trailing PR-number subject matches the linkified notes" \
+"fix	stop the crash on empty input (#256)	bug" \
+"## Bug Fixes
+* stop the crash on empty input ([#256](https://x/256)) ([abc](https://x/abc)), closes [#224]" \
+  "release-notes: complete"
+
 # --- omission: a visible feat is missing from the notes.
 check 1 "missing feature flagged" \
 "feat	surface milestone-gated readiness	feature
