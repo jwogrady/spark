@@ -34,6 +34,7 @@ preferences|cmd_preferences|Show the resolved engineering standard; --apply carr
 resume|cmd_resume|Rebuild where the lifecycle left off from .spark/state.json
 version|cmd_version|Print the Spark plugin version
 brief|cmd_brief|Print the session brief: orient, locate, load (--short for the SessionStart hook)
+state|cmd_state|Show or write the work state (.spark/state.json); --set key=value records a stage close-out
 footprint|cmd_footprint|Measure Spark'\''s context footprint per surface (core + companions); --json for machine-readable
 orient|cmd_orient|Classify this repo as new, existing, or ambiguous before setup; --set records the decision
 help|usage|Show this help'
@@ -2177,6 +2178,90 @@ cmd_footprint() {
     fi
   fi
   return 0
+}
+
+# state (#210): the mechanical half of the work-state write. The lifecycle
+# skills decide WHAT to record — the issue picked, the blockers, the next action
+# — and that judgment stays with the model. But formatting valid one-level JSON,
+# stamping `updated`, and keeping the key set stable is mechanical, and a
+# hand-written file drifts from the schema (docs/reference/state.md). The skill
+# passes the judgment values as key=value pairs; this writes them canonically,
+# merging into any existing state and always re-stamping `updated`.
+STATE_KEYS="stage problem_statement issue branch pr blockers next_action updated"
+
+cmd_state() {
+  local usage_line="usage: spark state [--set key=value ...]"
+  local do_set=0 pairs=()
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --set) do_set=1 ;;
+      -h|--help) echo "$usage_line"; return 0 ;;
+      *=*) pairs+=("$1") ;;
+      *) red "unknown option: $1"; echo "$usage_line"; return 1 ;;
+    esac
+    shift
+  done
+
+  local top
+  if ! top="$(git rev-parse --show-toplevel 2>/dev/null)"; then
+    red "spark state needs a git repo — run it from inside the project."
+    return 1
+  fi
+  local state="$top/.spark/state.json"
+
+  # Load any existing state into per-key shell vars (empty when unset).
+  local stage='' problem_statement='' issue='' branch='' pr='' blockers='' next_action='' updated='' k v
+  if [ -f "$state" ]; then
+    while IFS=$'\t' read -r k v; do
+      case "$k" in
+        stage) stage="$v" ;; problem_statement) problem_statement="$v" ;;
+        issue) issue="$v" ;; branch) branch="$v" ;; pr) pr="$v" ;;
+        blockers) blockers="$v" ;; next_action) next_action="$v" ;; updated) updated="$v" ;;
+      esac
+    done < <(read_flat_json "$state")
+  fi
+
+  # Show mode: print the resolved key=value lines, stable order, and stop.
+  if [ "$do_set" -eq 0 ]; then
+    [ -f "$state" ] || { yellow "no work state at .spark/state.json"; return 0; }
+    for k in $STATE_KEYS; do eval "printf '%s=%s\n' \"\$k\" \"\${$k}\""; done
+    return 0
+  fi
+
+  # Set mode: merge the passed judgment values, validating each key and the
+  # stage enum, then always re-stamp `updated`.
+  local pair key val
+  for pair in "${pairs[@]}"; do
+    key="${pair%%=*}"; val="${pair#*=}"
+    case " $STATE_KEYS " in
+      *" $key "*) ;;
+      *) red "unknown state key: $key (valid: $STATE_KEYS)"; return 1 ;;
+    esac
+    if [ "$key" = "stage" ]; then
+      case " ideate plan codify validate ship idle " in
+        *" $val "*) ;;
+        *) red "invalid stage: $val (one of: ideate plan codify validate ship idle)"; return 1 ;;
+      esac
+    fi
+    eval "$key=\$val"
+  done
+  updated="$(date +%F)"
+
+  # Write canonical one-level JSON in the schema's key order. Values are escaped
+  # for the two JSON metacharacters that can appear in a one-line string.
+  mkdir -p "$top/.spark" || { red "could not create $top/.spark"; return 1; }
+  json_escape() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+  {
+    printf '{\n'
+    local first=1
+    for k in $STATE_KEYS; do
+      eval "v=\${$k}"
+      [ "$first" -eq 1 ] && first=0 || printf ',\n'
+      printf '  "%s": "%s"' "$k" "$(json_escape "$v")"
+    done
+    printf '\n}\n'
+  } > "$state" || { red "could not write $state"; return 1; }
+  green "state: $state (stage ${stage:-?}, updated $updated)"
 }
 
 verb="${1:-help}"

@@ -43,10 +43,9 @@ feature, not a task list.
    roadmap gap is a planning blocker: report it with the smallest human
    decision needed; never guess a priority or version.
 7. **Confirm before creating anything on GitHub.**
-8. **Carry the state forward.** Update `.spark/state.json`
-   ([schema](../../docs/reference/state.md)): `stage` `plan`, `issue` the number
-   picked for codify (`""` until one is — GitHub owns the backlog),
-   `next_action`, `updated`.
+8. **Carry the state forward.** Record the close-out with
+   `spark state --set stage=plan issue=<number picked for codify, or issue="" until one is — GitHub owns the backlog> next_action="<…>"`
+   (writes `.spark/state.json`, [schema](../../docs/reference/state.md); `updated` is stamped for you).
 
 ## Creating the issues
 

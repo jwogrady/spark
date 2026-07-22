@@ -36,10 +36,9 @@ rules mechanically; this skill produces a commit and PR that pass the first time
    - How it was verified (tests run, app exercised).
    - Anything reviewers should look at closely.
 6. **Report the PR URL** back to the user.
-7. **Carry the state forward.** Update `.spark/state.json`
-   ([schema](../../docs/reference/state.md)): `stage` `ship`, `pr` the number
-   (digits only), `blockers` `""`, `next_action` (normally merging the PR),
-   `updated`.
+7. **Carry the state forward.** Record the close-out with
+   `spark state --set stage=ship pr=<number, digits only> blockers="" next_action="<normally merging the PR>"`
+   (writes `.spark/state.json`, [schema](../../docs/reference/state.md); `updated` is stamped for you).
 
 ## Releases: defer to Release Please
 
