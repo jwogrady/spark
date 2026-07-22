@@ -43,6 +43,47 @@ record* around that machinery — it never recreates release management.
 - [ ] **Blockers vs follow-ups are named.** Release blockers are called out;
       safe post-release follow-ups are recorded as issues, not held.
 
+## Platform Compatibility Review — the manual half (Constitution Article VII)
+
+Article VII makes the Platform Compatibility Review a permanent pre-release
+gate. Half of it is automated; this section is the **other half — the checks a
+human performs before approving each release**, because they are judgment calls
+against surfaces that live outside this repository. Do not expect a script to
+cover them; none does, by design (#305 split them out of #300 explicitly).
+
+- [ ] **Deletion-Test census against the *current* platform surfaces.** For
+      each Spark club (skill, hook, CLI verb), ask: does a native Claude Code
+      or GitHub tool *now* duplicate it? If yes, Spark retires its club — the
+      host evolving is the signal to update Spark, not a break. This cannot be
+      automated deterministically: the oracle is Anthropic's and GitHub's
+      currently shipping feature set, which changes without leaving any signal
+      in this repo, and "duplicates" is a product judgment (Mission and User
+      Value can outvote a Deletion-Test failure — see
+      `docs/governance/capability-evaluation.md` in the Spark repo).
+- [ ] **External host guidance still exists.** Every upstream document, spec,
+      or platform behavior Spark's docs and skills reference is still published
+      and still says what Spark claims it says. Again human judgment: link
+      liveness could be scripted, but "the guidance still supports the claim"
+      cannot.
+
+Two Article VII clauses are **not** on this manual list because they are
+already mechanical:
+
+- *"Every enforced mechanism still fires"* is covered by the milestone gate,
+  which requires the `doctor` and `tests` CI checks green on the Release
+  Please PR head before reporting ready. It is not re-checked by hand here.
+- *"Every Accepted, experiment-gated ADR has a status matching its
+  experiment's verdict"* is the automated half's ADR-status advisory:
+  `.github/scripts/platform-compat-check.sh` (run on the Release Please PR by
+  `.github/scripts/platform-compat-runner.sh`, offline-tested by
+  `tests/test-platform-compat-check.sh`) verifies declared capability-evaluation
+  evidence and flags any ADR whose Status-line gate issues have all closed,
+  asking a human to *confirm* the status — a labeled heuristic prompt, never a
+  verdict, and never a gate-blocker.
+
+Record the outcome of the two manual checks in the release approval (a PR
+comment is enough): what was censused, what was retired or kept, and why.
+
 ## After Release Please releases
 
 - [ ] **Verify the release incorporated the intended content** — version,
