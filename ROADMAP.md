@@ -203,20 +203,23 @@ keeping the one-version-behind-milestone-name skew the v0.13 note records.
 
 ---
 
-## v0.15 — orchestration
+## v0.15 — model & context efficiency
 
 **Status:** Planned
 
-Follows v0.12's ratified architecture, sequenced so the cheap, certain value
-ships first and speculative infrastructure stays deferred until evidence
-justifies it (#284 tracks it). Ship now: retune the crew model tiers for spend
-by hand — no new infra, savings on the next session (#211) — and the
-deterministic issue-wiring manifest helper (#214, gated on one live-repo e2e).
-Run as a measured, time-boxed experiment: validate as parallel review roles,
-adopted only if it beats the single-agent baseline, otherwise killed with the
-result recorded (#206). Deferred to backlog: the ADR-0024 capability-selection
-*infrastructure* (#288) — built only once provider-name churn makes the
-hand-tuned tiers painful, or a second consumer needs it.
+Efficiency across the two axes the v0.13 audit exposed — model tier (cheaper
+models where quality holds) and context tokens (less loaded every session) —
+sequenced so the cheap, certain wins ship first (#284 tracks it). Ship now:
+retune the crew model tiers for spend by hand (#211, no new infra); reduce the
+always-loaded context surfaces — trim the skill descriptions and move heavy
+bodies to `references/` (#293) — then enforce a total footprint budget ratcheted
+from the v0.13 baseline so it can't creep back (#292); and the deterministic
+issue-wiring manifest helper (#214, gated on one live-repo e2e). Run as a
+measured, time-boxed experiment: validate as parallel review roles, adopted only
+if it beats the single-agent baseline, otherwise killed with the result recorded
+(#206). Deferred to backlog: the ADR-0024 capability-selection *infrastructure*
+(#288) — built only once provider-name churn makes the hand-tuned tiers painful,
+or a second consumer needs it.
 
 ---
 
