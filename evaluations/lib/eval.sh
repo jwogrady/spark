@@ -128,26 +128,41 @@ eval_check_scores() {
     END { print p+0 }' "$2" "$1"
 }
 
-# eval_check_run <run.tsv> <rates> <group> — the run facts scoring reads must be
-# present and resolvable: the required keys exist and the model is in the rates
-# table (so a malformed run fails validate, not silently at score time). Count
-# to stdout; offenders to stderr.
+# eval_check_run <run.tsv> <rates> <group> — the run facts scoring feeds into awk
+# arithmetic must be present AND numeric, or awk silently coerces non-numeric
+# text to 0 and publishes a wrong cost/latency as though it were valid. So:
+# tokens_in, tokens_out, latency_seconds must be non-negative numbers; the model
+# must exist and resolve to numeric in/out rates. Count to stdout; offenders to
+# stderr.
 eval_check_run() {
-  local run="$1" rates="$2" g="$3" k v model p=0
-  for k in model tokens_in tokens_out latency_seconds; do
-    v="$(eval_kv "$run" "$k")"
-    [ -n "$v" ] || { echo "  invalid: $g run.tsv missing key '$k'" >&2; p=$((p+1)); }
-  done
+  local run="$1" rates="$2" g="$3" key val model rin rout p=0
+  local num='^[0-9]+(\.[0-9]+)?$'
   model="$(eval_kv "$run" model)"
+  [ -n "$model" ] || { echo "  invalid: $g run.tsv missing key 'model'" >&2; p=$((p+1)); }
+  for key in tokens_in tokens_out latency_seconds; do
+    val="$(eval_kv "$run" "$key")"
+    if [ -z "$val" ]; then
+      echo "  invalid: $g run.tsv missing key '$key'" >&2; p=$((p+1))
+    elif ! printf '%s' "$val" | grep -qE "$num"; then
+      echo "  invalid: $g run.tsv $key=\"$val\" (want a non-negative number)" >&2; p=$((p+1))
+    fi
+  done
   if [ -n "$model" ] && [ -f "$rates" ]; then
-    awk -F'\t' -v m="$model" '$1==m{f=1} END{exit !f}' "$rates" \
-      || { echo "  invalid: $g run.tsv model '$model' not in rates table" >&2; p=$((p+1)); }
+    rin="$(awk -F'\t' -v m="$model" '$1==m{print $2; exit}' "$rates")"
+    rout="$(awk -F'\t' -v m="$model" '$1==m{print $3; exit}' "$rates")"
+    if [ -z "$rin" ]; then
+      echo "  invalid: $g run.tsv model '$model' not in rates table" >&2; p=$((p+1))
+    else
+      printf '%s' "$rin"  | grep -qE "$num" || { echo "  invalid: $g rates in-rate for '$model' non-numeric (\"$rin\")"  >&2; p=$((p+1)); }
+      printf '%s' "$rout" | grep -qE "$num" || { echo "  invalid: $g rates out-rate for '$model' non-numeric (\"$rout\")" >&2; p=$((p+1)); }
+    fi
   fi
   echo "$p"
 }
 
 eval_validate() {
   local topology="${1:-$EVAL_DEFAULT_TOPOLOGY}" problems=0 g ak fnd rb sc run f n
+  [ -f "$EVAL_RATES" ] || { echo "  missing rates table: $EVAL_RATES" >&2; problems=$((problems+1)); }
   for g in $EVAL_GROUPS; do
     ak="$EVAL_FIXTURES/$g/answer-key.tsv"
     fnd="$EVAL_RUNS/$topology/$g/findings.tsv"

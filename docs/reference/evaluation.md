@@ -45,10 +45,14 @@ diffable and `jq`-free.
 `validate` enforces both shape and value integrity: findings must have one row
 per answer-key item and scorecard one per rubric dimension (matching column-1
 ids); `caught` must be exactly `0`/`1`; each score must be a non-negative number
-within its rubric max; every rubric max must be a positive number; and `run.tsv`
-must carry the required keys with a model present in the rates table — or the run
-is not well-formed. This is what the release gate consumes, so malformed metric
-evidence can never pass as a green release-readiness result.
+within its rubric max; every rubric max must be a positive number; and every
+number scoring reads — `tokens_in`/`tokens_out`/`latency_seconds` and the model's
+in/out rates — must be a present, non-negative number (otherwise awk would coerce
+it to 0 and publish a silently wrong figure). Any of these failing means the run
+is not well-formed. This is what the release gate consumes, so a run carrying a
+malformed metric or run-fact value cannot pass validation, and therefore cannot
+reach a green release-readiness result. (Free-text fields such as notes and the
+`*_method` labels are not scored and are not validated.)
 
 ## The four metrics
 

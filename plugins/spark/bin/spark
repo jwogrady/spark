@@ -1129,7 +1129,7 @@ cmd_doctor() {
     echo "Reference laziness:"
     local ref_out
     if ref_out="$(check_reference_laziness "$mroot")"; then
-      green "  ✓ every skill links its references; none loaded eagerly"
+      green "  ✓ every reference file is linked; no eager-load instruction found (inlining is bounded by the #209 line budget)"
     else
       red "  ✗ progressive disclosure broken:"; printf '%s\n' "$ref_out"; errors=$((errors+1))
     fi
@@ -2337,7 +2337,7 @@ fp_cache_stability() {
     printf '%s' "$d" | grep -qE "$volatile" && bad="${bad} ${f#"$root"/}"
   done < <(find "$root/plugins" -type f -name 'SKILL.md' 2>/dev/null | sort)
   if [ -n "$bad" ]; then printf 'volatile bytes in always-loaded surface(s):%s' "$bad"; return 1; fi
-  printf 'always-loaded surfaces carry no volatile bytes'
+  printf 'no volatile date/"updated"/"as of" pattern detected in always-loaded surfaces (heuristic)'
 }
 
 # check_reference_laziness <marketplace-root> — enforce progressive disclosure
