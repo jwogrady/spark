@@ -1,6 +1,6 @@
 ---
 name: ship
-description: Land a reviewed change — write a conventional commit (imperative subject under 72 chars, why-not-what body, no AI attribution), push the branch, and open one focused pull request. Use when the user wants to commit, write a commit message, push, or open a PR for finished work. Not for writing the code (`codify`) or running the reviews (`validate`) — it assumes an already-reviewed change.
+description: Land a reviewed change — write a conventional commit, push the branch, and open one focused pull request. Use to commit, write a commit message, push, or open a PR for finished work. Not for writing the code (`codify`) or running the reviews (`validate`); it assumes an already-reviewed change.
 ---
 
 # ship — Stage 5 of the Spark lifecycle
@@ -50,23 +50,11 @@ your conventional commit types are the release input, and merging the
 release-PR that Release Please maintains is the release act — a human decision.
 
 **Fallback — repos without Release Please only,** and only with explicit user
-go-ahead (never cut a tag or Release unprompted): derive the bump from the
-commit types in the range per the version ladder in
-[`docs/explanation/sdlc-doctrine.md`](../../docs/explanation/sdlc-doctrine.md)
-(`feat:` → minor; `fix:`/`docs:`/`chore:`/`refactor:`/`test:` → patch; `!` or
-`BREAKING CHANGE:` → major; take the highest), then in order: roll
-`[Unreleased]` into a dated `vX.Y.Z` section, bump the version file, annotated
-tag, `gh release create` with the CHANGELOG section as notes, fresh
-`[Unreleased]`.
-
-Non-version-bumping ships still update `[Unreleased]` when behavior changed.
-
-**A changelog records what changed in the product, not how it was built.** Every
-`[Unreleased]` entry describes a user-facing change — a feature, fix, or
-behavior. It is not a process journal: never log phase transitions ("Completed
-Phase 1 — Plan"), grill reviews, QC passes, planning bookkeeping, or `/spark:`
-stage activity. If an entry only makes sense to someone running the Spark
-lifecycle, it does not belong in the changelog.
+go-ahead (never cut a tag or Release unprompted): derive the bump from the commit
+types per the version ladder, roll `[Unreleased]` into a dated `vX.Y.Z` section,
+bump the version file, tag, and `gh release create`. The full steps and the
+changelog-records-product-not-process rule are in
+[references/release-fallback.md](references/release-fallback.md).
 
 ## Hard rules (the hook will reject violations)
 

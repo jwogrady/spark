@@ -1,6 +1,6 @@
 ---
 name: bootstrap
-description: Scaffold a new project's runtime with config options — choose frontend/backend and framework, run the canonical scaffolder with Bun (TypeScript) or uv (Python) defaults, and wire it into the Spark lifecycle. Use when starting a new project, scaffolding a runtime, or setting up a frontend/backend stack. Not for wiring services or secrets (the spark-connect companion plugin), nor framing/planning the work (`ideate`/`plan`).
+description: Scaffold a new project's runtime — choose frontend/backend and framework, run the canonical scaffolder (Bun or uv defaults), and wire it into the lifecycle. Use when starting a new project or setting up a frontend/backend stack. Not for wiring services or secrets (`spark-connect`), nor framing/planning (`ideate`/`plan`).
 ---
 
 # bootstrap — runtime scaffold

@@ -1,6 +1,6 @@
 ---
 name: agents-md
-description: Create, maintain, audit, and sync a repo's AI-agent behavioral-contract files — AGENTS.md (any agent) and CLAUDE.md (Claude Code). Use when the user wants to write, update, audit, or drift-check AGENTS.md or CLAUDE.md. Defers net-new CLAUDE.md creation to native /init. Not for prose docs — use `docit` (public) or `knowledge` (internal); this owns the agent-contract files only.
+description: Create, maintain, audit, and sync a repo's AI-agent contract files — AGENTS.md (any agent) and CLAUDE.md (Claude Code). Use to write, update, audit, or drift-check AGENTS.md or CLAUDE.md. Defers net-new CLAUDE.md creation to native /init. Not prose docs — use `docit` (public) or `knowledge` (internal).
 ---
 
 # agents-md — the agent behavioral-contract skill
@@ -30,37 +30,15 @@ do:
 For a brand-new `CLAUDE.md`, run `/init` first, then this skill to enforce the
 Spark sections and generate the matching `AGENTS.md`.
 
-## The shared behavioral contract
+## What both files carry
 
-Both files carry these non-negotiable rules (restated in plain language for
-`AGENTS.md`, in fuller context for `CLAUDE.md`):
-
-- **Attribution.** Credit the human author only. No AI tool names, no
-  `Co-Authored-By` lines for AI systems, in any commit, file, doc, or changelog.
-- **Branch & PR discipline.** Never commit to `master`/`main` directly; feature
-  branch → focused PR; one concern per PR.
-- **Commits.** Conventional commits; imperative subject under 72 chars, no trailing
-  period; body explains *why*.
-- **Destructive actions need confirmation.** Deleting files, force-pushing or
-  resetting history, removing dependencies, dropping data, editing CI.
-- **GitHub boundary.** Read GitHub state freely; never open/close/comment on
-  issues or PRs, create tags/releases, or edit workflows without explicit
-  instruction.
-- **Scope discipline.** Do only what was asked; no opportunistic refactors, no
-  invented integrations or commands; mark unknowns with a TODO rather than guessing.
-
-## Required sections
-
-**`CLAUDE.md`** (rich, Claude-facing): Project Mission · Repository Purpose · Repo
-Map · Common Commands · Development Workflow · Skill Authoring (Spark repos) ·
-GitHub Integration Guardrails · Coding & Documentation Standards · Commit Rules ·
-Attribution Rules · Destructive Change Rules · Agent Safety Rules.
-
-**`AGENTS.md`** (scannable, tool-agnostic): What This Repo Is · Core Rules · Branch
-and PR Discipline · Code Quality · Documentation · Destructive Actions · Commits ·
-GitHub API and Automation · Scope Discipline · Skill Authoring Quick Reference.
-
-Omit a section only when genuinely not applicable, and note why.
+Both files share one **non-negotiable behavioral contract** — attribution,
+branch/PR discipline, conventional commits, destructive-action confirmation, the
+GitHub boundary, and scope discipline — and a **required-sections** layout (rich
+for `CLAUDE.md`, scannable for `AGENTS.md`). The full contract and the per-file
+section lists are in
+[references/contract-and-sections.md](references/contract-and-sections.md);
+consult it when authoring or auditing, and keep the two files in sync on it.
 
 ## Link the methodology, don't paste it
 
