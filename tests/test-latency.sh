@@ -37,4 +37,18 @@ out="$( cd "$WORK" && LATENCY_BRIEF_MS=0 "$SPARK" doctor 2>&1 )" || rc=$?
 assert_contains "doctor prints the latency advisory" "Latency (advisory" "$out"
 assert_contains "doctor warns on the over-budget brief" "over the 0ms budget" "$out"
 
+# --- #265: on a date without GNU %N (macOS/BSD), timing must degrade, not
+# compute garbage. Inject a fake date that prints a literal 'N' for +%s%N and
+# delegates everything else to the real date by absolute path (no recursion).
+fake="$WORK/fakebin"; mkdir -p "$fake"; realdate="$(command -v date)"
+cat > "$fake/date" <<EOF
+#!/usr/bin/env bash
+if [ "\$1" = "+%s%N" ]; then printf '%sN\n' "\$($realdate +%s)"; else exec $realdate "\$@"; fi
+EOF
+chmod +x "$fake/date"
+bsd_json="$(PATH="$fake:$PATH" "$SPARK" footprint --timing --json 2>/dev/null || true)"
+assert_contains "timing still emits a doctor ms without GNU %N" '"doctor":{"ms":' "$bsd_json"
+bsd_ms="$(printf '%s' "$bsd_json" | sed -n 's/.*"doctor":{"ms":\([0-9][0-9]*\).*/\1/p')"
+[ -n "$bsd_ms" ] && ok || bad "#265: doctor ms is a number under a %N-less date (got '$bsd_ms')"
+
 finish

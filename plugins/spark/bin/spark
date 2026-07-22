@@ -2126,10 +2126,27 @@ fp_desc_chars() {
   printf '%s' "$total"
 }
 
+# now_ms — current time in milliseconds. GNU date has %N; macOS/BSD date does
+# not and prints a literal "N", so detect that and degrade rather than compute
+# garbage (#265): try python3 for millisecond resolution, else fall back to
+# whole seconds (coarse — sub-second reads as 0 — but never wrong).
+now_ms() {
+  local ns
+  ns=$(date +%s%N 2>/dev/null)
+  case "$ns" in
+    ''|*[!0-9]*) ;;                                  # empty or contains 'N' → unsupported
+    *) printf '%s' $(( ns / 1000000 )); return 0 ;;
+  esac
+  if command -v python3 >/dev/null 2>&1; then
+    python3 -c 'import time; print(int(time.time()*1000))' 2>/dev/null && return 0
+  fi
+  printf '%s' $(( $(date +%s) * 1000 ))
+}
+
 # fp_run_ms <fn> — wall-clock milliseconds for one call of a shell function.
 fp_run_ms() {
-  local s e; s=$(date +%s%N); "$1" >/dev/null 2>&1 || true; e=$(date +%s%N)
-  printf '%s' $(( (e - s) / 1000000 ))
+  local s e; s=$(now_ms); "$1" >/dev/null 2>&1 || true; e=$(now_ms)
+  printf '%s' $(( e - s ))
 }
 # fp_median3_ms <fn> — median of three runs, robust to a single outlier.
 fp_median3_ms() {
