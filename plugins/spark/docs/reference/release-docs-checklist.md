@@ -24,7 +24,10 @@ record* around that machinery — it never recreates release management.
       the generated notes, and it flags any visible commit missing from the notes
       and any commit merged under a hidden type whose PR is labeled `feature`.
       Offline-tested by `tests/test-release-notes-check.sh`; #232 is the failure
-      it prevents.
+      it prevents. The **omission** half now runs automatically as an advisory on
+      the Release Please PR (`.github/scripts/release-notes-runner.sh`, wired into
+      the milestone-gate workflow, #261); the **mislabel** half needs per-commit
+      PR labels and stays this manual step.
 - [ ] **README and reference docs describe only merged behavior.** Nothing
       planned is presented as shipped.
 - [ ] **Companion docs** (spark-audit, spark-connect, spark-docs) match their

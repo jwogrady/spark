@@ -34,8 +34,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # release-notes-runner needs the tag..HEAD range
       - name: evaluate milestone gate
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: bash .github/scripts/gate-runner.sh
+      - name: check release-notes completeness (advisory)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: bash .github/scripts/release-notes-runner.sh
