@@ -64,7 +64,7 @@ gh api -X POST "repos/$repo/statuses/$head_sha" \
 marker="<!-- release-notes-check -->"
 existing="$(gh api "repos/$repo/issues/$pr_number/comments" \
   --jq ".[] | select(.body|startswith(\"$marker\")) | .id" 2>/dev/null | head -n1)"
-comment="$(printf '%s\n**Release-notes completeness (advisory)**\n\n```\n%s\n```\n\n(Omission check only — a feature merged under a hidden type still needs the manual release-docs-checklist review.)\n' "$marker" "$out")"
+comment="$(printf '%s\n**Release-notes: core subject-omission check (advisory)**\n\n```\n%s\n```\n\nScope: verifies only that each changelog-visible commit subject in the core `vX.Y.Z` range appears in the notes. It does **not** verify hidden-type mislabels (a feature merged under `chore:`) or companion (audit/connect) releases — those still need the manual release-docs-checklist review.\n' "$marker" "$out")"
 if [ -n "$existing" ]; then
   gh api -X PATCH "repos/$repo/issues/comments/$existing" -f body="$comment" >/dev/null
 else
