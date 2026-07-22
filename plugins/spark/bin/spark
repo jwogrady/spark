@@ -35,7 +35,7 @@ resume|cmd_resume|Rebuild where the lifecycle left off from .spark/state.json
 version|cmd_version|Print the Spark plugin version
 brief|cmd_brief|Print the session brief: orient, locate, load (--short for the SessionStart hook)
 state|cmd_state|Show or write the work state (.spark/state.json); --set key=value records a stage close-out
-footprint|cmd_footprint|Measure Spark'\''s context footprint per surface (core + companions); --json for machine-readable
+footprint|cmd_footprint|Measure Spark'\''s context footprint per surface (--json); --timing gates hot-path latency
 orient|cmd_orient|Classify this repo as new, existing, or ambiguous before setup; --set records the decision
 help|usage|Show this help'
 
@@ -334,6 +334,18 @@ cmd_version() {
 #     (Claude reads every one to choose a skill); it is also the plugin-spec cap.
 SKILL_MD_MAX_LINES=100
 SKILL_DESC_MAX_CHARS=1024
+
+# Latency budgets (#213) — generous wall-clock ceilings for the three hot paths,
+# in milliseconds: the guard hook (every Bash call), the SessionStart brief
+# (every session), and doctor (every push). Set with headroom over a fast dev
+# machine so a slower CI runner does not trip them. Wall clock is machine-
+# dependent, so `spark doctor` only WARNS when a path exceeds its budget;
+# `spark footprint --timing` is the opt-in hard gate meant for a stable machine.
+# Env-overridable so an operator can tune for their machine and tests can force
+# the over-budget path; the values here are the shipped defaults.
+LATENCY_GUARD_MS="${LATENCY_GUARD_MS:-150}"
+LATENCY_BRIEF_MS="${LATENCY_BRIEF_MS:-600}"
+LATENCY_DOCTOR_MS="${LATENCY_DOCTOR_MS:-6000}"
 
 # Lint one SKILL.md's frontmatter and size. The description is the only thing
 # Claude sees when choosing a skill, so its quality is checked here — and both
@@ -951,6 +963,26 @@ cmd_doctor() {
         green "✓ changelog mode matches Release Please (no hand-curated [Unreleased])"
       fi
     fi
+  fi
+
+  # Latency advisory (#213): wall clock is machine-dependent, so this only WARNS
+  # when a hot path exceeds its budget — the hard gate is the opt-in
+  # `spark footprint --timing`. Measures the guard and the brief (cheap, no
+  # recursion); doctor cannot time itself from within, so its own budget is
+  # checked only by that gate.
+  echo
+  echo "Latency (advisory — hard gate: spark footprint --timing):"
+  local d_gms d_bms
+  d_gms=$(fp_run_ms fp_hot_guard); d_bms=$(fp_run_ms fp_hot_brief)
+  if fp_over_budget "$d_gms" "$LATENCY_GUARD_MS"; then
+    yellow "  ! guard hook ${d_gms}ms — over the ${LATENCY_GUARD_MS}ms budget"; warnings=$((warnings+1))
+  else
+    green "  ✓ guard hook ${d_gms}ms (budget ${LATENCY_GUARD_MS}ms)"
+  fi
+  if fp_over_budget "$d_bms" "$LATENCY_BRIEF_MS"; then
+    yellow "  ! session brief ${d_bms}ms — over the ${LATENCY_BRIEF_MS}ms budget"; warnings=$((warnings+1))
+  else
+    green "  ✓ session brief ${d_bms}ms (budget ${LATENCY_BRIEF_MS}ms)"
   fi
 
   echo
@@ -2080,12 +2112,56 @@ fp_desc_chars() {
   printf '%s' "$total"
 }
 
+# fp_run_ms <fn> — wall-clock milliseconds for one call of a shell function.
+fp_run_ms() {
+  local s e; s=$(date +%s%N); "$1" >/dev/null 2>&1 || true; e=$(date +%s%N)
+  printf '%s' $(( (e - s) / 1000000 ))
+}
+# fp_median3_ms <fn> — median of three runs, robust to a single outlier.
+fp_median3_ms() {
+  printf '%s\n' "$(fp_run_ms "$1")" "$(fp_run_ms "$1")" "$(fp_run_ms "$1")" \
+    | sort -n | sed -n '2p'
+}
+# The three hot paths as callable functions, so timing measures a real run.
+fp_hot_guard()  { printf '%s' '{"tool_input":{"command":"ls -la"}}' | bash "$SPARK_ROOT/hooks/guard-bash.sh"; }
+fp_hot_brief()  { "$SPARK_ROOT/bin/spark" brief --short; }
+fp_hot_doctor() { "$SPARK_ROOT/bin/spark" doctor; }
+
+# fp_over_budget <ms> <budget> — pure comparison, factored out so the enforcement
+# rule is unit-testable without a stopwatch. Over budget → return 0 (true).
+fp_over_budget() { [ "$1" -gt "$2" ]; }
+
+# fp_latency <as_json> — measure the three hot paths (median of 3), compare to
+# the LATENCY_*_MS budgets, print human or JSON, and return 1 if any is over.
+fp_latency() {
+  local as_json="$1" gms bms dms over=0 tag
+  gms=$(fp_median3_ms fp_hot_guard)
+  bms=$(fp_median3_ms fp_hot_brief)
+  dms=$(fp_median3_ms fp_hot_doctor)
+  fp_over_budget "$gms" "$LATENCY_GUARD_MS"  && over=1
+  fp_over_budget "$bms" "$LATENCY_BRIEF_MS"  && over=1
+  fp_over_budget "$dms" "$LATENCY_DOCTOR_MS" && over=1
+  if [ -n "$as_json" ]; then
+    printf '{"method":"median-of-3 wall-clock ms","paths":{"guard":{"ms":%s,"budget":%s},"brief":{"ms":%s,"budget":%s},"doctor":{"ms":%s,"budget":%s}}}\n' \
+      "$gms" "$LATENCY_GUARD_MS" "$bms" "$LATENCY_BRIEF_MS" "$dms" "$LATENCY_DOCTOR_MS"
+  else
+    echo "Hot-path latency (median of 3, wall-clock ms — machine-dependent, not exact)"
+    printf '  %-10s %8s %9s\n' path ms budget
+    for tag in "guard $gms $LATENCY_GUARD_MS" "brief $bms $LATENCY_BRIEF_MS" "doctor $dms $LATENCY_DOCTOR_MS"; do
+      set -- $tag
+      printf '  %-10s %8s %9s%s\n' "$1" "$2" "$3" "$(fp_over_budget "$2" "$3" && echo '  OVER BUDGET')"
+    done
+  fi
+  [ "$over" -eq 0 ]
+}
+
 cmd_footprint() {
-  local usage_line="usage: spark footprint [--json] [--root <marketplace-dir>]"
-  local json="" root=""
+  local usage_line="usage: spark footprint [--json] [--timing] [--root <marketplace-dir>]"
+  local json="" root="" timing=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --json) json=1 ;;
+      --timing) timing=1 ;;
       --root) shift; root="${1:-}" ;;
       --root=*) root="${1#--root=}" ;;
       -h|--help) echo "$usage_line"; return 0 ;;
@@ -2093,6 +2169,13 @@ cmd_footprint() {
     esac
     shift
   done
+
+  # Timing mode is the opt-in hard gate: measure the hot paths and exit non-zero
+  # if any exceeds its budget. Kept separate from the size report so each has a
+  # stable machine-readable shape (#209's diff, #213's gate).
+  if [ -n "$timing" ]; then
+    fp_latency "$json"; return $?
+  fi
 
   # Which plugin dirs to measure. --root treats its argument as a marketplace
   # root (…/plugins/*/) so a fixture layout with known sizes is measurable;
