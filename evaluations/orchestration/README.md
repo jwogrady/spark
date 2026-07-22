@@ -13,6 +13,12 @@ This is **not** a pass/fail test suite. It lives outside `tests/` on purpose and
 is not run by `tests/run.sh` — its outputs are graded measurements, not
 assertions.
 
+The reusable contract every suite shares — file formats, the four metrics,
+experiment governance, and the three-instrument boundary — is
+[`../../docs/reference/evaluation.md`](../../docs/reference/evaluation.md). This
+suite is its first consumer: `run.sh` is a thin wrapper that sets this suite's
+policy and delegates all mechanics to [`../lib/eval.sh`](../lib/eval.sh).
+
 ---
 
 ## Why it exists
@@ -36,7 +42,7 @@ without a baseline is opinion. This directory:
 evaluations/orchestration/
 ├── README.md                # this file
 ├── BASELINE.md              # the recorded single-agent measurement + method
-├── run.sh                   # the harness (zero-dep bash + awk)
+├── run.sh                   # thin wrapper over ../lib/eval.sh (zero-dep bash + awk)
 ├── rates.tsv                # model → $/Mtok, for the derived cost metric
 ├── fixtures/
 │   ├── shape/               # framing/planning task
