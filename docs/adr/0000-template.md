@@ -9,6 +9,17 @@ Owner: jwogrady
 > it with a new one and update this one's Status. Capture facts separate from
 > assumptions, and current state separate from intended state.
 
+## Alignment
+
+Trace this decision to the governance layers above it (see
+[../product-constitution.md](../product-constitution.md)). Reference, don't restate.
+
+- **Mission / Constitution / Identity served:** which article(s) and owned surface.
+- **Supersedes / Superseded by:** ADR numbers, or "nothing".
+- **Status tracks evidence:** if this decision's implementation is gated on an
+  experiment, name the experiment and state that this ADR's Status must follow its
+  verdict (re-status; never implement around a killed experiment). Else "n/a".
+
 ## Context
 
 What forced the decision: the problem, the constraints, the relevant prior state.
