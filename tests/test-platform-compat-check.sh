@@ -198,6 +198,16 @@ case "$out" in *"0002-open-gate.md —"*) bad "adr — open-gate ADR must have n
 case "$out" in *"wrong"*) bad "adr — heuristic wording must confirm, never assert wrong ($out)" ;; *) ok ;; esac
 case "$out" in *"gate-state and exit code above are unchanged"*) ok ;; *) bad "adr — findings header states it is advisory-only ($out)" ;; esac
 
+# b2. a recorded verdict IS the confirmation: a Status line carrying
+# "Verdict annotated <date>" (or "verdict confirmed") over the same closed gate
+# must NOT re-prompt — otherwise annotating (the action the prompt asks for)
+# could never resolve the prompt.
+printf '# ADR: annotated\nStatus: Accepted (2026-01-01, at the #901 decision gate - implementation is deferred. Verdict annotated 2026-07-22: slice closed unmeasured; decision stands)\n' > "$adrdir/0005-annotated.md"
+run_adr --adr-dir "$adrdir" --issues "$work/issues.json"
+case "$out" in *"0005-annotated.md —"*) bad "adr — annotated verdict must suppress the prompt ($out)" ;; *) ok ;; esac
+case "$out" in *"0003-closed-gate.md — Status references closed gate issue(s) #901"*) ok ;; *) bad "adr — unannotated closed gate still prompts alongside ($out)" ;; esac
+rm -f "$adrdir/0005-annotated.md"
+
 # c. ADR findings never flip a neutral verdict either.
 printf '%s\n211\tnot-required\t\t\n' "$HDR" > "$work/index.tsv"
 printf '211\n' > "$work/caps.tsv"
