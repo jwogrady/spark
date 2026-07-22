@@ -9,6 +9,48 @@ Keep a Changelog format. Do not hand-edit released sections.
 
 ---
 
+## [0.13.0](https://github.com/jwogrady/spark/compare/v0.11.1...v0.13.0) (2026-07-22)
+
+
+### Features
+
+* add spark footprint to baseline the context cost per surface ([2d56c0b](https://github.com/jwogrady/spark/commit/2d56c0bcdde9ddac4ca58a5ddda12d5a11e098bf)), closes [#208](https://github.com/jwogrady/spark/issues/208)
+* enforce SKILL.md size budgets in doctor ([ed852e1](https://github.com/jwogrady/spark/commit/ed852e19f8663e197615e34bc69678598ec6c859)), closes [#209](https://github.com/jwogrady/spark/issues/209)
+* guard changelog completeness against silent omissions ([99b70a9](https://github.com/jwogrady/spark/commit/99b70a99f4c8ce7bc3f184964724dad10c3d54e1)), closes [#232](https://github.com/jwogrady/spark/issues/232)
+* measure and budget hot-path latency ([e335532](https://github.com/jwogrady/spark/commit/e335532fa81b49eef71eb54aa7160e628eb7f2f9)), closes [#213](https://github.com/jwogrady/spark/issues/213)
+* offload the work-state write to a deterministic spark state verb ([460bf7a](https://github.com/jwogrady/spark/commit/460bf7a1bfaa87d7479f3013320cb9f7ab0fc8b9)), closes [#210](https://github.com/jwogrady/spark/issues/210)
+* run the release-notes completeness guard on release PRs ([c2844cd](https://github.com/jwogrady/spark/commit/c2844cd299229503f854b7c2cf7e5015d5547e7e)), closes [#261](https://github.com/jwogrady/spark/issues/261)
+
+
+### Bug Fixes
+
+* audit the release PR head, not the workflow checkout ([af801d4](https://github.com/jwogrady/spark/commit/af801d4f4e124309e2b643c51e60b692b7cb2ee2)), closes [#280](https://github.com/jwogrady/spark/issues/280)
+* classify nested unversioned source as ambiguous, not new ([#253](https://github.com/jwogrady/spark/issues/253)) ([069897b](https://github.com/jwogrady/spark/commit/069897b3f3723d03fc61bf35234b9476d4956bd1)), closes [#242](https://github.com/jwogrady/spark/issues/242)
+* measure latency portably on dates without GNU %N ([b5f73b2](https://github.com/jwogrady/spark/commit/b5f73b2bffc37a94e5a556d838157de7123cdd37)), closes [#265](https://github.com/jwogrady/spark/issues/265)
+* publish companions as prereleases so release-please tags atomically ([c8e8d40](https://github.com/jwogrady/spark/commit/c8e8d400fdb2854c2f2029eff42b11e26d6c1c67)), closes [#248](https://github.com/jwogrady/spark/issues/248)
+* report latency as not-measured without an ms-resolution clock ([ef1a204](https://github.com/jwogrady/spark/commit/ef1a2041bca1e6d09422521096493d0684dd4b47)), closes [#281](https://github.com/jwogrady/spark/issues/281)
+* restate accepted orchestration ADRs and guard the banner drift ([f99f572](https://github.com/jwogrady/spark/commit/f99f572e800b847a1194f6a9c72af364b6fb9d80)), closes [#255](https://github.com/jwogrady/spark/issues/255)
+* roadmap-check exits 3 (not 0) when the inventory is unassessed ([#256](https://github.com/jwogrady/spark/issues/256)) ([2d5f4b6](https://github.com/jwogrady/spark/commit/2d5f4b6abb6a28e82a5910b1b041405ac691f041)), closes [#224](https://github.com/jwogrady/spark/issues/224)
+* round-trip quoted work-state values without jq ([7c7e4dc](https://github.com/jwogrady/spark/commit/7c7e4dce97bddd73fde1e9b2ab80d7fcf0d4c332)), closes [#264](https://github.com/jwogrady/spark/issues/264)
+* ship changelog-sections in the release-please template ([153175a](https://github.com/jwogrady/spark/commit/153175a88f7433769abcc8aba2f53e3ec5e9388b)), closes [#271](https://github.com/jwogrady/spark/issues/271)
+* stop the release-notes guard flagging PR-suffixed subjects ([c36273c](https://github.com/jwogrady/spark/commit/c36273ca4f18dca7e6e4e48551368d4054cd3921)), closes [#261](https://github.com/jwogrady/spark/issues/261)
+
+
+### Documentation
+
+* correct the changelog format claim to match Release Please ([caa5569](https://github.com/jwogrady/spark/commit/caa556965c62aed2d96bc794b3b8ea415b7bf481)), closes [#268](https://github.com/jwogrady/spark/issues/268)
+* document the backlog disposition label for roadmap-check ([dec1d54](https://github.com/jwogrady/spark/commit/dec1d548e10b2710eed3125705900336d96a323f)), closes [#250](https://github.com/jwogrady/spark/issues/250)
+* make the ROADMAP truthful and enforce its vocabulary ([6907165](https://github.com/jwogrady/spark/commit/69071654154463d6f13a4fd95b6b3496602dcdb6)), closes [#267](https://github.com/jwogrady/spark/issues/267)
+* record setup profiles as an ADR-0012 amendment ([72b9e27](https://github.com/jwogrady/spark/commit/72b9e2739dbb9db333f21f6620df8d2dbb47ea46)), closes [#249](https://github.com/jwogrady/spark/issues/249)
+* record the v0.15 orchestration milestone on the roadmap ([2f2fd66](https://github.com/jwogrady/spark/commit/2f2fd66366db9cad5237f24c2ec85c768eb8a1c4)), closes [#284](https://github.com/jwogrady/spark/issues/284)
+* scope the skills.md parity claim to what doctor enforces ([daef72c](https://github.com/jwogrady/spark/commit/daef72c02408da6071b649598f1ef817272f2cd4)), closes [#269](https://github.com/jwogrady/spark/issues/269)
+* sync the CLAUDE.md Repo Map verbs with the CLI dispatch table ([9856c7a](https://github.com/jwogrady/spark/commit/9856c7a1890dfc59944e7431937555fe34afb553)), closes [#266](https://github.com/jwogrady/spark/issues/266)
+
+
+### Chores
+
+* release the token-efficiency milestone as v0.13.0 ([75e34fe](https://github.com/jwogrady/spark/commit/75e34fe89b73ec1ce495a75af5cdd0ac4415ffa9))
+
 ## [0.11.1](https://github.com/jwogrady/spark/compare/v0.11.0...v0.11.1) (2026-07-21)
 
 

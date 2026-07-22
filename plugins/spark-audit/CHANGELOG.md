@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/jwogrady/spark/compare/spark-audit-v0.2.0...spark-audit-v0.2.1) (2026-07-22)
+
+
+### Documentation
+
+* fix dead references left by the reshape ([#162](https://github.com/jwogrady/spark/issues/162)) ([1c80d15](https://github.com/jwogrady/spark/commit/1c80d15ef445cb6bbf6aec2365e2b8109273cc46)), closes [#157](https://github.com/jwogrady/spark/issues/157)
+
 ## [0.2.0](https://github.com/jwogrady/spark/compare/spark-audit-v0.1.0...spark-audit-v0.2.0) (2026-07-11)
 
 
