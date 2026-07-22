@@ -827,6 +827,20 @@ cmd_doctor() {
       fi
     fi
 
+    # (a3) The CLI verb list must match what CLAUDE.md's Repo Map documents
+    # (#266). The shipped set is the VERBS dispatch table itself; the doc set is
+    # the parenthesized list on the bin/spark line. They drift whenever a verb
+    # ships without the doc being updated (as profiles/orient/state/footprint did).
+    local ship_verbs doc_verbs
+    ship_verbs="$(printf '%s\n' "$VERBS" | awk -F'|' 'NF{print $1}' | sort | tr '\n' ' ' || true)"
+    doc_verbs="$(grep 'the CLI (' "$cm" | sed -n 's/.*the CLI (\([^)]*\)).*/\1/p' | tr ',' '\n' | tr -d ' ' | sort | tr '\n' ' ' || true)"
+    if [ -n "$ship_verbs" ] && [ "$ship_verbs" = "$doc_verbs" ]; then
+      green "  ✓ CLI verbs agree between the VERBS table and CLAUDE.md's Repo Map"
+    else
+      red "  ✗ CLI verb lists drift — dispatch: [${ship_verbs% }] CLAUDE.md: [${doc_verbs% }]. Sync the bin/spark line in the Repo Map."
+      errors=$((errors+1))
+    fi
+
     # (b) AI-attribution prohibition: implemented in the hook, documented twice.
     local ok=1
     parity 'co-authored-by' "$cmsg" "must reject AI co-author trailers" || ok=0

@@ -41,7 +41,7 @@ plugins/spark/          # the core plugin (the shipping loop)
 │   ├── hooks.json              # PreToolUse wiring
 │   └── guard-bash.sh           # blocks force-push and pushes to trunk
 ├── scripts/hooks/              # git hook sources (commit-msg, pre-commit)
-├── bin/spark                   # the CLI (doctor, list-skills, new-skill, setup, install-git-hooks, apply-permissions, preferences, resume, version, brief, help)
+├── bin/spark                   # the CLI (doctor, list-skills, new-skill, setup, profiles, install-git-hooks, apply-permissions, preferences, resume, version, brief, state, footprint, orient, help)
 └── docs/                       # USER docs (ship with the plugin), organized by Diátaxis
 plugins/spark-audit/    # companion: whole-project assessment + evidence-backed cleanup
 plugins/spark-connect/  # companion: services, credentials, 1Password, shred-env
