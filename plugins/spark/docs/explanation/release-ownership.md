@@ -33,19 +33,21 @@ release PR up to date from conventional commits on `master`; merging it is
 always a human decision, and that single merge is what produces the bump,
 the changelog entry, the tag, and the GitHub Release together.
 
-**Which commit types reach the changelog.** `changelog-sections` in
-`release-please-config.json` fixes this explicitly: `feat` (Features), `fix`
-(Bug Fixes), `perf`, `revert`, and `docs` (Documentation) are rendered into the
-generated release notes; the build-process types — `chore`, `refactor`, `test`,
-`build`, `ci`, `style` — are hidden (they still drive a patch bump). The line is
-the changelog philosophy in config form: the changelog records what changed in
-the *product* (features, fixes, and the docs users read), not how it was built.
-`docs` is visible because documentation is part of the product; process churn is
-not. The consequence that still bites: a user-facing change merged under a hidden
-type — a feature that lands as `chore:` — never appears in the notes (#232). The
-release-docs checklist's completeness step guards that at pre-approval, backed by
-`.github/scripts/release-notes-check.sh`; the visible-type list there, the
-`changelog-sections` config, and this paragraph must stay in lockstep.
+**Which commit types reach the changelog.** Spark's committed vocabulary is
+exactly six conventional types — `feat`, `fix`, `docs`, `chore`, `refactor`,
+`test` — enforced by the `commit-msg` hook, so no other type can be committed.
+`changelog-sections` in `release-please-config.json` covers those six and no
+more: `feat` (Features), `fix` (Bug Fixes), and `docs` (Documentation) are
+visible; `chore`, `refactor`, and `test` are hidden (they still drive a patch
+bump). This is the changelog philosophy in config form — the changelog records
+what changed in the *product* (features, fixes, and the docs users read), not
+how it was built; `docs` is visible because documentation is part of the
+product, process churn is not. The consequence that still bites: a user-facing
+change merged under a hidden type — a feature that lands as `chore:` — never
+appears in the notes (#232). The release-docs checklist's completeness step
+guards that at pre-approval, backed by `.github/scripts/release-notes-check.sh`.
+The one type table, the `changelog-sections` config, its visible subset, and
+this paragraph must stay in lockstep — `spark doctor` enforces it (#270).
 
 ## How the model plays out in this repo
 
