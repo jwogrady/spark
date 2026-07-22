@@ -379,6 +379,15 @@ cmd_version() {
 SKILL_MD_MAX_LINES=100
 SKILL_DESC_MAX_CHARS=1024
 
+# Total context-footprint budgets (#292) — the aggregate ratchet the per-file
+# budgets above cannot catch: a dozen small additions grow the whole without
+# tripping any one file. Ratcheted just above the post-#293 baseline (marketplace
+# ≈116.7 KB, largest plugin ≈72.7 KB) so growth fails CI now and trimming lowers
+# them. Bytes (FOOTPRINT_CPT converts to tokens); env-overridable so tests can
+# force the over-budget path. Enforced only in the Spark marketplace repo.
+FOOTPRINT_MARKETPLACE_MAX_BYTES="${FOOTPRINT_MARKETPLACE_MAX_BYTES:-120000}"
+FOOTPRINT_PLUGIN_MAX_BYTES="${FOOTPRINT_PLUGIN_MAX_BYTES:-76000}"
+
 # Latency budgets (#213) — generous wall-clock ceilings for the three hot paths,
 # in milliseconds: the guard hook (every Bash call), the SessionStart brief
 # (every session), and doctor (every push). Set with headroom over a fast dev
@@ -1089,6 +1098,30 @@ cmd_doctor() {
       else
         green "✓ changelog mode matches Release Please (no hand-curated [Unreleased])"
       fi
+    fi
+  fi
+
+  # Context footprint budget (#292): the aggregate ratchet the per-file budgets
+  # cannot catch. Meaningful only in the Spark marketplace repo (companions
+  # present); a standalone install has no marketplace total to gate. Reuses the
+  # footprint primitives so the gate and the `spark footprint` audit agree.
+  if [ -f "$SPARK_ROOT/../../.claude-plugin/marketplace.json" ]; then
+    local mroot fp_summary cache_summary
+    mroot="$(cd "$SPARK_ROOT/../.." && pwd)"
+    echo
+    echo "Context footprint budget:"
+    if fp_summary="$(fp_footprint_gate "$mroot")"; then
+      green "  ✓ $fp_summary"
+    else
+      red "  ✗ $fp_summary — trim, or raise the budget in bin/spark with rationale"; errors=$((errors+1))
+    fi
+    # Cache stability: the always-loaded prefix must carry no volatile bytes that
+    # would bust Claude Code's prompt cache. Advisory — a legitimate date is rare
+    # but possible, so flag it for a human rather than hard-fail.
+    if cache_summary="$(fp_cache_stability "$mroot")"; then
+      green "  ✓ $cache_summary"
+    else
+      yellow "  ! $cache_summary"; warnings=$((warnings+1))
     fi
   fi
 
@@ -2233,6 +2266,58 @@ fp_desc_chars() {
   printf '%s' "$total"
 }
 
+# fp_plugin_bytes <plugindir> — total context bytes for one plugin, summed over
+# the SAME surfaces + primitives cmd_footprint uses, so the #292 gate and the
+# #208 audit can never disagree.
+fp_plugin_bytes() {
+  local p="$1" surface b bl total=0
+  for surface in skill-descriptions skills references agents; do
+    if [ "$surface" = "skill-descriptions" ]; then
+      b="$(fp_desc_chars "$p")"
+    else
+      bl="$(fp_bytes_lines $(fp_files "$p" "$surface"))"; b="${bl% *}"
+    fi
+    total=$((total + b))
+  done
+  printf '%s' "$total"
+}
+
+# fp_footprint_gate <marketplace-root> — compare each plugin and the marketplace
+# total against the #292 budgets. Echoes a one-line summary (naming any breach)
+# and returns 1 if any surface is over budget. Factored out of doctor so the
+# ratchet is testable with a --root fixture and env-set budgets.
+fp_footprint_gate() {
+  local root="$1" d name pb grand=0 over=""
+  for d in "$root"/plugins/*/; do
+    [ -d "$d" ] || continue
+    name="$(basename "$d")"
+    pb="$(fp_plugin_bytes "$d")"
+    grand=$((grand + pb))
+    [ "$pb" -gt "$FOOTPRINT_PLUGIN_MAX_BYTES" ] && over="${over} ${name}=${pb}B>${FOOTPRINT_PLUGIN_MAX_BYTES}B"
+  done
+  [ "$grand" -gt "$FOOTPRINT_MARKETPLACE_MAX_BYTES" ] && over="${over} marketplace=${grand}B>${FOOTPRINT_MARKETPLACE_MAX_BYTES}B"
+  if [ -n "$over" ]; then
+    printf 'over budget:%s' "$over"; return 1
+  fi
+  printf 'marketplace %sB ≤ %sB; every plugin ≤ %sB' "$grand" "$FOOTPRINT_MARKETPLACE_MAX_BYTES" "$FOOTPRINT_PLUGIN_MAX_BYTES"
+}
+
+# fp_cache_stability <repo-root> — flag volatile bytes in the always-loaded
+# surfaces (root CLAUDE.md + every skill description). A date, "last updated",
+# or "as of <n>" in a prefix that is cached every session busts Claude Code's
+# prompt-cache prefix (#292). Echoes one finding per offender; returns 1 if any.
+fp_cache_stability() {
+  local root="$1" volatile='20[0-9]{2}-[01][0-9]-[0-3][0-9]|[Ll]ast updated|[Gg]enerated on|[Aa]s of [0-9]' f d bad=""
+  [ -f "$root/CLAUDE.md" ] && grep -qE "$volatile" "$root/CLAUDE.md" \
+    && bad="${bad} CLAUDE.md"
+  while IFS= read -r f; do
+    d="$(awk '/^description:/{sub(/^description:[[:space:]]*/,"");print;exit}' "$f" 2>/dev/null)"
+    printf '%s' "$d" | grep -qE "$volatile" && bad="${bad} ${f#"$root"/}"
+  done < <(find "$root/plugins" -type f -name 'SKILL.md' 2>/dev/null | sort)
+  if [ -n "$bad" ]; then printf 'volatile bytes in always-loaded surface(s):%s' "$bad"; return 1; fi
+  printf 'always-loaded surfaces carry no volatile bytes'
+}
+
 # now_ms — current time in milliseconds. GNU date has %N; macOS/BSD date does
 # not and prints a literal "N", so detect that and degrade rather than compute
 # garbage (#265): try python3 for millisecond resolution, else fall back to
@@ -2502,14 +2587,18 @@ cmd_state() {
   green "state: $state (stage ${stage:-?}, updated $updated)"
 }
 
-verb="${1:-help}"
-case "$verb" in -h|--help) verb=help ;; esac
-handler=""
-while IFS='|' read -r v h _; do
-  [ "$v" = "$verb" ] && { handler="$h"; break; }
-done <<EOF
+# Dispatch only when executed, not when sourced — sourcing (e.g. from behavioral
+# tests) loads the functions without running a command.
+if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
+  verb="${1:-help}"
+  case "$verb" in -h|--help) verb=help ;; esac
+  handler=""
+  while IFS='|' read -r v h _; do
+    [ "$v" = "$verb" ] && { handler="$h"; break; }
+  done <<EOF
 $VERBS
 EOF
-[ -n "$handler" ] || { red "unknown command: $verb"; echo; usage; exit 1; }
-if [ "$#" -gt 0 ]; then shift; fi
-"$handler" "$@"
+  [ -n "$handler" ] || { red "unknown command: $verb"; echo; usage; exit 1; }
+  if [ "$#" -gt 0 ]; then shift; fi
+  "$handler" "$@"
+fi
