@@ -322,23 +322,41 @@ cmd_version() {
   echo "spark $v"
 }
 
-# Lint one SKILL.md's frontmatter. The description is the only thing Claude
-# sees when choosing a skill, so its quality is checked here — and both doctor
-# and new-skill call this, so scaffold-time and audit-time verdicts agree.
-# Sets lint_errors/lint_warnings; findings print as "  ✗|! <label>: <finding>".
+# Context budgets (#209) — the single canonical declaration, read by every
+# surface check below and by the footprint audit (#208), so the gate and the
+# audit can never disagree. These turn the skill-authoring prose into enforced
+# facts: context bloat is docs drift with a per-session price, paid on every
+# invocation in every project.
+#   - SKILL_MD_MAX_LINES: a SKILL.md is a router, not a manual — depth belongs
+#     in references/ progressive disclosure, loaded only when needed.
+#   - SKILL_DESC_MAX_CHARS: the description is the always-loaded selection cost
+#     (Claude reads every one to choose a skill); it is also the plugin-spec cap.
+SKILL_MD_MAX_LINES=100
+SKILL_DESC_MAX_CHARS=1024
+
+# Lint one SKILL.md's frontmatter and size. The description is the only thing
+# Claude sees when choosing a skill, so its quality is checked here — and both
+# doctor and new-skill call this, so scaffold-time and audit-time verdicts
+# agree. Sets lint_errors/lint_warnings; findings print as "  ✗|! <label>: …".
 lint_skill_md() {
-  local f="$1" label="$2" desc
+  local f="$1" label="$2" desc lines
   lint_errors=0 lint_warnings=0
   if ! grep -q '^name:' "$f"; then
     red "  ✗ $label: SKILL.md missing 'name:' frontmatter"; lint_errors=$((lint_errors+1))
+  fi
+  # Size budget: a hard fact, reported with the measured value and the budget.
+  lines=$(wc -l < "$f" 2>/dev/null || echo 0)
+  if [ "$lines" -gt "$SKILL_MD_MAX_LINES" ]; then
+    red "  ✗ $label: SKILL.md is $lines lines (budget $SKILL_MD_MAX_LINES) — move depth to references/"
+    lint_errors=$((lint_errors+1))
   fi
   if ! grep -q '^description:' "$f"; then
     red "  ✗ $label: SKILL.md missing 'description:' frontmatter"; lint_errors=$((lint_errors+1))
     return 0
   fi
   desc="$(grep '^description:' "$f" | sed 's/^description: *//' | head -1)"
-  if [ "${#desc}" -gt 1024 ]; then
-    yellow "  ! $label: description is ${#desc} chars (over the 1024 limit)"; lint_warnings=$((lint_warnings+1))
+  if [ "${#desc}" -gt "$SKILL_DESC_MAX_CHARS" ]; then
+    red "  ✗ $label: description is ${#desc} chars (budget $SKILL_DESC_MAX_CHARS)"; lint_errors=$((lint_errors+1))
   fi
   if ! printf '%s' "$desc" | grep -qiE 'use (when|after|for|to)'; then
     yellow "  ! $label: description names no trigger (\"Use when …\")"; lint_warnings=$((lint_warnings+1))
