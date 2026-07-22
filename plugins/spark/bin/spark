@@ -1100,13 +1100,18 @@ cmd_doctor() {
   echo
   echo "Latency (advisory — hard gate: spark footprint --timing):"
   local d_gms d_bms
-  d_gms=$(fp_run_ms fp_hot_guard); d_bms=$(fp_run_ms fp_hot_brief)
-  if fp_over_budget "$d_gms" "$LATENCY_GUARD_MS"; then
+  d_gms=$(fp_run_ms fp_hot_guard) || d_gms=""
+  d_bms=$(fp_run_ms fp_hot_brief) || d_bms=""
+  if [ -z "$d_gms" ]; then
+    echo "  - guard hook: not measured (no ms-resolution clock — needs GNU date +%s%N or python3)"
+  elif [ "$d_gms" -gt "$LATENCY_GUARD_MS" ]; then
     yellow "  ! guard hook ${d_gms}ms — over the ${LATENCY_GUARD_MS}ms budget"; warnings=$((warnings+1))
   else
     green "  ✓ guard hook ${d_gms}ms (budget ${LATENCY_GUARD_MS}ms)"
   fi
-  if fp_over_budget "$d_bms" "$LATENCY_BRIEF_MS"; then
+  if [ -z "$d_bms" ]; then
+    echo "  - session brief: not measured (no ms-resolution clock)"
+  elif [ "$d_bms" -gt "$LATENCY_BRIEF_MS" ]; then
     yellow "  ! session brief ${d_bms}ms — over the ${LATENCY_BRIEF_MS}ms budget"; warnings=$((warnings+1))
   else
     green "  ✓ session brief ${d_bms}ms (budget ${LATENCY_BRIEF_MS}ms)"
@@ -2236,24 +2241,32 @@ now_ms() {
   local ns
   ns=$(date +%s%N 2>/dev/null)
   case "$ns" in
-    ''|*[!0-9]*) ;;                                  # empty or contains 'N' → unsupported
+    ''|*[!0-9]*) ;;                                  # empty or contains 'N' → no GNU %N
     *) printf '%s' $(( ns / 1000000 )); return 0 ;;
   esac
   if command -v python3 >/dev/null 2>&1; then
     python3 -c 'import time; print(int(time.time()*1000))' 2>/dev/null && return 0
   fi
-  printf '%s' $(( $(date +%s) * 1000 ))
+  return 1   # no ms-resolution clock — refuse to fake it with whole seconds (#281)
 }
 
-# fp_run_ms <fn> — wall-clock milliseconds for one call of a shell function.
+# fp_run_ms <fn> — wall-clock milliseconds for one call, or empty + nonzero when
+# the host has no ms-resolution clock (so callers report "not measured" rather
+# than a misleading whole-second figure).
 fp_run_ms() {
-  local s e; s=$(now_ms); "$1" >/dev/null 2>&1 || true; e=$(now_ms)
+  local s e
+  s=$(now_ms) || return 1
+  "$1" >/dev/null 2>&1 || true
+  e=$(now_ms) || return 1
   printf '%s' $(( e - s ))
 }
-# fp_median3_ms <fn> — median of three runs, robust to a single outlier.
+# fp_median3_ms <fn> — median of three runs, or empty + nonzero when unmeasurable.
 fp_median3_ms() {
-  printf '%s\n' "$(fp_run_ms "$1")" "$(fp_run_ms "$1")" "$(fp_run_ms "$1")" \
-    | sort -n | sed -n '2p'
+  local a b c
+  a=$(fp_run_ms "$1") || return 1
+  b=$(fp_run_ms "$1") || return 1
+  c=$(fp_run_ms "$1") || return 1
+  printf '%s\n' "$a" "$b" "$c" | sort -n | sed -n '2p'
 }
 # The three hot paths as callable functions, so timing measures a real run.
 fp_hot_guard()  { printf '%s' '{"tool_input":{"command":"ls -la"}}' | bash "$SPARK_ROOT/hooks/guard-bash.sh"; }
@@ -2267,23 +2280,29 @@ fp_over_budget() { [ "$1" -gt "$2" ]; }
 # fp_latency <as_json> — measure the three hot paths (median of 3), compare to
 # the LATENCY_*_MS budgets, print human or JSON, and return 1 if any is over.
 fp_latency() {
-  local as_json="$1" gms bms dms over=0 tag
-  gms=$(fp_median3_ms fp_hot_guard)
-  bms=$(fp_median3_ms fp_hot_brief)
-  dms=$(fp_median3_ms fp_hot_doctor)
-  fp_over_budget "$gms" "$LATENCY_GUARD_MS"  && over=1
-  fp_over_budget "$bms" "$LATENCY_BRIEF_MS"  && over=1
-  fp_over_budget "$dms" "$LATENCY_DOCTOR_MS" && over=1
+  local as_json="$1" gms bms dms over=0 unmeasured=0
+  gms=$(fp_median3_ms fp_hot_guard)  || gms=""
+  bms=$(fp_median3_ms fp_hot_brief)  || bms=""
+  dms=$(fp_median3_ms fp_hot_doctor) || dms=""
+  # An unmeasured path (no ms clock) never fails the gate; only a real
+  # over-budget measurement does.
+  [ -z "$gms" ] && unmeasured=1 || { [ "$gms" -gt "$LATENCY_GUARD_MS" ]  && over=1; }
+  [ -z "$bms" ] && unmeasured=1 || { [ "$bms" -gt "$LATENCY_BRIEF_MS" ]  && over=1; }
+  [ -z "$dms" ] && unmeasured=1 || { [ "$dms" -gt "$LATENCY_DOCTOR_MS" ] && over=1; }
   if [ -n "$as_json" ]; then
-    printf '{"method":"median-of-3 wall-clock ms","paths":{"guard":{"ms":%s,"budget":%s},"brief":{"ms":%s,"budget":%s},"doctor":{"ms":%s,"budget":%s}}}\n' \
-      "$gms" "$LATENCY_GUARD_MS" "$bms" "$LATENCY_BRIEF_MS" "$dms" "$LATENCY_DOCTOR_MS"
+    printf '{"method":"median-of-3 wall-clock ms (null = no ms-resolution clock)","paths":{"guard":{"ms":%s,"budget":%s},"brief":{"ms":%s,"budget":%s},"doctor":{"ms":%s,"budget":%s}}}\n' \
+      "${gms:-null}" "$LATENCY_GUARD_MS" "${bms:-null}" "$LATENCY_BRIEF_MS" "${dms:-null}" "$LATENCY_DOCTOR_MS"
   else
     echo "Hot-path latency (median of 3, wall-clock ms — machine-dependent, not exact)"
     printf '  %-10s %8s %9s\n' path ms budget
-    for tag in "guard $gms $LATENCY_GUARD_MS" "brief $bms $LATENCY_BRIEF_MS" "doctor $dms $LATENCY_DOCTOR_MS"; do
-      set -- $tag
-      printf '  %-10s %8s %9s%s\n' "$1" "$2" "$3" "$(fp_over_budget "$2" "$3" && echo '  OVER BUDGET')"
-    done
+    fp_lat_row() { # fp_lat_row <name> <ms> <budget>
+      if [ -z "$2" ]; then printf '  %-10s %8s %9s  not measured\n' "$1" "-" "$3"
+      else printf '  %-10s %8s %9s%s\n' "$1" "$2" "$3" "$([ "$2" -gt "$3" ] && echo '  OVER BUDGET')"; fi
+    }
+    fp_lat_row guard  "$gms" "$LATENCY_GUARD_MS"
+    fp_lat_row brief  "$bms" "$LATENCY_BRIEF_MS"
+    fp_lat_row doctor "$dms" "$LATENCY_DOCTOR_MS"
+    [ "$unmeasured" -eq 1 ] && echo "  (no ms-resolution clock on this host — install GNU date or python3 to measure)"
   fi
   [ "$over" -eq 0 ]
 }
