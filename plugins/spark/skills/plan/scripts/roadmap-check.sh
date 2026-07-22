@@ -97,9 +97,21 @@ if [ -f "$roadmap" ]; then
     gap "roadmap names no next release (every ## vX.Y section is already Shipped)"
   fi
 
+  # Vocabulary: every section's Status must lead with a known term, or the
+  # roadmap drifts into ad-hoc statuses no reader or tool can rely on.
   while IFS=$'\t' read -r ver status ref marker; do
     [ -n "$ver" ] || continue
-    case "$status" in [Ss]hipped*) continue ;; esac
+    case "$status" in
+      Planned*|"In progress"*|Merged*|[Ss]hipped*|Complete*|Deferred*|Backlog*)
+        echo "ok: roadmap section \"$ver\" uses a vocabulary status" ;;
+      *)
+        gap "roadmap section \"$ver\" Status \"${status:-unknown}\" is outside the vocabulary (Planned|In progress|Merged|Shipped|Complete|Deferred|Backlog)" ;;
+    esac
+  done <<< "$sections"
+
+  while IFS=$'\t' read -r ver status ref marker; do
+    [ -n "$ver" ] || continue
+    case "$status" in [Ss]hipped*|Complete*) continue ;; esac
     if [ "$ref" -eq 1 ] || [ "$marker" -eq 1 ]; then
       echo "ok: roadmap section \"$ver\" links issues or defers explicitly"
     else
