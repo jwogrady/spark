@@ -1,6 +1,6 @@
 ---
 name: knowledge
-description: Turn messy notes, repo findings, architecture decisions, and Claude Code session discoveries into clean, durable internal docs — ADRs, system docs, product specs, SOPs/runbooks, and glossary entries — via a three-role crew (intake → author → librarian-editor). Use when the user needs to record a decision, document a system or process, or turn rough notes into a real doc — typically when codify/validate/ship surface something worth keeping. Not for outward-facing marketing docs or README glow-ups — public docs and positioning are the spark-docs companion plugin's job.
+description: Turn messy notes, findings, and decisions into clean, durable internal docs — ADRs, system docs, product specs, SOPs/runbooks, glossary entries — via a three-role crew (intake → author → librarian-editor). Use to record a decision or document a system or process. Not for outward-facing marketing or README glow-ups — that's `docit` (public docs).
 ---
 
 # knowledge — minimal decision documentation
@@ -50,9 +50,8 @@ Three real subagents under [`agents/knowledge/`](../../agents/knowledge/)
    in one voice to the recommended path and updates the glossary/index. For any
    overwrite, **show the diff first** and get a go-ahead before writing.
 7. **Promote deliberately (optional)** — glossary-only: if operator-level
-   vocabulary candidates were flagged, present them and, only on explicit
-   go-ahead, append them with provenance to `~/.config/spark/knowledge/`. Never
-   copy silently; the project-local entry stays put and wins on conflict. Rules:
+   vocabulary candidates were flagged, present them and promote only on explicit
+   go-ahead (never copy silently; project-local wins on conflict), per
    [`references/operator-knowledge.md`](references/operator-knowledge.md).
 8. **Ship through the lifecycle** — hand the result to
    [`ship`](../ship/SKILL.md). Commit only the published docs; keep
@@ -72,10 +71,9 @@ Phase-by-phase orchestration and barriers:
 - **Match the docs system** — file into the repo's existing structure (`docs/`,
   `docs/adr/`, `docs/architecture/`, `docs/product/`, `docs/ops/`,
   `docs/runbooks/`, `docs/glossary/`); don't invent a parallel scheme.
-- **Preserve domain vocabulary** — the crew consults the glossary tiers (shipped
-  seed [`references/glossary.md`](references/glossary.md) → operator store →
-  project-local, later tiers win) and never normalizes the operator's domain
-  vocabulary. The seed ships generic; forks replace it with their own terms.
+- **Preserve domain vocabulary** — the crew consults the glossary tiers and never
+  normalizes the operator's domain vocabulary; the tiers and the shipped seed are
+  in [`references/glossary.md`](references/glossary.md).
 - **Don't touch application code** — knowledge writes docs; it inspects code to
   document it, never to change it.
 - **The skill orchestrates; agents don't self-coordinate** — the main loop does

@@ -1,6 +1,6 @@
 ---
 name: plan
-description: Turn a framed problem into an implementation approach (stack/architecture recorded as ADRs), a feature breakdown, and a set of GitHub-ready issues plus a milestone. Use after ideate, when the user wants to decide the stack, plan features, break work into issues, or scope a milestone. Not for framing the problem first (`ideate`) or implementing the work (`codify`).
+description: Turn a framed problem into an implementation approach (stack/architecture as ADRs), a feature breakdown, and GitHub issues plus a milestone. Use to decide the stack, break work into issues, or scope a milestone after `ideate`. Not for framing the problem (`ideate`) or implementing it (`codify`).
 ---
 
 # plan — Stage 2 of the Spark lifecycle
@@ -49,12 +49,9 @@ feature, not a task list.
 
 ## Creating the issues
 
-- Only call the GitHub API / `gh` after explicit user confirmation (per
-  `AGENTS.md`). Default to producing the drafts first; create on approval.
-- Use `gh issue create` with the template body, and `gh api` for the milestone
-  if the user wants it.
-- If the user prefers, output the issues as markdown drafts they create
-  themselves.
+Draft first; create on GitHub only after explicit confirmation. The `gh`
+mechanics (issue creation, the milestone, or markdown-only drafts if the user
+prefers) are in [references/creating-issues.md](references/creating-issues.md).
 
 ## Guardrails
 

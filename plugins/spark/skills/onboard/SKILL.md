@@ -1,6 +1,6 @@
 ---
 name: onboard
-description: Guide a repository's first run as one narrative — orient (classify new/existing/ambiguous), choose a setup profile, seed hooks + permissions + the project standards docs, and close with a brief of what was created, kept, decided, and still open. Sequences the mechanical CLI verbs and stops at each human decision. Use when arming a repo for the first time, when the operator asks "how do I start with Spark here", or when a brief reports the repo unclassified/unarmed. Not for scaffolding a new runtime (that's `bootstrap`, which this may follow) and not the mechanical seed itself — `spark setup` stays the create-only one-command carry-in this flow calls.
+description: Guide a repository's first run as one narrative — orient, choose a setup profile, seed hooks + permissions + standards docs, and close with a brief. Stops at each human decision. Use when arming a repo for the first time or when a brief reports it unclassified/unarmed. Not for scaffolding a new runtime (`bootstrap`) and not the mechanical seed itself (`spark setup`, the one-command carry-in).
 ---
 
 # onboard — the guided first run
