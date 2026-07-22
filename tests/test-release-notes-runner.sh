@@ -215,5 +215,34 @@ grep -q "$(printf 'chore\tdrop the legacy connect config (#304)\t\tbreaking')" "
 [ "$(notes_status_for_results < "$split/results.tsv")" = "failure" ] \
   && ok || bad "integration verdict folds to failure"
 
+# --- EXECUTED-main regression (the CI-only bug class the sourced tests miss):
+# main registers an EXIT trap over a local; after main returns, the trap fires
+# out of scope and under set -u an unbound expansion turns a successful run
+# into exit 1 at the finish line. Execute the real script with a stub gh whose
+# `pr list` returns nothing — main early-returns — AND with a stub returning a
+# minimal release PR so the full path (mktemp + trap + split + post) runs to
+# completion. Both must exit 0 all the way through process exit.
+stub="$work/stubbin"; mkdir -p "$stub"
+cat > "$stub/gh" <<'STUB'
+#!/usr/bin/env bash
+case "$1 $2" in
+  "pr list")
+    if [ -n "${STUB_PR_JSON:-}" ]; then printf '%s' "$STUB_PR_JSON"; fi ;;
+  "api "*|api*) exit 0 ;;
+  *) exit 0 ;;
+esac
+STUB
+chmod +x "$stub/gh"
+rc=0; ( cd "$work" && PATH="$stub:$PATH" GITHUB_REPOSITORY=o/r bash "$runner" >/dev/null 2>&1 ) || rc=$?
+[ "$rc" -eq 0 ] && ok || bad "executed main (no open release PR) must exit 0 through process exit (got $rc)"
+e2e_repo="$work/e2erepo"; mkdir -p "$e2e_repo"
+git -C "$e2e_repo" init -q 2>/dev/null
+( cd "$e2e_repo" && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m "chore: seed" )
+sha="$(git -C "$e2e_repo" rev-parse HEAD)"
+export STUB_PR_JSON="{\"number\":1,\"headRefOid\":\"$sha\",\"body\":\"release me\"}"
+rc=0; ( cd "$e2e_repo" && PATH="$stub:$PATH" GITHUB_REPOSITORY=o/r bash "$runner" >/dev/null 2>&1 ) || rc=$?
+[ "$rc" -eq 0 ] && ok || bad "executed main (full path incl. EXIT trap) must exit 0 — trap must not die on an out-of-scope local under set -u (got $rc)"
+unset STUB_PR_JSON
+
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
