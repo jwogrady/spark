@@ -13,6 +13,9 @@ dist/
 .claude/settings.local.json
 # Claude Code runtime locks (e.g. the scheduled-task loop); transient state
 .claude/*.lock
+# Agent worktrees — transient per-run checkouts that otherwise leave the tree
+# perpetually dirty (#275). Created and removed by the harness at runtime.
+.claude/worktrees/
 
 # Skill scratch — per-role working notes, debate logs, audit slates. Process
 # exhaust, not product; the published artifacts and their git history are the
