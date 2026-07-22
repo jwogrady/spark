@@ -176,5 +176,26 @@ res="$(printf '206\tadd A\n206\tadd A again\n207\tadd B\n\tadd C\n\tadd C\n' | c
 [ "$(printf '%s\n' "$res" | awk -F'\t' '$1=="206"{print $2; exit}')" = "add A" ] && ok || bad "206 keeps the first (deterministic) label ($res)"
 [ "$(printf '%s\n' "$res" | awk -F'\t' '$1=="-"{c++} END{print c+0}')" = "1" ] && ok || bad "unresolved (sentinel id) deduped by subject to one record ($res)"
 
+# --- #310: capability-id extraction must tolerate a feat with no issue reference
+# and never abort the runner under `set -euo pipefail` (grep exits 1 on no match).
+# Case 1 — feat with an issue reference: id extracted.
+[ "$(compat_issue_id 'feat: add thing (#123)')" = "123" ] && ok || bad "case1: '(#123)' -> 123 (got '$(compat_issue_id 'feat: add thing (#123)')')"
+# Case 2 — feat with NO reference: empty id, and the call does not abort. This
+# whole test file runs under `set -e`; reaching the next line proves no abort.
+id2="$(compat_issue_id 'feat: add thing')"
+[ -z "$id2" ] && ok || bad "case2: no reference -> empty id (got '$id2')"
+ok  # reached here without the set -e abort the bug caused
+# Case 3 — existing behavior unchanged: first reference wins, deterministically.
+[ "$(compat_issue_id 'feat: close #7 and #8')" = "7" ] && ok || bad "case3: first reference wins (got '$(compat_issue_id 'feat: close #7 and #8')')"
+
+# --- integration: the discovery step over a mix (with a no-ref feat) completes
+# and yields a deterministic caps list — a resolved id plus a "-" sentinel — with
+# no abort, so the checker is reached (the failure mode was aborting beforehand).
+caps_out="$(printf 'feat: add exporter (#42)\nfeat: tidy things\n' | while IFS= read -r subj; do
+  printf '%s\t%s\n' "$(compat_issue_id "$subj")" "${subj#*: }"
+done | compat_resolve_capabilities)"
+[ "$(printf '%s\n' "$caps_out" | awk -F'\t' '$1=="42"{c++} END{print c+0}')" = "1" ] && ok || bad "integration: referenced feat -> id 42 ($caps_out)"
+[ "$(printf '%s\n' "$caps_out" | awk -F'\t' '$1=="-"{c++} END{print c+0}')" = "1" ] && ok || bad "integration: no-ref feat -> unresolved sentinel, no abort ($caps_out)"
+
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

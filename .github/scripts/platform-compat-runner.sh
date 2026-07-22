@@ -40,6 +40,15 @@ compat_resolve_capabilities() {
   '
 }
 
+# Extract the first issue reference (#NNN -> NNN) from a commit's subject+body.
+# Empty when the commit cites no issue — a supported, unresolved-identity case,
+# not an error. The trailing `|| true` is load-bearing: grep exits 1 on no match,
+# which under the runner's `set -euo pipefail` would otherwise abort the whole
+# run before the checker is ever invoked.
+compat_issue_id() { # <commit subject+body text> -> issue number, or empty
+  printf '%s' "$1" | grep -oE '#[0-9]+' | head -n1 | tr -d '#' || true
+}
+
 main() {
   set -euo pipefail
   local here repo_root repo release_branch index eval_root pr pr_number head_sha
@@ -77,7 +86,7 @@ main() {
     git log --no-merges --format='%H' "$range" 2>/dev/null | while IFS= read -r sha; do
       subj="$(git log -1 --format='%s' "$sha")"
       case "$subj" in feat:*|feat\(*) ;; *) continue ;; esac
-      id="$(git log -1 --format='%s%n%b' "$sha" | grep -oE '#[0-9]+' | head -n1 | tr -d '#')"
+      id="$(compat_issue_id "$(git log -1 --format='%s%n%b' "$sha")")"
       printf '%s\t%s\n' "$id" "${subj#*: }"
     done | compat_resolve_capabilities > "$caps"
   fi
