@@ -151,9 +151,9 @@ completion — milestone and version in lockstep.
 
 ## v0.12 — Lifecycle orchestration (research & architecture)
 
-**Status:** Complete (research & architecture) — no version cut; nothing new to
-run shipped, so Release Please published no release. The deliverables are the
-ratified ADRs and the recorded baseline.
+**Status:** Complete (no release) — no version cut; nothing new to run shipped,
+so Release Please published no release. The deliverables are the ratified ADRs
+and the recorded baseline.
 
 A deliberate, evidence-backed decision rather than a promise to ship a
 multi-agent framework. Two ratified ADRs — the Shape / Build / Assure & Deliver
@@ -165,6 +165,23 @@ from multi-agent work, Shape most; the candidate parallel-review slice (#206) is
 **backlogged** until it is built behind a flag and measured to beat the baseline.
 No new runtime orchestration capability shipped — the architecture is decided,
 implementation is gated on evidence.
+
+---
+
+## v0.13 — Token & model efficiency
+
+**Status:** Merged (awaiting release) — all deliverables are on `master`; the
+`v0.13.0` release PR is pending a human merge.
+
+Efficiency as a measured discipline: no optimization without a baseline, and
+scripts replace model turns only where the work is mechanical. `spark footprint`
+baselines the per-surface context cost (#208); `spark doctor` enforces SKILL.md
+size budgets (#209); `spark state` makes the work-state write deterministic
+(#210); and `spark footprint --timing` measures hot-path latency against budgets,
+with doctor carrying a warn-only advisory (#213). Delivered four of six planned
+issues; right-sizing the crew roles to capability tiers (#211) and the
+issue-wiring manifest helper (#214) were **backlogged** — the first needs the
+ADR-0024 selection infrastructure, the second a live-repo verification run.
 
 ---
 

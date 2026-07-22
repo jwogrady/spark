@@ -60,7 +60,9 @@ One status per roadmap item, backed by evidence:
 | --- | --- | --- |
 | **Planned** | Intended, not started | A linked issue |
 | **In progress** | Being implemented now | A linked issue/PR |
+| **Merged (awaiting release)** | Work merged to the trunk; the release is not yet cut | The merged PR(s) / closed issues and the pending release |
 | **Shipped (`vX.Y.Z`)** | Released | The published tag/Release |
+| **Complete (no release)** | Deliverables merged; the milestone intentionally cut no version | The merged artifacts and the decision record |
 | **Deferred** | Consciously postponed | The reason and, if known, the target |
 | **Backlog** | Unassigned to any release | Why it is not yet scheduled |
 

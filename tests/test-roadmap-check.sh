@@ -50,7 +50,7 @@ Everything landed.
 
 ## v0.10 — Next train
 
-**Status:** Next
+**Status:** Planned
 
 Release assignment becomes mechanical (#179, #188).
 EOF
@@ -189,6 +189,26 @@ check 1 "unshipped section without issue links is a gap" \
 check 0 "unshipped section with a deferred marker passes" \
   "$work/deferred-marker.md" "$work/issues-empty.json" \
   "roadmap-check: 0 gap(s)"
+
+# --- #267: a Status outside the vocabulary is a gap.
+cat > "$work/bad-status.md" <<'EOF'
+# Roadmap
+
+## v0.9 — Current train
+
+**Status:** Shipped (`v0.9.0`)
+
+Everything landed (#177).
+
+## v0.10 — Next train
+
+**Status:** Cooking
+
+Prose referencing #188.
+EOF
+check 1 "status outside the vocabulary is a gap" \
+  "$work/bad-status.md" "$work/issues-empty.json" \
+  'is outside the vocabulary'
 
 # --- the marker must start a line: the word mid-sentence is not a decision
 cat > "$work/issues-backlog-midsentence.json" <<'EOF'
