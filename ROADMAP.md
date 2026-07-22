@@ -190,6 +190,21 @@ ADR-0024 selection infrastructure, the second a live-repo verification run.
 
 ---
 
+## v0.15 — orchestration
+
+**Status:** Planned
+
+Build the lifecycle orchestration *decided* in v0.12 (ADR-0023 topology, ADR-0024
+capability-based selection), each piece gated on evidence — a home and plan, not
+a commitment to ship all three (#284 tracks it). Right-size the crew roles to
+capability tiers once the ADR-0024 selection infrastructure exists (#211); adopt
+parallel review roles in `validate` only once built behind a flag and measured to
+beat the single-agent baseline (#206); and batch GitHub issue wiring into a
+deterministic manifest helper, gated on one live-repo e2e (#214). Nothing builds
+until its gate is met.
+
+---
+
 ## Later — Project inception
 
 Project inception — `/plugin install spark` plus the `bootstrap` skill —
