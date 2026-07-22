@@ -156,6 +156,83 @@ if [ "$rc" -eq 0 ] && [ "$state" = "neutral" ]; then ok; else bad "unresolved ->
 case "$out" in *'feat "add the thing" — no issue reference'*) ok ;; *) bad "unresolved names the feat, does not invent an id ($out)" ;; esac
 
 # ============================================================================
+# ADR status advisory (#305). Fixture ADR dir + issues.json; the advisory must
+# never change gate-state or the exit code, and its heuristic must only prompt
+# when EVERY Status-line-parenthetical issue ref is confirmably closed.
+# ============================================================================
+adrdir="$work/adr"
+mkdir -p "$adrdir"
+# Template: its Status line is the placeholder menu — must be excluded.
+printf '# ADR: template\nStatus: Proposed | Accepted | Superseded by ADR-NNNN\n' > "$adrdir/0000-template.md"
+# Clean, unconditional acceptance: passes silently.
+printf '# ADR: clean\nStatus: Accepted\n' > "$adrdir/0001-clean.md"
+# Experiment-gated on an OPEN issue: no prompt (the gate has not concluded).
+printf '# ADR: open gate\nStatus: Accepted (2026-01-01, at the #900 decision gate - implementation is deferred)\n' > "$adrdir/0002-open-gate.md"
+printf '[{"number":900,"state":"OPEN"},{"number":901,"state":"CLOSED"}]' > "$work/issues.json"
+
+run_adr() { # <extra args...> -> stdout+rc in $out/$rc
+  rc=0
+  out="$(bash "$script" --index "$work/index.tsv" --capabilities "$work/caps.tsv" --evaluations-root "$EVROOT" "$@" 2>&1)" || rc=$?
+  state="$(printf '%s\n' "$out" | sed -n 's/^gate-state: //p' | head -n1)"
+}
+
+# Evidence fixture: ready (206 required + valid).
+printf '%s\n206\trequired\ts1\tvalid\n' "$HDR" > "$work/index.tsv"
+printf '206\n' > "$work/caps.tsv"
+
+# a. valid Status lines + open gate -> clean advisory line; template excluded
+#    (count is 2, not 3); gate-state/exit driven by evidence alone.
+run_adr --adr-dir "$adrdir" --issues "$work/issues.json"
+[ "$rc" -eq 0 ] && [ "$state" = "ready" ] && ok || bad "adr clean — evidence stays ready/exit 0 (rc=$rc state=$state: $out)"
+case "$out" in *"ADR status (advisory): 2 ADRs have a recognized Status; no closed-gate confirmation prompts (heuristic — Status-line issue refs only)."*) ok ;; *) bad "adr clean — honest clean line with count ($out)" ;; esac
+case "$out" in *"confirm the Status"*) bad "adr clean — open gate must not prompt ($out)" ;; *) ok ;; esac
+
+# b. missing Status flagged; closed gate prompts to CONFIRM (never asserts wrong).
+printf '# ADR: closed gate\nStatus: Accepted (2026-01-01, at the #901 decision gate - implementation is deferred)\n' > "$adrdir/0003-closed-gate.md"
+printf '# ADR: no status\nNo status line here.\n' > "$adrdir/0004-nostatus.md"
+run_adr --adr-dir "$adrdir" --issues "$work/issues.json"
+[ "$rc" -eq 0 ] && [ "$state" = "ready" ] && ok || bad "adr findings — never flip ready state or exit code (rc=$rc state=$state: $out)"
+case "$out" in *"0004-nostatus.md — no recognized Status line (want Proposed|Accepted|Superseded)"*) ok ;; *) bad "adr — missing Status flagged deterministically ($out)" ;; esac
+case "$out" in *"0003-closed-gate.md — Status references closed gate issue(s) #901; confirm the Status still reflects the recorded verdict (re-status or annotate)"*) ok ;; *) bad "adr — closed gate prompts confirm, names the ADR ($out)" ;; esac
+case "$out" in *"0002-open-gate.md —"*) bad "adr — open-gate ADR must have no finding line ($out)" ;; *) ok ;; esac
+case "$out" in *"wrong"*) bad "adr — heuristic wording must confirm, never assert wrong ($out)" ;; *) ok ;; esac
+case "$out" in *"gate-state and exit code above are unchanged"*) ok ;; *) bad "adr — findings header states it is advisory-only ($out)" ;; esac
+
+# c. ADR findings never flip a neutral verdict either.
+printf '%s\n211\tnot-required\t\t\n' "$HDR" > "$work/index.tsv"
+printf '211\n' > "$work/caps.tsv"
+run_adr --adr-dir "$adrdir" --issues "$work/issues.json"
+[ "$rc" -eq 0 ] && [ "$state" = "neutral" ] && ok || bad "adr findings — neutral stays neutral/exit 0 (rc=$rc state=$state: $out)"
+case "$out" in *"confirm the Status still reflects"*) ok ;; *) bad "adr findings present alongside neutral verdict ($out)" ;; esac
+
+# d. a blocked evidence verdict stays blocked (exit 1) with the ADR section present.
+printf '%s\n207\trequired\tnosuch\tvalid\n' "$HDR" > "$work/index.tsv"
+printf '207\n' > "$work/caps.tsv"
+run_adr --adr-dir "$adrdir" --issues "$work/issues.json"
+[ "$rc" -eq 1 ] && [ "$state" = "blocked" ] && ok || bad "adr — blocked evidence still blocks with ADR section (rc=$rc state=$state: $out)"
+
+# e. --adr-dir absent -> honest not-assessed line; evidence verdict unchanged.
+printf '%s\n206\trequired\ts1\tvalid\n' "$HDR" > "$work/index.tsv"
+printf '206\n' > "$work/caps.tsv"
+run_adr
+[ "$rc" -eq 0 ] && [ "$state" = "ready" ] && ok || bad "adr absent — verdict unchanged (rc=$rc state=$state)"
+case "$out" in *"ADR status (advisory): not assessed (--adr-dir not provided)."*) ok ;; *) bad "adr absent — section reports not assessed ($out)" ;; esac
+
+# f. --adr-dir without --issues -> deterministic check still runs; the closed-gate
+#    heuristic is honestly not assessed (no prompt fabricated from missing data).
+run_adr --adr-dir "$adrdir"
+[ "$rc" -eq 0 ] && [ "$state" = "ready" ] && ok || bad "adr no-issues — verdict unchanged (rc=$rc state=$state)"
+case "$out" in *"0004-nostatus.md — no recognized Status line"*) ok ;; *) bad "adr no-issues — deterministic Status check still runs ($out)" ;; esac
+case "$out" in *"confirm the Status"*) bad "adr no-issues — heuristic must not prompt without issue data ($out)" ;; *) ok ;; esac
+case "$out" in *"closed-gate heuristic not assessed (--issues not provided)"*) ok ;; *) bad "adr no-issues — heuristic reported not assessed ($out)" ;; esac
+
+# g. a provided-but-missing ADR dir or issues file is an input error (exit 2).
+rc=0; bash "$script" --index "$work/index.tsv" --capabilities "$work/caps.tsv" --evaluations-root "$EVROOT" --adr-dir "$work/no-such-dir" >/dev/null 2>&1 || rc=$?
+[ "$rc" -eq 2 ] && ok || bad "missing --adr-dir path -> exit 2 (got $rc)"
+rc=0; bash "$script" --index "$work/index.tsv" --capabilities "$work/caps.tsv" --evaluations-root "$EVROOT" --adr-dir "$adrdir" --issues "$work/no-such.json" >/dev/null 2>&1 || rc=$?
+[ "$rc" -eq 2 ] && ok || bad "missing --issues path -> exit 2 (got $rc)"
+
+# ============================================================================
 # Runner pure helpers (Findings 1 & 2). Source the runner: main is guarded, so
 # only the functions load — no CI side effects.
 # ============================================================================
@@ -196,6 +273,41 @@ caps_out="$(printf 'feat: add exporter (#42)\nfeat: tidy things\n' | while IFS= 
 done | compat_resolve_capabilities)"
 [ "$(printf '%s\n' "$caps_out" | awk -F'\t' '$1=="42"{c++} END{print c+0}')" = "1" ] && ok || bad "integration: referenced feat -> id 42 ($caps_out)"
 [ "$(printf '%s\n' "$caps_out" | awk -F'\t' '$1=="-"{c++} END{print c+0}')" = "1" ] && ok || bad "integration: no-ref feat -> unresolved sentinel, no abort ($caps_out)"
+
+# --- #312: capability discovery must recognize every Conventional Commits
+# FEATURE form — a `feat!:` is a Release Please feature/breaking input, so
+# missing it let a breaking feature bypass the gate. Non-feature types stay
+# excluded: the gate's capability unit is feat commits only (a breaking fix is
+# #291's territory), and `feature:` is not a Conventional Commits type.
+compat_is_feature_subject 'feat: add thing (#1)'          && ok || bad "#312: 'feat:' recognized"
+compat_is_feature_subject 'feat(scope): add thing (#1)'   && ok || bad "#312: 'feat(scope):' recognized"
+compat_is_feature_subject 'feat!: break thing (#1)'       && ok || bad "#312: 'feat!:' recognized"
+compat_is_feature_subject 'feat(scope)!: break thing'     && ok || bad "#312: 'feat(scope)!:' recognized"
+compat_is_feature_subject 'fix: repair thing'             && bad "#312: 'fix:' excluded" || ok
+compat_is_feature_subject 'chore!: breaking chore'        && bad "#312: 'chore!:' excluded" || ok
+compat_is_feature_subject 'feature: not a CC type'        && bad "#312: 'feature:' excluded" || ok
+compat_is_feature_subject 'fix!: breaking fix'            && bad "#312: 'fix!:' excluded (feat-only unit; #291 owns breaking fixes)" || ok
+
+# #312 discovery-path integration: a `feat!:` flows through the same pure
+# functions main uses, yields its issue id, and the label is the post-': ' text
+# (the '!' and '(scope)' never leak into the label). #311's no-reference
+# handling stays green in the same mix.
+caps312="$(printf 'feat!: drop legacy exporter (#207)\nfix!: breaking fix (#9)\nfeat(ui)!: new shell (#42)\nfeat: tidy things\n' | while IFS= read -r subj; do
+  compat_is_feature_subject "$subj" || continue
+  printf '%s\t%s\n' "$(compat_issue_id "$subj")" "${subj#*: }"
+done | compat_resolve_capabilities)"
+[ "$(printf '%s\n' "$caps312" | awk -F'\t' '$1=="207"{print $2; exit}')" = "drop legacy exporter (#207)" ] && ok || bad "#312: feat!: reaches the caps list with a clean label ($caps312)"
+[ "$(printf '%s\n' "$caps312" | awk -F'\t' '$1=="42"{print $2; exit}')" = "new shell (#42)" ] && ok || bad "#312: feat(scope)!: label keeps only post-': ' text ($caps312)"
+[ "$(printf '%s\n' "$caps312" | awk -F'\t' '$1=="9"{c++} END{print c+0}')" = "0" ] && ok || bad "#312: fix!: never becomes a capability ($caps312)"
+[ "$(printf '%s\n' "$caps312" | awk -F'\t' '$1=="-"{c++} END{print c+0}')" = "1" ] && ok || bad "#312: no-ref feat still unresolved sentinel, no abort (#311) ($caps312)"
+
+# #312 end-to-end: a required+invalid declaration referenced by a `feat!:`
+# blocks exactly like a plain `feat:` would.
+printf '%s\n207\trequired\tnosuch\tvalid\n' "$HDR" > "$work/index.tsv"
+printf '%s\n' "$caps312" | awk -F'\t' '$1=="207"' > "$work/caps.tsv"
+rc=0; out="$(bash "$script" --index "$work/index.tsv" --capabilities "$work/caps.tsv" --evaluations-root "$EVROOT" 2>&1)" || rc=$?
+state="$(printf '%s\n' "$out" | sed -n 's/^gate-state: //p' | head -n1)"
+{ [ "$rc" -eq 1 ] && [ "$state" = "blocked" ]; } && ok || bad "#312: feat!:-discovered capability blocks like feat: (rc=$rc state=$state: $out)"
 
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

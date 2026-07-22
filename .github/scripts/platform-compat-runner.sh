@@ -3,7 +3,9 @@
 # Release Please PR, resolves the release range (last core tag..PR head), lists
 # the capabilities it releases (feat commits), asks platform-compat-check.sh
 # whether their DECLARED evaluation evidence is present and valid, then posts an
-# advisory `platform-compat` commit status and one summary comment. Mirrors
+# advisory `platform-compat` commit status and one summary comment. It also
+# feeds the check the ADR directory and the repo's issue states (#305) so the
+# comment carries the ADR-status advisory section. Mirrors
 # gate-runner.sh / release-notes-runner.sh; like them it reads and writes only a
 # status + a comment — never merges, tags, or releases.
 #
@@ -21,6 +23,21 @@ compat_status_for() { # <rc> -> success|failure|error
     1) echo failure ;;   # blocked — a declared-but-invalid required declaration
     3) echo success ;;   # not assessed (range unavailable) — honest, non-error
     *) echo error ;;     # 2 (usage/config/input) or unexpected — never success
+  esac
+}
+
+# The gate's capability unit is a FEATURE commit — all four Conventional Commits
+# feature forms: `feat:`, `feat(scope):`, `feat!:`, `feat(scope)!:`. The breaking
+# forms matter (#312): Release Please treats `feat!:` as a feature/breaking
+# release input, so skipping it let a breaking feature bypass the Evaluation ->
+# Release gate entirely. The unit stays feat-only by design: a breaking fix
+# (`fix!:`) is a compatibility question (#291's territory), not a new capability,
+# and `feature:` is not a Conventional Commits type — both stay excluded.
+# Centralized here so the supported forms live, and are tested, in one place.
+compat_is_feature_subject() { # <commit subject> -> exit 0 iff a feature commit
+  case "$1" in
+    feat:*|feat\(*\):*|feat!:*|feat\(*\)!:*) return 0 ;;
+    *) return 1 ;;
   esac
 }
 
@@ -52,7 +69,8 @@ compat_issue_id() { # <commit subject+body text> -> issue number, or empty
 main() {
   set -euo pipefail
   local here repo_root repo release_branch index eval_root pr pr_number head_sha
-  local caps no_range_flag last_tag range out rc state body status_state
+  local caps no_range_flag last_tag range out rc state body status_state issues
+  local -a adr_args
 
   here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   repo_root="$(cd "$here/../.." && pwd)"
@@ -73,6 +91,18 @@ main() {
   caps="$(mktemp)"
   no_range_flag=""
 
+  # ADR-status advisory inputs (#305): issues fetched exactly like gate-runner.sh.
+  # If the fetch fails, --issues is simply not passed — the check then reports the
+  # closed-gate heuristic as "not assessed" instead of fabricating a clean sweep.
+  # The guard also keeps a gh hiccup from aborting the whole run under
+  # `set -euo pipefail` (#310 is the scar tissue here).
+  issues="$(mktemp)"
+  adr_args=(--adr-dir "$repo_root/docs/adr")
+  if gh issue list --repo "$repo" --state all --limit 500 \
+       --json number,state > "$issues" 2>/dev/null; then
+    adr_args+=(--issues "$issues")
+  fi
+
   # Resolve the release range as the release-notes runner does: from the last
   # CORE tag (vX.Y.Z, never a companion tag) to the PR head. If the head can't be
   # resolved, the range is unknown — tell the check to report not-assessed.
@@ -85,7 +115,7 @@ main() {
     # A release capability is a feat commit, keyed by its first issue reference.
     git log --no-merges --format='%H' "$range" 2>/dev/null | while IFS= read -r sha; do
       subj="$(git log -1 --format='%s' "$sha")"
-      case "$subj" in feat:*|feat\(*) ;; *) continue ;; esac
+      compat_is_feature_subject "$subj" || continue
       id="$(compat_issue_id "$(git log -1 --format='%s%n%b' "$sha")")"
       printf '%s\t%s\n' "$id" "${subj#*: }"
     done | compat_resolve_capabilities > "$caps"
@@ -93,10 +123,11 @@ main() {
 
   set +e
   out="$(bash "$here/platform-compat-check.sh" \
-    --index "$index" --capabilities "$caps" --evaluations-root "$eval_root" $no_range_flag 2>&1)"
+    --index "$index" --capabilities "$caps" --evaluations-root "$eval_root" \
+    "${adr_args[@]}" $no_range_flag 2>&1)"
   rc=$?
   set -e
-  rm -f "$caps"
+  rm -f "$caps" "$issues"
 
   state="$(printf '%s\n' "$out" | sed -n 's/^gate-state: //p' | head -n1)"
   body="$(printf '%s\n' "$out" | tail -n +2)"
@@ -110,7 +141,7 @@ main() {
   marker="<!-- platform-compat -->"
   existing="$(gh api "repos/$repo/issues/$pr_number/comments" \
     --jq ".[] | select(.body|startswith(\"$marker\")) | .id" 2>/dev/null | head -n1)"
-  comment="$(printf '%s\n**Platform Compatibility Review: %s**\n\n```\n%s\n```\n\n(Checks DECLARED capability-evaluation evidence for the Evaluation → Release seam — ADR-0026. Undeclared or unresolved-identity capabilities are advisory during initial adoption and do not block.)\n' "$marker" "${state:-unknown}" "$body")"
+  comment="$(printf '%s\n**Platform Compatibility Review: %s**\n\n```\n%s\n```\n\n(Checks DECLARED capability-evaluation evidence for the Evaluation → Release seam — ADR-0026. Undeclared or unresolved-identity capabilities are advisory during initial adoption and do not block. The "ADR status" section is a labeled heuristic advisory — #305 — asking a human to confirm; it never changes the gate verdict.)\n' "$marker" "${state:-unknown}" "$body")"
   if [ -n "$existing" ]; then
     gh api -X PATCH "repos/$repo/issues/comments/$existing" -f body="$comment" >/dev/null
   else
