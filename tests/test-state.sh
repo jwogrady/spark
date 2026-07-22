@@ -55,4 +55,18 @@ assert_contains "brief's locate line reflects the written stage" \
 rc=0; ( cd "$WORK" && "$SPARK" state --set stage=idle >/dev/null 2>&1 ) || rc=$?
 [ "$rc" -ne 0 ] && ok || bad "state outside a git repo refuses"
 
+# --- #264: a quoted value round-trips even with neither jq nor python3 on PATH
+# (the awk fallback must not truncate at the first embedded quote).
+bare="$WORK/barebin"; mkdir -p "$bare"
+for t in bash sh dirname basename cat cp mkdir grep sed awk sort tr head wc find env git date; do
+  real="$(command -v "$t" 2>/dev/null || true)"; [ -n "$real" ] && ln -s "$real" "$bare/$t"
+done
+nojq="$WORK/nojq"; make_repo "$nojq"
+( cd "$nojq" && env PATH="$bare" "$SPARK" state --set stage=ship \
+    next_action='Merge the "big" PR' blockers='path a\b' >/dev/null 2>&1 )
+got="$( cd "$nojq" && env PATH="$bare" "$SPARK" state | awk -F= '$1=="next_action"{sub(/^[^=]*=/,"");print}' )"
+[ "$got" = 'Merge the "big" PR' ] && ok || bad "no-jq: quoted next_action round-trips (got '$got')"
+gotb="$( cd "$nojq" && env PATH="$bare" "$SPARK" state | awk -F= '$1=="blockers"{sub(/^[^=]*=/,"");print}' )"
+[ "$gotb" = 'path a\b' ] && ok || bad "no-jq: backslash in blockers round-trips (got '$gotb')"
+
 finish

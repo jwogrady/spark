@@ -75,9 +75,23 @@ read_flat_json() {
     return 0
   fi
   # Fallback for the documented schema: one "key": "value" pair per line.
-  # Splitting on '"' keeps spaces and colons inside values intact; escaped
-  # quotes are outside the schema, so they are out of scope here.
-  awk -F'"' 'NF >= 5 && $3 ~ /^[[:space:]]*:[[:space:]]*$/ { print $2 "\t" $4 }' "$f"
+  # Escaped quotes and backslashes are protected with control-char sentinels
+  # before the split on '"' and restored afterward, so a value containing a
+  # quote round-trips instead of being truncated at its first embedded quote
+  # (#264). Splitting still keeps spaces and colons inside values intact.
+  awk '
+    {
+      line = $0
+      gsub(/\\\\/, "\002", line)   # protect escaped backslashes first
+      gsub(/\\"/, "\001", line)    # then escaped quotes
+      n = split(line, f, "\"")
+      if (n >= 5 && f[3] ~ /^[[:space:]]*:[[:space:]]*$/) {
+        k = f[2]; v = f[4]
+        gsub(/\001/, "\"", k); gsub(/\002/, "\\", k)
+        gsub(/\001/, "\"", v); gsub(/\002/, "\\", v)
+        print k "\t" v
+      }
+    }' "$f"
 }
 
 # resolve_prefs — print "key<TAB>value<TAB>source" for the fully resolved
