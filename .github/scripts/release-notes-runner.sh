@@ -27,11 +27,18 @@ pr_number="$(printf '%s' "$pr" | jq -r '.number')"
 head_sha="$(printf '%s' "$pr" | jq -r '.headRefOid')"
 printf '%s' "$pr" | jq -r '.body' > notes.md
 
-# Commit range: since the last release tag on this history. Needs full history
-# (the workflow checks out with fetch-depth: 0). Each subject becomes a
+# Commit range: the commits the release PR actually releases — from the last
+# CORE release tag (vX.Y.Z, never a companion tag) to the PR head. milestone-gate
+# runs on many events, so the local checkout may be any ref (#280); fetch and pin
+# the PR head SHA rather than trusting HEAD. Each subject becomes a
 # type<TAB>subject line; labels are left empty (the omission half needs none).
-last_tag="$(git describe --tags --abbrev=0 2>/dev/null || true)"
-range="${last_tag:+$last_tag..}HEAD"
+git fetch --quiet --tags origin "$head_sha" 2>/dev/null || true
+if ! git cat-file -e "$head_sha" 2>/dev/null; then
+  echo "could not resolve the release PR head ($head_sha); skipping without a status"
+  exit 0
+fi
+last_tag="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname 2>/dev/null | head -n1)"
+range="${last_tag:+$last_tag..}$head_sha"
 : > commits.tsv
 git log --no-merges --format='%s' "$range" 2>/dev/null | while IFS= read -r subj; do
   case "$subj" in
@@ -42,11 +49,16 @@ done
 
 set +e
 out="$(bash "$here/release-notes-check.sh" --commits commits.tsv --notes notes.md 2>&1)"
+rc=$?
 set -e
 
-# Commit status — always success (advisory); the detail names any finding.
+# Reflect the actual finding in the status (#280): failure when the checker
+# found an omission so it is visible on the PR, success when the notes are
+# complete. It stays non-blocking by policy — the status is not a required
+# check; the human merge is the release act.
+state="success"; [ "$rc" -ne 0 ] && state="failure"
 gh api -X POST "repos/$repo/statuses/$head_sha" \
-  -f state="success" -f context="release-notes" \
+  -f state="$state" -f context="release-notes" \
   -f description="$(printf '%s' "$out" | tail -n1 | head -c 130)" >/dev/null
 
 marker="<!-- release-notes-check -->"
