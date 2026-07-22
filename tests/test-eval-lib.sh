@@ -154,5 +154,31 @@ rc=0; out="$(EVAL_RATES="" eval_main validate t1 2>&1)" || rc=$?
 { [ "$rc" -ne 0 ] && case "$out" in *"missing required config: EVAL_RATES"*) true ;; *) false ;; esac; } \
   && ok || bad "missing required config is named ($rc: $out)"
 
+# non-numeric run facts are caught — they would otherwise coerce to 0 in scoring
+# and publish a silently wrong cost/latency as valid evidence.
+good_run; printf 'model\tm1\ntokens_in\tlots\ntokens_out\t1\ntokens_method\testimate\nlatency_seconds\t1\nlatency_method\tmeasured\n' > "$work/runs/t1/g1/run.tsv"
+rc=0; out="$(eval_main validate t1 2>&1)" || rc=$?
+{ [ "$rc" -ne 0 ] && case "$out" in *'tokens_in="lots"'*) true ;; *) false ;; esac; } \
+  && ok || bad "non-numeric tokens_in must be caught ($rc: $out)"
+
+printf 'model\tm1\ntokens_in\t1\ntokens_out\t1\ntokens_method\testimate\nlatency_seconds\tsoon\nlatency_method\tmeasured\n' > "$work/runs/t1/g1/run.tsv"
+rc=0; out="$(eval_main validate t1 2>&1)" || rc=$?
+{ [ "$rc" -ne 0 ] && case "$out" in *'latency_seconds="soon"'*) true ;; *) false ;; esac; } \
+  && ok || bad "non-numeric latency_seconds must be caught ($rc: $out)"
+
+# a non-numeric rate for the run's model is caught (cost would coerce to 0).
+good_run; printf 'm1\tcheap\t6\n' > "$work/rates.tsv"
+rc=0; out="$(eval_main validate t1 2>&1)" || rc=$?
+{ [ "$rc" -ne 0 ] && case "$out" in *'in-rate'*'non-numeric'*) true ;; *) false ;; esac; } \
+  && ok || bad "non-numeric rate must be caught ($rc: $out)"
+printf 'm1\t3\t6\n' > "$work/rates.tsv"
+
+# a missing rates table is caught by validate, not only at score time.
+good_run; rm -f "$work/rates.tsv"
+rc=0; out="$(eval_main validate t1 2>&1)" || rc=$?
+{ [ "$rc" -ne 0 ] && case "$out" in *'missing rates table'*) true ;; *) false ;; esac; } \
+  && ok || bad "missing rates table must be caught ($rc: $out)"
+printf 'm1\t3\t6\n' > "$work/rates.tsv"
+
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
