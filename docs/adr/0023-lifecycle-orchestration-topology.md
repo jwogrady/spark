@@ -1,7 +1,7 @@
 # ADR: Lifecycle orchestration topology — Shape, Build, Assure & Deliver
 
 Date: 2026-07-21
-Status: Accepted (2026-07-21, at the #198 decision gate — the three-group topology is the ratified orchestration model; implementation is deferred, see the v0.12 recommendation)
+Status: Accepted (2026-07-21, at the #198 decision gate — the three-group topology is the ratified orchestration model; implementation is deferred, see the v0.12 recommendation. Verdict annotated 2026-07-22: the first implementation slice (#206) closed without a measurement window — not adopted, never measured; the topology decision stands, unimplemented, and any revival needs a scheduled measurement window)
 Owner: jwogrady
 
 > This ADR records an **Accepted** decision (issue #203, the first deliverable of

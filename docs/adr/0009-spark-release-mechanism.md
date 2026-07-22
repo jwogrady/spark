@@ -1,7 +1,7 @@
 # ADR: Spark releases manually today, adopts Release Please once validation CI lands
 
 Date: 2026-07-08
-Status: Accepted (realized 2026-07-21 — validation CI (#70) and `release-please.yml` both landed; Release Please is now Spark's live release mechanism and the manual fallback has retired here — see ADR-0016 and explanation/release-ownership.md)
+Status: Accepted (realized 2026-07-21 — validation CI (#70) and `release-please.yml` both landed; Release Please is now Spark's live release mechanism and the manual fallback has retired here — see ADR-0016 and explanation/release-ownership.md; verdict confirmed 2026-07-22: shipped and in force)
 Owner: jwogrady
 
 ## Context

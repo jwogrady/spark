@@ -212,6 +212,12 @@ for i in json.load(open(sys.argv[1])):
     # gate — …)"), not from the rest of the line or the document.
     refs="$(printf '%s' "$status_line" | grep -oE '\([^)]*\)' | grep -oE '#[0-9]+' | tr -d '#' | sort -u || true)"
     [ -z "$refs" ] && continue
+    # A recorded resolution IS the confirmation this prompt asks for: a Status
+    # line carrying "verdict annotated/confirmed <date>" has already answered
+    # the closed-gate question, so re-prompting every release would be noise.
+    if printf '%s' "$status_line" | grep -qiE 'verdict (annotated|confirmed)'; then
+      continue
+    fi
     all_closed=1
     while IFS= read -r n; do
       printf '%s\n' "$closed" | grep -qx "$n" || all_closed=0

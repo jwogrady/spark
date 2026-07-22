@@ -1,7 +1,7 @@
 # ADR: Capability-based model selection — profiles per group, not hard-coded names
 
 Date: 2026-07-21
-Status: Accepted (2026-07-21, at the #198 decision gate — capability-based selection is the ratified policy; no selection infrastructure is built until an orchestration slice is adopted)
+Status: Accepted (2026-07-21, at the #198 decision gate — capability-based selection is the ratified policy; no selection infrastructure is built until an orchestration slice is adopted. Verdict annotated 2026-07-22: no slice was adopted (#206 closed unmeasured) and the build trigger has not fired (#288 closed as a standing conditional); the policy stands, infrastructure unbuilt)
 Owner: jwogrady
 
 > This ADR records an **Accepted** decision (issue #204, the second deliverable of
