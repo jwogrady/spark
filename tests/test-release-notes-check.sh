@@ -44,7 +44,7 @@ refactor	extract the resolver	tech-debt" \
 * stop the crash on empty input (#11)
 ## Documentation
 * document the backlog label (#12)" \
-  "release-notes: complete"
+  "core subject-omission check passed"
 
 # --- docs is a visible type: a docs change absent from the notes is flagged
 # just like a feat, since documentation is part of the product.
@@ -61,7 +61,7 @@ check 0 "trailing PR-number subject matches the linkified notes" \
 "fix	stop the crash on empty input (#256)	bug" \
 "## Bug Fixes
 * stop the crash on empty input ([#256](https://x/256)) ([abc](https://x/abc)), closes [#224]" \
-  "release-notes: complete"
+  "core subject-omission check passed"
 
 # --- omission: a visible feat is missing from the notes.
 check 1 "missing feature flagged" \
@@ -92,7 +92,7 @@ ci	pin the runner version	chore
 refactor	extract the resolver	tech-debt" \
 "## Features
 * nothing user-facing this release" \
-  "release-notes: complete"
+  "core subject-omission check passed"
 
 # --- combined: an omission and a mislabel in the same range are both reported.
 check 1 "omission and mislabel both reported" \
@@ -102,6 +102,27 @@ chore	assign the feature to its milestone	feature" \
 "## Bug Fixes
 * an unrelated fix (#9)" \
   "omission: feat: add the exporter" "mislabel: assign the feature to its milestone"
+
+# --- #297: the production runner supplies NO labels, so the hidden-feature
+# (mislabel) half is vacuous. The success message must make ONLY the
+# subject-omission claim, and must NOT claim the hidden-feature property it
+# could not check. This is the honesty fix's core assertion.
+printf 'feat\tadd the widget\t\nfix\tpatch the bug\t\n' > "$work/commits.tsv"
+printf '## Features\n* add the widget (#10)\n## Bug Fixes\n* patch the bug (#11)\n' > "$work/notes.md"
+rc=0; out="$(bash "$script" --commits "$work/commits.tsv" --notes "$work/notes.md" 2>&1)" || rc=$?
+if [ "$rc" -ne 0 ]; then bad "no-labels path — want exit 0, got $rc ($out)"; else
+  case "$out" in *"core subject-omission check passed"*) ok ;; *) bad "no-labels path — missing the omission claim ($out)" ;; esac
+  case "$out" in *"hidden behind an excluded type"*) bad "no-labels path — must NOT claim the hidden-feature property ($out)" ;; *) ok ;; esac
+fi
+
+# --- #297: when labels ARE supplied and clean, the success message may add the
+# hidden-feature clause, because that half actually ran.
+printf 'feat\tadd the widget\tfeature\nchore\tbump the container\tchore\n' > "$work/commits.tsv"
+printf '## Features\n* add the widget (#10)\n' > "$work/notes.md"
+rc=0; out="$(bash "$script" --commits "$work/commits.tsv" --notes "$work/notes.md" 2>&1)" || rc=$?
+if [ "$rc" -ne 0 ]; then bad "labels-present path — want exit 0, got $rc ($out)"; else
+  case "$out" in *"no labeled commit is hidden behind an excluded type"*) ok ;; *) bad "labels-present path — missing the hidden-feature clause ($out)" ;; esac
+fi
 
 # --- usage errors exit 2.
 rc=0; bash "$script" --commits "$work/nope.tsv" --notes "$work/notes.md" >/dev/null 2>&1 || rc=$?
