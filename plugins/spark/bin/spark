@@ -65,6 +65,18 @@ prefs_operator_path() {
   printf '%s\n' "${XDG_CONFIG_HOME:-$HOME/.config}/spark/preferences.json"
 }
 
+# Permission trust tiers (ADR-0017). The preset→baseline map is declared once
+# here so apply-permissions and doctor read the same authority (#277): a preset
+# with no shipped baseline, or a baseline with no preset, cannot slip through.
+PERMISSION_PRESETS="delivery conservative"
+permission_baseline() { # permission_baseline <preset> — echo path, or return 1
+  case "$1" in
+    delivery)     printf '%s' "$SPARK_ROOT/settings/permission-baseline.json" ;;
+    conservative) printf '%s' "$SPARK_ROOT/settings/permission-baseline-conservative.json" ;;
+    *) return 1 ;;
+  esac
+}
+
 # read_flat_json <file> — print one "key<TAB>value" line per pair. A missing
 # file prints nothing: every tier above the shipped defaults is optional.
 read_flat_json() {
@@ -670,6 +682,24 @@ cmd_doctor() {
     done
     [ "$tax_ok" -eq 1 ] && green "  ✓ every shipped skill is in the canonical taxonomy"
   fi
+
+  # Permission presets (ADR-0017, #277): every preset in the enum must resolve
+  # to a shipped baseline that is valid JSON, so a preset can never be offered
+  # without the file it applies. Reads the same permission_baseline authority
+  # apply-permissions uses.
+  echo
+  echo "Permission presets:"
+  local preset_ok=1 pbase
+  for p in $PERMISSION_PRESETS; do
+    if ! pbase="$(permission_baseline "$p")"; then
+      red "  ✗ preset '$p' has no baseline mapping"; errors=$((errors+1)); preset_ok=0
+    elif [ ! -f "$pbase" ]; then
+      red "  ✗ preset '$p' → missing baseline ${pbase#"$SPARK_ROOT"/}"; errors=$((errors+1)); preset_ok=0
+    elif ! check_json "$pbase"; then
+      red "  ✗ preset '$p' → ${pbase#"$SPARK_ROOT"/} is not valid JSON"; errors=$((errors+1)); preset_ok=0
+    fi
+  done
+  [ "$preset_ok" -eq 1 ] && green "  ✓ every permission preset resolves to a valid baseline ($PERMISSION_PRESETS)"
 
   # Companion plugins (ADR-0014): inside the marketplace repo, the validation
   # gate covers every listed plugin, not only the core — manifest JSON, skill
@@ -1861,12 +1891,10 @@ cmd_apply_permissions() {
   [ -n "$preset" ] || preset="$(pref_get permissions.preset || true)"
   [ -n "$preset" ] || preset="delivery"
   local baseline
-  case "$preset" in
-    delivery)     baseline="$SPARK_ROOT/settings/permission-baseline.json" ;;
-    conservative) baseline="$SPARK_ROOT/settings/permission-baseline-conservative.json" ;;
-    *) red "✗ unknown permission preset: $preset (expected delivery or conservative)"
-       APPLY_PERMISSIONS_ATTENTION=1 APPLY_PERMISSIONS_FAILED=1; return 1 ;;
-  esac
+  if ! baseline="$(permission_baseline "$preset")"; then
+    red "✗ unknown permission preset: $preset (expected: $PERMISSION_PRESETS)"
+    APPLY_PERMISSIONS_ATTENTION=1 APPLY_PERMISSIONS_FAILED=1; return 1
+  fi
   echo "Permission preset: $preset"
   if [ ! -f "$baseline" ]; then
     red "✗ baseline not found: $baseline"
