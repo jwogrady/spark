@@ -51,9 +51,12 @@ deleted — the key list stays stable.
 
 - **Written** by the five lifecycle skills at close-out: `ideate` records the
   statement's path, `plan` the issue picked for codify, `codify` the branch,
-  `validate` the blockers, `ship` the PR. Claude edits the file directly per
-  each SKILL.md's carry-forward step; there is no CLI write verb — the state
-  records judgment calls no script can infer.
+  `validate` the blockers, `ship` the PR. The skill supplies the judgment values
+  — no script can infer what the next action or the blockers are — and
+  `spark state --set key=value …` writes them: it merges into any existing
+  state, keeps the key set stable, and stamps `updated`, so the file never
+  drifts from this schema. `spark state` with no arguments prints the current
+  values.
 - **Read** by `spark resume` (the full "where you were / what's next" view,
   every key) and `spark brief` (the locate line: `stage`, `issue`,
   `next_action`, `blockers`, `updated`).

@@ -25,9 +25,9 @@ ones, then drives the fixes.
 3. **Fix the must/should items** on the same branch.
 4. **Re-verify** against the issue's acceptance criteria. The criteria are the
    definition of done.
-5. **Carry the state forward.** Update `.spark/state.json`
-   ([schema](../../docs/reference/state.md)): `stage` `validate`, `blockers`
-   (what still blocks shipping, `""` when nothing), `next_action`, `updated`.
+5. **Carry the state forward.** Record the close-out with
+   `spark state --set stage=validate blockers="<what still blocks shipping, empty when nothing>" next_action="<…>"`
+   (writes `.spark/state.json`, [schema](../../docs/reference/state.md); `updated` is stamped for you).
 
 ## Guardrails
 
