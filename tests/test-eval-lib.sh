@@ -90,5 +90,69 @@ rc=0; out="$(eval_main bogus 2>&1)" || rc=$?
 { [ "$rc" -ne 0 ] && case "$out" in *"unknown command"*) true ;; *) false ;; esac; } \
   && ok || bad "unknown command is rejected ($rc: $out)"
 
+# ============================================================================
+# Metric-range validation (#306): identity is not enough — values must be sane.
+# ============================================================================
+good_run() { printf 'model\tm1\ntokens_in\t1000000\ntokens_out\t500000\ntokens_method\testimate\nlatency_seconds\t120\nlatency_method\tmeasured\n' > "$work/runs/t1/g1/run.tsv"; }
+good_rubric() { printf '# id\tmax\nclarity\t2\ndepth\t2\n' > "$work/fixtures/g1/rubric.tsv"; }
+
+# caught value outside {0,1} is rejected, naming the id.
+good_findings; good_scorecard; printf 'A1\t2\nA2\t0\n' > "$work/runs/t1/g1/findings.tsv"
+rc=0; out="$(eval_main validate t1 2>&1)" || rc=$?
+{ [ "$rc" -ne 0 ] && case "$out" in *'findings id "A1" caught="2"'*) true ;; *) false ;; esac; } \
+  && ok || bad "caught=2 must be rejected ($rc: $out)"
+
+# non-numeric caught is rejected.
+printf 'A1\tx\nA2\t0\n' > "$work/runs/t1/g1/findings.tsv"
+rc=0; out="$(eval_main validate t1 2>&1)" || rc=$?
+{ [ "$rc" -ne 0 ] && case "$out" in *'caught="x"'*) true ;; *) false ;; esac; } \
+  && ok || bad "non-numeric caught must be rejected ($rc: $out)"
+
+# a score exceeding its rubric max is rejected.
+good_findings; printf 'clarity\t9\ndepth\t2\n' > "$work/runs/t1/g1/scorecard.tsv"
+rc=0; out="$(eval_main validate t1 2>&1)" || rc=$?
+{ [ "$rc" -ne 0 ] && case "$out" in *'score 9 exceeds rubric max 2'*) true ;; *) false ;; esac; } \
+  && ok || bad "score above rubric max must be rejected ($rc: $out)"
+
+# a negative score is rejected.
+printf 'clarity\t-1\ndepth\t2\n' > "$work/runs/t1/g1/scorecard.tsv"
+rc=0; out="$(eval_main validate t1 2>&1)" || rc=$?
+{ [ "$rc" -ne 0 ] && case "$out" in *'scorecard id "clarity" score="-1"'*) true ;; *) false ;; esac; } \
+  && ok || bad "negative score must be rejected ($rc: $out)"
+
+# a non-positive rubric max (a scoring denominator) is rejected.
+good_scorecard; printf '# id\tmax\nclarity\t0\ndepth\t2\n' > "$work/fixtures/g1/rubric.tsv"
+rc=0; out="$(eval_main validate t1 2>&1)" || rc=$?
+{ [ "$rc" -ne 0 ] && case "$out" in *'rubric id "clarity" max="0"'*) true ;; *) false ;; esac; } \
+  && ok || bad "non-positive rubric max must be rejected ($rc: $out)"
+good_rubric
+
+# valid evidence still validates (no false positives from the range checks).
+good_findings; good_scorecard; good_run
+rc=0; out="$(eval_main validate t1 2>&1)" || rc=$?
+{ [ "$rc" -eq 0 ] && case "$out" in *"well-formed"*) true ;; *) false ;; esac; } \
+  && ok || bad "valid evidence still validates ($rc: $out)"
+
+# ============================================================================
+# Run-facts + required-config validation (#304).
+# ============================================================================
+# run.tsv missing a required key is caught by validate, naming the key.
+printf 'model\tm1\ntokens_out\t500000\ntokens_method\testimate\nlatency_seconds\t120\nlatency_method\tmeasured\n' > "$work/runs/t1/g1/run.tsv"
+rc=0; out="$(eval_main validate t1 2>&1)" || rc=$?
+{ [ "$rc" -ne 0 ] && case "$out" in *"run.tsv missing key 'tokens_in'"*) true ;; *) false ;; esac; } \
+  && ok || bad "missing run.tsv key must be caught ($rc: $out)"
+
+# a model absent from the rates table is caught at validate, not silently at score.
+printf 'model\tnope\ntokens_in\t1\ntokens_out\t1\ntokens_method\testimate\nlatency_seconds\t1\nlatency_method\tmeasured\n' > "$work/runs/t1/g1/run.tsv"
+rc=0; out="$(eval_main validate t1 2>&1)" || rc=$?
+{ [ "$rc" -ne 0 ] && case "$out" in *"model 'nope' not in rates table"*) true ;; *) false ;; esac; } \
+  && ok || bad "unknown model must be caught by validate ($rc: $out)"
+good_run
+
+# a suite that forgot a required variable gets a named error, not a set -u crash.
+rc=0; out="$(EVAL_RATES="" eval_main validate t1 2>&1)" || rc=$?
+{ [ "$rc" -ne 0 ] && case "$out" in *"missing required config: EVAL_RATES"*) true ;; *) false ;; esac; } \
+  && ok || bad "missing required config is named ($rc: $out)"
+
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

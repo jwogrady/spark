@@ -42,8 +42,13 @@ diffable and `jq`-free.
 | `runs/<t>/<group>/scorecard.tsv` | a run | one row per rubric dimension; column 2 is the graded score |
 | `runs/<t>/<group>/run.tsv` | a run | `key<TAB>value`: `model`, `tokens_in`, `tokens_out`, `tokens_method`, `latency_seconds`, `latency_method` |
 
-`validate` enforces the shape: findings must have one row per answer-key item and
-scorecard one per rubric dimension, or the run is not well-formed.
+`validate` enforces both shape and value integrity: findings must have one row
+per answer-key item and scorecard one per rubric dimension (matching column-1
+ids); `caught` must be exactly `0`/`1`; each score must be a non-negative number
+within its rubric max; every rubric max must be a positive number; and `run.tsv`
+must carry the required keys with a model present in the rates table — or the run
+is not well-formed. This is what the release gate consumes, so malformed metric
+evidence can never pass as a green release-readiness result.
 
 ## The four metrics
 

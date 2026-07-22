@@ -95,6 +95,57 @@ eval_check_ids() { # <expected-file> <actual-file> <group> <expected-name> <actu
     }' "$1" "$2"
 }
 
+# eval_check_findings <findings> <group> — every caught value must be exactly 0
+# or 1 (the documented contract). Offenders to stderr; count to stdout. Without
+# this, awk coerces "2" or "x" and scoring can report correctness above 1.00.
+eval_check_findings() {
+  awk -F'\t' -v g="$2" '
+    /^[[:space:]]*#/ {next} /^[[:space:]]*$/ {next}
+    { v=$2; if (v!="0" && v!="1") { printf "  invalid: %s findings id \"%s\" caught=\"%s\" (want 0 or 1)\n", g, $1, v > "/dev/stderr"; p++ } }
+    END { print p+0 }' "$1"
+}
+
+# eval_check_rubric <rubric> <group> — every max must be a positive number, since
+# it is a scoring denominator. Offenders to stderr; count to stdout.
+eval_check_rubric() {
+  awk -F'\t' -v g="$2" '
+    /^[[:space:]]*#/ {next} /^[[:space:]]*$/ {next}
+    { v=$2; if (v !~ /^[0-9]+(\.[0-9]+)?$/ || v+0 <= 0) { printf "  invalid: %s rubric id \"%s\" max=\"%s\" (want positive number)\n", g, $1, v > "/dev/stderr"; p++ } }
+    END { print p+0 }' "$1"
+}
+
+# eval_check_scores <scorecard> <rubric> <group> — each score must be a
+# non-negative number not exceeding its matching rubric max (joined by id).
+eval_check_scores() {
+  awk -F'\t' -v g="$3" '
+    function is_data() { return ($0 !~ /^[[:space:]]*#/ && $0 !~ /^[[:space:]]*$/) }
+    FNR==NR { if (is_data()) max[$1]=$2; next }
+    is_data() {
+      v=$2
+      if (v !~ /^[0-9]+(\.[0-9]+)?$/) { printf "  invalid: %s scorecard id \"%s\" score=\"%s\" (want non-negative number)\n", g, $1, v > "/dev/stderr"; p++; next }
+      if (($1 in max) && v+0 > max[$1]+0) { printf "  invalid: %s scorecard id \"%s\" score %s exceeds rubric max %s\n", g, $1, v, max[$1] > "/dev/stderr"; p++ }
+    }
+    END { print p+0 }' "$2" "$1"
+}
+
+# eval_check_run <run.tsv> <rates> <group> — the run facts scoring reads must be
+# present and resolvable: the required keys exist and the model is in the rates
+# table (so a malformed run fails validate, not silently at score time). Count
+# to stdout; offenders to stderr.
+eval_check_run() {
+  local run="$1" rates="$2" g="$3" k v model p=0
+  for k in model tokens_in tokens_out latency_seconds; do
+    v="$(eval_kv "$run" "$k")"
+    [ -n "$v" ] || { echo "  invalid: $g run.tsv missing key '$k'" >&2; p=$((p+1)); }
+  done
+  model="$(eval_kv "$run" model)"
+  if [ -n "$model" ] && [ -f "$rates" ]; then
+    awk -F'\t' -v m="$model" '$1==m{f=1} END{exit !f}' "$rates" \
+      || { echo "  invalid: $g run.tsv model '$model' not in rates table" >&2; p=$((p+1)); }
+  fi
+  echo "$p"
+}
+
 eval_validate() {
   local topology="${1:-$EVAL_DEFAULT_TOPOLOGY}" problems=0 g ak fnd rb sc run f n
   for g in $EVAL_GROUPS; do
@@ -114,6 +165,13 @@ eval_validate() {
     if [ -f "$rb" ] && [ -f "$sc" ]; then
       n="$(eval_check_ids "$rb" "$sc" "$g" "rubric" "scorecard")"; problems=$((problems + n))
     fi
+    # Metric ranges (#306): identifiers matching is not enough — the values must
+    # be credible, or scoring publishes correctness/quality above 100%.
+    [ -f "$rb" ]  && { n="$(eval_check_rubric "$rb" "$g")"; problems=$((problems + n)); }
+    [ -f "$fnd" ] && { n="$(eval_check_findings "$fnd" "$g")"; problems=$((problems + n)); }
+    [ -f "$sc" ] && [ -f "$rb" ] && { n="$(eval_check_scores "$sc" "$rb" "$g")"; problems=$((problems + n)); }
+    # Run facts (#304): required keys present and the model resolvable in rates.
+    [ -f "$run" ] && { n="$(eval_check_run "$run" "$EVAL_RATES" "$g")"; problems=$((problems + n)); }
   done
   if [ "$problems" -eq 0 ]; then
     echo "validate: $topology is well-formed"
@@ -202,14 +260,24 @@ Usage:
 EOF
 }
 
+# eval_require_config — fail with a clear, named error when a suite forgot a
+# required variable, instead of a cryptic `set -u` "unbound variable" (#304).
+eval_require_config() {
+  local v
+  for v in EVAL_TITLE EVAL_FIXTURES EVAL_RUNS EVAL_RATES EVAL_GROUPS EVAL_DEFAULT_TOPOLOGY; do
+    [ -n "${!v:-}" ] || eval_die "missing required config: $v (the suite must set it before eval_main)"
+  done
+}
+
 # Dispatch. EVAL_ROOT (for tidy relative paths in diagnostics) defaults to the
-# fixtures' parent when a suite does not set it.
+# fixtures' parent when a suite does not set it. Every working command requires
+# a fully configured suite; help does not.
 eval_main() {
-  : "${EVAL_ROOT:=$(dirname "$EVAL_FIXTURES")}"
+  : "${EVAL_ROOT:=$(dirname "${EVAL_FIXTURES:-.}")}"
   case "${1:-help}" in
-    list)     shift; eval_list "$@" ;;
-    score)    shift; eval_score "$@" ;;
-    validate) shift; eval_validate "$@" ;;
+    list)     eval_require_config; shift; eval_list "$@" ;;
+    score)    eval_require_config; shift; eval_score "$@" ;;
+    validate) eval_require_config; shift; eval_validate "$@" ;;
     help|-h|--help) eval_help ;;
     *) eval_die "unknown command '${1:-}' (try: list | score | validate | help)" ;;
   esac
