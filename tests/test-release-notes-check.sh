@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Offline suite for the release-notes completeness check (#232). It exercises
-# the pure decision logic against fixtures — no network, no gh, no git. The two
-# failure modes it must catch are the ones v0.10.1 actually hit: a visible
-# commit missing from the notes, and a feature merged under an excluded type.
+# Offline suite for the release-notes completeness check (#232, #291). It
+# exercises the pure decision logic against fixtures — no network, no gh, no
+# git. The failure modes it must catch: a visible commit missing from the
+# notes, a feature merged under an excluded type (the two v0.10.1 actually
+# hit), and a breaking change hidden behind an excluded type (#291).
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -102,6 +103,73 @@ chore	assign the feature to its milestone	feature" \
 "## Bug Fixes
 * an unrelated fix (#9)" \
   "omission: feat: add the exporter" "mislabel: assign the feature to its milestone"
+
+# --- #291: a breaking change whose TYPE is hidden (chore!) is changelog-
+# visible regardless of type; missing from the notes it must be flagged.
+check 1 "breaking-typed chore missing from the notes flagged" \
+"chore!	drop the legacy config knob	chore" \
+"## Bug Fixes
+* an unrelated fix (#9)" \
+  "omission: chore!: drop the legacy config knob" "breaking change"
+
+# --- #291: same property spelled as the BREAKING CHANGE footer, which the
+# caller represents as the fourth TSV column.
+check 1 "body-marker breaking change missing from the notes flagged" \
+"refactor	rework the hook loader	tech-debt	breaking" \
+"## Chores
+* nothing related here" \
+  "omission: refactor!: rework the hook loader"
+
+# --- #291: a breaking change present in the notes passes, and the success
+# message may claim breaking visibility because a breaking commit was present.
+check 0 "breaking change present in the notes passes with the breaking claim" \
+"chore!	drop the legacy config knob	chore" \
+"## ⚠ BREAKING CHANGES
+* drop the legacy config knob (#77)" \
+  "every breaking change appears in the notes"
+
+# --- #291: a breaking, feature-labeled, hidden-type commit that IS in the
+# notes is not a mislabel — the breaking marker already made it visible.
+check 0 "breaking feature-labeled chore in the notes is not a mislabel" \
+"chore!	swap the storage backend	feature" \
+"## ⚠ BREAKING CHANGES
+* swap the storage backend (#88)" \
+  "every breaking change appears in the notes"
+
+# --- #291 regression: an EMPTY labels column before the breaking flag must
+# not be collapsed away (tab is IFS whitespace — a naive `read` would swallow
+# the empty field and misread `breaking` as the labels). The breaking half
+# must run and the labels half must not be claimed.
+printf 'chore\tdrop the legacy knob\t\tbreaking\n' > "$work/commits.tsv"
+printf '## Chores\n* nothing related\n' > "$work/notes.md"
+rc=0; out="$(bash "$script" --commits "$work/commits.tsv" --notes "$work/notes.md" 2>&1)" || rc=$?
+if [ "$rc" -ne 1 ]; then bad "empty-labels breaking column — want exit 1, got $rc ($out)"; else
+  case "$out" in *"omission: chore!: drop the legacy knob"*) ok ;; *) bad "empty-labels breaking column — breaking omission not flagged ($out)" ;; esac
+fi
+
+# --- #291 honesty: with no breaking commit in the range the success message
+# must NOT claim the breaking property (nothing exercised it).
+printf 'feat\tadd the widget\t\t\n' > "$work/commits.tsv"
+printf '## Features\n* add the widget (#10)\n' > "$work/notes.md"
+rc=0; out="$(bash "$script" --commits "$work/commits.tsv" --notes "$work/notes.md" 2>&1)" || rc=$?
+if [ "$rc" -ne 0 ]; then bad "no-breaking path — want exit 0, got $rc ($out)"; else
+  case "$out" in *"breaking change appears in the notes"*) bad "no-breaking path — must NOT claim the breaking property ($out)" ;; *) ok ;; esac
+fi
+
+# --- #291: the component name flows into every claim, so a companion's pass
+# can never read as core's (per-component honesty for the advisory table).
+printf 'feat\tadd the audit exporter\t\t\n' > "$work/commits.tsv"
+printf '## Features\n* add the audit exporter (#12)\n' > "$work/notes.md"
+rc=0; out="$(bash "$script" --component spark-audit --commits "$work/commits.tsv" --notes "$work/notes.md" 2>&1)" || rc=$?
+if [ "$rc" -ne 0 ]; then bad "component path — want exit 0, got $rc ($out)"; else
+  case "$out" in *"spark-audit subject-omission check passed"*) ok ;; *) bad "component path — claim must name the component ($out)" ;; esac
+fi
+printf 'feat\tadd the audit exporter\t\t\n' > "$work/commits.tsv"
+printf '## Features\n* something else entirely\n' > "$work/notes.md"
+rc=0; out="$(bash "$script" --component spark-audit --commits "$work/commits.tsv" --notes "$work/notes.md" 2>&1)" || rc=$?
+if [ "$rc" -ne 1 ]; then bad "component failure path — want exit 1, got $rc ($out)"; else
+  case "$out" in *"finding(s) in spark-audit"*) ok ;; *) bad "component failure path — summary must name the component ($out)" ;; esac
+fi
 
 # --- #297: the production runner supplies NO labels, so the hidden-feature
 # (mislabel) half is vacuous. The success message must make ONLY the
