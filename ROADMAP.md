@@ -170,8 +170,7 @@ implementation is gated on evidence.
 
 ## v0.13 — Token & model efficiency
 
-**Status:** Merged (awaiting release) — all deliverables are on `master`; the
-`v0.13.0` release PR is pending a human merge.
+**Status:** Shipped (`v0.13.0`) — released 2026-07-22.
 
 > Released as **`v0.13.0`**, not `0.12.0`: v0.12 (research & architecture) cut no
 > version, so the `0.12.0` tag is intentionally skipped to keep the release
@@ -185,8 +184,22 @@ size budgets (#209); `spark state` makes the work-state write deterministic
 (#210); and `spark footprint --timing` measures hot-path latency against budgets,
 with doctor carrying a warn-only advisory (#213). Delivered four of six planned
 issues; right-sizing the crew roles to capability tiers (#211) and the
-issue-wiring manifest helper (#214) were **backlogged** — the first needs the
-ADR-0024 selection infrastructure, the second a live-repo verification run.
+issue-wiring manifest helper (#214) moved to the [v0.15 milestone](#v015--orchestration)
+(#284), each gated on evidence.
+
+---
+
+## v0.14 — Repository truth and cleanup
+
+**Status:** Shipped (`v0.13.0`) — rode the same release train, 2026-07-22.
+
+A concentrated truth-and-cleanup pass: two shipped-bug fixes (state escaping
+without `jq`, macOS-portable latency timing), the commit-type/changelog
+vocabulary collapsed to one enforced table, roadmap and doc-truth corrections,
+and internal duplication consolidated behind single authorities (`git_root`,
+`check_json`, `STATE_STAGES`, the permission-preset map) — each with a `doctor`
+guard so it cannot creep back. Shipped under the `v0.13.0` tag alongside v0.13,
+keeping the one-version-behind-milestone-name skew the v0.13 note records.
 
 ---
 
