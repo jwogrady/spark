@@ -13,9 +13,12 @@
 #   declared-and-valid   required + suite/topology resolve + validate passes
 #   not-required         a deliberate CEF decision; reported, never blocks
 #   declared-but-invalid required but incomplete/missing/malformed/validate-fails
-#   undeclared           no index entry; advisory during initial adoption
+#   undeclared           has a stable id but no index entry; advisory
+#   unresolved-identity  no stable capability id at all (empty id); advisory
 #
 # Only declared-but-invalid `required` evidence blocks the release in this phase.
+# A capabilities line with a "-" sentinel id (no resolvable issue reference) is
+# unresolved — reported, never blocking, never assigned an invented identity.
 #
 # First stdout line is "gate-state: ready|blocked|neutral" for the caller to
 # parse; the rest is the human summary. Exit 0 for ready/neutral, 1 for blocked,
@@ -55,13 +58,19 @@ index_rows_for() {
     $1==id { print $2 "\t" $3 "\t" $4 }' "$index"
 }
 
-valid=() notreq=() undeclared=() blocked=()
+valid=() notreq=() undeclared=() unresolved=() blocked=()
 
-while IFS=$'\t' read -r cid label || [ -n "${cid:-}" ]; do
-  # Skip blanks/comments so the runner's capability list can annotate itself.
-  [ -n "${cid:-}" ] || continue
+while IFS=$'\t' read -r cid label || [ -n "${cid:-}${label:-}" ]; do
+  cid="${cid:-}"; label="${label:-}"
+  # Skip comment lines and truly blank lines (no id, no label).
   case "$cid" in \#*) continue ;; esac
-  label="${label:-}"
+  [ -z "$cid" ] && continue
+  if [ "$cid" = "-" ]; then
+    # A feat with no resolvable stable id (the "-" sentinel). Never invent an
+    # identity from the subject (ADR-0026) — classify as unresolved, advisory.
+    [ -n "$label" ] && unresolved+=("  feat \"$label\" — no issue reference; capability identity unresolved (advisory)")
+    continue
+  fi
   who="capability $cid${label:+ ($label)}"
 
   rows="$(index_rows_for "$cid")"
@@ -123,6 +132,8 @@ echo "declared but invalid (required): ${#blocked[@]}"
 [ "${#blocked[@]}" -gt 0 ] && printf '%s\n' "${blocked[@]}"
 echo "undeclared (advisory):           ${#undeclared[@]}"
 [ "${#undeclared[@]}" -gt 0 ] && printf '%s\n' "${undeclared[@]}"
+echo "unresolved identity (advisory):  ${#unresolved[@]}"
+[ "${#unresolved[@]}" -gt 0 ] && printf '%s\n' "${unresolved[@]}"
 
 case "$state" in
   blocked) exit 1 ;;

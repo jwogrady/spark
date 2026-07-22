@@ -63,6 +63,13 @@ distinct and deliberate:
   evaluation is unnecessary — not an accidental absence of evidence;
 - a **`required`** entry must resolve to valid evidence.
 
+`capability_id` is the stable identity — an issue number, never a commit subject
+(prose is not stable). At release time the gate derives one deterministic record
+per capability from the release's `feat` commits, keyed by issue reference and
+deduplicated. A `feat` with **no** resolvable issue reference has no stable
+identity; the gate never invents one from the subject — it reports the capability
+as *unresolved-identity*, advisory and non-blocking, alongside the undeclared set.
+
 **2. The Platform Compatibility Review validates declared evidence; it never
 interprets it.** For each `required` capability the gate resolves the suite and
 topology and invokes that suite's *own* mechanism — `run.sh validate <topology>`

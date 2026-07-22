@@ -146,5 +146,35 @@ case "$out" in *"all capabilities evaluated"*) bad "language — must never clai
 rc=0; bash "$script" --index "$work/nope.tsv" --capabilities "$work/caps.tsv" --evaluations-root "$EVROOT" >/dev/null 2>&1 || rc=$?
 [ "$rc" -eq 2 ] && ok || bad "missing index file -> exit 2 (got $rc)"
 
+# --- unresolved identity at the check level: an empty id (no issue reference)
+# is advisory and non-blocking, and the feat is named — never invented as an id.
+printf '%s' "$HDR" > "$work/index.tsv"
+printf -- '-\tadd the thing\n' > "$work/caps.tsv"
+rc=0; out="$(bash "$script" --index "$work/index.tsv" --capabilities "$work/caps.tsv" --evaluations-root "$EVROOT" 2>&1)" || rc=$?
+state="$(printf '%s\n' "$out" | sed -n 's/^gate-state: //p' | head -n1)"
+if [ "$rc" -eq 0 ] && [ "$state" = "neutral" ]; then ok; else bad "unresolved -> neutral/exit0 (rc=$rc state=$state: $out)"; fi
+case "$out" in *'feat "add the thing" — no issue reference'*) ok ;; *) bad "unresolved names the feat, does not invent an id ($out)" ;; esac
+
+# ============================================================================
+# Runner pure helpers (Findings 1 & 2). Source the runner: main is guarded, so
+# only the functions load — no CI side effects.
+# ============================================================================
+. "$root/.github/scripts/platform-compat-runner.sh"
+
+# Finding 1 — exit-code mapping. A usage/config error or any unexpected code must
+# NEVER become a successful advisory.
+[ "$(compat_status_for 0)" = "success" ] && ok || bad "rc 0 -> success"
+[ "$(compat_status_for 1)" = "failure" ] && ok || bad "rc 1 -> failure"
+[ "$(compat_status_for 3)" = "success" ] && ok || bad "rc 3 (not-assessed) -> success (honest, non-error)"
+[ "$(compat_status_for 2)" = "error" ]   && ok || bad "rc 2 (usage/config) -> error, never success"
+[ "$(compat_status_for 42)" = "error" ]  && ok || bad "unexpected rc -> error, never success"
+
+# Finding 2 — deterministic one-record-per-capability; unresolved never invented.
+res="$(printf '206\tadd A\n206\tadd A again\n207\tadd B\n\tadd C\n\tadd C\n' | compat_resolve_capabilities)"
+[ "$(printf '%s\n' "$res" | awk -F'\t' '$1=="206"{c++} END{print c+0}')" = "1" ] && ok || bad "duplicate id 206 collapses to one record ($res)"
+[ "$(printf '%s\n' "$res" | awk -F'\t' '$1=="207"{c++} END{print c+0}')" = "1" ] && ok || bad "207 present exactly once ($res)"
+[ "$(printf '%s\n' "$res" | awk -F'\t' '$1=="206"{print $2; exit}')" = "add A" ] && ok || bad "206 keeps the first (deterministic) label ($res)"
+[ "$(printf '%s\n' "$res" | awk -F'\t' '$1=="-"{c++} END{print c+0}')" = "1" ] && ok || bad "unresolved (sentinel id) deduped by subject to one record ($res)"
+
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
