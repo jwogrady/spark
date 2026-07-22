@@ -19,10 +19,15 @@ bash -n "$lib" && ok || bad "bash -n eval.sh"
 # --- Build a minimal one-group, one-topology suite. Cost is chosen to land on a
 # known value: 1e6 in @ 3 + 5e5 out @ 6 = 3.0 + 3.0 = 6.0000.
 mkdir -p "$work/fixtures/g1" "$work/runs/t1/g1"
-printf '# item\nitem one\nitem two\n'                 > "$work/fixtures/g1/answer-key.tsv"
-printf '# dimension\tmax\nclarity\t2\ndepth\t2\n'     > "$work/fixtures/g1/rubric.tsv"
-printf 'caught one\t1\ncaught two\t0\n'               > "$work/runs/t1/g1/findings.tsv"
+printf '# id\tdescription\nA1\titem one\nA2\titem two\n' > "$work/fixtures/g1/answer-key.tsv"
+printf '# id\tmax\nclarity\t2\ndepth\t2\n'            > "$work/fixtures/g1/rubric.tsv"
+printf 'A1\t1\nA2\t0\n'                               > "$work/runs/t1/g1/findings.tsv"
 printf 'clarity\t1\ndepth\t2\n'                       > "$work/runs/t1/g1/scorecard.tsv"
+
+# Restore the good run files (id-matched to the fixtures) — the id-integrity
+# tests below corrupt one file at a time, so reset between them.
+good_findings()  { printf 'A1\t1\nA2\t0\n'      > "$work/runs/t1/g1/findings.tsv"; }
+good_scorecard() { printf 'clarity\t1\ndepth\t2\n' > "$work/runs/t1/g1/scorecard.tsv"; }
 printf 'model\tm1\ntokens_in\t1000000\ntokens_out\t500000\ntokens_method\testimate\nlatency_seconds\t120\nlatency_method\tmeasured\n' > "$work/runs/t1/g1/run.tsv"
 printf 'm1\t3\t6\n'                                    > "$work/rates.tsv"
 
@@ -56,11 +61,29 @@ if [ "$rc" -ne 0 ]; then bad "score exited $rc ($out)"; else
   done
 fi
 
-# --- validate: a findings/answer-key row mismatch is caught (non-zero).
-printf 'caught one\t1\ncaught two\t0\ncaught three\t1\n' > "$work/runs/t1/g1/findings.tsv"
+# --- IDENTITY, not cardinality: equal row count with a renamed id must fail,
+# reporting both the missing expected id and the unexpected unknown id.
+good_scorecard; printf 'A1\t1\nA9\t0\n' > "$work/runs/t1/g1/findings.tsv"
 rc=0; out="$(eval_main validate t1 2>&1)" || rc=$?
-{ [ "$rc" -ne 0 ] && case "$out" in *"row mismatch: g1 findings"*) true ;; *) false ;; esac; } \
-  && ok || bad "validate rejects a row mismatch ($rc: $out)"
+if [ "$rc" -eq 0 ]; then bad "renamed id (equal count) must fail but passed ($out)"; else
+  case "$out" in *"missing: g1 findings lacks expected id \"A2\""*) ok ;; *) bad "renamed id — no missing-A2 diagnostic ($out)" ;; esac
+  case "$out" in *"unexpected: g1 findings has unknown id \"A9\""*) ok ;; *) bad "renamed id — no unexpected-A9 diagnostic ($out)" ;; esac
+fi
+
+# --- a duplicate id (equal row count, one item repeated, one missing) fails.
+good_scorecard; printf 'A1\t1\nA1\t0\n' > "$work/runs/t1/g1/findings.tsv"
+rc=0; out="$(eval_main validate t1 2>&1)" || rc=$?
+{ [ "$rc" -ne 0 ] && case "$out" in *"duplicate: g1 findings id \"A1\""*) true ;; *) false ;; esac; } \
+  && ok || bad "duplicate id must fail with a duplicate diagnostic ($rc: $out)"
+
+# --- the same rule governs scorecard vs rubric dimensions.
+good_findings; printf 'clarity\t1\nspeed\t2\n' > "$work/runs/t1/g1/scorecard.tsv"
+rc=0; out="$(eval_main validate t1 2>&1)" || rc=$?
+if [ "$rc" -eq 0 ]; then bad "renamed rubric dimension must fail but passed ($out)"; else
+  case "$out" in *"missing: g1 scorecard lacks expected id \"depth\""*) ok ;; *) bad "scorecard — no missing-depth diagnostic ($out)" ;; esac
+  case "$out" in *"unexpected: g1 scorecard has unknown id \"speed\""*) ok ;; *) bad "scorecard — no unexpected-speed diagnostic ($out)" ;; esac
+fi
+good_findings; good_scorecard  # leave the suite well-formed
 
 # --- an unknown command exits non-zero with guidance.
 rc=0; out="$(eval_main bogus 2>&1)" || rc=$?

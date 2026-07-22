@@ -8,8 +8,8 @@
 # and the contract doc; mechanism stays here. The canonical contract is
 # docs/reference/evaluation.md.
 #
-# Zero runtime dependencies beyond POSIX bash + awk (awk only for float math;
-# bash has no floats). No jq, no python, no network. Grading is graded
+# Zero runtime dependencies beyond Bash + awk (awk only for float math; bash has
+# no floats). No jq, no python, no network. Grading is graded
 # measurement, not a pass/fail unit suite — this library lives outside tests/
 # and is not run by tests/run.sh (its own logic is covered by tests/test-eval-lib.sh).
 #
@@ -65,8 +65,38 @@ eval_list() {
   done
 }
 
+# Compare the column-1 identifiers of two TSV files (comments/blanks skipped).
+# The "actual" file must cover exactly the "expected" file's ids — no missing,
+# no unexpected, no duplicates on either side. Row-count equality does not prove
+# this: a file with the right number of unrelated ids would pass a count check.
+# Diagnostics go to stderr; the problem count is printed to stdout.
+eval_check_ids() { # <expected-file> <actual-file> <group> <expected-name> <actual-name>
+  awk -F'\t' -v g="$3" -v en="$4" -v an="$5" '
+    function is_data() { return ($0 !~ /^[[:space:]]*#/ && $0 !~ /^[[:space:]]*$/) }
+    FNR==NR {
+      if (is_data()) {
+        c = ++e[$1]
+        if (c == 1) eord[++ne] = $1
+        else if (c == 2) { printf "  duplicate: %s %s id \"%s\"\n", g, en, $1 > "/dev/stderr"; p++ }
+      }
+      next
+    }
+    {
+      if (is_data()) {
+        c = ++a[$1]
+        if (c == 1) aord[++na] = $1
+        else if (c == 2) { printf "  duplicate: %s %s id \"%s\"\n", g, an, $1 > "/dev/stderr"; p++ }
+      }
+    }
+    END {
+      for (i = 1; i <= ne; i++) { k = eord[i]; if (!(k in a)) { printf "  missing: %s %s lacks expected id \"%s\"\n", g, an, k > "/dev/stderr"; p++ } }
+      for (i = 1; i <= na; i++) { k = aord[i]; if (!(k in e)) { printf "  unexpected: %s %s has unknown id \"%s\"\n", g, an, k > "/dev/stderr"; p++ } }
+      print p + 0
+    }' "$1" "$2"
+}
+
 eval_validate() {
-  local topology="${1:-$EVAL_DEFAULT_TOPOLOGY}" problems=0 g ak fnd rb sc run f
+  local topology="${1:-$EVAL_DEFAULT_TOPOLOGY}" problems=0 g ak fnd rb sc run f n
   for g in $EVAL_GROUPS; do
     ak="$EVAL_FIXTURES/$g/answer-key.tsv"
     fnd="$EVAL_RUNS/$topology/$g/findings.tsv"
@@ -76,18 +106,14 @@ eval_validate() {
     for f in "$ak" "$rb" "$fnd" "$sc" "$run"; do
       [ -f "$f" ] || { echo "  missing: ${f#"$EVAL_ROOT"/}" >&2; problems=$((problems+1)); }
     done
-    [ -f "$ak" ] && [ -f "$fnd" ] && {
-      [ "$(eval_rows "$ak")" = "$(eval_rows "$fnd")" ] || {
-        echo "  row mismatch: $g findings ($(eval_rows "$fnd")) != answer-key ($(eval_rows "$ak"))" >&2
-        problems=$((problems+1))
-      }
-    }
-    [ -f "$rb" ] && [ -f "$sc" ] && {
-      [ "$(eval_rows "$rb")" = "$(eval_rows "$sc")" ] || {
-        echo "  row mismatch: $g scorecard ($(eval_rows "$sc")) != rubric ($(eval_rows "$rb"))" >&2
-        problems=$((problems+1))
-      }
-    }
+    # Identity, not just cardinality: findings must cover exactly the answer-key
+    # items and scorecard exactly the rubric dimensions — same column-1 ids.
+    if [ -f "$ak" ] && [ -f "$fnd" ]; then
+      n="$(eval_check_ids "$ak" "$fnd" "$g" "answer-key" "findings")"; problems=$((problems + n))
+    fi
+    if [ -f "$rb" ] && [ -f "$sc" ]; then
+      n="$(eval_check_ids "$rb" "$sc" "$g" "rubric" "scorecard")"; problems=$((problems + n))
+    fi
   done
   if [ "$problems" -eq 0 ]; then
     echo "validate: $topology is well-formed"
@@ -160,7 +186,7 @@ eval_help() {
   cat <<EOF
 
 Graded measurement over fixed fixtures — not a pass/fail suite. See the contract:
-docs/reference/evaluation.md. Zero deps beyond POSIX bash + awk.
+docs/reference/evaluation.md. Zero deps beyond Bash + awk.
 
 The four metrics:
   correctness  answer-key items caught / total          (objective, findings.tsv)
