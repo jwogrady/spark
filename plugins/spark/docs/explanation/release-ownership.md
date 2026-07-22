@@ -33,6 +33,16 @@ release PR up to date from conventional commits on `master`; merging it is
 always a human decision, and that single merge is what produces the bump,
 the changelog entry, the tag, and the GitHub Release together.
 
+**Which commit types reach the changelog.** Under Release Please's `simple`
+release type, only `feat`, `fix`, `perf`, and `revert` are rendered into the
+generated release notes; `docs`, `chore`, `refactor`, `test`, `style`, `build`,
+and `ci` are changelog-hidden (they still drive a patch bump). The consequence
+that bites: a user-facing change merged under a hidden type — a feature that
+lands as `chore:` — silently never appears in the notes (#232). The
+release-docs checklist's completeness step guards this at pre-approval, backed
+by `.github/scripts/release-notes-check.sh`; the visible-type list there and in
+that script must match this paragraph.
+
 ## How the model plays out in this repo
 
 Manifest mode across four packages (`release-please-config.json`,
