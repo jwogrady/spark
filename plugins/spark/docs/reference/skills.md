@@ -9,8 +9,9 @@ All core skills are invoked namespaced under the plugin: `/spark:<name>`.
 This page is the **canonical skill taxonomy** for the core plugin — nine
 skills in three categories: Lifecycle, Setup, Supporting. `CLAUDE.md` and
 `README.md` use the same grouping; if they ever disagree, this page wins.
-`spark doctor` enforces the parity mechanically: every skill that ships must
-appear here.
+`spark doctor` enforces this mechanically for the core: every **core** skill
+that ships must appear here (the companion skills live under
+[companion plugins](#companion-plugins) and are not checked against this page).
 
 Capabilities outside the shipping loop live in the
 [companion plugins](#companion-plugins) — same marketplace, separate installs.
