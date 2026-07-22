@@ -5,18 +5,15 @@
 # checkout is never mutated.
 
 set -euo pipefail
+. "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 
-repo="$(cd "$(dirname "$0")/.." && pwd)"
-work="$(mktemp -d)"
-trap 'rm -rf "$work"' EXIT
+# Runs in the shared lib.sh sandbox (#274): a private copy of the plugin under
+# $WORK/plugin, so the real checkout is never touched.
+sandbox_init
+spark="$SPARK"
+skills="$WORK/plugin/skills"
 
-cp -r "$repo/plugins/spark" "$work/spark"
-spark="$work/spark/bin/spark"
-skills="$work/spark/skills"
-
-pass=0 fail=0
-
-snapshot() { find "$work" | sort; }
+snapshot() { find "$WORK/plugin" | sort; }
 
 reject() {
   local desc="$1" name="$2" before after rc=0
@@ -55,7 +52,7 @@ else
 fi
 
 # --- compat: every skill name the plugin already ships passes the same rule
-for existing in "$repo"/plugins/spark/skills/*/; do
+for existing in "$skills"/*/; do
   name="$(basename "$existing")"
   case "$name" in
     *[!a-z0-9-]*|-*)
