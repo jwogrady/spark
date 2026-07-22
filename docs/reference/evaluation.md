@@ -102,9 +102,38 @@ An evaluation exists to decide something. State the decision rule up front:
 
 Capability Traceability ends `… → Evaluation → Release`. The
 [Platform Compatibility Review gate](../product-constitution.md) (Constitution
-Article VII) consumes evaluation results at release time: a capability whose Q4
-evidence is absent does not ship. This document defines the evidence; the gate
-(a separate issue) enforces its presence.
+Article VII) consumes evaluation results at release time: a capability whose
+declared `required` evidence is absent or malformed does not ship. This document
+defines the evidence and the declaration; the gate enforces it.
+
+## The evidence index (capability → evidence)
+
+A capability declares its evaluation evidence in `evaluations/evidence-index.tsv`
+(the machine-readable form of the CEF's Q4, adopted in
+[ADR-0026](../adr/0026-evidence-declaration-and-release-gate.md)). Tab-separated;
+`#` comments and blank lines ignored:
+
+```
+capability_id    requirement    suite    topology
+```
+
+- `capability_id` — originating issue number, or another stable capability id.
+- `requirement` — `required` or `not-required`.
+- `suite` / `topology` — the recorded evidence to validate; may be empty when
+  `not-required`.
+
+Three deliberate states:
+
+- **absent** — the capability is *undeclared* (advisory during initial adoption);
+- **`not-required`** — a deliberate CEF determination that graded evaluation is
+  unnecessary, not an accidental absence;
+- **`required`** — must resolve to valid evidence, or the release is blocked.
+
+The gate resolves each `required` row's suite and topology and runs that suite's
+own `run.sh validate <topology>` — reading only pass/fail. It **validates, never
+interprets**: no scoring, no recomputation, no reinterpretation of adopt/kill.
+The orchestration suite is research evidence, not a shipped capability, so it is
+intentionally not indexed.
 
 ## Adding a new suite
 
