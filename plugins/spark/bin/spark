@@ -25,6 +25,20 @@ yellow(){ printf '\033[33m%s\033[0m\n' "$1"; }
 # The one place the git plumbing is spelled, so callers stop re-deriving it.
 git_root() { git rev-parse --show-toplevel 2>/dev/null || true; }
 
+# check_json <file> — true when the file parses as JSON. jq, then python3; with
+# neither validator present it returns 0 (skip), so a zero-dependency
+# environment never fails on JSON it cannot check. The one validity ladder
+# (#272), shared by doctor, setup, apply-permissions, and orient.
+check_json() {
+  if command -v jq >/dev/null 2>&1; then
+    jq empty "$1" >/dev/null 2>&1
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$1" >/dev/null 2>&1
+  else
+    return 0
+  fi
+}
+
 # Verb table — the single source for both usage() and dispatch, so the help
 # text cannot drift from what is implemented. Rows: verb|handler|description.
 VERBS='doctor|cmd_doctor|Validate the plugin layout; --requirements checks environment readiness
@@ -564,16 +578,6 @@ cmd_doctor() {
 
   local errors=0 warnings=0
 
-  check_json() {
-    if command -v jq >/dev/null 2>&1; then
-      jq empty "$1" >/dev/null 2>&1
-    elif command -v python3 >/dev/null 2>&1; then
-      python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$1" >/dev/null 2>&1
-    else
-      return 0  # no validator available; skip
-    fi
-  }
-
   echo "Spark doctor — $SPARK_ROOT"
   echo
 
@@ -719,6 +723,15 @@ cmd_doctor() {
       green "  ✓ repo-root detection routes through git_root (one authority)"
     else
       red "  ✗ $rp_count direct toplevel lookups in bin/spark — route them through git_root() (#276)"; errors=$((errors+1))
+    fi
+    # JSON validity has one ladder too (#272): check_json. Pattern split so this
+    # check doesn't count its own source.
+    local je_count je_pat; je_pat="jq ""empty"
+    je_count="$(grep -c -- "$je_pat" "$cli" 2>/dev/null || echo 0)"
+    if [ "$je_count" -le 1 ]; then
+      green "  ✓ JSON validity routes through check_json (one ladder)"
+    else
+      red "  ✗ $je_count inline JSON-validity ladders in bin/spark — route them through check_json() (#272)"; errors=$((errors+1))
     fi
   fi
 
@@ -1630,13 +1643,7 @@ orient_set() {
     return 1
   fi
 
-  local valid=0
-  if [ "$have_jq" -eq 1 ]; then
-    jq empty "$target" >/dev/null 2>&1 && valid=1
-  else
-    python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$target" >/dev/null 2>&1 && valid=1
-  fi
-  if [ "$valid" -ne 1 ]; then
+  if ! check_json "$target"; then
     red "orient: $target is not valid JSON — fix it before recording"; return 1
   fi
 
@@ -1966,13 +1973,7 @@ cmd_apply_permissions() {
     return 1
   fi
 
-  local valid=0
-  if [ "$have_jq" -eq 1 ]; then
-    jq empty "$target" >/dev/null 2>&1 && valid=1
-  else
-    python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$target" >/dev/null 2>&1 && valid=1
-  fi
-  if [ "$valid" -ne 1 ]; then
+  if ! check_json "$target"; then
     red "✗ $target is not valid JSON — fix it before merging"
     APPLY_PERMISSIONS_ATTENTION=1
     return 1
