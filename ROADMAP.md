@@ -207,14 +207,16 @@ keeping the one-version-behind-milestone-name skew the v0.13 note records.
 
 **Status:** Planned
 
-Build the lifecycle orchestration *decided* in v0.12 (ADR-0023 topology, ADR-0024
-capability-based selection), each piece gated on evidence — a home and plan, not
-a commitment to ship it all (#284 tracks it). Three independent tracks: build the
-ADR-0024 selection infrastructure (#288, the keystone) and then right-size the
-crew roles that consume it (#211); adopt parallel review roles in `validate`,
-gated on beating the single-agent baseline (#206); and batch GitHub issue wiring
-into a deterministic manifest helper, gated on one live-repo e2e (#214). Nothing
-builds until its gate is met.
+Follows v0.12's ratified architecture, sequenced so the cheap, certain value
+ships first and speculative infrastructure stays deferred until evidence
+justifies it (#284 tracks it). Ship now: retune the crew model tiers for spend
+by hand — no new infra, savings on the next session (#211) — and the
+deterministic issue-wiring manifest helper (#214, gated on one live-repo e2e).
+Run as a measured, time-boxed experiment: validate as parallel review roles,
+adopted only if it beats the single-agent baseline, otherwise killed with the
+result recorded (#206). Deferred to backlog: the ADR-0024 capability-selection
+*infrastructure* (#288) — built only once provider-name churn makes the
+hand-tuned tiers painful, or a second consumer needs it.
 
 ---
 
