@@ -21,6 +21,10 @@ red()   { printf '\033[31m%s\033[0m\n' "$1"; }
 green() { printf '\033[32m%s\033[0m\n' "$1"; }
 yellow(){ printf '\033[33m%s\033[0m\n' "$1"; }
 
+# git_root — the repo top-level, or empty when not inside a git repo (#276).
+# The one place the git plumbing is spelled, so callers stop re-deriving it.
+git_root() { git rev-parse --show-toplevel 2>/dev/null || true; }
+
 # Verb table — the single source for both usage() and dispatch, so the help
 # text cannot drift from what is implemented. Rows: verb|handler|description.
 VERBS='doctor|cmd_doctor|Validate the plugin layout; --requirements checks environment readiness
@@ -111,7 +115,7 @@ read_flat_json() {
 # the shipped defaults define the listing; later tiers override the value.
 resolve_prefs() {
   local top
-  top="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  top="$(git_root)"
   {
     read_flat_json "$SPARK_ROOT/preferences/defaults.json" \
       | awk -F'\t' 'NF >= 2 { print $0 "\tdefault" }'
@@ -145,7 +149,7 @@ apply_standard() {
   # re-initialized per call so a stale value never leaks between runs.
   APPLY_STANDARD_CREATED=0 APPLY_STANDARD_KEPT=0 APPLY_STANDARD_ATTENTION=0 APPLY_STANDARD_FAILED=0
   local top="${1:-}"
-  [ -n "$top" ] || top="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  [ -n "$top" ] || top="$(git_root)"
   [ -n "$top" ] || { red "apply_standard: not inside a git repo"; return 1; }
   local name created=0 kept=0 attention=0 failed=0
   name="$(basename "$top")"
@@ -444,7 +448,7 @@ doctor_requirements() {
   # the shipped mechanism (Release Please) is Spark's to assess; any other
   # resolved release.mechanism is the operator's own machinery.
   local top="" in_repo=0 mech="" rp_config=0 rp_wf=0
-  [ -n "$git_v" ] && top="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  [ -n "$git_v" ] && top="$(git_root)"
   if [ -n "$top" ]; then
     in_repo=1
     mech="$(pref_get release.mechanism || true)"
@@ -700,6 +704,23 @@ cmd_doctor() {
     fi
   done
   [ "$preset_ok" -eq 1 ] && green "  ✓ every permission preset resolves to a valid baseline ($PERMISSION_PRESETS)"
+
+  # CLI source hygiene (#276): repo-root detection is spelled once, in git_root.
+  # A stray direct toplevel lookup anywhere else is the duplication this
+  # consolidated. The search pattern is split across a concatenation so this
+  # check does not count its own source as an occurrence.
+  local cli="$SPARK_ROOT/bin/spark" rp_count rp_pat
+  rp_pat="rev-parse --show-""toplevel"
+  if [ -f "$cli" ]; then
+    echo
+    echo "CLI source hygiene:"
+    rp_count="$(grep -c -- "$rp_pat" "$cli" 2>/dev/null || echo 0)"
+    if [ "$rp_count" -le 1 ]; then
+      green "  ✓ repo-root detection routes through git_root (one authority)"
+    else
+      red "  ✗ $rp_count direct toplevel lookups in bin/spark — route them through git_root() (#276)"; errors=$((errors+1))
+    fi
+  fi
 
   # Companion plugins (ADR-0014): inside the marketplace repo, the validation
   # gate covers every listed plugin, not only the core — manifest JSON, skill
@@ -982,8 +1003,8 @@ cmd_doctor() {
   # Only markers anchored at end-of-line count — the templates describe the
   # marker format inline (in backticks, mid-sentence), and that prose example
   # must not be mistaken for a live assertion.
-  if git rev-parse --show-toplevel >/dev/null 2>&1; then
-    local std_root; std_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  if [ -n "$(git_root)" ]; then
+    local std_root; std_root="$(git_root)"
     local std_doc std_present=0
     for std_doc in CONVENTIONS.md ENGINEERING-STANDARDS.md; do
       [ -f "$std_root/$std_doc" ] && std_present=1
@@ -1029,7 +1050,7 @@ cmd_doctor() {
       green "✓ Spark git hooks are installed in this repo"
     else
       local toplevel spark_repo=""
-      toplevel="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+      toplevel="$(git_root)"
       [ -f "$SPARK_ROOT/../../.claude-plugin/marketplace.json" ] \
         && spark_repo="$(cd "$SPARK_ROOT/../.." && pwd)"
       if [ -n "$spark_repo" ] && [ "$toplevel" = "$spark_repo" ] && [ -z "${CI:-}" ]; then
@@ -1046,8 +1067,8 @@ cmd_doctor() {
   # [Unreleased] heading. A stray one means someone edited against the policy.
   # Projects without Release Please keep [Unreleased], so the check is silent
   # there.
-  if git rev-parse --show-toplevel >/dev/null 2>&1; then
-    local proj_root; proj_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  if [ -n "$(git_root)" ]; then
+    local proj_root; proj_root="$(git_root)"
     if [ -n "$proj_root" ] && [ -f "$proj_root/release-please-config.json" ] && [ -f "$proj_root/CHANGELOG.md" ]; then
       echo
       if grep -qiE '^#+[[:space:]]*\[?unreleased\]?' "$proj_root/CHANGELOG.md"; then
@@ -1145,7 +1166,7 @@ cmd_preferences() {
   if [ "$mode" = "apply" ]; then
     # apply_standard refuses outside a repo too, but the refusal here can say
     # what still works: showing resolves from defaults + operator anywhere.
-    if ! git rev-parse --show-toplevel >/dev/null 2>&1; then
+    if [ -z "$(git_root)" ]; then
       red "spark preferences --apply needs a git repo — run it from inside the project."
       echo "(bare 'spark preferences' works anywhere and shows what would apply)"
       return 1
@@ -1159,7 +1180,7 @@ cmd_preferences() {
   local defaults="$SPARK_ROOT/preferences/defaults.json"
   local operator="${XDG_CONFIG_HOME:-$HOME/.config}/spark/preferences.json"
   local gitroot project=""
-  gitroot="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  gitroot="$(git_root)"
   [ -n "$gitroot" ] && project="$gitroot/.spark/preferences.json"
 
   # The shipped defaults are load-bearing for carry-in: absence means a
@@ -1219,7 +1240,7 @@ cmd_brief() {
   # opens, Spark project or not — outside a git repo it must contribute
   # nothing to the session (silent, exit 0).
   local root
-  root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  root="$(git_root)"
   if [ -z "$root" ]; then
     [ "$short" -eq 1 ] && return 0
     yellow "spark brief: not inside a git repo — nothing to orient on."
@@ -1500,7 +1521,7 @@ cmd_orient() {
   # Inspect the git root when inside one, else the current directory — a
   # not-yet-versioned project is a valid thing to orient on.
   local root
-  root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  root="$(git_root)"
   [ -n "$root" ] || root="$(pwd)"
 
   if [ -n "$set_to" ]; then
@@ -1762,7 +1783,7 @@ cmd_setup() {
 
   # One repo check up front, so the refusal names the command, not a step.
   local top
-  if ! top="$(git rev-parse --show-toplevel 2>/dev/null)"; then
+  top="$(git_root)"; if [ -z "$top" ]; then
     red "spark setup needs a git repo — run it from inside the project."
     return 1
   fi
@@ -1905,8 +1926,8 @@ cmd_apply_permissions() {
   # Anchor on the repo root when inside one, so the settings land where Claude
   # Code actually reads them, regardless of the current subdirectory.
   local root="."
-  if git rev-parse --show-toplevel >/dev/null 2>&1; then
-    root="$(git rev-parse --show-toplevel)"
+  if [ -n "$(git_root)" ]; then
+    root="$(git_root)"
   fi
   local target="$root/.claude/settings.json"
 
@@ -2035,8 +2056,8 @@ PY
 # past session may have been overtaken — drift is reported, never trusted.
 cmd_resume() {
   local root
-  root="$(git rev-parse --show-toplevel 2>/dev/null)" \
-    || { red "not inside a git repo — nothing to resume"; return 1; }
+  root="$(git_root)"
+  [ -n "$root" ] || { red "not inside a git repo — nothing to resume"; return 1; }
   local state="$root/.spark/state.json"
   if [ ! -f "$state" ]; then
     yellow "No work state at .spark/state.json — nothing recorded yet."
@@ -2401,7 +2422,7 @@ cmd_state() {
   done
 
   local top
-  if ! top="$(git rev-parse --show-toplevel 2>/dev/null)"; then
+  top="$(git_root)"; if [ -z "$top" ]; then
     red "spark state needs a git repo — run it from inside the project."
     return 1
   fi
