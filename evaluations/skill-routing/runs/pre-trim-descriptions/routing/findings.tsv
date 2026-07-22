@@ -1,0 +1,28 @@
+# Pre-trim (07b972f) descriptions - routing judged per prompt. grader: model-judged, n=1 (see task.md).
+# id	caught	note
+R01	1	Literal "I want to build X" cue matches ideate verbatim.
+R02	1	plan: "break work into issues... milestone".
+R03	1	codify: "start coding an issue".
+R04	1	validate: harden branch diff pre-PR.
+R05	1	ship: commit + open the PR.
+R06	1	onboard: first run / arming.
+R07	1	bootstrap: scaffold runtime (uv default).
+R08	1	knowledge: notes -> ADR.
+R09	1	agents-md: owns both contract files.
+R10	1	ideate: "scope is still fuzzy".
+R11	1	plan: decide the stack + issues.
+R12	1	codify vs plan: implement planned work.
+R13	1	validate: "get a diff ready to ship" cue present; ship excluded (assumes reviewed).
+R14	1	ship: "write a commit message".
+R15	1	onboard: arming, no runtime scaffold needed.
+R16	1	bootstrap: scaffold + wire into lifecycle.
+R17	1	knowledge: SOP/process doc; docit is public-facing.
+R18	1	docit: knowledge explicitly cedes README glow-ups.
+R19	1	audit: validate cedes whole-codebase audits.
+R20	1	knowledge: record a decision (ADR).
+R21	1	docit: launch copy named.
+R22	1	connect: bootstrap cedes services/secrets.
+R23	1	validate: "resolve review findings".
+R24	1	knowledge: record a decision.
+R25	1	Literal "how do I start with Spark here" cue matches onboard verbatim.
+R26	1	knowledge: "Claude Code session discoveries" cue present.

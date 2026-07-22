@@ -20,3 +20,4 @@
 # so it is intentionally NOT indexed here.
 #
 # capability_id	requirement	suite	topology
+293	required	skill-routing	current-descriptions

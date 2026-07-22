@@ -1,0 +1,28 @@
+# Current (post-#293) descriptions - routing judged per prompt. grader: model-judged, n=1 (see task.md).
+# id	caught	note
+R01	1	CUE LOSS: literal "I want to build X" trimmed; routes via "starting something new". No flip.
+R02	1	plan unchanged in substance.
+R03	1	codify: "start coding an issue" kept.
+R04	1	validate: harden branch diff kept.
+R05	1	ship: commit + open PR kept.
+R06	1	onboard: "arming a repo for the first time" kept.
+R07	1	bootstrap: scaffold runtime kept.
+R08	1	knowledge: notes -> ADR kept.
+R09	1	agents-md unchanged in substance.
+R10	1	ideate: "scope is still fuzzy" kept.
+R11	1	plan: "decide the stack, break work into issues" kept.
+R12	1	codify: "a planned feature" kept.
+R13	1	CUE LOSS: "get a diff ready to ship" trimmed; routes via "harden a single change/branch/PR" + ship excluding unreviewed work. No flip.
+R14	1	ship: "write a commit message" kept.
+R15	1	onboard vs bootstrap boundary clause kept both sides.
+R16	1	bootstrap: "wire it into the lifecycle" kept.
+R17	1	knowledge: SOPs/runbooks kept; docit still public-only.
+R18	1	knowledge -> docit README cession kept verbatim.
+R19	1	validate -> audit cession kept verbatim.
+R20	1	knowledge: "record a decision" kept.
+R21	1	docit unchanged (companion untouched by #293).
+R22	1	bootstrap -> spark-connect cession kept.
+R23	1	validate: "resolve review findings" kept.
+R24	1	knowledge: "record a decision" kept.
+R25	1	CUE LOSS: literal "how do I start with Spark here" trimmed; routes via "arming a repo for the first time". No flip.
+R26	1	CUE LOSS: "Claude Code session discoveries" trimmed; routes via "findings, and decisions". No flip.

@@ -1,0 +1,7 @@
+# Routing judgment run facts - ESTIMATES (no live selector trace; see task.md).
+model	claude-opus-4-8
+tokens_in	15000
+tokens_out	1500
+tokens_method	estimate
+latency_seconds	600
+latency_method	estimate
