@@ -49,9 +49,12 @@ feature, not a task list.
 
 ## Creating the issues
 
-Draft first; create on GitHub only after explicit confirmation. The `gh`
-mechanics (issue creation, the milestone, or markdown-only drafts if the user
-prefers) are in [references/creating-issues.md](references/creating-issues.md).
+Draft first; create on GitHub only after explicit confirmation. Then create
+and wire the whole approved slate with one deterministic helper — write a
+manifest, preview it with `bash scripts/issue-manifest.sh --dry-run <file>`
+(run from this skill's directory), and rerun without `--dry-run` to execute.
+Manifest format and resume rules:
+[references/creating-issues.md](references/creating-issues.md).
 
 ## Guardrails
 
