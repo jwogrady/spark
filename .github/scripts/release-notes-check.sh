@@ -26,10 +26,13 @@
 # (each printed); 2 on a usage error.
 set -euo pipefail
 
-# Changelog-visible conventional types under Release Please's "simple" default
-# (see docs/explanation/release-ownership.md). Keep this list and that doc in
-# lockstep — they are the one definition of "user-facing in the changelog".
-VISIBLE_TYPES="feat fix perf revert"
+# Changelog-visible conventional types, matching the changelog-sections in
+# release-please-config.json (see docs/explanation/release-ownership.md). docs
+# is visible — documentation is part of the product; the build-process types
+# (chore/refactor/test/build/ci/style) stay hidden as noise. Keep this list, the
+# config, and that doc in lockstep: they are the one definition of "user-facing
+# in the changelog".
+VISIBLE_TYPES="feat fix perf revert docs"
 
 usage() {
   echo "usage: release-notes-check.sh --commits <file> --notes <file>" >&2

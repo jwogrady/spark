@@ -17,14 +17,15 @@ record* around that machinery — it never recreates release management.
       repos) or under `## [Unreleased]` (manual repos). No entry describes work
       that has not merged; none is a process-journal note.
 - [ ] **Changelog input is complete** — no user-facing change is silently
-      dropped. Only changelog-visible commit types reach the generated notes
-      (`feat`, `fix`, `perf`, `revert`); `docs`/`chore`/`refactor`/`test` are
-      hidden, so a feature merged under one of them vanishes. `.github/scripts/`
-      `release-notes-check.sh` mechanizes this: feed it the range's commits
-      (type, subject, PR labels) and the generated notes, and it flags any
-      visible commit missing from the notes and any commit merged under an
-      excluded type whose PR is labeled `feature`. Offline-tested by
-      `tests/test-release-notes-check.sh`; #232 is the failure it prevents.
+      dropped. Changelog-visible types reach the generated notes (`feat`, `fix`,
+      `perf`, `revert`, `docs`); the build-process types
+      (`chore`/`refactor`/`test`/`build`/`ci`/`style`) are hidden, so a feature
+      merged under one of them vanishes. `.github/scripts/release-notes-check.sh`
+      mechanizes this: feed it the range's commits (type, subject, PR labels) and
+      the generated notes, and it flags any visible commit missing from the notes
+      and any commit merged under a hidden type whose PR is labeled `feature`.
+      Offline-tested by `tests/test-release-notes-check.sh`; #232 is the failure
+      it prevents.
 - [ ] **README and reference docs describe only merged behavior.** Nothing
       planned is presented as shipped.
 - [ ] **Companion docs** (spark-audit, spark-connect, spark-docs) match their

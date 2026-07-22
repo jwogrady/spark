@@ -33,15 +33,19 @@ release PR up to date from conventional commits on `master`; merging it is
 always a human decision, and that single merge is what produces the bump,
 the changelog entry, the tag, and the GitHub Release together.
 
-**Which commit types reach the changelog.** Under Release Please's `simple`
-release type, only `feat`, `fix`, `perf`, and `revert` are rendered into the
-generated release notes; `docs`, `chore`, `refactor`, `test`, `style`, `build`,
-and `ci` are changelog-hidden (they still drive a patch bump). The consequence
-that bites: a user-facing change merged under a hidden type — a feature that
-lands as `chore:` — silently never appears in the notes (#232). The
-release-docs checklist's completeness step guards this at pre-approval, backed
-by `.github/scripts/release-notes-check.sh`; the visible-type list there and in
-that script must match this paragraph.
+**Which commit types reach the changelog.** `changelog-sections` in
+`release-please-config.json` fixes this explicitly: `feat` (Features), `fix`
+(Bug Fixes), `perf`, `revert`, and `docs` (Documentation) are rendered into the
+generated release notes; the build-process types — `chore`, `refactor`, `test`,
+`build`, `ci`, `style` — are hidden (they still drive a patch bump). The line is
+the changelog philosophy in config form: the changelog records what changed in
+the *product* (features, fixes, and the docs users read), not how it was built.
+`docs` is visible because documentation is part of the product; process churn is
+not. The consequence that still bites: a user-facing change merged under a hidden
+type — a feature that lands as `chore:` — never appears in the notes (#232). The
+release-docs checklist's completeness step guards that at pre-approval, backed by
+`.github/scripts/release-notes-check.sh`; the visible-type list there, the
+`changelog-sections` config, and this paragraph must stay in lockstep.
 
 ## How the model plays out in this repo
 

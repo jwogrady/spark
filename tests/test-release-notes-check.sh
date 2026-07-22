@@ -41,8 +41,19 @@ refactor	extract the resolver	tech-debt" \
 "## Features
 * add the widget (#10)
 ## Bug Fixes
-* stop the crash on empty input (#11)" \
+* stop the crash on empty input (#11)
+## Documentation
+* document the backlog label (#12)" \
   "release-notes: complete"
+
+# --- docs is a visible type: a docs change absent from the notes is flagged
+# just like a feat, since documentation is part of the product.
+check 1 "missing docs change flagged" \
+"docs	rewrite the release-ownership explanation	documentation
+fix	stop the crash	bug" \
+"## Bug Fixes
+* stop the crash (#11)" \
+  "omission: docs: rewrite the release-ownership explanation"
 
 # --- omission: a visible feat is missing from the notes.
 check 1 "missing feature flagged" \
@@ -62,14 +73,15 @@ fix	stop the crash	bug" \
 * stop the crash (#11)" \
   "mislabel: add the milestone-gate readiness signal" "labeled 'feature'"
 
-# --- multiple documentation/governance commits under excluded types with no
-# user-facing label are NOT flagged (they are legitimately hidden). This is the
-# regression guard that the check does not become noisy about honest chores.
-check 0 "excluded governance commits stay silent" \
-"docs	correct the roadmap status	documentation
-chore	add metadata governance parity	chore
-docs	seed standards docs from resolved prefs	documentation
-test	add orchestration fixtures	test" \
+# --- multiple build-process commits under hidden types with no user-facing
+# label are NOT flagged (they are legitimately hidden). This is the regression
+# guard that the check does not become noisy about honest chores.
+check 0 "hidden build-process commits stay silent" \
+"chore	add metadata governance parity	chore
+test	add orchestration fixtures	test
+build	bump the dev container image	chore
+ci	pin the runner version	chore
+refactor	extract the resolver	tech-debt" \
 "## Features
 * nothing user-facing this release" \
   "release-notes: complete"
@@ -77,7 +89,7 @@ test	add orchestration fixtures	test" \
 # --- combined: an omission and a mislabel in the same range are both reported.
 check 1 "omission and mislabel both reported" \
 "feat	add the exporter	feature
-docs	record setup profiles as an ADR amendment	documentation
+refactor	extract the shared helper	tech-debt
 chore	assign the feature to its milestone	feature" \
 "## Bug Fixes
 * an unrelated fix (#9)" \
