@@ -34,6 +34,7 @@ preferences|cmd_preferences|Show the resolved engineering standard; --apply carr
 resume|cmd_resume|Rebuild where the lifecycle left off from .spark/state.json
 version|cmd_version|Print the Spark plugin version
 brief|cmd_brief|Print the session brief: orient, locate, load (--short for the SessionStart hook)
+footprint|cmd_footprint|Measure Spark'\''s context footprint per surface (core + companions); --json for machine-readable
 orient|cmd_orient|Classify this repo as new, existing, or ambiguous before setup; --set records the decision
 help|usage|Show this help'
 
@@ -2006,6 +2007,158 @@ cmd_resume() {
     yellow "$drift fact(s) drifted since this state was written — trust the repo,"
     yellow "then let the current stage's close-out rewrite .spark/state.json."
   fi
+}
+
+# ---------------------------------------------------------------------------
+# footprint (#208): measure what Spark loads into a model's context, per
+# surface, across the core and every companion. Read-only — it counts, it
+# changes nothing. Token figures are an explicit bytes÷4 approximation
+# (ADR-0003 forbids a tokenizer dependency); the method prints with the numbers
+# so runs are comparable but never mistaken for exact counts. #209 turns this
+# baseline into an enforced doctor budget by diffing the --json output.
+FOOTPRINT_CPT=4
+
+# fp_bytes_lines <file...> — echo "<bytes> <lines>" summed over existing files.
+# A surface a plugin lacks sums to "0 0", so absence reports cleanly.
+fp_bytes_lines() {
+  local b=0 l=0 f wb wl
+  for f in "$@"; do
+    [ -f "$f" ] || continue
+    wb=$(wc -c < "$f" 2>/dev/null || echo 0)
+    wl=$(wc -l < "$f" 2>/dev/null || echo 0)
+    b=$((b + wb)); l=$((l + wl))
+  done
+  printf '%s %s' "$b" "$l"
+}
+
+# fp_files <dir> <surface> — print the files that make up one surface, one per
+# line. Surfaces mirror what actually enters a model's context: on-invoke skill
+# bodies, the reference files skills point at, and agent definitions. Hook
+# *source* is deliberately absent — it never enters the model's context; the
+# per-session cost hooks impose is their runtime output (the SessionStart
+# brief), measured separately and apart from this deterministic file total.
+fp_files() {
+  local dir="$1" surface="$2"
+  {
+    case "$surface" in
+      skills)     find "$dir/skills" -type f -name 'SKILL.md' 2>/dev/null ;;
+      references) find "$dir" -path '*/references/*' -type f 2>/dev/null ;;
+      agents)     find "$dir" -path '*/agents/*' -type f -name '*.md' 2>/dev/null ;;
+    esac
+  } | sort
+}
+
+# fp_desc_chars <dir> — total characters of every SKILL.md description value.
+# The description is the always-loaded selection cost (Claude reads it to pick a
+# skill), so it is billed apart from the on-invoke SKILL.md body.
+fp_desc_chars() {
+  local dir="$1" total=0 f desc
+  while IFS= read -r f; do
+    [ -f "$f" ] || continue
+    desc="$(awk '/^description:/{sub(/^description:[[:space:]]*/,"");print;exit}' "$f" 2>/dev/null)"
+    total=$((total + ${#desc}))
+  done < <(find "$dir/skills" -type f -name 'SKILL.md' 2>/dev/null)
+  printf '%s' "$total"
+}
+
+cmd_footprint() {
+  local usage_line="usage: spark footprint [--json] [--root <marketplace-dir>]"
+  local json="" root=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --json) json=1 ;;
+      --root) shift; root="${1:-}" ;;
+      --root=*) root="${1#--root=}" ;;
+      -h|--help) echo "$usage_line"; return 0 ;;
+      *) red "unknown option: $1"; echo "$usage_line"; return 1 ;;
+    esac
+    shift
+  done
+
+  # Which plugin dirs to measure. --root treats its argument as a marketplace
+  # root (…/plugins/*/) so a fixture layout with known sizes is measurable;
+  # otherwise measure the installed marketplace, or the core alone when the
+  # plugin is installed standalone.
+  local plugins=() d mroot
+  if [ -n "$root" ]; then
+    [ -d "$root" ] || { red "no such --root dir: $root"; return 1; }
+    for d in "$root"/plugins/*/; do [ -d "$d" ] && plugins+=("$(cd "$d" && pwd)"); done
+    [ "${#plugins[@]}" -gt 0 ] || plugins+=("$(cd "$root" && pwd)")
+  elif [ -f "$SPARK_ROOT/../../.claude-plugin/marketplace.json" ]; then
+    mroot="$(cd "$SPARK_ROOT/../.." && pwd)"
+    for d in "$mroot"/plugins/*/; do [ -d "$d" ] && plugins+=("$(cd "$d" && pwd)"); done
+  else
+    plugins+=("$SPARK_ROOT")
+  fi
+
+  local surfaces="skill-descriptions skills references agents"
+  local g_b=0 g_l=0 g_t=0            # grand totals across plugins
+  local json_plugins=""
+
+  [ -z "$json" ] && {
+    echo "Spark context footprint"
+    echo "Token estimate = bytes ÷ ${FOOTPRINT_CPT} (heuristic; not exact — no tokenizer dependency, ADR-0003)"
+  }
+
+  local p name surface b l t p_b p_l p_t bl json_surfaces
+  for p in "${plugins[@]}"; do
+    name="$(basename "$p")"
+    p_b=0; p_l=0; p_t=0; json_surfaces=""
+    [ -z "$json" ] && { echo; printf '%s\n' "$name"; printf '  %-20s %8s %7s %9s\n' surface bytes lines "~tokens"; }
+    for surface in $surfaces; do
+      if [ "$surface" = "skill-descriptions" ]; then
+        b="$(fp_desc_chars "$p")"; l=0
+      else
+        bl="$(fp_bytes_lines $(fp_files "$p" "$surface"))"
+        b="${bl% *}"; l="${bl#* }"
+      fi
+      t=$((b / FOOTPRINT_CPT))
+      p_b=$((p_b + b)); p_l=$((p_l + l))
+      if [ -n "$json" ]; then
+        json_surfaces="${json_surfaces}${json_surfaces:+,}\"${surface}\":{\"bytes\":${b},\"lines\":${l},\"tokens\":${t}}"
+      else
+        printf '  %-20s %8s %7s %9s\n' "$surface" "$b" "${l/#0/—}" "$t"
+      fi
+    done
+    # Totals derive their token estimate from summed bytes, not from summing the
+    # per-surface floors — so total tokens always equals total bytes ÷ 4 and a
+    # budget check (#209) reads one consistent rule.
+    p_t=$((p_b / FOOTPRINT_CPT))
+    g_b=$((g_b + p_b)); g_l=$((g_l + p_l))
+    if [ -n "$json" ]; then
+      json_plugins="${json_plugins}${json_plugins:+,}{\"name\":\"${name}\",\"surfaces\":{${json_surfaces}},\"total\":{\"bytes\":${p_b},\"lines\":${p_l},\"tokens\":${p_t}}}"
+    else
+      printf '  %-20s %8s %7s %9s\n' "total" "$p_b" "$p_l" "$p_t"
+    fi
+  done
+
+  # Runtime surface: the SessionStart brief is the one hook output that enters
+  # every session's context, and it varies with repo state — so it is measured
+  # live (skipped under --root, where there is no real repo) and reported apart
+  # from the deterministic file total, never folded into a budget that must be
+  # stable across runs. The guard's block messages are situational, not
+  # per-session, and are out of scope here.
+  local rt_json="" brief_b brief_t
+  if [ -z "$root" ]; then
+    brief_b=$(cmd_brief --short 2>/dev/null | wc -c | tr -d ' ' || echo 0)
+    brief_t=$((brief_b / FOOTPRINT_CPT))
+    rt_json=",\"runtime\":{\"session-brief\":{\"bytes\":${brief_b},\"tokens\":${brief_t}}}"
+  fi
+
+  g_t=$((g_b / FOOTPRINT_CPT))
+  if [ -n "$json" ]; then
+    printf '{"method":"bytes/%s","plugins":[%s],"total":{"bytes":%s,"lines":%s,"tokens":%s}%s}\n' \
+      "$FOOTPRINT_CPT" "$json_plugins" "$g_b" "$g_l" "$g_t" "$rt_json"
+  else
+    echo
+    printf 'marketplace total     %8s %7s %9s\n' "$g_b" "$g_l" "$g_t"
+    if [ -n "$rt_json" ]; then
+      echo
+      echo "runtime (this environment, not in the total above — varies with repo state)"
+      printf '  %-20s %8s %7s %9s\n' "session-brief" "$brief_b" "—" "$brief_t"
+    fi
+  fi
+  return 0
 }
 
 verb="${1:-help}"
