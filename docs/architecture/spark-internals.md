@@ -39,10 +39,11 @@ Spark is a **four-plugin marketplace** (ADR-0014): the repo-root
 `.claude-plugin/marketplace.json` catalog lists a focused core plus three
 companions, each under `plugins/<name>/`:
 
-- **`spark`** — the core: the shipping loop. `setup` (one-command carry-in),
-  `bootstrap` (inception), the five lifecycle skills, preferences and project
-  overrides, `brief`/`resume` and the durable work state, the two enforcement
-  doors, `doctor`, Release Please scaffolding, `agents-md`, and `knowledge`.
+- **`spark`** — the core: the shipping loop. The nine core skills of the
+  [canonical taxonomy](../../plugins/spark/docs/reference/skills.md)
+  (lifecycle, setup, supporting), `setup` (one-command carry-in), preferences
+  and project overrides, `brief`/`resume` and the durable work state, the two
+  enforcement doors, `doctor`, and Release Please scaffolding.
 - **`spark-audit`** — whole-project assessment and evidence-backed cleanup
   (`/spark-audit:audit`).
 - **`spark-connect`** — service connectivity + secrets via 1Password
@@ -77,7 +78,7 @@ The core plugin is layered:
 |---|---|---|---|
 | Marketplace catalog | `.claude-plugin/marketplace.json` (repo root) | Make the repo git-installable; lists the core + the three companions | [../reference/plugin-manifest.md](../reference/plugin-manifest.md) |
 | Plugin manifests | `plugins/<name>/.claude-plugin/plugin.json` | Name and version each plugin (author `jwogrady`, MIT); companions version independently of the core | [../reference/plugin-manifest.md](../reference/plugin-manifest.md) |
-| Skills | `plugins/spark/skills/<name>/SKILL.md` | The five lifecycle stages + `bootstrap`, `knowledge`, `agents-md`, exposed as `/spark:<name>` | [reference/skills.md](../../plugins/spark/docs/reference/skills.md) |
+| Skills | `plugins/spark/skills/<name>/SKILL.md` | The nine core skills — lifecycle, setup, supporting — exposed as `/spark:<name>` | [reference/skills.md](../../plugins/spark/docs/reference/skills.md) |
 | Agent crew | `plugins/spark/agents/knowledge/*.md` | The knowledge crew (3 roles) the `knowledge` skill dispatches; companions carry their own crews | — |
 | PreToolUse hook | `plugins/spark/hooks/hooks.json`, `plugins/spark/hooks/guard-bash.sh` | Enforce git hygiene on the **Claude-driven** path | [reference/hooks.md](../../plugins/spark/docs/reference/hooks.md) |
 | CLI | `plugins/spark/bin/spark` | Validate the marketplace, carry the standard in, rebuild session context, scaffold skills | [reference/cli.md](../../plugins/spark/docs/reference/cli.md) |
@@ -85,10 +86,12 @@ The core plugin is layered:
 | User docs | `plugins/spark/docs/` | Ship with the plugin; Diátaxis-organized: tutorials / how-to / reference / explanation | — |
 | Dev docs | `docs/` (repo root) | Never shipped: ADRs, this architecture map, packaging reference | — |
 
-The CLI verbs: `doctor`, `list-skills`, `new-skill`, `setup`,
-`install-git-hooks`, `apply-permissions`, `preferences`, `resume`, `version`,
-`brief`, `help`. (`shred-env` moved to `spark-connect` with the connect skill —
-it has no independent core purpose.)
+The CLI verbs live in [reference/cli.md](../../plugins/spark/docs/reference/cli.md):
+the `VERBS` dispatch table in `bin/spark` is the mechanical source of truth,
+and doctor holds both that reference and `CLAUDE.md`'s repo-map mirror in
+parity with it — this map deliberately does not restate the list.
+(`shred-env` moved to `spark-connect` with the connect skill — it has no
+independent core purpose.)
 
 ```mermaid
 flowchart TB

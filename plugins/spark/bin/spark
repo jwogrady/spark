@@ -700,6 +700,22 @@ cmd_doctor() {
     [ "$tax_ok" -eq 1 ] && green "  ✓ every shipped skill is in the canonical taxonomy"
   fi
 
+  # CLI-verb parity (canonical page): the same one-canonical-source rule for
+  # verbs — every verb the VERBS dispatch table ships must have its section in
+  # reference/cli.md, or the canonical page silently under-documents the CLI
+  # (state and footprint had already gone missing when this check landed).
+  if [ -f "$SPARK_ROOT/docs/reference/cli.md" ]; then
+    echo
+    echo "CLI-verb parity (VERBS table vs reference/cli.md):"
+    local cli_ok=1 verb
+    for verb in $(printf '%s\n' "$VERBS" | awk -F'|' 'NF{print $1}'); do
+      if ! grep -qE "^## \`spark $verb( |\`)" "$SPARK_ROOT/docs/reference/cli.md"; then
+        red "  ✗ verb '$verb' ships but has no section in reference/cli.md"; errors=$((errors+1)); cli_ok=0
+      fi
+    done
+    [ "$cli_ok" -eq 1 ] && green "  ✓ every shipped verb is documented in the canonical CLI reference"
+  fi
+
   # Permission presets (ADR-0017, #277): every preset in the enum must resolve
   # to a shipped baseline that is valid JSON, so a preset can never be offered
   # without the file it applies. Reads the same permission_baseline authority
@@ -923,6 +939,24 @@ cmd_doctor() {
     else
       red "  ✗ CLI verb lists drift — dispatch: [${ship_verbs% }] CLAUDE.md: [${doc_verbs% }]. Sync the bin/spark line in the Repo Map."
       errors=$((errors+1))
+    fi
+
+    # (a4) Skill-taxonomy mirrors: README.md and CLAUDE.md deliberately restate
+    # the skill taxonomy (the front door and the always-loaded agent contract);
+    # every other doc links to reference/skills.md instead. Restatement without
+    # parity is exactly how the architecture map drifted, so the two surviving
+    # mirrors are gated the same way the CLI-verb mirror is (a3).
+    local tm_out tm_rc=0 tm_line
+    tm_out="$(check_taxonomy_mirrors "$repo_root" "$SPARK_ROOT")" || tm_rc=$?
+    if [ "$tm_rc" -eq 0 ]; then
+      green "  ✓ README.md and CLAUDE.md name every shipped core skill"
+    elif [ "$tm_rc" -eq 1 ]; then
+      while IFS= read -r tm_line; do
+        [ -n "$tm_line" ] || continue
+        red "  ✗ ${tm_line#  }"; errors=$((errors+1))
+      done <<EOF_TM
+$tm_out
+EOF_TM
     fi
 
     # (b) AI-attribution prohibition: implemented in the hook, documented twice.
@@ -2425,6 +2459,27 @@ check_traceability_templates() {
   f="$root/.github/PULL_REQUEST_TEMPLATE.md"
   if [ ! -f "$f" ]; then echo "  missing PR template"; rc=1
   elif ! grep -qi 'Capability traceability' "$f"; then echo "  ${f#"$root"/}: lost the Capability traceability section"; rc=1; fi
+  return $rc
+}
+
+# check_taxonomy_mirrors <repo-root> <spark-root> — inside the Spark repo,
+# README.md and CLAUDE.md insist on restating the skill taxonomy; the canonical
+# source stays reference/skills.md (gated by taxonomy parity), and a mirror is
+# tolerated only while it is held in parity: every shipped core skill must
+# appear backticked in both mirrors. Echoes one line per omission; returns 1 on
+# drift, 3 when either mirror is absent (not this repo). Factored for offline
+# testing.
+check_taxonomy_mirrors() {
+  local repo_root="$1" spark_root="$2" rc=0 d name doc
+  [ -f "$repo_root/README.md" ] && [ -f "$repo_root/CLAUDE.md" ] || return 3
+  for d in "$spark_root"/skills/*/; do
+    [ -d "$d" ] || continue
+    name="$(basename "$d")"
+    for doc in README.md CLAUDE.md; do
+      grep -q "\`$name\`" "$repo_root/$doc" \
+        || { echo "  $doc mirrors the skill taxonomy but omits \`$name\`"; rc=1; }
+    done
+  done
   return $rc
 }
 

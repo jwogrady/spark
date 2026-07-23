@@ -250,6 +250,26 @@ stale-orientation warning line when the recorded classification has drifted.
 Outside a git repo it prints nothing and exits `0`, so non-project sessions
 start clean.
 
+## `spark state [--set key=value ...]`
+
+Shows the committed work state at `.spark/state.json` ([schema](state.md)), or
+writes it: `--set key=value` records a stage close-out (e.g. `spark state
+--set stage=plan issue=42 next_action="codify #42"`), stamping `updated` for
+you. Only the schema's keys are accepted; the file is created on first write.
+This is the mechanical writer the lifecycle skills call at each stage's
+close-out — `spark resume` and `spark brief` are its readers. Exits 1 outside
+a git repo.
+
+## `spark footprint [--json] [--timing]`
+
+Measures Spark's context footprint — the bytes each always-loaded surface
+(marketplace catalog, skill descriptions, hook output) costs a session — and
+reports per surface, with `--json` for the machine-readable shape. `--timing`
+is the opt-in hard latency gate: it measures the hot paths (the PreToolUse
+guard, `brief --short`) against their budgets and exits non-zero when one is
+exceeded. `spark doctor` runs the same latency numbers advisorily; the gate
+form is for CI.
+
 ## `spark version`
 
 Prints the Spark plugin version, read from `.claude-plugin/plugin.json`.
