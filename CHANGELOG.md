@@ -9,6 +9,18 @@ Keep a Changelog format. Do not hand-edit released sections.
 
 ---
 
+## [0.15.0](https://github.com/jwogrady/spark/compare/v0.14.0...v0.15.0) (2026-07-23)
+
+
+### Features
+
+* add the Alpha feedback intake ([5b68b4b](https://github.com/jwogrady/spark/commit/5b68b4b218bb5dc0d4e2b0c89ce7614334d8c677))
+
+
+### Documentation
+
+* establish the Spark Alpha program ([5380c5a](https://github.com/jwogrady/spark/commit/5380c5ae30b4dc187d2b2a31abf2e1cc2aaa01f1))
+
 ## [0.14.0](https://github.com/jwogrady/spark/compare/v0.13.0...v0.14.0) (2026-07-23)
 
 
