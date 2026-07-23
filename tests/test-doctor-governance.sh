@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Behavioral suite for the two governance guards doctor adds: reference laziness
-# (#294 — progressive disclosure stays lazy) and the capability-traceability
-# template seam (#301 — the CEF's collection points can't silently vanish).
-# Sources bin/spark (dispatch is source-guarded) and drives the factored checks
-# against throwaway fixtures.
+# Behavioral suite for the governance guards doctor adds: reference laziness
+# (#294 — progressive disclosure stays lazy), the capability-traceability
+# template seam (#301 — the CEF's collection points can't silently vanish),
+# and the skill-taxonomy mirrors (README.md/CLAUDE.md restatements stay in
+# parity with the shipped skills). Sources bin/spark (dispatch is
+# source-guarded) and drives the factored checks against throwaway fixtures.
 set -euo pipefail
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 
@@ -119,5 +120,31 @@ fi
 # not this repo (no config/runner) -> returns 3, silent.
 rc=0; out="$(check_release_component_parity "$WORK/emptyrepo")" || rc=$?
 assert_rc "absent files skip cleanly" 3 "$rc"
+
+# ======================= skill-taxonomy mirrors (D-6) =======================
+mroot="$WORK/mirrorrepo"
+mkdir -p "$mroot/plugins/spark/skills/ideate" "$mroot/plugins/spark/skills/onboard"
+
+# both mirrors name every shipped skill -> passes.
+printf '# readme\nSkills: `ideate`, `onboard`.\n' > "$mroot/README.md"
+printf '# claude\nSkills: `ideate`, `onboard`.\n' > "$mroot/CLAUDE.md"
+rc=0; out="$(check_taxonomy_mirrors "$mroot" "$mroot/plugins/spark")" || rc=$?
+assert_rc "complete mirrors pass" 0 "$rc"
+
+# a mirror that drops a skill -> fails, names the doc and the skill.
+printf '# claude\nSkills: `ideate`.\n' > "$mroot/CLAUDE.md"
+rc=0; out="$(check_taxonomy_mirrors "$mroot" "$mroot/plugins/spark")" || rc=$?
+assert_rc "omitted skill fails" 1 "$rc"
+assert_contains "names the omitting mirror and skill" 'CLAUDE.md mirrors the skill taxonomy but omits `onboard`' "$out"
+
+# an unbackticked mention does not count — the mirrors list skills as code.
+printf '# claude\nSkills: `ideate`, onboard.\n' > "$mroot/CLAUDE.md"
+rc=0; out="$(check_taxonomy_mirrors "$mroot" "$mroot/plugins/spark")" || rc=$?
+assert_rc "bare-word mention is not a mirror entry" 1 "$rc"
+
+# not this repo (a mirror absent) -> returns 3, silent.
+rm "$mroot/CLAUDE.md"
+rc=0; out="$(check_taxonomy_mirrors "$mroot" "$mroot/plugins/spark")" || rc=$?
+assert_rc "absent mirror skips cleanly" 3 "$rc"
 
 finish
