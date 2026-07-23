@@ -167,3 +167,8 @@ Imported skills must include their source URL in a `README.md`.
 Do not credit AI systems in any commit message, PR, comment, code, doc,
 changelog, or generated file. Do not add `Co-Authored-By` lines for AI tools.
 Credit belongs to the human author only.
+
+## Code of conduct
+
+Participation is governed by the [Contributor Covenant](CODE_OF_CONDUCT.md).
+Report unacceptable behavior through the private channel described there.
