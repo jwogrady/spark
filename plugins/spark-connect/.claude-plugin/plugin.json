@@ -1,7 +1,7 @@
 {
   "name": "spark-connect",
   "description": "Service connectivity and secrets bootstrap for Claude Code projects: capture provider credentials, load them into 1Password, verify each connection with a smoke test, and securely shred the plaintext. Ships provider recipes (GitHub, Google Cloud, Vultr, Linode) and the shred-env secure-delete script. Companion to the Spark core plugin.",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "author": {
     "name": "jwogrady"
   },
