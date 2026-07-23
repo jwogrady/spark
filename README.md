@@ -143,12 +143,18 @@ paths a git command can take:
 | `PreToolUse` guard | Claude runs a git command | Blocks force-pushes and pushes whose destination is trunk — through leading git options, full refspecs, and compound commands |
 | Git hooks | You (or anyone) commits directly | Rejects commits on trunk, invalid conventional commits, and AI attribution |
 | `spark doctor` | Locally and in CI | Plugin structure, scripts, documentation links, manifests, enforcement parity |
-| Behavioral tests | Every pull request | The CLI flows and both enforcement doors, exercised against throwaway repos |
+| Behavioral tests | Every pull request **to this repository** | Spark's own CI exercises the CLI flows and both enforcement doors against throwaway repos — this is how Spark tests itself, not a suite added to your project (`preferences --apply` scaffolds *your* stack's validation instead) |
 
 Claude can move quickly because Spark keeps the work inside boundaries you can
 trust.
 
 ## Start shipping
+
+**Before you begin:** you need a Git repository, Claude Code, and an
+authenticated GitHub CLI (`gh`) — `onboard` and the lifecycle create issues and
+pull requests through it. Run `spark doctor --requirements` any time to check
+your machine against the [supported-environment matrix](plugins/spark/docs/reference/compatibility.md),
+which also lists what degrades gracefully when an optional tool is absent.
 
 **1. Install Spark in Claude Code**
 
@@ -185,11 +191,10 @@ want to apply or inspect each step separately.
 /spark:ideate → /spark:plan → /spark:codify → /spark:validate → /spark:ship
 ```
 
-**Prerequisites:** a Git repository, Claude Code, and an authenticated GitHub
-CLI (`gh`) for issue and pull-request creation — the full contract, including
-what degrades gracefully without optional tools, is the
-[supported-environment matrix](plugins/spark/docs/reference/compatibility.md).
-`spark doctor --requirements` checks your machine against it.
+The full environment contract — required versus optional tools, and what
+degrades gracefully — is the
+[supported-environment matrix](plugins/spark/docs/reference/compatibility.md),
+and `spark doctor --requirements` is its executable form.
 
 ## The plugin family
 
@@ -229,9 +234,11 @@ sessions, and GitHub-backed delivery discipline. Skip it when you want an
 unstructured coding session or when every repository must follow a completely
 unrelated process.
 
-Spark is MIT licensed and designed for single-developer work. Expect
-occasional breaking changes while the project matures; the
-[changelog](CHANGELOG.md) records every one.
+Spark is MIT licensed and designed for single-developer work. From v1 on, what
+each version protects — and what it deliberately does not, including the
+solo-operator scope and the limits of what CI proves — is the
+[stability contract](plugins/spark/docs/reference/stability.md); the
+[changelog](CHANGELOG.md) records every change against it.
 
 ## Documentation
 
@@ -241,6 +248,7 @@ occasional breaking changes while the project matures; the
 | [Build your first project](plugins/spark/docs/tutorials/build-your-first-project.md) | [CLI reference](plugins/spark/docs/reference/cli.md) | [Roadmap](ROADMAP.md) |
 | | [Engineering preferences](plugins/spark/docs/reference/engineering-preferences.md) | [Changelog](CHANGELOG.md) |
 | | [Supported environments](plugins/spark/docs/reference/compatibility.md) | |
+| | [Stability contract](plugins/spark/docs/reference/stability.md) | |
 
 ---
 
