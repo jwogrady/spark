@@ -41,6 +41,16 @@ author (`jwogrady`), homepage/repository, and the MIT license field. The
 files themselves are the single source of truth; this page deliberately
 embeds no copy of them, because an embedded copy goes stale on every release.
 
+Every companion additionally declares `"dependencies": ["spark"]` — the
+plugin-spec field for cross-plugin edges. The companions hand work to the
+core's skills and call the `spark` CLI, so the dependency is real: declaring
+it lets Claude Code enable the core transitively when a companion is enabled
+(and fail loudly when it can't) instead of leaving a standalone companion
+install with dangling handoffs. `spark doctor` errors on a companion manifest
+that loses the declaration. No semver constraint is pinned while the
+companions are prerelease and the core moves fast (Alpha holds backwards
+compatibility as a non-goal); revisit constraints at v1.
+
 Each companion also carries its own `CHANGELOG.md` at the plugin root,
 written by Release Please, so the release history ships to consumers with
 the plugin. The core's changelog stays at the repo root.
