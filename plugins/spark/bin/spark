@@ -900,6 +900,17 @@ cmd_doctor() {
       fi
     fi
 
+    # (a2b) Release-component parity (#291): the release-notes runner verifies
+    # one component per Release Please package from a hard-coded list; a package
+    # added to the config without its runner component ships UNVERIFIED notes.
+    local rcp_out rcp_rc=0
+    rcp_out="$(check_release_component_parity "$repo_root")" || rcp_rc=$?
+    case "$rcp_rc" in
+      0) green "  ✓ ${rcp_out#  }" ;;
+      1) red "  ✗ ${rcp_out#  }"; errors=$((errors+1)) ;;
+      2) yellow "  ! jq/python3 absent — skipping the release-component parity check"; warnings=$((warnings+1)) ;;
+    esac
+
     # (a3) The CLI verb list must match what CLAUDE.md's Repo Map documents
     # (#266). The shipped set is the VERBS dispatch table itself; the doc set is
     # the parenthesized list on the bin/spark line. They drift whenever a verb
@@ -2376,6 +2387,35 @@ check_reference_laziness() {
 # contribution templates, so an edit that removes the field/section is caught. Verifies
 # the feature + skill issue templates carry the capability_traceability field and
 # the PR template carries the traceability section. Echoes findings; returns 1.
+check_release_component_parity() {
+  # The release-notes runner verifies one component per Release Please package
+  # from a HARD-CODED list; a package with no matching component ships its
+  # release notes UNVERIFIED — not even reported as not-assessed (#291). Echoes
+  # one line and returns: 0 match, 1 drift, 2 no JSON tool to read the config
+  # (caller decides warn-vs-skip), 3 not this repo. Package `.` → core,
+  # `plugins/<x>` → <x>.
+  local root="$1"
+  local cfg="$root/release-please-config.json"
+  local runner="$root/.github/scripts/release-notes-runner.sh"
+  [ -f "$cfg" ] && [ -f "$runner" ] || return 3
+  local pkgs=""
+  if command -v jq >/dev/null 2>&1; then
+    pkgs="$(jq -r '.packages | keys[]' "$cfg" 2>/dev/null || true)"
+  elif command -v python3 >/dev/null 2>&1; then
+    pkgs="$(python3 -c 'import json,sys; print(chr(10).join(json.load(open(sys.argv[1]))["packages"].keys()))' "$cfg" 2>/dev/null || true)"
+  fi
+  [ -n "$pkgs" ] || return 2
+  local expect comps
+  expect="$(printf '%s\n' "$pkgs" | sed -e 's#^\.$#core#' -e 's#^plugins/##' | sort | tr '\n' ' ' || true)"
+  comps="$(grep -E '^NOTES_COMPONENTS=' "$runner" | sed -E 's/^NOTES_COMPONENTS="?([^"]*)"?.*/\1/' | tr ' ' '\n' | sort | tr '\n' ' ' || true)"
+  if [ "$expect" = "$comps" ]; then
+    echo "  release components match Release Please packages (${comps% })"
+    return 0
+  fi
+  echo "  release-component drift — release-please-config packages: [${expect% }] vs release-notes-runner NOTES_COMPONENTS: [${comps% }]. A package with no component ships UNVERIFIED notes; align both sets."
+  return 1
+}
+
 check_traceability_templates() {
   local root="$1" rc=0 f
   for f in "$root/.github/ISSUE_TEMPLATE/feature.yml" "$root/.github/ISSUE_TEMPLATE/skill.yml"; do
