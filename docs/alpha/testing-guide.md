@@ -1,8 +1,9 @@
 # Spark Alpha — testing guide
 
 > For Alpha participants. This is what to do and what we need from you. The plan
-> behind it is [alpha-program.md](alpha-program.md); you file evidence with
-> [feedback-template.md](feedback-template.md).
+> behind it is [alpha-program.md](alpha-program.md); you file evidence through
+> the `alpha-feedback` GitHub issue form (New Issue → *Alpha feedback*), and the
+> [field reference](feedback-template.md) lists what that form asks.
 
 ## What we're asking
 
@@ -79,9 +80,17 @@ matters most: it tells us whether Spark is worth it once the novelty is gone.
 
 ## After each lifecycle run
 
-File one [feedback-template.md](feedback-template.md) entry per run (as a GitHub
-issue labeled `alpha-feedback`, or wherever the program coordinator directs).
-One entry per run, while it's fresh — not a weekly summary.
+File one report per run through the **`alpha-feedback` GitHub issue form** (New
+Issue → *Alpha feedback*) — one per run, while it's fresh, not a weekly summary.
+That form is the only accepted intake; it enforces the safety rules below. The
+[field reference](feedback-template.md) lists what it asks so you can think
+ahead, but **do not** copy it into an issue — file through the form.
+
+Because reports are public: **use your coordinator-assigned pseudonym** (e.g.
+`P1`), never your real name or email, and never include secrets or credentials,
+proprietary or customer source, customer data or personal information, or
+sensitive recordings/screenshots. Recordings, only with your explicit consent,
+are handled privately by the coordinator.
 
 ## At the end of your Alpha
 
