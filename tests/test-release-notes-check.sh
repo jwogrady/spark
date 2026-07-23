@@ -192,6 +192,53 @@ if [ "$rc" -ne 0 ]; then bad "labels-present path — want exit 0, got $rc ($out
   case "$out" in *"no labeled commit is hidden behind an excluded type"*) ok ;; *) bad "labels-present path — missing the hidden-feature clause ($out)" ;; esac
 fi
 
+# --- HOSTILE (F3): a subject that is a PREFIX of another commit's note line
+# must NOT false-pass — bullet equality, not substring.
+check 1 "prefix subject does not ride a longer bullet" \
+"feat	add widget	feature	
+feat	add widget tests	feature	" \
+"## Features
+* add widget tests (#11)" \
+  "omission: feat: add widget"
+
+# --- HOSTILE (F3): one bullet cannot satisfy two commits (consume-once).
+check 1 "one bullet cannot satisfy two commits" \
+"feat	harden the guard	feature	
+feat	harden the guard	feature	" \
+"## Features
+* harden the guard (#12)" \
+  "omission: feat: harden the guard"
+
+# --- HOSTILE (F3): prose mentioning the subject is not a bullet; no match.
+check 1 "prose mention is not a note bullet" \
+"feat	retry logic		" \
+"We removed the broken retry logic pending redesign." \
+  "omission: feat: retry logic"
+
+# --- F8: a mid-subject issue ref is linkified by Release Please; both sides
+# normalize so this legitimate rendering still passes.
+check 0 "mid-subject issue ref matches its linkified bullet" \
+"fix	honor (#12) mid subject text		" \
+"## Bug Fixes
+* honor ([#12](https://x/12)) mid subject text ([abc1234](https://x/c))" \
+  "subject-omission check passed"
+
+# --- scope-bolded rendering still passes (bullet normalization strips it).
+check 0 "scope-bolded bullet matches the descoped subject" \
+"fix	tighten the parser		" \
+"## Bug Fixes
+* **cli:** tighten the parser ([#9](https://x/9))" \
+  "subject-omission check passed"
+
+# --- F4: the runner's label-fetch-failure sentinel must surface as "labels
+# unretrievable", never as a clean full-claims pass.
+check 0 "label-fetch failure is reported, not silently passed" \
+"feat	add widget	__labels_unavailable__	
+chore	some tweak	docs	" \
+"## Features
+* add widget (#10)" \
+  "labels unretrievable for 1 commit(s)"
+
 # --- usage errors exit 2.
 rc=0; bash "$script" --commits "$work/nope.tsv" --notes "$work/notes.md" >/dev/null 2>&1 || rc=$?
 [ "$rc" -eq 2 ] && ok || bad "missing commits file — want exit 2, got $rc"

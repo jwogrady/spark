@@ -244,5 +244,57 @@ rc=0; ( cd "$e2e_repo" && PATH="$stub:$PATH" GITHUB_REPOSITORY=o/r bash "$runner
 [ "$rc" -eq 0 ] && ok || bad "executed main (full path incl. EXIT trap) must exit 0 — trap must not die on an out-of-scope local under set -u (got $rc)"
 unset STUB_PR_JSON
 
+# ============================================================================
+# Hostile-review regressions (F1/F2/F5/F7).
+# ============================================================================
+# F1: a bad range (deleted/unfetched tag) must be an rc-1 INFRA failure, not an
+# empty TSV that later folds to a clean pass.
+rc=0; (cd "$fixture" && notes_component_commits_tsv "jwogrady/spark" "core" "vNOSUCH..$head_sha" > /dev/null 2>&1) || rc=$?
+[ "$rc" -ne 0 ] && ok || bad "F1: bad range must return nonzero, got $rc"
+# ...and run_components records it as an error row (exit-2 class) the fold turns
+# into error.
+split2="$work/split2"; mkdir -p "$split2"
+( cd "$fixture" && notes_last_tag() { case "$1" in core) echo "vNOSUCH";; *) command git tag --list "$1-v[0-9]*" --sort=-v:refname | head -n1;; esac; }
+  notes_run_components "jwogrady/spark" "$head_sha" "$split2" )
+[ "$(awk -F'\t' '$1=="core"{print $2"|"$3}' "$split2/results.tsv")" = "yes|2" ] \
+  && ok || bad "F1: range failure recorded as error row ($(cat "$split2/results.tsv"))"
+[ "$(notes_status_for_results < "$split2/results.tsv")" = "error" ] \
+  && ok || bad "F1: fold must be error on a range failure"
+
+# F2: a component with releasable commits but NO notes section is a FAILURE
+# (dropped release), while no-commits + no-section stays not-assessed.
+split3="$work/split3"; mkdir -p "$split3"
+cp "$split/core.md" "$split3/core.md" 2>/dev/null || true
+seed plugins/spark-docs/d.txt 'feat: add the docs exporter (#305)'
+head_sha2="$(gitc rev-parse HEAD)"
+( cd "$fixture" && notes_run_components "jwogrady/spark" "$head_sha2" "$split3" )
+[ "$(awk -F'\t' '$1=="spark-docs"{print $2"|"$3}' "$split3/results.tsv")" = "yes|1" ] \
+  && ok || bad "F2: dropped component with releasable commits must fail ($(cat "$split3/results.tsv"))"
+grep -q "NO notes section" "$split3/report.txt" && ok || bad "F2: report names the dropped release"
+[ "$(awk -F'\t' '$1=="spark-connect"{print $2}' "$split3/results.tsv")" = "yes" ] \
+  || [ "$(awk -F'\t' '$1=="spark-connect"{print $2"|"$3}' "$split3/results.tsv")" != "" ] \
+  && ok || bad "F2: other components still recorded"
+
+# F5: conventional-commits footer variants Release Please's parser treats as
+# breaking must be detected — the " #" separator (spec §8) and an indented
+# footer (RP parser tolerance).
+gitc commit -q --allow-empty -m 'fix: sep form' -m 'BREAKING CHANGE #77 removed the knob'
+sha_sep="$(gitc rev-parse HEAD)"
+[ "$(cd "$fixture" && notes_body_breaking "$sha_sep")" = "breaking" ] \
+  && ok || bad "F5: 'BREAKING CHANGE #77' footer must be detected"
+gitc commit -q --allow-empty -m 'fix: indented form' -m '  BREAKING-CHANGE: moved the config'
+sha_ind="$(gitc rev-parse HEAD)"
+[ "$(cd "$fixture" && notes_body_breaking "$sha_ind")" = "breaking" ] \
+  && ok || bad "F5: indented BREAKING-CHANGE footer must be detected"
+
+# F7: a hostile tab inside a verbatim commit subject must not inject TSV
+# columns (labels/breaking field shift).
+date +%s%N > "$fixture/core.txt"
+( cd "$fixture" && git add -A && git -c user.name=t -c user.email=t@t commit -q --cleanup=verbatim -m "$(printf 'feat: tab\there feature (#9)')" )
+sha_tab="$(gitc rev-parse HEAD)"
+tsv_line="$(cd "$fixture" && notes_component_commits_tsv "jwogrady/spark" "core" "${sha_tab}~1..${sha_tab}")"
+[ "$(printf '%s' "$tsv_line" | awk -F'\t' '{print NF}')" = "4" ] \
+  && ok || bad "F7: tab-in-subject must yield exactly 4 TSV columns (got: $tsv_line)"
+
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
