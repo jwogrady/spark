@@ -17,11 +17,13 @@ secret is added, the release PR is created by that identity and its `validate`
 checks run without being held. The companion-tag step still runs on the default
 token — it only pushes tags, which never need to trigger a downstream workflow.
 
-The remaining step is **operator-only**: create the credential and store it as
-the `RELEASE_PLEASE_TOKEN` repository secret (below). No code change is needed
-after that — the next push to `master` uses it automatically.
+The operator step is **also done**: the credential was minted and stored as
+the `RELEASE_PLEASE_TOKEN` repository secret on 2026-07-21. Since then every
+release PR (#230 onward) has been created under the `jwogrady` identity rather
+than `github-actions[bot]`; `v0.11.0` was the first release verified end to
+end through the milestone gate under it (see `../releases/v0.11.md`).
 
-Two consequences of the *default* token that this resolves:
+Two consequences of the *default* token that this resolved:
 
 1. **No downstream triggering.** Resources created with the default token do
    not trigger other workflows — a documented `GITHUB_TOKEN` limitation, not
@@ -31,7 +33,7 @@ Two consequences of the *default* token that this resolves:
    (verified run `29167470940`: same-repo path, `github-actions[bot]` actor —
    not the fork-approval path, so a fork-policy change would not help).
 
-## Recommended identity (for this solo repo)
+## The identity in use (for this solo repo)
 
 A **least-privilege fine-grained PAT** — simpler than a GitHub App for a single
 operator, and sufficient here:
@@ -48,13 +50,16 @@ operator, and sufficient here:
 A GitHub App is the better choice if this ever becomes multi-maintainer or
 org-owned (no human-tied expiry, finer audit); revisit then.
 
-### Verify after adding the secret
+### Verified after the secret was added (2026-07-21)
 
-1. Push any conventional commit to `master` (or re-run the `release-please`
-   workflow) so the release PR refreshes under the new identity.
-2. Confirm the release PR now shows `doctor` + `tests` **running/passed** (not
-   `action_required`), and that the `milestone-gate` status can reach *ready*
-   once the mapped milestone is complete (#194).
+1. Release PRs refresh under the new identity: #230, #252, #254, #287, and
+   #320 were all authored by `jwogrady`, where #222 and earlier were authored
+   by `github-actions[bot]`.
+2. Those release PRs show `doctor` + `tests` **run and passed** (not
+   `action_required`), and the `milestone-gate` status reached *ready* for
+   `v0.11.0` with the mapped milestone complete (#194).
+
+Re-run both observations whenever the token is rotated.
 
 ## Failure behavior
 
@@ -63,8 +68,10 @@ A dead or revoked token has **no mechanical detection today**. `spark doctor
 files are present — never token validity — so the observable symptom is the
 release PR silently no longer refreshing after pushes to `master`. The
 milestone-gate readiness signal (#194, shipped in v0.10.1) is the mechanical
-surface here: once this token lets the release PR run CI, a dead token shows up
-as the gate reporting validation not-green on an otherwise-complete milestone.
+surface here: now that the token lets the release PR run CI, a dead token
+shows up as the gate reporting validation not-green on an otherwise-complete
+milestone — or as release PRs reverting to the `github-actions[bot]` author
+with held checks once the workflow falls back to the default token.
 
 ## See also
 
