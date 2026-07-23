@@ -234,11 +234,15 @@ sessions, and GitHub-backed delivery discipline. Skip it when you want an
 unstructured coding session or when every repository must follow a completely
 unrelated process.
 
-Spark is MIT licensed and designed for single-developer work. From v1 on, what
-each version protects — and what it deliberately does not, including the
-solo-operator scope and the limits of what CI proves — is the
-[stability contract](plugins/spark/docs/reference/stability.md); the
-[changelog](CHANGELOG.md) records every change against it.
+Spark is MIT licensed and designed for single-developer work.
+
+> **Spark is in Alpha (v0.x).** The engineering pipeline is proven; the
+> *product* is still being validated by real users, and **breaking changes are
+> expected** while we learn what to keep, change, or remove. If you'd like to
+> help shape it, see the [Alpha program](docs/alpha/alpha-program.md). What a
+> stable `v1.0.0` will protect — and what it deliberately won't — is already
+> written down in the [stability contract](plugins/spark/docs/reference/stability.md);
+> the [changelog](CHANGELOG.md) records every change.
 
 ## Documentation
 
