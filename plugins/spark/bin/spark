@@ -778,6 +778,14 @@ cmd_doctor() {
       if ! check_json "$sib/.claude-plugin/plugin.json"; then
         red "  ✗ $sibname: plugin.json is not valid JSON"; errors=$((errors+1)); continue
       fi
+      # Companions are not standalone: their skills hand to the core's
+      # plan/validate/ship and call the spark CLI, so each manifest must
+      # declare the edge with the spec's dependencies field — Claude Code
+      # then enables the core transitively instead of leaving a standalone
+      # install with dangling handoffs.
+      if ! grep -A3 '"dependencies"' "$sib/.claude-plugin/plugin.json" 2>/dev/null | grep -q '"spark"'; then
+        red "  ✗ $sibname: plugin.json does not declare its dependency on the spark core"; errors=$((errors+1))
+      fi
       for d in "$sib"skills/*/; do
         [ -d "$d" ] || continue
         name="$(basename "$d")"
