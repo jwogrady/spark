@@ -207,5 +207,43 @@ rc=0; out="$(eval_main validate t1 2>&1)" || rc=$?
   && ok || bad "duplicate rate row must be rejected ($rc: $out)"
 printf 'm1\t3\t6\n' > "$work/rates.tsv"
 
+# --- CRLF: a run.tsv with \r\n endings must validate cleanly (the trailing CR
+# used to land on the value column and reject "100" as non-numeric with an
+# invisible cause).
+good_run
+awk '{printf "%s\r\n", $0}' "$work/runs/t1/g1/run.tsv" > "$work/runs/t1/g1/run.tsv.crlf" \
+  && mv "$work/runs/t1/g1/run.tsv.crlf" "$work/runs/t1/g1/run.tsv"
+rc=0; out="$(eval_main validate t1 2>&1)" || rc=$?
+{ [ "$rc" -eq 0 ] && case "$out" in *well-formed*) true ;; *) false ;; esac; } \
+  && ok || bad "CRLF run.tsv must validate ($rc: $out)"
+good_run
+
+# --- magnitude: a 300-digit token count passes the digit regex but would
+# overflow awk to +inf; validate must reject it.
+big="$(printf '9%.0s' $(seq 1 300))"
+printf 'model\tm1\ntokens_in\t%s\ntokens_out\t1\ntokens_method\testimate\nlatency_seconds\t1\nlatency_method\tmeasured\n' "$big" > "$work/runs/t1/g1/run.tsv"
+rc=0; out="$(eval_main validate t1 2>&1)" || rc=$?
+{ [ "$rc" -ne 0 ] && case "$out" in *"exceeds the sane magnitude bound"*) true ;; *) false ;; esac; } \
+  && ok || bad "huge tokens_in must be rejected ($rc: $out)"
+good_run
+
+# --- SNAPSHOT isolation (check/use unification): hook eval_validate_topology to
+# corrupt the ORIGINAL findings after acceptance; with the one-snapshot design,
+# score's arithmetic reads the snapshot and publishes the pre-corruption metric.
+ORIG_FINDINGS="$work/runs/t1/g1/findings.tsv"
+real_validate_src="$(declare -f eval_validate_topology)"
+eval "orig_${real_validate_src}"   # keep the real one as orig_eval_validate_topology
+eval_validate_topology() {
+  local out; out="$(orig_eval_validate_topology "$@")"
+  printf 'A1\t1\nA2\t1\n' > "$ORIG_FINDINGS"   # mutate ORIGINAL post-acceptance
+  printf '%s' "$out"
+}
+rc=0; out="$(eval_main score t1 2>&1)" || rc=$?
+eval "$real_validate_src"          # restore the real function
+good_findings
+if [ "$rc" -ne 0 ]; then bad "snapshot score exited $rc ($out)"; else
+  case "$out" in *"1/2 "*) ok ;; *) bad "score must publish the SNAPSHOT metric (1/2), not the mutated original ($out)" ;; esac
+fi
+
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
