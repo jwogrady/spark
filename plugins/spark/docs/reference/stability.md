@@ -2,6 +2,13 @@
 
 > Reference — information-oriented.
 
+> **Current phase: Alpha (v0.x).** This page describes the promise a stable
+> `v1.0.0` **will** make. During Alpha, every surface below — including those
+> marked *Stable* — may still change when real usage justifies it; that is the
+> whole point of Spark's Alpha validation phase (the program is documented under
+> `docs/alpha/` in the repository). The classifications tell you the *intended*
+> v1 guarantee so you can plan, not a promise that already binds today.
+
 This page defines exactly what Spark's semantic version protects, surface by
 surface, from v1.0.0 onward. It is the companion to the
 [supported-environment matrix](compatibility.md): that page says what Spark
