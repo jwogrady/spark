@@ -9,6 +9,54 @@ Keep a Changelog format. Do not hand-edit released sections.
 
 ---
 
+## [0.14.0](https://github.com/jwogrady/spark/compare/v0.13.0...v0.14.0) (2026-07-23)
+
+
+### Features
+
+* add ADR-status advisory and fix breaking-feat discovery ([e762846](https://github.com/jwogrady/spark/commit/e762846ad6384c8e6680a0a59d121b810d94135b)), closes [#305](https://github.com/jwogrady/spark/issues/305) [#312](https://github.com/jwogrady/spark/issues/312)
+* add the canonical Evaluation surface contract ([517ab85](https://github.com/jwogrady/spark/commit/517ab851f3d0e29582724d8a9af1f6c448c50b63))
+* add the Platform Compatibility Review decision logic ([2b798c1](https://github.com/jwogrady/spark/commit/2b798c17b18a18e5ce3e67caab1dae00619e9317)), closes [#300](https://github.com/jwogrady/spark/issues/300)
+* enforce a total context-footprint ratchet in doctor ([fc2ab0c](https://github.com/jwogrady/spark/commit/fc2ab0cb4968d99340de0aa7af9df9098fbd116e)), closes [#292](https://github.com/jwogrady/spark/issues/292)
+* guard reference laziness and the traceability seam in doctor ([48e3cd9](https://github.com/jwogrady/spark/commit/48e3cd93ffb512aa438cdaf5c867c96d3487edef)), closes [#294](https://github.com/jwogrady/spark/issues/294) [#301](https://github.com/jwogrady/spark/issues/301)
+* record routing evidence for the description trims ([c895b7f](https://github.com/jwogrady/spark/commit/c895b7faff9b376ef8f0f0778a2650880325936f)), closes [#313](https://github.com/jwogrady/spark/issues/313)
+* require the CEF answer on capability issues and PRs ([a2ce673](https://github.com/jwogrady/spark/commit/a2ce6737318ec897d42ab73efe95081ec78c8548)), closes [#301](https://github.com/jwogrady/spark/issues/301)
+* run the Platform Compatibility Review as the third release gate ([0e3d373](https://github.com/jwogrady/spark/commit/0e3d373795b22c043c66c78274d6a0f65644e9bc)), closes [#300](https://github.com/jwogrady/spark/issues/300)
+* verify release notes per component with authoritative labels ([9e2ac4b](https://github.com/jwogrady/spark/commit/9e2ac4b720572567ee1f5129de587fc5c48f04e9)), closes [#291](https://github.com/jwogrady/spark/issues/291)
+* wire issue slates deterministically from a manifest ([9e8d187](https://github.com/jwogrady/spark/commit/9e8d187c0434177fd232ce0fb6717da4bffe5ee8))
+
+
+### Bug Fixes
+
+* close eval score bypass; unify footprint and eval authority ([2375058](https://github.com/jwogrady/spark/commit/237505855c3af659a837959b7ca9fa559134c5fa))
+* close the hostile-review holes in release-notes verification ([b80f1cc](https://github.com/jwogrady/spark/commit/b80f1cc11f9a64d74d6c7a318035ba79a48739d3)), closes [#291](https://github.com/jwogrady/spark/issues/291)
+* enforce release-component parity in doctor ([502a27c](https://github.com/jwogrady/spark/commit/502a27ca9204d207766c772a9f59899a70b337c1)), closes [#291](https://github.com/jwogrady/spark/issues/291)
+* honest exit codes and stable identity in platform-compat gate ([07b972f](https://github.com/jwogrady/spark/commit/07b972f91e2fddfa60137bafd8ca7824db3f408b)), closes [#300](https://github.com/jwogrady/spark/issues/300)
+* keep the release-notes EXIT trap alive past main's scope ([218eeb8](https://github.com/jwogrady/spark/commit/218eeb89eee2a75e70b4c3b426a7ab4003a426ab)), closes [#291](https://github.com/jwogrady/spark/issues/291)
+* reject ambiguous milestone titles; state resume-truth limits ([4a63c47](https://github.com/jwogrady/spark/commit/4a63c479c765b0242fd3ea519dc537e2be6be7fd)), closes [#214](https://github.com/jwogrady/spark/issues/214)
+* scope the release advisory to what CI actually verifies ([46b23a7](https://github.com/jwogrady/spark/commit/46b23a750cc687ea978ce3f65618b977b8ebe100)), closes [#297](https://github.com/jwogrady/spark/issues/297)
+* score and validate one snapshot; bound and de-CRLF eval inputs ([4289257](https://github.com/jwogrady/spark/commit/42892579bba09bfbe338203f6f87845a103788d4))
+* stop the compat runner aborting on a feat with no issue ref ([7fc9b87](https://github.com/jwogrady/spark/commit/7fc9b87801f1cbd202ca8f97888445c9773aae04)), closes [#310](https://github.com/jwogrady/spark/issues/310)
+* validate evaluation identifiers, not just row counts ([b14332a](https://github.com/jwogrady/spark/commit/b14332a667d749e073a6fa03313cabb081fdf603))
+* validate metric ranges, run facts, and required config in eval ([471e443](https://github.com/jwogrady/spark/commit/471e4430d1612d60be4b78f191967db1214c2aec)), closes [#304](https://github.com/jwogrady/spark/issues/304) [#306](https://github.com/jwogrady/spark/issues/306)
+* validate run/rate numerics; make doctor messages literally true ([8c3c88d](https://github.com/jwogrady/spark/commit/8c3c88d74b6cd6cc3961043bb70e10031cfbe5f0))
+
+
+### Documentation
+
+* add a code of conduct for contributors ([581a5d0](https://github.com/jwogrady/spark/commit/581a5d0c10171602ecfeead94a2f37ee360d052f))
+* add the capability-evaluation governance procedure ([2fead93](https://github.com/jwogrady/spark/commit/2fead9333d9fbc6cb7810a8f1ce65db80a86f9ab))
+* add the Spark Product Constitution ([0fe4701](https://github.com/jwogrady/spark/commit/0fe470194b6a1c61a302e46fe7e01b4c8eaca651))
+* adopt the Capability Evaluation Framework as ADR-0025 ([b7605ba](https://github.com/jwogrady/spark/commit/b7605ba85e07e6a5070d11f2b5ed3ac8190eaa4b))
+* adopt the capability-to-evidence declaration contract (ADR-0026) ([5a7e402](https://github.com/jwogrady/spark/commit/5a7e402bf5610ec1721ae45aa3fd94e94df94fdf)), closes [#300](https://github.com/jwogrady/spark/issues/300)
+* define the v1 stability contract and align launch claims ([938c582](https://github.com/jwogrady/spark/commit/938c5827392b21476c2f5076af9e84ac7ef78638)), closes [#284](https://github.com/jwogrady/spark/issues/284)
+* mark v0.13 and v0.14 shipped in v0.13.0 ([3f50ccd](https://github.com/jwogrady/spark/commit/3f50ccd7bdeb4b78c78a663bb7667e0e177caded)), closes [#207](https://github.com/jwogrady/spark/issues/207)
+* name the selection infrastructure in the v0.15 roadmap ([d2dae08](https://github.com/jwogrady/spark/commit/d2dae0885e333d5d923e5c400004f9e77fce3d31)), closes [#284](https://github.com/jwogrady/spark/issues/284)
+* record ADR verdicts; annotation resolves the closed-gate prompt ([9d63e22](https://github.com/jwogrady/spark/commit/9d63e2277017a778fba61a186a0ae70be3d54c70)), closes [#305](https://github.com/jwogrady/spark/issues/305)
+* rename v0.15 to model & context efficiency; add context axis ([95565ba](https://github.com/jwogrady/spark/commit/95565ba938743ea461a2ad604ab326c16e92c1d0)), closes [#284](https://github.com/jwogrady/spark/issues/284)
+* reshape the v0.15 roadmap to ship the cheap win first ([444a361](https://github.com/jwogrady/spark/commit/444a36190e892a2d952582f59c639fc73ecaec21)), closes [#284](https://github.com/jwogrady/spark/issues/284)
+* truth the v0.15 roadmap entry against what actually shipped ([a1b893f](https://github.com/jwogrady/spark/commit/a1b893f6e477de91c05acc2aaf363a548cc1b136))
+
 ## [0.13.0](https://github.com/jwogrady/spark/compare/v0.11.1...v0.13.0) (2026-07-22)
 
 
