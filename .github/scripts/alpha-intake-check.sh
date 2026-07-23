@@ -20,13 +20,34 @@ flag() { echo "  ✗ $1"; violations=$((violations + 1)); }
 if [ ! -f "$form" ]; then
   flag "canonical intake form missing: $form"
 else
-  # exactly the four required privacy attestations (checkboxes with required:true)
-  req_opts="$(grep -c 'required: true' "$form" 2>/dev/null || true)"
-  [ "${req_opts:-0}" -ge 5 ] || flag "form has fewer required fields than expected (privacy checkboxes may have been weakened): $form"
-  grep -qi 'no secrets' "$form"            || flag "form lost the 'no secrets/credentials' attestation"
-  grep -qi 'proprietary'  "$form"          || flag "form lost the 'no proprietary/customer source' attestation"
-  grep -qiE 'customer data|personal information' "$form" || flag "form lost the 'no customer data / PII' attestation"
-  grep -qi 'recording'    "$form"          || flag "form lost the 'no sensitive recordings' attestation"
+  # Structural, not keyword-count: a repository-wide `required: true` count is
+  # bypassable — the form carries 13+ required fields that have nothing to do
+  # with privacy, so all four attestations could go optional while a global
+  # count stayed green (#332). Instead, isolate the `id: privacy` checkbox
+  # block (its lines up to the next `- type:` element) and demand that each of
+  # the four attestations exists there AND carries its own `required: true` on
+  # the line that follows its label.
+  privacy_opts="$(awk '
+    /^[[:space:]]*id:[[:space:]]*privacy[[:space:]]*$/ { inblk=1; next }
+    inblk && /^[[:space:]]*-[[:space:]]*type:/ { inblk=0 }
+    inblk' "$form" 2>/dev/null || true)"
+  if [ -z "$privacy_opts" ]; then
+    flag "form lost the 'id: privacy' checkbox block entirely"
+  else
+    check_attestation() { # <label-pattern> <human-name>
+      local opt
+      opt="$(printf '%s\n' "$privacy_opts" | grep -iE -A1 -- "-[[:space:]]*label:.*($1)" || true)"
+      if [ -z "$opt" ]; then
+        flag "form lost the '$2' attestation from the privacy block"
+      elif ! printf '%s\n' "$opt" | grep -q 'required: true'; then
+        flag "privacy attestation '$2' is present but no longer required"
+      fi
+    }
+    check_attestation 'no secrets'                        "no secrets/credentials"
+    check_attestation 'proprietary'                       "no proprietary/customer source"
+    check_attestation 'customer data|personal information' "no customer data / PII"
+    check_attestation 'recording'                         "no sensitive recordings"
+  fi
   grep -qiE 'pseudonym|P3|assigned' "$form" || flag "form lost the pseudonym-only identity instruction"
   grep -qi 'alpha-feedback' "$form"        || flag "form lost its alpha-feedback label"
 fi

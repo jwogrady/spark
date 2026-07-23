@@ -62,4 +62,40 @@ sed -i.bak '/[Ss]ecrets/d' "$weakform" 2>/dev/null || true
 rc=0; out="$(bash "$check" "$fix" "$weakform" 2>&1)" || rc=$?
 assert_rc "weakened form (lost a privacy control) fails" 1 "$rc"
 
+# hazard 6 (#332): an attestation that stays PRESENT but goes OPTIONAL must
+# fail — a global `required: true` count misses this, because the form's 13
+# unrelated required fields keep the count high. Weaken each of the four
+# privacy options independently by deleting only the `required: true` line
+# that follows its label, then all four together.
+weaken() { # <label-pattern> <in-form> <out-form>
+  awk -v pat="$1" '
+    drop && $0 ~ /^[[:space:]]*required:[[:space:]]*true[[:space:]]*$/ { drop=0; next }
+    { drop = (tolower($0) ~ /-[[:space:]]*label:/ && tolower($0) ~ pat) ? 1 : drop; print }
+  ' "$2" > "$3"
+}
+fix="$WORK/optional"; mkfix "$fix"
+i=0
+for pat in 'no secrets' 'proprietary' 'customer data' 'recording'; do
+  i=$((i + 1)); optform="$WORK/optional-$i.yml"
+  weaken "$pat" "$form" "$optform"
+  rc=0; out="$(bash "$check" "$fix" "$optform" 2>&1)" || rc=$?
+  assert_rc "attestation '$pat' present-but-optional fails" 1 "$rc"
+  assert_contains "names the optional attestation ($pat)" "present but no longer required" "$out"
+done
+allform="$WORK/optional-all.yml"; cp "$form" "$allform"
+for pat in 'no secrets' 'proprietary' 'customer data' 'recording'; do
+  weaken "$pat" "$allform" "$allform.tmp" && mv "$allform.tmp" "$allform"
+done
+rc=0; out="$(bash "$check" "$fix" "$allform" 2>&1)" || rc=$?
+assert_rc "all four attestations optional fails" 1 "$rc"
+
+# hazard 7 (#332): the privacy block vanishing entirely is named as such.
+noblock="$WORK/no-privacy-block.yml"
+awk '
+  /^[[:space:]]*id:[[:space:]]*privacy[[:space:]]*$/ { skip=1 }
+  skip && /^[[:space:]]*-[[:space:]]*type:/ && !/checkboxes/ { skip=0 }
+  !skip' "$form" > "$noblock"
+rc=0; out="$(bash "$check" "$fix" "$noblock" 2>&1)" || rc=$?
+assert_rc "missing privacy block fails" 1 "$rc"
+
 finish
