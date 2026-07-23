@@ -3,11 +3,19 @@
 This roadmap reflects current intent, not a commitment or timeline.
 Priorities may shift as the project evolves.
 
+**Current phase: Alpha (v0.x).** The engineering pipeline is proven and
+`v0.15.0` has shipped; the product itself is now being validated by real users.
+The program, its evidence gates, and the Alpha → Beta → v1.0.0 promotion path
+are the [Alpha program](docs/alpha/alpha-program.md) — a stable v1.0.0 is
+**not** authorized just because the proving releases shipped.
+
 Each entry carries one **Status** backed by evidence — `Planned`,
 `In progress`, `Shipped (vX.Y.Z)`, `Deferred`, or `Backlog`. The vocabulary and
 its evidence rules are defined in
 [the release-docs checklist](plugins/spark/docs/reference/release-docs-checklist.md#roadmap-status-vocabulary);
-an item becomes `Shipped` only once its release exists.
+an item becomes `Shipped` only once its release exists. **Planning-wave names
+(v0.13/v0.14/v0.15 below) are not the same as published tags** — a wave may ship
+under one or more tags; each entry's `Shipped (vX.Y.Z)` names the actual tag.
 
 ---
 
@@ -205,7 +213,7 @@ keeping the one-version-behind-milestone-name skew the v0.13 note records.
 
 ## v0.15 — context efficiency & release hardening
 
-**Status:** In progress
+**Status:** Shipped (`v0.15.0`)
 
 The context axis of the v0.13 audit, delivered and then locked in: the skill
 descriptions trimmed and heavy bodies moved to `references/` (#293, shipped on
@@ -218,7 +226,8 @@ release-truth engine — per-component, label-aware release-notes verification
 (#291) — and the Platform Compatibility Review completed with capability
 discovery fixed for breaking features and an ADR-status advisory (#312/#305);
 and the deterministic issue-wiring manifest helper for the plan skill (#214).
-#284 tracks it; the hardening PR carries everything unmerged.
+The hardening landed via PR #314 (merged); its epic #284 is closed, and it
+released as `v0.14.0` (the proving release) and `v0.15.0`.
 
 The **model axis is descoped to backlog with reasons recorded on each issue**:
 retuning crew tiers (#211) is blocked on measured quality evidence, the
