@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/jwogrady/spark/compare/spark-audit-v0.2.1...spark-audit-v0.2.2) (2026-07-23)
+
+
+### Bug Fixes
+
+* declare each companion's dependency on the spark core ([#334](https://github.com/jwogrady/spark/issues/334)) ([c31238b](https://github.com/jwogrady/spark/commit/c31238b7fcce0e9c3c8fb0c46ee0ffadd8f71845))
+
 ## [0.2.1](https://github.com/jwogrady/spark/compare/spark-audit-v0.2.0...spark-audit-v0.2.1) (2026-07-22)
 
 

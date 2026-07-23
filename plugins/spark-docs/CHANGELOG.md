@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.1](https://github.com/jwogrady/spark/compare/spark-docs-v0.3.0...spark-docs-v0.3.1) (2026-07-23)
+
+
+### Bug Fixes
+
+* declare each companion's dependency on the spark core ([#334](https://github.com/jwogrady/spark/issues/334)) ([c31238b](https://github.com/jwogrady/spark/commit/c31238b7fcce0e9c3c8fb0c46ee0ffadd8f71845))
+* remove the stale launch-copy example from spark-docs ([#328](https://github.com/jwogrady/spark/issues/328)) ([c72549c](https://github.com/jwogrady/spark/commit/c72549cf669fccdedbea74745803b9cbf3003612))
+
 ## [0.3.0](https://github.com/jwogrady/spark/compare/spark-docs-v0.2.0...spark-docs-v0.3.0) (2026-07-21)
 
 

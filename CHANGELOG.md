@@ -9,6 +9,27 @@ Keep a Changelog format. Do not hand-edit released sections.
 
 ---
 
+## [0.15.1](https://github.com/jwogrady/spark/compare/v0.15.0...v0.15.1) (2026-07-23)
+
+
+### Bug Fixes
+
+* declare each companion's dependency on the spark core ([#334](https://github.com/jwogrady/spark/issues/334)) ([c31238b](https://github.com/jwogrady/spark/commit/c31238b7fcce0e9c3c8fb0c46ee0ffadd8f71845))
+* gate every surviving taxonomy restatement against drift ([#333](https://github.com/jwogrady/spark/issues/333)) ([3eb3cdf](https://github.com/jwogrady/spark/commit/3eb3cdfff7f12b0f64f5d057f474b2c50ab33a34))
+* remove the stale launch-copy example from spark-docs ([#328](https://github.com/jwogrady/spark/issues/328)) ([c72549c](https://github.com/jwogrady/spark/commit/c72549cf669fccdedbea74745803b9cbf3003612))
+* route all Alpha docs to one privacy-safe feedback intake ([#327](https://github.com/jwogrady/spark/issues/327)) ([3858907](https://github.com/jwogrady/spark/commit/38589071d00c7d0972c578d12ae27fc455d6435f)), closes [#322](https://github.com/jwogrady/spark/issues/322)
+* scope the alpha intake guard to the privacy checkbox block ([#335](https://github.com/jwogrady/spark/issues/335)) ([7fcc9b3](https://github.com/jwogrady/spark/commit/7fcc9b3d6edfea8ecaf37eda0c098b6b78c8be29)), closes [#332](https://github.com/jwogrady/spark/issues/332)
+
+
+### Documentation
+
+* consolidate release records into one directory ([#331](https://github.com/jwogrady/spark/issues/331)) ([2e33770](https://github.com/jwogrady/spark/commit/2e33770af7b4c6d15dd996e66bb612b7ab5f458b))
+* convert the launch checklist to a historical shipped record ([#325](https://github.com/jwogrady/spark/issues/325)) ([d6dafd0](https://github.com/jwogrady/spark/commit/d6dafd0e353dbfc4403b8422db21c7bf6a55b282))
+* mark the v0.10/v0.11 release records as historical ([#326](https://github.com/jwogrady/spark/issues/326)) ([83392f5](https://github.com/jwogrady/spark/commit/83392f550c456f3804693a384a0b70240c8dd445))
+* mark v0.15 shipped and record the Alpha phase in the roadmap ([#323](https://github.com/jwogrady/spark/issues/323)) ([80ecbc4](https://github.com/jwogrady/spark/commit/80ecbc4b4160358dcc911545a75ae63659e87661))
+* record the release token as live in the governance reference ([#329](https://github.com/jwogrady/spark/issues/329)) ([e050c55](https://github.com/jwogrady/spark/commit/e050c55d30a2785e626d5b9b0e794dd31b007a0f))
+* stop presenting resolved PM states as current ([#330](https://github.com/jwogrady/spark/issues/330)) ([2d83323](https://github.com/jwogrady/spark/commit/2d833237fbbffdd5e7e1d8f8ebe4f2432dc4b0e2))
+
 ## [0.15.0](https://github.com/jwogrady/spark/compare/v0.14.0...v0.15.0) (2026-07-23)
 
 
