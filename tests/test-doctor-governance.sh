@@ -76,4 +76,48 @@ rc=0; out="$(check_traceability_templates "$troot")" || rc=$?
 assert_rc "missing PR section fails" 1 "$rc"
 assert_contains "names the PR template" "PULL_REQUEST_TEMPLATE" "$out"
 
+# ===================== #291 release-component parity =====================
+# The runner verifies one component per Release Please package; a package with
+# no matching component ships UNVERIFIED notes. Only meaningful when a JSON tool
+# is present — skip the value assertions otherwise (the check returns 2 = skip).
+croot="$WORK/rcpmkt"
+mkdir -p "$croot/.github/scripts"
+mk_config() { # <json packages object body>
+  printf '{ "packages": %s }\n' "$1" > "$croot/release-please-config.json"
+}
+mk_runner() { # <space-separated component list>
+  printf 'NOTES_COMPONENTS="%s"\n' "$1" > "$croot/.github/scripts/release-notes-runner.sh"
+}
+
+if command -v jq >/dev/null 2>&1 || command -v python3 >/dev/null 2>&1; then
+  # aligned: `.`->core, plugins/x->x, matching the runner list -> passes.
+  mk_config '{ ".": {}, "plugins/spark-audit": {}, "plugins/spark-connect": {} }'
+  mk_runner 'core spark-audit spark-connect'
+  rc=0; out="$(check_release_component_parity "$croot")" || rc=$?
+  assert_rc "aligned components pass" 0 "$rc"
+  assert_contains "reports the matched set" "release components match" "$out"
+
+  # a package with no runner component -> drift, fails, names both sets.
+  mk_config '{ ".": {}, "plugins/spark-audit": {}, "plugins/spark-ghost": {} }'
+  mk_runner 'core spark-audit'
+  rc=0; out="$(check_release_component_parity "$croot")" || rc=$?
+  assert_rc "extra package fails" 1 "$rc"
+  assert_contains "names the drift" "release-component drift" "$out"
+  assert_contains "warns notes go unverified" "UNVERIFIED" "$out"
+  assert_contains "names the missing component" "spark-ghost" "$out"
+
+  # a runner component with no package -> also drift (unexpected component).
+  mk_config '{ ".": {}, "plugins/spark-audit": {} }'
+  mk_runner 'core spark-audit spark-stale'
+  rc=0; out="$(check_release_component_parity "$croot")" || rc=$?
+  assert_rc "unexpected component fails" 1 "$rc"
+  assert_contains "names the unexpected component" "spark-stale" "$out"
+else
+  echo "  (jq/python3 absent — release-component parity value checks skipped)"
+fi
+
+# not this repo (no config/runner) -> returns 3, silent.
+rc=0; out="$(check_release_component_parity "$WORK/emptyrepo")" || rc=$?
+assert_rc "absent files skip cleanly" 3 "$rc"
+
 finish
