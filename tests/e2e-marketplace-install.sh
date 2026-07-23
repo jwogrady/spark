@@ -10,7 +10,7 @@
 # What it proves, from a factory-fresh HOME:
 #   1. `claude plugin marketplace add jwogrady/spark` — the published path
 #   2. `claude plugin install spark@spark` — the core plugin
-#   3. discovery: all 8 core skills and both hooks are inventoried
+#   3. discovery: all 9 core skills and both hooks are inventoried
 #   4. the spark CLI ships and works: version, doctor, doctor --requirements
 #   5. companion install (spark-audit@spark) and marketplace update
 #   6. one real core-skill invocation (/spark:ideate) — only when
@@ -85,10 +85,10 @@ esac
 echo "[3/6] discovery"
 details="$(claude plugin details spark@spark 2>/dev/null || true)"
 skills_ok=1
-for s in agents-md bootstrap codify ideate knowledge plan ship validate; do
+for s in agents-md bootstrap codify ideate knowledge onboard plan ship validate; do
   case "$details" in *"$s"*) ;; *) skills_ok=0; bad "skill missing from inventory: $s" ;; esac
 done
-[ "$skills_ok" -eq 1 ] && ok "all 8 core skills inventoried"
+[ "$skills_ok" -eq 1 ] && ok "all 9 core skills inventoried"
 case "$details" in
   *PreToolUse*SessionStart*|*SessionStart*PreToolUse*) ok "both hooks inventoried" ;;
   *) bad "hooks missing from inventory" ;;
