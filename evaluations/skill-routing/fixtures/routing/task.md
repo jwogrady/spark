@@ -36,7 +36,8 @@ both topologies (#293 touched only the core nine).
 
 A description change is regression-free when its topology scores
 **correctness ≥ the pre-trim baseline** on this fixture **and no boundary-pair
-prompt (R10–R19) flips**. Known ambiguity or reduced redundancy is documented
+or cession prompt (R10–R22) flips** — the cession prompts (R18/R19/R22) are
+boundary tests too and are inside the flip guard. Known ambiguity or reduced redundancy is documented
 in the findings/scorecard notes rather than converted into a green claim —
 see the current topology's Q3 score.
 
