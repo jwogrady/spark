@@ -1,0 +1,164 @@
+name: Alpha feedback
+description: One report per lifecycle run during the Spark Alpha. File it right after you finish, while it's fresh.
+labels: ["alpha-feedback", "research"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping validate Spark. One entry per `ideate→ship` run.
+        We're testing the **product**, not you — every confusion is a Spark bug.
+        The instructions are in `docs/alpha/testing-guide.md`.
+
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check (required)
+      description: This report is public. Keep it safe to share.
+      options:
+        - label: This report contains NO secrets, credentials, or tokens.
+          required: true
+        - label: This report contains NO proprietary or customer source code.
+          required: true
+        - label: This report contains NO customer data or personal information (mine or anyone's).
+          required: true
+        - label: I have attached NO sensitive recordings or screenshots. (Recordings are arranged privately with the coordinator, never here.)
+          required: true
+
+  - type: input
+    id: participant
+    attributes:
+      label: Participant ID
+      description: Your coordinator-assigned pseudonym/number (e.g. `P3`). Do NOT put your real name or email.
+      placeholder: P3
+    validations:
+      required: true
+
+  - type: dropdown
+    id: experience
+    attributes:
+      label: Experience level
+      options:
+        - Newcomer to structured delivery
+        - Mid-level solo developer
+        - Strong engineer
+    validations:
+      required: true
+
+  - type: dropdown
+    id: run_number
+    attributes:
+      label: Which run is this for you?
+      options:
+        - "1st (first ever)"
+        - "2nd"
+        - "3rd or later"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: project_type
+    attributes:
+      label: Project type
+      options:
+        - New project
+        - Existing repository
+    validations:
+      required: true
+
+  - type: input
+    id: stack
+    attributes:
+      label: Stack
+      description: Language and framework (e.g. "Python / FastAPI").
+    validations:
+      required: true
+
+  - type: dropdown
+    id: unaided
+    attributes:
+      label: Did you reach a shipped PR unaided?
+      description: The single most important signal.
+      options:
+        - "Yes — shipped a PR with no coordinator/author help"
+        - "Finished, but needed help"
+        - "Did not finish"
+    validations:
+      required: true
+
+  - type: input
+    id: unaided_detail
+    attributes:
+      label: If you needed help or didn't finish — where?
+      description: Which stage, and what blocked you. Leave blank if you finished unaided.
+
+  - type: textarea
+    id: stage_friction
+    attributes:
+      label: Stage-level friction
+      description: Rate each stage 0 (frictionless) – 3 (blocked me). Say why, and note any stage you skipped AND why you skipped it.
+      value: |
+        - onboard/setup: [0-3] —
+        - ideate: [0-3] —
+        - plan: [0-3] —
+        - codify: [0-3] —
+        - validate: [0-3] —
+        - ship: [0-3] —
+    validations:
+      required: true
+
+  - type: textarea
+    id: stop_and_think
+    attributes:
+      label: Stop-and-think moments
+      description: Every point where you paused, backtracked, or asked "what does this do?" Specific and in-the-moment. The most valuable field here.
+    validations:
+      required: true
+
+  - type: textarea
+    id: discoverability
+    attributes:
+      label: Command discoverability
+      description: Which commands did you find on your own? Which only after being told (or reading source)? Which names were unclear?
+    validations:
+      required: true
+
+  - type: textarea
+    id: docs_used
+    attributes:
+      label: Documentation used
+      description: Which docs did you open (before asking for help)? Did they answer you? Which did you never open even when stuck?
+    validations:
+      required: true
+
+  - type: textarea
+    id: value
+    attributes:
+      label: Value outcome
+      description: Did Spark save time, cost time, or break even? Did it prevent a mistake? Improve planning/quality? On a repeat run — still worth it?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: keep_using
+    attributes:
+      label: Keep using or stop?
+      options:
+        - "Would keep using Spark"
+        - "Would stop using Spark"
+        - "Undecided"
+    validations:
+      required: true
+
+  - type: input
+    id: keep_using_why
+    attributes:
+      label: In one line — why?
+      description: "Finish: \"I would keep/stop using Spark because …\""
+    validations:
+      required: true
+
+  - type: textarea
+    id: anything_else
+    attributes:
+      label: Anything we didn't ask
+      description: Redesign ideas welcome — treated as hypotheses until a second participant corroborates.
