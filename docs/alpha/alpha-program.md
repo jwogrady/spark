@@ -161,7 +161,7 @@ project.** Novelty carries the first run; only value carries the second.
 
 ## Alpha Backlog
 
-Grounded in the current repository (post-v0.14.0). Three buckets.
+Grounded in the current repository (post-v0.15.0). Three buckets.
 
 ### Learn — needs user evidence before we touch it
 

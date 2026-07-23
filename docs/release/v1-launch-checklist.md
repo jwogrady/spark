@@ -1,126 +1,75 @@
-# Spark v1 launch checklist
+# Spark launch record — v0.14.0 / v0.15.0
 
-> Canonical launch record. Created during the v0.14.0 proving release
-> (2026-07-23). Evidence-first: every "done" below cites what proves it.
+> **Status: historical record.** This file was created before the proving
+> release was cut and originally read as a pending checklist. Both releases
+> have since shipped; it is now the *record* of that launch, not a set of
+> current actions. The forward path to a stable v1.0.0 is **not** here — it is
+> the [Alpha program](../alpha/alpha-program.md) and its
+> [exit criteria](../alpha/exit-criteria.md).
 
-## Version reality (read this first)
+## Actual shipped result (verified)
 
-The v0.15 milestone and the `cycle/v0.15-hardening` branch were named for a
-*planning wave*, not a version number. Release Please computes the version from
-the conventional commits since the last tag (`v0.13.0`): 10 `feat` + 12 `fix`,
-no breaking changes, no `Release-As` directive ⇒ a **minor bump to `v0.14.0`**.
+The v0.15 hardening wave shipped across two releases. Concrete evidence:
 
-**The proving release is `v0.14.0`.** There is no `v0.15.0` unless a human
-deliberately forces one with a `Release-As: 0.15.0` commit — a decision that has
-not been made and is not required.
+| What | Outcome | Evidence |
+| --- | --- | --- |
+| Hardening PR | **Merged** | PR #314 rebase-merged to `master` |
+| Proving release | **`v0.14.0` cut** | release PR #287 squash-merged 2026-07-23; tag `v0.14.0`; GitHub Release published (not draft, not prerelease) |
+| Alpha intake + follow-on | **`v0.15.0` cut** | release PR #320 (regenerated after the alpha-intake `feat`, PR #321) squash-merged; tag `v0.15.0`; Release published |
+| Release epic | **Closed** | #284 closed 2026-07-23 |
+| CEF epic | **Closed (completed)** | #298 closed after its three tracked items were verified shipped |
+| Release/validation gates | **All green** on the release PRs | doctor · gate · milestone-gate · platform-compat · release-notes · tests · traceability |
+| Published install | **Verified** | `tests/e2e-marketplace-install.sh` — 12/12 from a clean environment against the published marketplace path; all 9 core skills inventoried |
+| Repository health at release | **Healthy** | `spark doctor` 0 errors/0 warnings; `doctor --requirements` Ready; `tests/run.sh` all suites |
 
-## Completed engineering work
+The proving release therefore did what a proving release must: the pipeline,
+changelog, version bumps, tag, and Release all behaved as designed on a real
+cut, and the published artifact installs from scratch.
 
-| Area | Evidence |
-| --- | --- |
-| v0.15 hardening wave merged | PR #314 rebase-merged to `master`; HEAD `581a5d0`; 20 commits |
-| Release-truth controls | milestone-gate + per-component release-notes verification + platform-compat gate, all live-green on PR #287 |
-| Evaluation surface hardened | single-snapshot validate/score, metric-range + magnitude + CRLF guards (#304, #306) |
-| Capability traceability enforced | issue-form `required: true` + `traceability` CI job (#301) |
-| Release-component parity | `check_release_component_parity` in doctor (#291) — a new package can no longer ship unverified notes |
-| v1 stability contract | `docs/reference/stability.md` — every surface classified; known limits stated |
-| Launch-surface claims aligned | README breaking-changes hedge removed; behavioral-tests scope corrected; `gh`/requirements placement fixed |
-| Community health | `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1) added and linked |
+## Current forward path (authoritative)
 
-Issues auto-closed on merge (per-commit `Closes`): #291, #292, #294, #301,
-#304, #305, #306, #312, #313. Closed earlier with recorded verdicts: #206,
-#211, #214, #223, #288, #309.
+- **Spark is in Alpha (v0.x).** Engineering is proven; the *product* is being
+  validated by real users.
+- **Alpha evidence collection is active** — see the
+  [Alpha program](../alpha/alpha-program.md), [testing guide](../alpha/testing-guide.md),
+  and the `alpha-feedback` issue form.
+- **Beta promotion is governed by** [`docs/alpha/exit-criteria.md`](../alpha/exit-criteria.md)
+  (evidence thresholds, not dates). Beta then proves durability before v1.0.0.
+- **A stable v1.0.0 is not authorized merely because the proving releases
+  shipped.** The earlier "proving-release → v1.0.0" path that this document
+  originally described is **superseded** by the Alpha → Beta → v1.0.0 gate.
 
-**Open, by intent:** #284 (release-readiness epic — stays open until the
-proving release actually ships) and #298 (CEF epic — all children closed;
-awaits an explicit close). Neither was closed automatically because the PR body
-used the phrase "Closes on merge:", which GitHub's parser does not treat as a
-closing keyword — a cosmetic parser miss, not a work gap.
+## Outstanding work
 
-## Completed release work
+Every pre-cut action this file once listed is **complete** (see the shipped
+table above): the release PRs are merged, both tags and Releases exist, the
+epics are closed, and published-install evidence exists. Nothing here remains
+open.
 
-| Step | Evidence |
-| --- | --- |
-| Final merge verification | head `0ddd394` matched the reviewed implementation; `MERGEABLE`/`CLEAN`; doctor ✓ tests ✓ gate ✓ traceability ✓ |
-| Merge #314 | rebase-merge (preserves conventional commits for Release Please); `master` → `581a5d0` |
-| Release Please ran | workflow `completed/success` on `581a5d0`; release PR #287 refreshed |
-| Computed version | `v0.14.0` (`.release-please-manifest.json` and `plugins/spark/.claude-plugin/plugin.json` both bumped in #287) |
-| Release-gate verification on #287 | doctor ✓ gate ✓ milestone-gate ✓ platform-compat ✓ release-notes ✓ tests ✓ traceability ✓ |
+Genuinely outstanding work lives in the Alpha program, not here: gathering
+unaided-completion, workflow-friction, discoverability, and value evidence from
+real participants, per [`exit-criteria.md`](../alpha/exit-criteria.md). That is
+the next gate, and it is deliberately open.
 
-## Evidence collected during production validation
+## Rollback guidance
 
-| Check | Result |
-| --- | --- |
-| `spark doctor` on merged `master` | Healthy — 0 errors, 0 warnings |
-| `spark doctor --requirements` | Ready — every capability has what it needs |
-| `tests/run.sh` | all 31 suites passed |
-| Install-from-scratch e2e (`e2e-marketplace-install.sh`) | 12 passed, 0 skipped — marketplace install, CLI, companion install, skill load all verified |
-| Plugin metadata | marketplace.json + all 4 plugin.json valid; core plugin.json bumps to 0.14.0 in #287 |
-| Documentation links | no broken relative links |
-| Skill inventory | 9 core skills on disk; install e2e now asserts all 9 (was 8 — missing `onboard`, fixed in this checklist's PR) |
+Separated by the state it applies to.
 
-## Known limitations (from the stability contract)
+**Current (post-release) — the applicable guidance.** Both tags are published;
+prefer rolling *forward*. To correct a defect in a shipped release, ship a
+follow-up `fix:` so Release Please cuts a corrected patch; the marketplace
+serves whatever the latest tag points to, so a corrected patch is the fastest
+clean recovery. Un-publishing a live Release (`gh release delete`) or deleting a
+tag is a deliberate maintainer action (the guard blocks hand-cut tags) and is a
+last resort, not routine.
 
-- Solo-operator scope; no multi-user governance.
-- Skill *judgment* is validated through use, not fully proven by CI.
-- Routing evidence is single-grader / limited-sample; labeled, not a benchmark.
-- `.spark/` state files are operational artifacts, not a public API.
-- Manifest state-file corruption recovery is documented but not behaviorally
-  tested (off the release path; a human-invoked plan tool).
+**Alpha handling — expected, not a rollback.** During Alpha, breaking changes
+and redesigns are *expected* and are shipped as normal minor releases with the
+change documented in the changelog and the [stability contract](../../plugins/spark/docs/reference/stability.md);
+they are not emergencies to roll back.
 
-## Remaining release actions
-
-1. **Human decision — version:** accept the computed `v0.14.0`, or force
-   `v0.15.0` via a `Release-As: 0.15.0` commit before merging #287. (Recommended:
-   accept `v0.14.0`; the number should follow the commits, which is Spark's own
-   doctrine.)
-2. **Human merges release PR #287** — this is the point-of-no-return publish;
-   Release Please cuts the tag + GitHub Release. Spark's guard blocks hand-cut
-   tags by design; the release-PR merge is the human gate.
-3. Post-release: confirm the tag, the GitHub Release, and that
-   `/plugin marketplace add jwogrady/spark` installs the new version.
-4. Close #298 (done) and, once the release ships, #284.
-
-## Go / No-Go criteria
-
-**Go** requires all of:
-- [x] `master` green (doctor, 31 suites, install e2e)
-- [x] Release PR #287 exists with the correct computed version and changelog
-- [x] All seven gates green on #287
-- [x] Plugin metadata bumps with the release
-- [x] Docs match reality (stability contract + README reconciled)
-- [ ] Human has chosen the version number (0.14.0 vs forced 0.15.0)
-- [ ] Human approves the irreversible publish
-
-**No-Go** if any gate on #287 goes red, the install e2e regresses, or a
-Critical defect surfaces. None is currently present.
-
-## Rollback procedure
-
-- **Before #287 is merged:** nothing to roll back — no tag or Release exists.
-  Close #287 or push a corrective commit to `master`; Release Please regenerates
-  the release PR.
-- **After #287 is merged (tag + Release cut):**
-  1. Mark the GitHub Release as a pre-release or delete it (`gh release delete
-     vX.Y.Z`) to unpublish the assets.
-  2. Delete the tag only with explicit maintainer instruction (the guard blocks
-     hand-cut tags; deletion is equally deliberate).
-  3. Ship a follow-up `fix:` so Release Please cuts a corrected patch — prefer
-     rolling *forward* to rewriting a published tag.
-  4. The marketplace serves whatever the latest tag points to; a corrected
-     patch release is the fastest clean recovery.
-
-## Criteria for declaring Spark v1.0.0
-
-Declare v1.0.0 only after the proving release provides the evidence:
-- [ ] `v0.14.0` (or the chosen number) is actually cut — tag + Release exist.
-- [ ] `/plugin marketplace add jwogrady/spark` installs the released version
-      from scratch (the e2e run against the *published* tag, not a local build).
-- [ ] The Release Please workflow, changelog, and version bumps behaved exactly
-      as designed on a real release (not just the release PR).
-- [ ] No release-critical defect appeared during or after the cut.
-- [ ] The stability contract still matches reality after the release.
-
-When those hold, cut v1.0.0 with a `Release-As: 1.0.0` commit — no new features,
-just the promotion. Until then, Spark is a healthy `v0.14.0`, not yet a proven
-`v1.0.0`.
+**Historical (pre-cut) — no longer applicable.** Before release PR #287 was
+merged there was nothing to roll back: no tag or Release existed, so a
+correction was just a commit to `master` that regenerated the release PR. This
+condition ended when `v0.14.0` was cut; it is retained here only as the record
+of the pre-release plan.
