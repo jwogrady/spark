@@ -18,6 +18,16 @@
 #   --fresh     ignore — and, on a live run, overwrite — existing state. This
 #               forgets prior landings and CAN double-create; explicit only.
 #
+# RESUME-TRUTH LIMITS (stated, not hidden): state records what the CLIENT saw.
+# Two windows exist where reality and state can diverge, and no retry policy
+# can close them without server-side idempotency keys (GitHub has none for
+# issue creation): (a) a create that succeeded server-side whose response was
+# lost in transit is not in state — a rerun re-creates it; (b) a kill between
+# a create's success and the state append does the same. Reruns therefore skip
+# exactly what the state RECORDS, and the operator reconciles the rare
+# ack-lost duplicate by hand. The helper never retries blindly, which is what
+# keeps the common path double-create-free.
+#
 # MANIFEST — line-oriented, tab-separated, '#'-comment and blank-line
 # tolerant. Three record types:
 #
@@ -413,7 +423,15 @@ im_execute() { # <manifest-file> <state-file> <fresh-0-or-1>
           im_fail "listing milestones (GET repos/{owner}/{repo}/milestones)" "$(cat "$errf")" \
             "$created" "$wired" "$skipped" "$state"; return 1
         fi
-        ms_number="$(printf '%s\n' "$out" | awk -v t="$b" 'BEGIN { FS = "\t" } $2 == t { print $1; exit }')"
+        # Reject ambiguity rather than resolve it silently: two milestones with
+        # the same title (possible across open/closed states) must be a named
+        # error, not a first-match guess.
+        ms_matches="$(printf '%s\n' "$out" | awk -v t="$b" 'BEGIN { FS = "\t" } $2 == t { print $1 }')"
+        if [ "$(printf '%s\n' "$ms_matches" | grep -c .)" -gt 1 ]; then
+          im_fail "resolving milestone \"$b\" — $(printf '%s\n' "$ms_matches" | grep -c .) milestones share this title (ambiguous); disambiguate on GitHub first" "" \
+            "$created" "$wired" "$skipped" "$state"; return 1
+        fi
+        ms_number="$ms_matches"
         if [ -z "$ms_number" ]; then
           im_fail "resolving milestone \"$b\" — not found on GitHub; create it first (the helper assigns milestones, it never creates them)" "" \
             "$created" "$wired" "$skipped" "$state"; return 1

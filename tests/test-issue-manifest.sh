@@ -221,5 +221,23 @@ rc=0; out="$(PATH="$bin:$PATH" bash "$script" --state "$live_state" "$slate/mani
 case "$out" in *"report: created 0, wired 0, skipped 5, failed 0"*) ok ;; *) bad "fully-landed rerun truthful report ($out)" ;; esac
 [ ! -s "$GH_CALLS" ] && ok || bad "fully-landed rerun made gh calls: $(cat "$GH_CALLS")"
 
+# --- duplicate milestone titles must be REJECTED as ambiguous, never resolved
+# first-match (hostile M-lane): a second stub serves two milestones sharing the
+# manifest's title.
+dupbin="$work/dupbin"; mkdir -p "$dupbin"
+cat > "$dupbin/gh" <<'STUB'
+#!/usr/bin/env bash
+case "$*" in
+  *milestones\?*) printf '5\tv0.15\n9\tv0.15\n' ;;
+  *labels\?*)     printf 'feature\nplan\n' ;;
+esac
+exit 0
+STUB
+chmod +x "$dupbin/gh"
+rc=0; out="$(cd "$slate" && PATH="$dupbin:$PATH" bash "$script" --state "$work/dup.state" manifest.tsv 2>&1)" || rc=$?
+{ [ "$rc" -ne 0 ] && case "$out" in *"share this title"*"ambiguous"*|*ambiguous*) true ;; *) false ;; esac; } \
+  && ok || bad "duplicate milestone titles must fail as ambiguous ($rc: $out)"
+case "$out" in *"created 0"*) ok ;; *) bad "ambiguous milestone must create nothing ($out)" ;; esac
+
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
