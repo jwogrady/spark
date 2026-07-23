@@ -111,14 +111,16 @@ notes_last_tag() { # <component> -> tag name, or empty
 }
 
 # Authoritative labels for the PR(s) that merged a commit, comma-joined. Empty
-# — not an error — when the commit reached the branch without a PR or the API
-# call fails; the check then treats the mislabel half as unassessable for that
-# commit instead of silently passing it (#297). The `|| true` is load-bearing:
-# under `set -euo pipefail` a failed gh call would otherwise abort the whole
-# run before any verdict is published (#310).
-notes_pr_labels() { # <repo> <sha> -> "label1,label2" or empty
+# when the commit genuinely has no PR/labels; the SENTINEL __labels_unavailable__
+# when the gh call FAILS — hostile review proved the two must be
+# distinguishable, or a transient API outage on exactly the mislabeled commit
+# silently disappears the hidden-type check while the pass message still claims
+# it ran. The guard keeps a failed gh call from aborting under pipefail (#310);
+# the sentinel keeps the failure honest.
+notes_pr_labels() { # <repo> <sha> -> "label1,label2", empty, or the sentinel
   gh api "repos/$1/commits/$2/pulls" \
-    --jq '[.[].labels[].name] | unique | join(",")' 2>/dev/null || true
+    --jq '[.[].labels[].name] | unique | join(",")' 2>/dev/null \
+    || printf '__labels_unavailable__'
 }
 
 # Does a commit's body declare a breaking change? Per conventional commits, a
@@ -126,8 +128,11 @@ notes_pr_labels() { # <repo> <sha> -> "label1,label2" or empty
 # regardless of its type. grep exits 1 on no match — the `|| true` keeps that
 # legitimate empty answer from aborting under pipefail (#310).
 notes_body_breaking() { # <sha> -> "breaking" or empty
+  # Footer separator per conventional commits is ": " OR " #" (spec §8/§12), and
+  # Release Please's parser additionally tolerates leading whitespace — match
+  # what THAT parser treats as breaking, or we under-detect what RP will render.
   git log -1 --format='%b' "$1" 2>/dev/null \
-    | grep -qE '^BREAKING[ -]CHANGE:' && echo "breaking" || true
+    | grep -qE '^[[:space:]]*BREAKING[ -]CHANGE(:| #)' && echo "breaking" || true
 }
 
 # Build one component's commits TSV (type, subject, labels, breaking) for the
@@ -135,20 +140,26 @@ notes_body_breaking() { # <sha> -> "breaking" or empty
 # touches the component's paths. Label lookup is one gh call per commit —
 # release ranges are small, and per-commit PR labels are the only
 # authoritative source for the hidden-type feature check (#291 AC-1).
-notes_component_commits_tsv() { # <repo> <component> <range> -> TSV on stdout
-  local repo="$1" comp="$2" range="$3" p sha subj parsed type rest breaking labels
+notes_component_commits_tsv() { # <repo> <component> <range> -> TSV; rc 1 = range failed
+  local repo="$1" comp="$2" range="$3" p sha subj parsed type rest breaking labels shas
   local paths=()
   while IFS= read -r p; do paths+=("$p"); done < <(notes_component_paths "$comp")
-  git log --no-merges --format='%H' "$range" -- "${paths[@]}" 2>/dev/null \
-  | while IFS= read -r sha; do
-      subj="$(git log -1 --format='%s' "$sha")"
-      parsed="$(notes_parse_subject "$subj")"
-      [ -n "$parsed" ] || continue
-      IFS=$'\t' read -r type rest breaking <<< "$parsed"
-      [ -n "$breaking" ] || breaking="$(notes_body_breaking "$sha")"
-      labels="$(notes_pr_labels "$repo" "$sha")"
-      printf '%s\t%s\t%s\t%s\n' "$type" "$rest" "$labels" "$breaking"
-    done || true
+  # Capture git's exit status: a bad/deleted tag or unfetched ref must surface
+  # as an INFRA FAILURE, not an empty file — hostile review proved an empty TSV
+  # is byte-identical to a legitimately empty range and folded to a clean pass.
+  shas="$(git log --no-merges --format='%H' "$range" -- "${paths[@]}" 2>/dev/null)" || return 1
+  [ -n "$shas" ] || return 0
+  while IFS= read -r sha; do
+    # Sanitize: a hostile tab in a verbatim commit subject would inject TSV
+    # columns (shifting the labels/breaking fields).
+    subj="$(git log -1 --format='%s' "$sha" | tr '\t' ' ')" || return 1
+    parsed="$(notes_parse_subject "$subj")"
+    [ -n "$parsed" ] || continue
+    IFS=$'\t' read -r type rest breaking <<< "$parsed"
+    [ -n "$breaking" ] || breaking="$(notes_body_breaking "$sha")"
+    labels="$(notes_pr_labels "$repo" "$sha")"
+    printf '%s\t%s\t%s\t%s\n' "$type" "$rest" "$labels" "$breaking"
+  done <<< "$shas"
 }
 
 # Run the check for every component and record the evidence. Reads the
@@ -164,17 +175,34 @@ notes_run_components() { # <repo> <head-sha> <workdir>
   : > "$work/report.txt"
   for comp in $NOTES_COMPONENTS; do
     notes_file="$work/$comp.md"
-    if [ ! -f "$notes_file" ]; then
-      # No notes section for this component: Release Please is not releasing
-      # it this round, so there is nothing to verify against. Reported
-      # honestly as not-assessed — never as a pass (#291 AC-4).
-      printf '%s\tno\t-\t%s\n' "$comp" "no notes section in the release PR body" >> "$work/results.tsv"
-      printf '== %s ==\nnot assessed — the release PR body has no notes section for this component; nothing was verified\n\n' "$comp" >> "$work/report.txt"
-      continue
-    fi
     last_tag="$(notes_last_tag "$comp")"
     range="${last_tag:+$last_tag..}$head_sha"
-    notes_component_commits_tsv "$repo" "$comp" "$range" > "$work/$comp.tsv"
+    if ! notes_component_commits_tsv "$repo" "$comp" "$range" > "$work/$comp.tsv"; then
+      # Range resolution failed (deleted/unfetched tag, bad ref). An empty TSV
+      # is byte-identical to "nothing to release", so a git failure must be an
+      # ERROR the fold refuses — never a clean pass (hostile-review F1).
+      printf '%s\tyes\t2\t%s\n' "$comp" "git range resolution failed ($range) — component not verifiable" >> "$work/results.tsv"
+      printf '== %s (%s) ==\nERROR: git range resolution failed; nothing was verified\n\n' "$comp" "$range" >> "$work/report.txt"
+      continue
+    fi
+    if [ ! -f "$notes_file" ]; then
+      # No notes section for this component. Benign ONLY if the range also has
+      # no releasable commits; a component WITH releasable commits but no
+      # section is precisely the dropped-release failure this guard exists for
+      # (hostile-review F2) — run the check against empty notes so the check
+      # itself (the visibility authority) decides.
+      if [ -s "$work/$comp.tsv" ] && \
+         ! out="$(bash "$here/release-notes-check.sh" --component "$comp" \
+             --commits "$work/$comp.tsv" --notes /dev/null 2>&1)"; then
+        detail="component has releasable commit(s) but NO notes section in the release PR body"
+        printf '%s\tyes\t1\t%s\n' "$comp" "$detail" >> "$work/results.tsv"
+        printf '== %s (%s) ==\n%s\n%s\n\n' "$comp" "$range" "$detail:" "$out" >> "$work/report.txt"
+      else
+        printf '%s\tno\t-\t%s\n' "$comp" "no notes section and no releasable commits" >> "$work/results.tsv"
+        printf '== %s ==\nnot assessed — no notes section for this component and no releasable commits in %s; nothing to verify\n\n' "$comp" "$range" >> "$work/report.txt"
+      fi
+      continue
+    fi
     rc=0
     out="$(bash "$here/release-notes-check.sh" --component "$comp" \
       --commits "$work/$comp.tsv" --notes "$notes_file" 2>&1)" || rc=$?
@@ -244,8 +272,14 @@ main() {
   # (#280); fetch and pin the PR head SHA rather than trusting HEAD.
   git fetch --quiet --tags origin "$head_sha" 2>/dev/null || true
   if ! git cat-file -e "$head_sha" 2>/dev/null; then
-    echo "could not resolve the release PR head ($head_sha); skipping without a status"
-    return 0
+    # An unresolvable head is an INFRA failure: exiting green here would leave
+    # any previous (possibly stale-success) release-notes status standing as if
+    # current. Post an error status and fail the step (hostile-review F9).
+    gh api -X POST "repos/$repo/statuses/$head_sha" \
+      -f state="error" -f context="release-notes" \
+      -f description="could not resolve the release PR head locally — notes not verified" >/dev/null 2>&1 || true
+    echo "could not resolve the release PR head ($head_sha); release notes NOT verified" >&2
+    return 1
   fi
 
   work="$(mktemp -d)"

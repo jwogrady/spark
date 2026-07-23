@@ -80,21 +80,55 @@ has_feature_label() { # has_feature_label <comma-separated-labels>
   case ",$1," in *,feature,*) return 0 ;; *) return 1 ;; esac
 }
 
-# Case-insensitive substring test: is the commit subject present in the notes?
-# Release Please writes the bare subject (type prefix stripped) as the changelog
-# line, so a substring match on the subject is the honest "did it survive".
-notes_lc="$(tr '[:upper:]' '[:lower:]' < "$notes")"
-subject_in_notes() { # subject_in_notes <subject>
-  local needle; needle="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
-  case "$notes_lc" in *"$needle"*) return 0 ;; esac
-  # A squash-merge subject often ends in " (#NNN)", which Release Please
-  # linkifies to "([#NNN](url))" in the notes — so the literal subject won't
-  # substring-match. Retry with that trailing PR reference stripped.
-  needle="$(printf '%s' "$needle" | sed -E 's/ *\(#[0-9]+\)$//')"
-  case "$notes_lc" in *"$needle"*) return 0 ;; *) return 1 ;; esac
+# Bullet-anchored, consume-once subject matching. Whole-file substring matching
+# was defeated by hostile review: a subject that is a PREFIX of another commit's
+# note line ("add widget" vs "* add widget tests"), one short note satisfying
+# two commits, and prose/URL text all false-passed. Release Please renders one
+# bullet per commit whose text IS the commit subject (type stripped, scope
+# bolded, refs linkified), so the honest test is: each changelog-visible commit
+# must consume exactly one note BULLET whose normalized text EQUALS its
+# normalized subject.
+#
+# notes_normalize: lowercase; drop linkified refs `([x](url))`; linkified
+# `[#12](url)` -> `#12`; drop trailing `, closes …` metadata; drop bare `(#N)`
+# refs (anywhere — conventional-changelog linkifies mid-subject refs too);
+# strip a leading `**scope:** `; squeeze whitespace.
+notes_normalize() {
+  printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E \
+    -e 's/\(\[[^]]*\]\([^)]*\)\)//g' \
+    -e 's/\[(#[0-9]+)\]\([^)]*\)/\1/g' \
+    -e 's/,? *closes .*$//' \
+    -e 's/\(#[0-9]+\)//g' \
+    -e 's/^\*\*[^*]+\*\* *//' \
+    -e 's/[[:space:]]+/ /g' -e 's/^ //' -e 's/ $//'
 }
 
-findings=0 labels_available=0 breaking_seen=0
+# Collect the notes bullets (lines starting `* ` or `- `), normalized, into a
+# consumable pool. Non-bullet lines (headings, prose, URLs) are never matched.
+note_bullets=()
+while IFS= read -r _line || [ -n "$_line" ]; do   # || catches a final line with no newline
+  case "$_line" in
+    [*-]\ *|" "[*-]\ *|"  "[*-]\ *)
+      _b="${_line#"${_line%%[*-]*}"}"     # strip leading indent
+      _b="${_b#? }"                        # strip the bullet marker + space
+      note_bullets+=("$(notes_normalize "$_b")") ;;
+  esac
+done < "$notes"
+
+subject_in_notes() { # subject_in_notes <subject> — consumes the matched bullet
+  local needle i
+  needle="$(notes_normalize "$1")"
+  [ -n "$needle" ] || return 1
+  for i in "${!note_bullets[@]}"; do
+    if [ "${note_bullets[$i]}" = "$needle" ]; then
+      note_bullets[$i]="__consumed__"
+      return 0
+    fi
+  done
+  return 1
+}
+
+findings=0 labels_available=0 breaking_seen=0 labels_unassessable=0
 # `read` treats a tab IFS as whitespace and collapses runs of tabs, which
 # would eat an EMPTY middle column — an empty labels field would swallow the
 # breaking flag into `labels`. Translate tabs to the unit separator, a hard
@@ -104,6 +138,12 @@ while IFS=$'\037' read -r type subject labels breaking || [ -n "$type" ]; do
   [ -n "${type:-}" ] || continue
   case "$type" in \#*) continue ;; esac
   labels="${labels:-}" breaking="${breaking:-}"
+  # The runner emits this sentinel when the label FETCH failed — distinct from
+  # "the commit genuinely has no labels". The mislabel half is unassessable for
+  # this commit and the verdict must say so, never claim it ran (hostile F4).
+  if [ "$labels" = "__labels_unavailable__" ]; then
+    labels=""; labels_unassessable=$((labels_unassessable + 1))
+  fi
   # A `!` on the type is the in-subject breaking marker (conventional
   # commits); normalize it into the breaking flag so both spellings verify
   # the same property.
@@ -142,8 +182,11 @@ if [ "$findings" -eq 0 ]; then
   if [ "$breaking_seen" -eq 1 ]; then
     msg="$msg; every breaking change appears in the notes"
   fi
-  if [ "$labels_available" -eq 1 ]; then
+  if [ "$labels_available" -eq 1 ] && [ "$labels_unassessable" -eq 0 ]; then
     msg="$msg; no labeled commit is hidden behind an excluded type"
+  fi
+  if [ "$labels_unassessable" -gt 0 ]; then
+    msg="$msg; labels unretrievable for $labels_unassessable commit(s) — the hidden-type check did not run for them"
   fi
   echo "$msg"
   exit 0
