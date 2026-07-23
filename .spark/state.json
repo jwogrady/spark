@@ -1,10 +1,10 @@
 {
-  "stage": "ship",
-  "problem_statement": "Clarify Spark's handoff to Release Please + token governance (#185)",
-  "issue": "185",
-  "branch": "docs/185-release-please-boundary",
+  "stage": "idle",
+  "problem_statement": "",
+  "issue": "",
+  "branch": "",
   "pr": "",
-  "blockers": "Token identity choice (GitHub App vs fine-grained PAT) and secret wiring need the human; see docs/reference/release-token-governance.md",
-  "next_action": "Human merges the PR (Refs #185); #185 stays open for the token decision; #186/#194 unblock on merge",
-  "updated": "2026-07-11"
+  "blockers": "",
+  "next_action": "",
+  "updated": "2026-07-23"
 }
