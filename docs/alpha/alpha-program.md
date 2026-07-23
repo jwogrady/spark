@@ -2,7 +2,7 @@
 
 > The canonical plan for Spark's Alpha validation phase. Companion docs:
 > [testing-guide.md](testing-guide.md) (what participants do),
-> [feedback-template.md](feedback-template.md) (how evidence is captured),
+> [feedback-template.md](feedback-template.md) (field reference for the intake form),
 > [coordinator-guide.md](coordinator-guide.md) (running the program — identity, consent, evidence, triage),
 > [pilot-plan.md](pilot-plan.md) (the 3-person method-validation pilot),
 > [exit-criteria.md](exit-criteria.md) (the evidence thresholds that end each phase).
@@ -47,8 +47,8 @@ succeeds by producing decisions.
 ## Alpha Objectives
 
 These are the questions the whole program is instrumented to answer. Each maps
-to evidence in the [feedback template](feedback-template.md) and a threshold in
-[exit-criteria.md](exit-criteria.md).
+to evidence in the `alpha-feedback` issue form (its [field reference](feedback-template.md))
+and a threshold in [exit-criteria.md](exit-criteria.md).
 
 **Workflow** — Can users discover the intended `ideate → plan → codify →
 validate → ship` flow on their own? Where do they get confused, which verbs are
@@ -121,8 +121,9 @@ kinds, in decreasing order of trustworthiness:
    aloud. Where they hesitate, backtrack, or ask "what does this do?" is the
    product's real map. One good observed session outweighs ten surveys.
 2. **Structured per-lifecycle reports.** After each `ideate→ship` run,
-   participants file the [feedback template](feedback-template.md) — one entry
-   per run, not per week, so friction is captured while fresh.
+   participants file the `alpha-feedback` GitHub issue form (the only accepted
+   intake; its [field reference](feedback-template.md)) — one entry per run, not
+   per week, so friction is captured while fresh.
 3. **Friction log (continuous).** A running GitHub Discussions thread (or
    issues labeled `alpha-feedback`) for anything that made them stop and think,
    captured in the moment.

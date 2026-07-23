@@ -14,8 +14,9 @@ v1.0.0 → stable public product                       (the promise the contract
 
 ## Alpha → Beta: required evidence
 
-All of the following must hold, each backed by evidence in the
-[feedback record](feedback-template.md), not by assertion. The numbers are
+All of the following must hold, each backed by evidence from the `alpha-feedback`
+issue-form submissions (its [field reference](feedback-template.md)), not by
+assertion. The numbers are
 thresholds against the [sample of 8–12](alpha-program.md#duration-and-sample-size);
 scale proportionally if the roster differs.
 

@@ -46,6 +46,16 @@ process, not the product.
       [exit criterion](exit-criteria.md) — unaided completion, stage friction,
       discoverability, docs used, value, keep/stop. (Mapping below.)
 
+### Pilot-evidence rule (what counts)
+- [ ] Only reports submitted through the **`alpha-feedback` GitHub issue form**
+      count toward pilot completeness. A report copied from the Markdown field
+      reference into an issue does **not** count — the form is the only intake.
+- [ ] Every required issue-form field is completed (blanks allowed only on the
+      free-text fields the form marks optional).
+- [ ] Before accepting a report as evidence, the coordinator verifies privacy
+      compliance: pseudonym only (no real name/email), and no secrets,
+      proprietary/customer source, personal data, or sensitive attachments.
+
 ### No routinely-misunderstood or vague question
 - [ ] No form field was misread by ≥2 of the 3, and none produced an
       unusably vague answer across the board. A field that did is reworded
