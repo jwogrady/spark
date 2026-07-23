@@ -22,3 +22,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: bash tests/run.sh
+  # Capability-traceability enforcement (#301): a feat-titled PR must carry the
+  # "Capability traceability" section — the CEF answer is required, not merely
+  # invited. Decision logic lives in the script (tests/test-pr-traceability.sh
+  # covers it); this stays a thin wrapper per the header rule.
+  traceability:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: bash .github/scripts/pr-traceability-check.sh
