@@ -89,7 +89,7 @@ body:
         - **Deletion Test:** if deleted, what outcome is lost that Claude / GitHub / Git / the OS cannot provide?
         - **Why Spark and not the platform:**
     validations:
-      required: false
+      required: true
 
   - type: checkboxes
     id: attribution
