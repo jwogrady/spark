@@ -1,6 +1,12 @@
 # Problem statement — the plugin ships more than its identity claims
 
-> Authoritative — the problem this effort solves. Owner: `jwogrady`.
+> **Historical problem statement — resolved.** A point-in-time artifact for
+> the v0.7 consolidation; the effort it framed shipped in `v0.7.0`
+> (2026-07-11): review/cleanup consolidated into one `audit` skill (#144),
+> consolidation hygiene (#143), and the marketplace reshaped into a focused
+> core plus companions (#146). Kept as the record of *why* the extraction
+> happened. Owner: `jwogrady`. Current framing lives in `ROADMAP.md` and
+> `docs/alpha/`; the next `ideate` run replaces this file.
 
 ## Problem
 
