@@ -3,6 +3,8 @@
 > The canonical plan for Spark's Alpha validation phase. Companion docs:
 > [testing-guide.md](testing-guide.md) (what participants do),
 > [feedback-template.md](feedback-template.md) (how evidence is captured),
+> [coordinator-guide.md](coordinator-guide.md) (running the program — identity, consent, evidence, triage),
+> [pilot-plan.md](pilot-plan.md) (the 3-person method-validation pilot),
 > [exit-criteria.md](exit-criteria.md) (the evidence thresholds that end each phase).
 
 ## Why Alpha, and why now
