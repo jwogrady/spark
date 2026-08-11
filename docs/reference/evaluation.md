@@ -5,6 +5,13 @@
 > evaluation suite shares. The **mechanism** that implements it is
 > [`../../evaluations/lib/eval.sh`](../../evaluations/lib/eval.sh). A dev-doc — it
 > governs how Spark is built and never ships. Owner: `jwogrady`.
+>
+> **Status (v0.16):** the recorded suites and the library remain the evidence
+> behind Spark's measured decisions (v0.12 orchestration, v0.15 routing), and
+> the library still runs future measurements. The *CI gates* that consumed the
+> evidence index — the platform-compat review and the PR traceability check —
+> were retired by the governance deletion test (#361). Nothing enforces this
+> contract on ordinary changes anymore; it applies when an evaluation is run.
 
 Spark owns evaluation (Constitution [Article II.4](../product-constitution.md);
 adopted by [ADR-0025](../adr/0025-capability-evaluation-framework.md)). This

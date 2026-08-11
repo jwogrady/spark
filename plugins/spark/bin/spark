@@ -1188,17 +1188,6 @@ EOF_TM
       red "  ✗ progressive disclosure broken:"; printf '%s\n' "$ref_out"; errors=$((errors+1))
     fi
 
-    # Capability-traceability templates (#301): the CEF's collection seam must
-    # not silently disappear from the contribution templates.
-    echo
-    echo "Capability-traceability templates:"
-    local tt_out tt_root
-    tt_root="$(cd "$SPARK_ROOT/../.." && pwd)"
-    if tt_out="$(check_traceability_templates "$tt_root")"; then
-      green "  ✓ issue + PR templates carry the traceability seam"
-    else
-      red "  ✗ traceability seam missing from a template:"; printf '%s\n' "$tt_out"; errors=$((errors+1))
-    fi
   fi
 
   # Latency advisory (#213): wall clock is machine-dependent, so this only WARNS
@@ -2424,11 +2413,6 @@ check_reference_laziness() {
   return $rc
 }
 
-# check_traceability_templates <repo-root> — the Capability-Traceability prompt
-# the CEF collects through (#296, ADR-0025/0026) must stay present in the
-# contribution templates, so an edit that removes the field/section is caught. Verifies
-# the feature + skill issue templates carry the capability_traceability field and
-# the PR template carries the traceability section. Echoes findings; returns 1.
 check_release_component_parity() {
   # The release-notes runner verifies one component per Release Please package
   # from a HARD-CODED list; a package with no matching component ships its
@@ -2456,18 +2440,6 @@ check_release_component_parity() {
   fi
   echo "  release-component drift — release-please-config packages: [${expect% }] vs release-notes-runner NOTES_COMPONENTS: [${comps% }]. A package with no component ships UNVERIFIED notes; align both sets."
   return 1
-}
-
-check_traceability_templates() {
-  local root="$1" rc=0 f
-  for f in "$root/.github/ISSUE_TEMPLATE/feature.yml" "$root/.github/ISSUE_TEMPLATE/skill.yml"; do
-    if [ ! -f "$f" ]; then echo "  missing template: ${f#"$root"/}"; rc=1
-    elif ! grep -q 'capability_traceability' "$f"; then echo "  ${f#"$root"/}: lost the capability_traceability field"; rc=1; fi
-  done
-  f="$root/.github/PULL_REQUEST_TEMPLATE.md"
-  if [ ! -f "$f" ]; then echo "  missing PR template"; rc=1
-  elif ! grep -qi 'Capability traceability' "$f"; then echo "  ${f#"$root"/}: lost the Capability traceability section"; rc=1; fi
-  return $rc
 }
 
 # check_taxonomy_mirrors <repo-root> <spark-root> — inside the Spark repo,

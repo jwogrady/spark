@@ -1,7 +1,13 @@
 # ADR: Adopt the Capability Evaluation Framework as Spark's capability entry point
 
 Date: 2026-07-22
-Status: Accepted
+Status: Accepted (gate machinery retired 2026-08-11: the five questions remain
+the recorded method for judging what belongs in Spark, applied as judgment at
+proposal time. The mechanical collection and enforcement seams — the
+capability-traceability template fields, the PR traceability CI check, and the
+platform-compat review — were removed by the #361 governance deletion test:
+none prevented a concrete failure that judgment plus the behavioral tests did
+not already prevent.)
 Owner: jwogrady
 
 > This ADR records a **permanent architectural decision**: how Spark decides what

@@ -8,7 +8,7 @@
 # whether anything changelog-visible went missing. Posts one advisory
 # `release-notes` commit status and one summary comment carrying a
 # per-component evidence table. Mirrors gate-runner.sh and
-# platform-compat-runner.sh; like them it reads and writes only a status + a
+# retired platform-compat-runner.sh; like it, this reads and writes only a status + a
 # comment — never merges, tags, or releases.
 #
 # Advisory by design: the status is not a required check; the human merge is
@@ -215,7 +215,7 @@ notes_run_components() { # <repo> <head-sha> <workdir>
 }
 
 # Fold the per-component exit codes into the one advisory commit-status state,
-# mirroring platform-compat-runner's honesty: real findings → failure, any
+# honesty rule: real findings → failure, any
 # check that could not run correctly (exit 2 or unexpected) → error (and main
 # fails the step), otherwise success. A not-assessed component is honest —
 # never an error, never a pass.

@@ -70,22 +70,15 @@ cover them; none does, by design (#305 split them out of #300 explicitly).
       liveness could be scripted, but "the guidance still supports the claim"
       cannot.
 
-Two Article VII clauses are **not** on this manual list because they are
-already mechanical:
+One clause is **not** on this manual list because it is already mechanical:
+*"every enforced mechanism still fires"* is covered by the milestone gate,
+which requires the `doctor` and `tests` CI checks green on the Release
+Please PR head before reporting ready. It is not re-checked by hand here.
+Checking that experiment-gated ADR statuses still match their experiments'
+verdicts is part of the same manual census — the scripted advisory that once
+prompted it was retired by the governance deletion test (#361).
 
-- *"Every enforced mechanism still fires"* is covered by the milestone gate,
-  which requires the `doctor` and `tests` CI checks green on the Release
-  Please PR head before reporting ready. It is not re-checked by hand here.
-- *"Every Accepted, experiment-gated ADR has a status matching its
-  experiment's verdict"* is the automated half's ADR-status advisory:
-  `.github/scripts/platform-compat-check.sh` (run on the Release Please PR by
-  `.github/scripts/platform-compat-runner.sh`, offline-tested by
-  `tests/test-platform-compat-check.sh`) verifies declared capability-evaluation
-  evidence and flags any ADR whose Status-line gate issues have all closed,
-  asking a human to *confirm* the status — a labeled heuristic prompt, never a
-  verdict, and never a gate-blocker.
-
-Record the outcome of the two manual checks in the release approval (a PR
+Record the outcome of the manual checks in the release approval (a PR
 comment is enough): what was censused, what was retired or kept, and why.
 
 ## After Release Please releases

@@ -10,15 +10,6 @@
 
 <!-- Bullet list of the specific files and decisions made. -->
 
-## Capability traceability
-
-<!-- For a capability change, carry the thread from the issue's Capability
-Evaluation Framework answer. Reference, don't restate. Procedure:
-../docs/governance/capability-evaluation.md -->
-
-- **Owned surface / Constitution article(s):**
-- **Evidence (Q4):** the evaluation result or measurement backing this change
-
 ## Test plan
 
 - [ ] Reviewed all changed files

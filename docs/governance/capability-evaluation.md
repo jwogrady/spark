@@ -1,10 +1,15 @@
 # Applying the Capability Evaluation Framework
 
 > **Procedure — how to run Spark's capability entry test.** This doc explains
-> *how*; it never redefines *what*. The five questions and the tie-break are
-> invariants owned by [Constitution Article VI](../product-constitution.md); the
-> decision to make them binding is [ADR-0025](../adr/0025-capability-evaluation-framework.md).
+> *how*; it never redefines *what*. The five questions come from
+> [ADR-0025](../adr/0025-capability-evaluation-framework.md) (historically via
+> Constitution Article VI, now archived).
 > A dev-doc — it governs how Spark is built and never ships. Owner: `jwogrady`.
+>
+> **Status (v0.16):** judgment guidance only. The template fields and CI checks
+> that mechanically collected and enforced these answers were retired by the
+> #361 governance deletion test — apply the questions when proposing a
+> capability; nothing polices the paperwork.
 
 Use this when proposing, reviewing, or re-examining any capability — a skill, a
 helper, an enforcement rule, an orchestration slice. It is the standing entry
