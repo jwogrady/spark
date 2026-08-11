@@ -1,20 +1,16 @@
 # The Spark Product Constitution
 
-> **Authoritative — the governing document for what Spark is, owns, and refuses.**
-> A dev-doc: it governs how Spark is built and never ships into a user project.
-> Derived by extraction from the identity and explanation docs; it introduces no
-> new product direction. Subordinate only to the Mission. Amendable **only by a
-> new ADR** — not by ad-hoc edit. Owner: `jwogrady`.
-
-The order of authority every decision defers to:
-
-```
-Mission → Constitution → Identity → Accepted ADRs → Roadmap → Issues → Implementation
-```
-
-A lower layer may refine a higher one; it may never contradict it. Where two
-inputs strain, [`identity.md`](../plugins/spark/docs/explanation/identity.md) —
-self-labeled *Authoritative* — breaks the tie.
+> **Archived (v0.16, #361) — historical record, no longer a live instrument.**
+> This document recorded Spark's founding invariants as a governing layer above
+> the ADRs. Run against the governance deletion test, it failed the consuming
+> test: nothing mechanical reads it, and every decision it governs is either an
+> Accepted ADR (the human-directed model is ADR-0019; the CEF is ADR-0025; the
+> release seam is ADR-0026) or identity/philosophy prose that
+> [`identity.md`](../plugins/spark/docs/explanation/identity.md) already owns.
+> The working order of authority is now simply:
+> **identity → accepted ADRs → issues → implementation.**
+> Kept unedited below as the record of what was ratified; do not extend it, and
+> record any future invariant as an ADR instead. Owner: `jwogrady`.
 
 ---
 

@@ -114,13 +114,14 @@ An evaluation exists to decide something. State the decision rule up front:
 - Research evidence is marked as such at its source (a banner) and never promoted
   to a product claim until an implementation ships and validates.
 
-## The Evaluation → Release seam
+## The Evaluation → Release seam (historical)
 
-Capability Traceability ends `… → Evaluation → Release`. The
-[Platform Compatibility Review gate](../product-constitution.md) (Constitution
-Article VII) consumes evaluation results at release time: a capability whose
-declared `required` evidence is absent or malformed does not ship. This document
-defines the evidence and the declaration; the gate enforces it.
+Capability Traceability ended `… → Evaluation → Release`: the Platform
+Compatibility Review gate consumed evaluation results at release time, so a
+capability whose declared `required` evidence was absent or malformed did not
+ship. That gate was retired by the #361 governance deletion test (see the
+status note above); the declaration format below remains the recorded form
+evidence takes when an evaluation is run.
 
 ## The evidence index (capability → evidence)
 

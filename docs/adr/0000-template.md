@@ -11,10 +11,10 @@ Owner: jwogrady
 
 ## Alignment
 
-Trace this decision to the governance layers above it (see
-[../product-constitution.md](../product-constitution.md)). Reference, don't restate.
+Trace this decision to what already governs it — identity, prior Accepted ADRs.
+Reference, don't restate.
 
-- **Mission / Constitution / Identity served:** which article(s) and owned surface.
+- **Identity / prior decisions served:** which identity claim or ADR(s) this builds on.
 - **Supersedes / Superseded by:** ADR numbers, or "nothing".
 - **Status tracks evidence:** if this decision's implementation is gated on an
   experiment, name the experiment and state that this ADR's Status must follow its
