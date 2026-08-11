@@ -853,42 +853,34 @@ cmd_doctor() {
   done < <(find "$doc_root" -type f -name '*.md' ! -path '*/.git/*' ! -path '*/node_modules/*' ! -path '*/.claude/*' | sort)
   [ "$broken" -eq 0 ] && green "  ✓ no broken relative links"
 
-  # Enforcement parity: Spark deliberately states each rule on more than one
-  # surface — the PreToolUse guard (Claude's door), the git hooks (the human
-  # door), and the docs. That redundancy gives coverage but drifts silently
-  # (ADR-0003), so inside the Spark repo doctor proves the surfaces still
-  # agree. Skipped elsewhere: user repos don't carry these docs.
+  # Enforcement lockstep: the rules a hook enforces are also stated as
+  # enumerable vocabulary on structured surfaces (the agent contract, the hooks
+  # reference, the release config). Doctor proves the enumerable sets still
+  # agree — list-vs-list, never phrase-grepping prose. Whether prose *describes*
+  # behavior truthfully is a docs-truth judgment (the audit skill owns it), not
+  # a grep. Skipped outside the Spark repo: user repos don't carry these docs.
   local repo_root=""
   [ -f "$SPARK_ROOT/../../.claude-plugin/marketplace.json" ] \
     && repo_root="$(cd "$SPARK_ROOT/../.." && pwd)"
-  if [ -n "$repo_root" ] && [ -f "$repo_root/CLAUDE.md" ] && [ -f "$repo_root/AGENTS.md" ]; then
+  if [ -n "$repo_root" ] && [ -f "$repo_root/AGENTS.md" ]; then
     echo
-    echo "Enforcement parity:"
-    local guard="$SPARK_ROOT/hooks/guard-bash.sh"
+    echo "Enforcement lockstep:"
     local cmsg="$SPARK_ROOT/scripts/hooks/commit-msg"
-    local precommit="$SPARK_ROOT/scripts/hooks/pre-commit"
-    local cm="$repo_root/CLAUDE.md" am="$repo_root/AGENTS.md"
-
-    # parity <pattern> <file> <fix-hint> — one missing surface = one error.
-    parity() {
-      grep -qiE -e "$1" "$2" 2>/dev/null && return 0
-      red "  ✗ ${2#"$repo_root"/}: $3"; errors=$((errors+1)); return 1
-    }
+    local am="$repo_root/AGENTS.md"
 
     # (a) The conventional-commit type list must be one set everywhere it is
-    # stated: the hook that enforces it, both agent contracts, and the hooks
+    # stated: the hook that enforces it, the agent contract, and the hooks
     # reference that documents it (#270 — hooks.md was previously excluded).
-    local hook_types cm_types am_types hm_types
+    local hook_types am_types hm_types
     # Each extraction ends in || true: with pipefail, a surface that lost its
     # rule would otherwise abort doctor instead of being reported as drift.
     hook_types="$(grep -oE '\(feat\|[a-z|]+\)' "$cmsg" 2>/dev/null | head -n1 | tr -d '()' | tr '|' '\n' | sort | tr '\n' ' ' || true)"
-    cm_types="$(grep -i 'conventional commits' "$cm" | grep -oE '`[a-z]+:`' | tr -d '`:' | sort | tr '\n' ' ' || true)"
     am_types="$(grep -i 'conventional commits' "$am" | grep -oE '`[a-z]+:`' | tr -d '`:' | sort | tr '\n' ' ' || true)"
     hm_types="$(grep -oE 'feat\|[a-z|]+' "$SPARK_ROOT/docs/reference/hooks.md" 2>/dev/null | head -n1 | tr '|' '\n' | sort | tr '\n' ' ' || true)"
-    if [ -n "$hook_types" ] && [ "$hook_types" = "$cm_types" ] && [ "$hook_types" = "$am_types" ] && [ "$hook_types" = "$hm_types" ]; then
-      green "  ✓ commit types agree across commit-msg, CLAUDE.md, AGENTS.md, hooks.md (${hook_types% })"
+    if [ -n "$hook_types" ] && [ "$hook_types" = "$am_types" ] && [ "$hook_types" = "$hm_types" ]; then
+      green "  ✓ commit types agree across commit-msg, AGENTS.md, hooks.md (${hook_types% })"
     else
-      red "  ✗ commit type lists drift — commit-msg: [${hook_types% }] CLAUDE.md: [${cm_types% }] AGENTS.md: [${am_types% }] hooks.md: [${hm_types% }]. Align the list on all four surfaces."
+      red "  ✗ commit type lists drift — commit-msg: [${hook_types% }] AGENTS.md: [${am_types% }] hooks.md: [${hm_types% }]. Align the list on all three surfaces."
       errors=$((errors+1))
     fi
 
@@ -935,64 +927,6 @@ cmd_doctor() {
       2) yellow "  ! jq/python3 absent — skipping the release-component parity check"; warnings=$((warnings+1)) ;;
     esac
 
-    # (a3) The CLI verb list must match what CLAUDE.md's Repo Map documents
-    # (#266). The shipped set is the VERBS dispatch table itself; the doc set is
-    # the parenthesized list on the bin/spark line. They drift whenever a verb
-    # ships without the doc being updated (as profiles/orient/state/footprint did).
-    local ship_verbs doc_verbs
-    ship_verbs="$(printf '%s\n' "$VERBS" | awk -F'|' 'NF{print $1}' | sort | tr '\n' ' ' || true)"
-    doc_verbs="$(grep 'the CLI (' "$cm" | sed -n 's/.*the CLI (\([^)]*\)).*/\1/p' | tr ',' '\n' | tr -d ' ' | sort | tr '\n' ' ' || true)"
-    if [ -n "$ship_verbs" ] && [ "$ship_verbs" = "$doc_verbs" ]; then
-      green "  ✓ CLI verbs agree between the VERBS table and CLAUDE.md's Repo Map"
-    else
-      red "  ✗ CLI verb lists drift — dispatch: [${ship_verbs% }] CLAUDE.md: [${doc_verbs% }]. Sync the bin/spark line in the Repo Map."
-      errors=$((errors+1))
-    fi
-
-    # (a4) Skill-taxonomy mirrors: README.md and CLAUDE.md deliberately restate
-    # the skill taxonomy (the front door and the always-loaded agent contract);
-    # every other doc links to reference/skills.md instead. Restatement without
-    # parity is exactly how the architecture map drifted, so the two surviving
-    # mirrors are gated the same way the CLI-verb mirror is (a3).
-    local tm_out tm_rc=0 tm_line
-    tm_out="$(check_taxonomy_mirrors "$repo_root" "$SPARK_ROOT")" || tm_rc=$?
-    if [ "$tm_rc" -eq 0 ]; then
-      green "  ✓ README.md and CLAUDE.md name every shipped core skill"
-    elif [ "$tm_rc" -eq 1 ]; then
-      while IFS= read -r tm_line; do
-        [ -n "$tm_line" ] || continue
-        red "  ✗ ${tm_line#  }"; errors=$((errors+1))
-      done <<EOF_TM
-$tm_out
-EOF_TM
-    fi
-
-    # (b) AI-attribution prohibition: implemented in the hook, documented twice.
-    local ok=1
-    parity 'co-authored-by' "$cmsg" "must reject AI co-author trailers" || ok=0
-    parity 'ai attribution' "$cmsg" "must reject AI attribution in commit bodies" || ok=0
-    parity 'never credit an ai' "$cm" "must document the AI-attribution prohibition" || ok=0
-    parity 'ai tool names|never credit an ai' "$am" "must document the AI-attribution prohibition" || ok=0
-    [ "$ok" -eq 1 ] && green "  ✓ AI-attribution ban implemented (commit-msg) and documented (CLAUDE.md, AGENTS.md)"
-
-    # (c) Trunk protection: guard blocks pushes, pre-commit blocks commits,
-    # docs state both rules.
-    ok=1
-    parity 'master\|main' "$guard" "must block pushes to master/main" || ok=0
-    parity 'master\|main' "$precommit" "must block commits on master/main" || ok=0
-    parity 'do not push directly to .master' "$cm" "must document the no-push-to-trunk rule" || ok=0
-    parity 'never commit directly to .master' "$cm" "must document the no-commit-on-trunk rule" || ok=0
-    parity 'never commit to .master. directly|never commit directly to .master' "$am" "must document the no-commit-on-trunk rule" || ok=0
-    [ "$ok" -eq 1 ] && green "  ✓ trunk protection implemented (guard-bash.sh, pre-commit) and documented (CLAUDE.md, AGENTS.md)"
-
-    # (d) Force-push: guard blocks --force but allows --force-with-lease;
-    # docs state the same split.
-    ok=1
-    parity 'force-push is blocked' "$guard" "must block force-pushes" || ok=0
-    parity 'force-with-lease' "$guard" "must allow the safer --force-with-lease" || ok=0
-    parity 'force-with-lease' "$cm" "must document the force-push rule and the --force-with-lease exception" || ok=0
-    parity 'force-push' "$am" "must document the force-push rule" || ok=0
-    [ "$ok" -eq 1 ] && green "  ✓ force-push rules implemented (guard-bash.sh) and documented (CLAUDE.md, AGENTS.md)"
   fi
 
   # Issue metadata governance (#192): category labels are governed by
@@ -1034,33 +968,6 @@ EOF_TM
         fi
       done
     fi
-  fi
-
-  # ADR status integrity (#255): once an ADR's Status line reads Accepted, it must
-  # not still carry a live proposal-state banner — "is a research proposal" or
-  # "must not be presented as adopted" — because that contradicts its own header
-  # and misreads ratified architecture as still awaiting approval. Only present-
-  # tense live banners are caught; a past-tense historical mention ("was a research
-  # proposal until …") reads clean, which is the intended escape hatch. Spark-repo
-  # self-check: ADRs are DEV docs that never ship into a user project.
-  local adr_dir="$repo_root/docs/adr"
-  if [ -n "$repo_root" ] && [ -d "$adr_dir" ]; then
-    echo
-    echo "ADR status integrity:"
-    local adr adr_status banner_ok=1
-    for adr in "$adr_dir"/[0-9]*.md; do
-      [ -e "$adr" ] || continue
-      adr_status="$(grep -iE '^Status:' "$adr" | head -n1 || true)"
-      case "$adr_status" in
-        *[Aa]ccepted*) ;;
-        *) continue ;;
-      esac
-      if grep -qiE 'is a research proposal|must not be presented as adopted' "$adr"; then
-        red "  ✗ ${adr#"$repo_root"/}: Accepted ADR still carries a live proposal-state banner — restate it as Accepted or mark the mention historical"
-        errors=$((errors+1)); banner_ok=0
-      fi
-    done
-    [ "$banner_ok" -eq 1 ] && green "  ✓ no Accepted ADR carries a live proposal-state banner"
   fi
 
   # Standards boundary (#200, ADR-0020): #182 makes the prose standards docs the
@@ -2440,27 +2347,6 @@ check_release_component_parity() {
   fi
   echo "  release-component drift — release-please-config packages: [${expect% }] vs release-notes-runner NOTES_COMPONENTS: [${comps% }]. A package with no component ships UNVERIFIED notes; align both sets."
   return 1
-}
-
-# check_taxonomy_mirrors <repo-root> <spark-root> — inside the Spark repo,
-# README.md and CLAUDE.md insist on restating the skill taxonomy; the canonical
-# source stays reference/skills.md (gated by taxonomy parity), and a mirror is
-# tolerated only while it is held in parity: every shipped core skill must
-# appear backticked in both mirrors. Echoes one line per omission; returns 1 on
-# drift, 3 when either mirror is absent (not this repo). Factored for offline
-# testing.
-check_taxonomy_mirrors() {
-  local repo_root="$1" spark_root="$2" rc=0 d name doc
-  [ -f "$repo_root/README.md" ] && [ -f "$repo_root/CLAUDE.md" ] || return 3
-  for d in "$spark_root"/skills/*/; do
-    [ -d "$d" ] || continue
-    name="$(basename "$d")"
-    for doc in README.md CLAUDE.md; do
-      grep -q "\`$name\`" "$repo_root/$doc" \
-        || { echo "  $doc mirrors the skill taxonomy but omits \`$name\`"; rc=1; }
-    done
-  done
-  return $rc
 }
 
 # now_ms — current time in milliseconds. GNU date has %N; macOS/BSD date does
