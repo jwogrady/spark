@@ -1061,19 +1061,20 @@ cmd_doctor() {
     fi
   fi
 
-  # Context footprint budget (#292): the aggregate ratchet the per-file budgets
-  # cannot catch. Meaningful only in the Spark marketplace repo (companions
-  # present); a standalone install has no marketplace total to gate. Reuses the
-  # footprint primitives so the gate and the `spark footprint` audit agree.
+  # Context footprint (#292, demoted to advisory by #361): the aggregate total
+  # across the marketplace. The per-file budgets above stay hard errors — they
+  # bound what a single surface loads — but the marketplace-total ratchet is
+  # internal governance, so it warns rather than gates. The opt-in
+  # `spark footprint` audit remains the measuring tool.
   if [ -f "$SPARK_ROOT/../../.claude-plugin/marketplace.json" ]; then
     local mroot fp_summary cache_summary
     mroot="$(cd "$SPARK_ROOT/../.." && pwd)"
     echo
-    echo "Context footprint budget:"
+    echo "Context footprint (advisory):"
     if fp_summary="$(fp_footprint_gate "$mroot")"; then
       green "  ✓ $fp_summary"
     else
-      red "  ✗ $fp_summary — trim, or raise the budget in bin/spark with rationale"; errors=$((errors+1))
+      yellow "  ! $fp_summary — trim, or raise the budget in bin/spark with rationale"; warnings=$((warnings+1))
     fi
     # Cache stability (heuristic): the always-loaded prefix should not embed a
     # volatile token (date / "updated" / "as of N") that would bust Claude Code's
@@ -1095,31 +1096,6 @@ cmd_doctor() {
       red "  ✗ progressive disclosure broken:"; printf '%s\n' "$ref_out"; errors=$((errors+1))
     fi
 
-  fi
-
-  # Latency advisory (#213): wall clock is machine-dependent, so this only WARNS
-  # when a hot path exceeds its budget — the hard gate is the opt-in
-  # `spark footprint --timing`. Measures the guard and the brief (cheap, no
-  # recursion); doctor cannot time itself from within, so its own budget is
-  # checked only by that gate.
-  echo
-  echo "Latency (advisory — hard gate: spark footprint --timing):"
-  local d_gms d_bms
-  d_gms=$(fp_run_ms fp_hot_guard) || d_gms=""
-  d_bms=$(fp_run_ms fp_hot_brief) || d_bms=""
-  if [ -z "$d_gms" ]; then
-    echo "  - guard hook: not measured (no ms-resolution clock — needs GNU date +%s%N or python3)"
-  elif [ "$d_gms" -gt "$LATENCY_GUARD_MS" ]; then
-    yellow "  ! guard hook ${d_gms}ms — over the ${LATENCY_GUARD_MS}ms budget"; warnings=$((warnings+1))
-  else
-    green "  ✓ guard hook ${d_gms}ms (budget ${LATENCY_GUARD_MS}ms)"
-  fi
-  if [ -z "$d_bms" ]; then
-    echo "  - session brief: not measured (no ms-resolution clock)"
-  elif [ "$d_bms" -gt "$LATENCY_BRIEF_MS" ]; then
-    yellow "  ! session brief ${d_bms}ms — over the ${LATENCY_BRIEF_MS}ms budget"; warnings=$((warnings+1))
-  else
-    green "  ✓ session brief ${d_bms}ms (budget ${LATENCY_BRIEF_MS}ms)"
   fi
 
   echo

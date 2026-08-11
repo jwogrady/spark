@@ -29,13 +29,13 @@ out="$(LATENCY_GUARD_MS=0 "$SPARK" footprint --timing 2>&1)" || rc=$?
 [ "$rc" -ne 0 ] && ok || bad "footprint --timing must fail when a path is over budget"
 assert_contains "the over-budget path is marked" "OVER BUDGET" "$out"
 
-# --- doctor only WARNS on latency: even with an impossible brief budget it must
-# still exit 0 (the whole point of the warn-not-fail decision), and say so.
+# --- doctor no longer times anything (#361 removed the per-run advisory): even
+# with an impossible brief budget it must exit 0 and mention no latency at all —
+# the only latency gate is the opt-in `spark footprint --timing` above.
 out=""; rc=0
 out="$( cd "$WORK" && LATENCY_BRIEF_MS=0 "$SPARK" doctor 2>&1 )" || rc=$?
-[ "$rc" -eq 0 ] && ok || bad "doctor must not fail on a latency regression (got $rc)"
-assert_contains "doctor prints the latency advisory" "Latency (advisory" "$out"
-assert_contains "doctor warns on the over-budget brief" "over the 0ms budget" "$out"
+[ "$rc" -eq 0 ] && ok || bad "doctor must not fail on a latency budget (got $rc)"
+case "$out" in *"Latency"*) bad "doctor still prints a latency section" ;; *) ok ;; esac
 
 # --- #265: on a date without GNU %N (macOS/BSD), timing must degrade, not
 # compute garbage. Inject a fake date that prints a literal 'N' for +%s%N and
