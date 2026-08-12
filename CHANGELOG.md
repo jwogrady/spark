@@ -9,6 +9,19 @@ Keep a Changelog format. Do not hand-edit released sections.
 
 ---
 
+## [0.16.1](https://github.com/jwogrady/spark/compare/v0.16.0...v0.16.1) (2026-08-12)
+
+
+### Bug Fixes
+
+* let positional evidence outrank a missing problem statement ([5c0bce6](https://github.com/jwogrady/spark/commit/5c0bce679fd75bf91783f49a000948aa7aba0094))
+* let positional evidence outrank a missing problem statement ([dd75e3b](https://github.com/jwogrady/spark/commit/dd75e3b2ec0e230f5ea48516d6b4cd47b331d4d3))
+
+
+### Documentation
+
+* state the locate inference order in the CLI reference ([57e244c](https://github.com/jwogrady/spark/commit/57e244cbc6f4e26da080e92cc5b9b5f5e8a05595))
+
 ## [0.16.0](https://github.com/jwogrady/spark/compare/v0.15.1...v0.16.0) (2026-08-12)
 
 
