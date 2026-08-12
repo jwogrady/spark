@@ -94,7 +94,7 @@ Do not rewrite published history. Do not force push to shared branches.
 Two gates run on every PR, and both are one local command:
 
 - `./plugins/spark/bin/spark doctor` — the static gate: layout, JSON,
-  frontmatter, `bash -n`, doc links, enforcement parity.
+  frontmatter, `bash -n`, doc links, enforcement lockstep.
 - `bash tests/run.sh` — the behavioral gate: every `tests/test-*.sh` suite,
   exercising the CLI flows (`setup`, `apply-permissions`, `preferences`,
   `brief`/`resume`, `new-skill`) and the enforcement hooks (`guard-bash.sh`,

@@ -1,7 +1,7 @@
 # Spark-repo validation gate. The workflow is intentionally a thin wrapper
 # around two locally-runnable commands, so CI and a contributor's machine can
 # never drift: `spark doctor` is the static superset gate (layout, JSON,
-# frontmatter, bash -n, doc links, enforcement parity) and `tests/run.sh` is
+# frontmatter, bash -n, doc links, enforcement lockstep) and `tests/run.sh` is
 # the behavioral gate (the CLI flows and hooks exercised against temp repos).
 # Do not add check logic here — extend doctor or add a tests/test-*.sh suite.
 # The two gates: ADR-0011 (doctor, the static gate) and ADR-0018 (tests/run.sh,

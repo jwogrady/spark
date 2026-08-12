@@ -2,7 +2,9 @@
 
 Date: 2026-05-29
 Status: Accepted; superseded in part by
-[ADR-0011](0011-doctor-is-the-validation-gate.md) — the "doctor is a human
+[ADR-0011](0011-doctor-is-the-validation-gate.md) (and note 2026-08-11: the
+two local doors gained a third, server-side door — GitHub trunk rulesets,
+ADR-0027) — the "doctor is a human
 convention, not a CI gate" and "rule parity is a manual discipline" claims no
 longer hold: validation CI now runs doctor on every PR, and doctor checks
 two-door parity mechanically (this ADR's Open Question, resolved)

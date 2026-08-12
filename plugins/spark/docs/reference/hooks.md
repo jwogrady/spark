@@ -2,8 +2,14 @@
 
 > Reference — information-oriented.
 
-Spark enforces its guardrails through two independent doors, because the
-Claude-driven path and the human-driven path need separate gates.
+Spark enforces its guardrails through three independent doors — the
+Claude-driven path, the human-driven local path, and the remote itself — each
+needing its own gate. This page documents the two local doors the plugin
+carries (the PreToolUse guard and the git hooks). The third door is a GitHub
+ruleset on the trunk: Spark ships the policy
+(`settings/github-ruleset-trunk.json`) and `spark doctor --requirements`
+inspects and reports drift, but applying it is always an explicit human act —
+see [../explanation/enforcement-model.md](../explanation/enforcement-model.md).
 
 ## Plugin hook (Claude-driven path)
 
@@ -104,8 +110,9 @@ design:
 
 So the broad allow is safe *only because* the guard is load-bearing, and the
 guard's behavior is pinned by its regression suite
-(`tests/test-guard-bash.sh`) and doctor's enforcement-parity checks. A
-push-capable preset must never ship without both.
+(`tests/test-guard-bash.sh`) — the one authority that proves what it blocks. A
+push-capable preset must never ship without that suite green, and the GitHub
+ruleset (the third door) backstops whatever a local bypass could still reach.
 
 The `conservative` preset does not rely on the guard at all: nothing
 push-capable is pre-approved, and every mutating command falls back to Claude
@@ -117,6 +124,10 @@ posture then rides the same three-tier resolution as every other standard
 
 ## See also
 
-- Why two doors — the decision and its scope: ../adr/0003-zero-dependency-bash-and-enforcement-hooks.md
-- The architectural view of the two-doors model: ../architecture/spark-internals.md
+- Why the doors exist — the enforcement rationale:
+  [../explanation/enforcement-model.md](../explanation/enforcement-model.md)
+- The local-doors decision (developer-only):
+  [ADR-0003](https://github.com/jwogrady/spark/blob/master/docs/adr/0003-zero-dependency-bash-and-enforcement-hooks.md);
+  the delivery/third-door decision:
+  [ADR-0027](https://github.com/jwogrady/spark/blob/master/docs/adr/0027-delivery-model.md)
 - Why the hand-cut-release guard exists and how the boundary plays out: [../explanation/release-ownership.md](../explanation/release-ownership.md)

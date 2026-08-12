@@ -13,8 +13,9 @@
 > were retired by the governance deletion test (#361). Nothing enforces this
 > contract on ordinary changes anymore; it applies when an evaluation is run.
 
-Spark owns evaluation (Constitution [Article II.4](../product-constitution.md);
-adopted by [ADR-0025](../adr/0025-capability-evaluation-framework.md)). This
+Spark owns evaluation (adopted by
+[ADR-0025](../adr/0025-capability-evaluation-framework.md); historically via
+Constitution Article II.4, now archived). This
 document is the reusable contract: a capability's Q4 evidence (see the
 [Capability Evaluation Framework](../governance/capability-evaluation.md)) is
 produced here, in a form any suite can adopt.
@@ -86,7 +87,7 @@ Spark verifies three different things three different ways. Keep them distinct:
 | Instrument | Nature | Home | Records |
 |---|---|---|---|
 | `spark doctor` | static, pass/fail | the CLI ([ADR-0011](../adr/0011-doctor-is-the-validation-gate.md)) | layout, JSON, frontmatter, links |
-| behavioral tests | executed, pass/fail | `tests/` ([ADR-0018](../adr/0018-behavioral-tests-are-the-second-ci-gate.md)) | shipped flows and both enforcement doors |
+| behavioral tests | executed, pass/fail | `tests/` ([ADR-0018](../adr/0018-behavioral-tests-are-the-second-ci-gate.md)) | shipped flows and all three enforcement doors (the remote door's inspect-only check included) |
 | **evaluation** | graded measurement | `evaluations/` (this doc) | quality/correctness/latency/cost of a capability |
 
 Doctor and behavioral tests answer *is it well-formed / does it work?* Evaluation
@@ -167,5 +168,5 @@ No new mechanism is needed — reuse the library:
 
 - [`../../evaluations/lib/eval.sh`](../../evaluations/lib/eval.sh) — the shared mechanism
 - [`../../evaluations/orchestration/README.md`](../../evaluations/orchestration/README.md) — the first suite
-- [Constitution Article II.4](../product-constitution.md) and [ADR-0025](../adr/0025-capability-evaluation-framework.md) — the surface's authority
+- [ADR-0025](../adr/0025-capability-evaluation-framework.md) — the surface's authority (originally Constitution Article II.4, archived)
 - [Applying the CEF](../governance/capability-evaluation.md) — where evaluation supplies the Q4 evidence

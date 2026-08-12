@@ -32,8 +32,8 @@ a purely advisory rule leaks.
 
 Spark's answer is to move the rules from prose into code that runs at the moment
 the rule would be broken, and refuses. The rule is no longer a thing you remember;
-it is a thing the system enforces. Two distinct mechanisms cover two distinct
-surfaces:
+it is a thing the system enforces. Three doors cover the three paths a git
+operation can take, and a fourth check validates the artifacts themselves:
 
 **1. A PreToolUse guard, for AI-mediated git actions.** `hooks/guard-bash.sh` runs
 *before* Claude Code executes a Bash command. It inspects the command and exits

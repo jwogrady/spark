@@ -148,7 +148,7 @@ path that can reach the repository:
 | Git hooks | You (or anyone) commits directly | Rejects commits on trunk, invalid conventional commits, and AI attribution |
 | GitHub ruleset | Anything reaches the remote — API calls, other clones, hookless clients | The same trunk policy server-side: PRs required, force-push and deletion blocked. Spark ships the policy and reports drift (`spark doctor --requirements`); applying it stays a human act |
 | `spark doctor` | Locally and in CI | Plugin structure, scripts, documentation links, manifests, enforcement lockstep |
-| Behavioral tests | Every pull request **to this repository** | Spark's own CI exercises the CLI flows and both enforcement doors against throwaway repos — this is how Spark tests itself, not a suite added to your project (`preferences --apply` scaffolds *your* stack's validation instead) |
+| Behavioral tests | Every pull request **to this repository** | Spark's own CI exercises the CLI flows and the local enforcement doors against throwaway repos — this is how Spark tests itself, not a suite added to your project (`preferences --apply` scaffolds *your* stack's validation instead) |
 
 Claude can move quickly because Spark keeps the work inside boundaries you can
 trust.
@@ -208,7 +208,7 @@ install a companion only when you need its job.
 
 | Plugin | Job | Entry point | Install |
 | --- | --- | --- | --- |
-| **spark** | The shipping loop: the five lifecycle skills plus `onboard`, `bootstrap`, `knowledge`, `agents-md`, the CLI, and both enforcement doors | `/spark:<skill>` | `/plugin install spark` |
+| **spark** | The shipping loop: the five lifecycle skills plus `onboard`, `bootstrap`, `knowledge`, `agents-md`, the CLI, and the enforcement doors (both local ones, plus the trunk-ruleset policy for the third) | `/spark:<skill>` | `/plugin install spark` |
 | **spark-audit** | Whole-project assessment and evidence-backed cleanup | `/spark-audit:audit` | `/plugin install spark-audit` |
 | **spark-connect** | Service connectivity and secrets via 1Password, including plaintext shredding | `/spark-connect:connect` | `/plugin install spark-connect` |
 | **spark-docs** | Public docs and positioning through author personas | `/spark-docs:docit` | `/plugin install spark-docs` |

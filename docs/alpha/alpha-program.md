@@ -191,7 +191,8 @@ Grounded in the current repository (post-v0.15.0). Three buckets.
 
 ### Preserve — already validated, protect from churn
 
-- The **enforcement doors** (PreToolUse guard + git hooks) — engineering-proven,
+- The **enforcement doors** (PreToolUse guard + git hooks + the trunk-ruleset
+  policy for the remote, human-applied) — engineering-proven,
   hostile-tested; do not weaken without extraordinary evidence.
 - **Release Please ownership** of tags/changelog/releases — proven end-to-end by
   v0.14.0; the human-merges-the-release-PR gate held correctly.

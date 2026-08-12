@@ -51,16 +51,21 @@ created lazily on first promotion. Project-local glossaries win over it on
 conflict. See
 [skills/knowledge/references/operator-knowledge.md](../skills/knowledge/references/operator-knowledge.md).
 
-### two-doors enforcement model
+### three-doors enforcement model
 
-Spark enforces the same git-hygiene rules through two independent doors, because
-a git operation reaches git by two paths and a plugin hook only sees one of them.
-**Door 1 — the PreToolUse guard** (`hooks/guard-bash.sh`) covers the
-Claude-driven path. **Door 2 — the git hooks** (`commit-msg`, `pre-commit`,
-installed via `spark install-git-hooks`) cover the human-driven path. Both doors,
-same intent. Prefer "two doors" over "two layers" / "two gates". See
-[reference/hooks.md](reference/hooks.md) and (developer-only)
-[ADR-0003 — zero-dependency bash and enforcement hooks](https://github.com/jwogrady/spark/blob/master/docs/adr/0003-zero-dependency-bash-and-enforcement-hooks.md).
+Spark enforces the same git-hygiene rules through three independent doors,
+because a git operation can reach the repository by three paths and each door
+sees only one of them. **Door 1 — the PreToolUse guard**
+(`hooks/guard-bash.sh`) covers the Claude-driven path. **Door 2 — the git
+hooks** (`commit-msg`, `pre-commit`, installed via `spark install-git-hooks`)
+cover the human-driven local path. **Door 3 — the GitHub ruleset**
+(`settings/github-ruleset-trunk.json`, applied only by an explicit human act;
+`spark doctor --requirements` inspects and reports drift) covers everything
+that reaches the remote without running local tooling — API calls, other
+clones, hookless clients. Same intent at every door. Prefer "three doors" over
+"layers" / "gates". See
+[explanation/enforcement-model.md](explanation/enforcement-model.md) for the
+why and [reference/hooks.md](reference/hooks.md) for the per-rule mechanics.
 
 ### Ideate → Plan → Codify → Validate → Ship
 
@@ -71,7 +76,7 @@ written with this exact stage order and these exact words. See
 
 ### PreToolUse guard (`guard-bash.sh`)
 
-Door 1 of the two-doors model: the Claude-driven enforcement path. Wired by
+Door 1 of the three-doors model: the Claude-driven enforcement path. Wired by
 `hooks/hooks.json` to fire on Claude Code's `PreToolUse` event for the `Bash`
 tool; runs `hooks/guard-bash.sh`, which blocks force-push and trunk pushes (exit
 `2`) and ships with the plugin (no per-repo install). See

@@ -90,8 +90,9 @@ runs in — that is the project's own concern, not Spark's.
 
 ## Shipped vs. building toward
 
-Honest today: Spark ships the lifecycle skills, the mechanical guardrails (the two
-doors), a canonical engineering standard the projects conform to, the **brief on
+Honest today: Spark ships the lifecycle skills, the mechanical guardrails (the
+three enforcement doors — two local, plus the shipped trunk-ruleset policy the
+operator applies), a canonical engineering standard the projects conform to, the **brief on
 entry** (orient / locate / load — `spark brief`, plus `resume` for picking work
 back up), and the **load-once** mechanism (`spark setup`, the one-command
 carry-in that arms a repo with the git hooks, permission baseline, and resolved
