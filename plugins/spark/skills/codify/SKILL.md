@@ -32,7 +32,7 @@ lane (Codify, stage 3).
    in the issue is a new issue, not a freebie.
 6. **Self-check** against each acceptance criterion before declaring done.
 7. **Carry the state forward.** Record the close-out with
-   `spark state --set stage=codify issue=<n> branch=<branch> next_action="<normally the validate run>"`
+   `spark state --set next_action="<normally the validate run>"`
    (writes `.spark/state.json`, [schema](../../docs/reference/state.md); `updated` is stamped for you).
 
 ## Guardrails

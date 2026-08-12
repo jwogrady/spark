@@ -51,8 +51,9 @@ Regression tests: `tests/test-guard-bash.sh` (run `bash tests/run.sh`).
 Also defined in `hooks/hooks.json`: on Claude Code's `SessionStart` event the
 plugin runs `bin/spark brief --short`. This is not an enforcement door — it
 blocks nothing. It prints at most three plain-text lines into the session
-context: branch and working-tree state (orient), the lifecycle position from
-`.spark/state.json` or repo-shape inference (locate), and the
+context: branch and working-tree state (orient), the lifecycle position
+derived from repo shape plus the dated `next_action` recorded in
+`.spark/state.json` (locate), and the
 resolved-preferences headline (load) — the carry-in and carry-forward motions
 applied at session entry. The entry has no matcher, so the brief also re-fires
 when a session resumes, clears, or compacts — exactly the moments context was

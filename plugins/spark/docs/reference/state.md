@@ -2,32 +2,32 @@
 
 > Reference — information-oriented.
 
-`.spark/state.json` is the durable work state — the carry-forward artifact
-(ADR-0008: Project layer, durable, small) that lets a new session answer
-"where was I, what's next?" without rediscovery. It lives at the git root
-beside the project preferences (`.spark/preferences.json`, ADR-0010), is
-committed, and is written by the lifecycle skills at each stage's close-out.
-`spark resume` renders it, cross-checked against the live repo; `spark brief`
-reads it for the locate line of the session brief.
+`.spark/state.json` records the two judgment values no repository can answer:
+what to do next, and what is blocking. Everything else a session needs to
+orient — current branch, its pull request, the issue, the lifecycle position —
+is **derived live from git and GitHub** by `spark brief` and `spark resume`,
+never stored. A stored copy of a derivable fact is a staleness generator: it is
+written at one moment and trusted at a later one, and the v0.1.0 field test
+proved it (a brief that opened every session with a stage the repo had left a
+day earlier). Since v0.16 that failure is structurally unreproducible — nothing
+reads a recorded stage, branch, issue, or PR, because none is written.
+
+The file lives at the git root beside the project preferences
+(`.spark/preferences.json`, ADR-0010) and is written by the lifecycle skills at
+each stage's close-out via `spark state --set`.
 
 ## Schema
 
 Flat JSON, one level deep, string values only — readable by the same
 zero-dependency reader the preferences use (`read_flat_json`: `jq` fast-path,
-awk fallback). Numbers are digit strings (`"66"`, never `66`). An empty string
-means "nothing recorded"; a missing key means the same; unknown keys are
-ignored. Values are lowercase machine values — readers print them verbatim.
+awk fallback). An empty string means "nothing recorded"; a missing key means
+the same; unknown keys are ignored on read.
 
 | Key | Meaning | Format |
 |---|---|---|
-| `stage` | The lifecycle stage whose close-out wrote this state, or `idle` between loops | `ideate` \| `plan` \| `codify` \| `validate` \| `ship` \| `idle` |
-| `problem_statement` | The active problem statement | repo-relative path, normally `docs/problem-statement.md` |
-| `issue` | The active work item | GitHub issue number as digits, no `#` (e.g. `"66"`) |
-| `branch` | The working branch | branch name (e.g. `feat/resume-state`) |
-| `pr` | The open pull request, once `ship` opens one | PR number as digits, no `#` |
-| `blockers` | What is stopping progress | one line; `""` when none; separate several with `; ` |
 | `next_action` | The first thing the next session should do | one imperative sentence |
-| `updated` | When the state was last written | ISO date, `YYYY-MM-DD` |
+| `blockers` | What is stopping progress | one line; `""` when none; separate several with `; ` |
+| `updated` | When the judgment was recorded | ISO date, `YYYY-MM-DD`, stamped on every write |
 
 Every write sets `updated`. A value that stops applying is set to `""`, not
 deleted — the key list stays stable.
@@ -36,58 +36,45 @@ deleted — the key list stays stable.
 
 ```json
 {
-  "stage": "codify",
-  "problem_statement": "docs/problem-statement.md",
-  "issue": "66",
-  "branch": "feat/resume-state",
-  "pr": "",
-  "blockers": "",
   "next_action": "Run /spark:validate on feat/resume-state",
-  "updated": "2026-07-09"
+  "blockers": "",
+  "updated": "2026-08-11"
 }
 ```
 
 ## Who writes it, who reads it
 
-- **Written** by the five lifecycle skills at close-out: `ideate` records the
-  statement's path, `plan` the issue picked for codify, `codify` the branch,
-  `validate` the blockers, `ship` the PR. The skill supplies the judgment values
-  — no script can infer what the next action or the blockers are — and
-  `spark state --set key=value …` writes them: it merges into any existing
-  state, keeps the key set stable, and stamps `updated`, so the file never
-  drifts from this schema. `spark state` with no arguments prints the current
-  values.
-- **Read** by `spark resume` (the full "where you were / what's next" view,
-  every key) and `spark brief` (the locate line: `stage`, `issue`,
-  `next_action`, `blockers`, `updated`).
-- **Committed.** Carry-forward means surviving `/clear`, a new terminal, and
-  a fresh clone; a gitignored file survives none of those.
+- **Written** by the five lifecycle skills at close-out through
+  `spark state --set key=value …` — the skill supplies the judgment, the
+  writer produces canonical JSON, merges into existing state, and stamps
+  `updated`. `spark state` with no arguments prints the current values.
+- **Read** as a *dated claim*, never as authority: `spark brief` shows
+  `next_action`/`blockers` alongside its derived orientation, always with the
+  recorded date; `spark resume` prints them under "Recorded intent" after the
+  derived "Current reality" section and tells you to verify before acting.
+- **Committed** by convention, so the judgment survives `/clear`, a new
+  terminal, and a fresh clone. Because it holds only two slow-moving values,
+  it no longer churns on every stage transition.
 
-The state tracks the one active work item, not the backlog — GitHub owns the
-backlog (ADR-0008). `plan` leaves `issue` empty until one is picked for
-codify.
+The state never tracks the backlog — GitHub owns issues, milestones, and PRs
+(ADR-0008), and `brief`/`resume` read them live rather than mirroring them.
 
-## Staleness
+## The derived facts
 
-The state is a claim; the repo is the truth. `spark resume` cross-checks every
-fact it prints — branch existence and checkout via git, PR and issue state via
-`gh` when available, problem-statement existence on disk — and flags what
-drifted instead of trusting it. The schema is deliberately these eight keys
-and no more: anything richer belongs to the knowledge layer, not work state.
+What `brief`/`resume` derive instead of reading from a file:
 
-## The loop close
+| Fact | Source |
+|---|---|
+| branch, dirty count, ahead/behind | `git` |
+| the branch's pull request and its state | `gh pr view` (skipped without `gh`; reported as unknown, never guessed) |
+| lifecycle position | inference: no `docs/problem-statement.md` → Ideate; on trunk → Plan; open PR → Validate/Ship; else Codify |
+| trunk ancestry (commits on `origin/<trunk>` missing here) | `git rev-list` — surfaced by `resume` so a merged prerequisite is never silently missing (see the delivery ADR) |
+| loop close | the current branch's PR reports `MERGED` — `resume` then refuses to replay a pre-merge `next_action` |
 
-A merged recorded PR means the state describes a **finished loop**: every
-value in the file — stage, branch, `next_action` — predates the merge, so the
-recorded next action would send the next session back into finished work.
-When `gh` reports the recorded PR as merged, `spark resume` still prints the
-drift notes but replaces the stale `next_action` with the loop restart:
-start the next problem, or re-frame from `docs/problem-statement.md`. The
-state file itself is not rewritten by `resume` — the next lifecycle stage's
-close-out rewrites it, as always.
+## Legacy files (pre-v0.16 schema)
 
-The close can also be recorded deliberately: after merging the PR, set
-`stage` to `idle` (clearing `issue`, `branch`, `pr`, and `next_action` to
-`""`). An idle state says "between loops" without needing a network check —
-`resume` presents the restart directly, and the next stage's close-out
-overwrites it.
+Older Spark wrote `stage`, `problem_statement`, `issue`, `branch`, and `pr`
+into this file. Those keys are **ignored on read** (resume flags them once),
+**rejected on write** with a message naming the derived source, and the next
+`spark state --set` migrates the file to the three-key schema. No manual
+migration is needed.

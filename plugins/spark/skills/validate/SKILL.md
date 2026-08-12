@@ -26,7 +26,7 @@ ones, then drives the fixes.
 4. **Re-verify** against the issue's acceptance criteria. The criteria are the
    definition of done.
 5. **Carry the state forward.** Record the close-out with
-   `spark state --set stage=validate blockers="<what still blocks shipping, empty when nothing>" next_action="<…>"`
+   `spark state --set blockers="<what still blocks shipping, empty when nothing>" next_action="<…>"`
    (writes `.spark/state.json`, [schema](../../docs/reference/state.md); `updated` is stamped for you).
 
 ## Guardrails

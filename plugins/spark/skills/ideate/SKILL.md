@@ -36,7 +36,7 @@ the `plan` skill can decompose.
    whether to save. If the file already exists, show the diff and confirm
    before overwriting. Only write elsewhere if the user names a different home.
 7. **Carry the state forward.** Record the close-out with
-   `spark state --set stage=ideate problem_statement=<saved path> next_action="<the plan handoff>"`
+   `spark state --set next_action="<the plan handoff>"`
    (writes `.spark/state.json`, [schema](../../docs/reference/state.md); `updated` is stamped for you).
 
 ## Output

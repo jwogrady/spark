@@ -44,7 +44,7 @@ feature, not a task list.
    decision needed; never guess a priority or version.
 7. **Confirm before creating anything on GitHub.**
 8. **Carry the state forward.** Record the close-out with
-   `spark state --set stage=plan issue=<number picked for codify, or issue="" until one is — GitHub owns the backlog> next_action="<…>"`
+   `spark state --set next_action="<codify #<n>, or the next planning step — GitHub owns the backlog>"`
    (writes `.spark/state.json`, [schema](../../docs/reference/state.md); `updated` is stamped for you).
 
 ## Creating the issues

@@ -124,11 +124,15 @@ useful to Claude when the next session begins.
 
 ## Claude stops waking up with amnesia
 
-Spark records lifecycle progress in `.spark/state.json`. At session start,
-`spark brief --short` orients Claude to the current branch, working state,
-lifecycle position, and resolved preferences. When you need the complete
-picture, `spark resume` cross-checks recorded state against the live
-repository and flags drift instead of inventing certainty.
+At session start, `spark brief --short` orients Claude by **deriving** the
+current branch, working state, lifecycle position, and resolved preferences
+from git and GitHub — never by trusting a recorded snapshot, which is how
+orientation goes stale. The one thing a repository cannot answer — what you
+meant to do next, and what was blocking — is recorded by each lifecycle
+stage's close-out in `.spark/state.json` and presented with its date. When
+you need the complete picture, `spark resume` prints the derived reality
+first and the recorded intent second, and refuses to replay an intent whose
+pull request has already merged.
 
 That means less subscription time spent rediscovering the project and more
 time advancing it.

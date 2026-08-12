@@ -212,16 +212,19 @@ standard, [engineering-preferences.md](engineering-preferences.md).
 
 ## `spark resume`
 
-Rebuilds "where you were / what's next" from the committed work state at
-`.spark/state.json` ([schema](state.md)), written by the lifecycle skills at
-each stage's close-out. Every recorded fact is cross-checked against the live
-repo before it is shown — branch existence and checkout via git, issue and PR
-state via `gh` when available, the problem statement's presence on disk — and
-whatever drifted is flagged with a `!` line: the repo is the truth, the state
-is a claim. With no state file it prints how to get one; a malformed file
-degrades to "no facts could be read", never an invented answer. Exits 0 in
-both cases; exits 1 only outside a git repo. For the three-line automatic
-version at session start, see `spark brief`.
+Rebuilds "where you are / what's next" derive-first ([state.md](state.md)):
+**Current reality** is read live — branch and tree from git, the branch's PR
+and its state via `gh` when available, the problem statement's presence on
+disk, and the trunk-ancestry check (commits on `origin/<trunk>` missing from
+this branch are flagged, since a merged prerequisite may be among them —
+reported, never silently repaired). **Recorded intent** then shows what the
+state file claims — `next_action`/`blockers` with their recorded date — and
+"What's next" tells you to verify the claim against the reality above. When
+the current branch's PR reports `MERGED`, the loop is declared closed and a
+pre-merge `next_action` is never replayed. Legacy pre-v0.16 keys found in the
+file are flagged and ignored; a malformed file degrades to "no facts could be
+read", never an invented answer. Exits 1 only outside a git repo. For the
+three-line automatic version at session start, see `spark brief`.
 
 ## `spark brief [--short]`
 
@@ -234,11 +237,12 @@ reported as such with a pointer to the first-run flow rather than a guess.
 Because the classification is a durable fact that can go stale, the brief
 re-runs the inspect-only classifier and flags a repo recorded `new` that has
 since grown real sources (now classifying `existing`) for re-orientation — a
-flag only, never a silent rewrite. **Locate** — the lifecycle position, read
-from `.spark/state.json` (see [state.md](state.md)) when a lifecycle skill has
-written it, otherwise inferred from repo shape (problem statement present,
-trunk vs. working branch, open PR); `spark resume` gives the full
-cross-checked view. **Load** — the resolved standard bag summarized: how many
+flag only, never a silent rewrite. **Locate** — the lifecycle position,
+always derived from repo shape (problem statement present, trunk vs. working
+branch, open PR), never read from a recorded stage; the recorded
+`next_action`/`blockers` are appended with their recorded date as intent to
+verify (see [state.md](state.md)); `spark resume` gives the full derived
+view. **Load** — the resolved standard bag summarized: how many
 preference keys resolved, how many the operator or project tiers override, the
 `stack.default` and `release.mechanism` headlines, and which project-local
 standards docs (`CONVENTIONS.md`, `ENGINEERING-STANDARDS.md`) exist; `spark
@@ -254,11 +258,13 @@ start clean.
 
 Shows the committed work state at `.spark/state.json` ([schema](state.md)), or
 writes it: `--set key=value` records a stage close-out (e.g. `spark state
---set stage=plan issue=42 next_action="codify #42"`), stamping `updated` for
-you. Only the schema's keys are accepted; the file is created on first write.
-This is the mechanical writer the lifecycle skills call at each stage's
-close-out — `spark resume` and `spark brief` are its readers. Exits 1 outside
-a git repo.
+--set next_action="codify #42"`), stamping `updated` for you. Only the two
+judgment keys (`next_action`, `blockers`) are accepted — derivable facts like
+stage, issue, branch, and PR are rejected with a message naming their live
+source, because `brief`/`resume` derive them from git and GitHub at read time.
+The file is created on first write; a write migrates a legacy-schema file to
+the current key set. This is the mechanical writer the lifecycle skills call
+at each stage's close-out. Exits 1 outside a git repo.
 
 ## `spark footprint [--json] [--timing]`
 
