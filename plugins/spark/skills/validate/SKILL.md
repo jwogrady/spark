@@ -22,9 +22,20 @@ ones, then drives the fixes.
 2. **Triage findings.** Sort into: must-fix (breaks a criterion or is a real
    bug), should-fix (quality), and out-of-scope (file as a new issue, don't fix
    here).
+   When validating a **combined state** — an integration branch, or a milestone
+   whose issues landed separately — follow
+   [references/integration-validation.md](references/integration-validation.md):
+   identify the tree by commit, re-verify what the combination could have
+   changed, classify blocking findings by provenance, and ask what
+   documentation became false.
 3. **Fix the must/should items** on the same branch.
 4. **Re-verify** against the issue's acceptance criteria. The criteria are the
-   definition of done.
+   definition of done. Report each claim with its evidence class — **CODE
+   IMPLEMENTED** (written, nothing observed), **STATICALLY PROVEN**
+   (tests/review passed), **LIVE PROVEN** (behavior observed running), **LIVE
+   UNPROVEN** (claimed live, not observed live). A claim about live behavior
+   requires live observation; never report a stronger class than the evidence
+   holds. Vocabulary only — nothing enforces it.
 5. **Carry the state forward.** Record the close-out with
    `spark state --set blockers="<what still blocks shipping, empty when nothing>" next_action="<…>"`
    (writes `.spark/state.json`, [schema](../../docs/reference/state.md); `updated` is stamped for you).
