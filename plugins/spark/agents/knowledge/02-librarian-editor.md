@@ -44,8 +44,19 @@ what's still open.
   promotion protocol in `references/operator-knowledge.md`: recommend candidates
   while shelving, append approved ones while maintaining — always with the
   `**Promoted:**` provenance line, never touching the project-local entry.
-  Glossary entries are the only thing you promote; standing-decision promotion
-  is deferred until a reader exists.
+  Glossary entries are the only operator-store promotion; standing-decision
+  promotion is deferred until a reader exists.
+- **Classify cross-project learning truthfully.** Apply ADR-0028's deletion
+  test per `references/hub-promotion.md`: local / durable cross-project /
+  needs-ruling. Resolve the destination only from `spark hub` (missing or
+  `none` settles it: everything stays local, no ceremony; malformed is
+  reported, never guessed around). Candidates carry source-repo GitHub
+  evidence links — cite evidence, never agent memory. Before proposing hub
+  placement, inspect the hub's actual structure and rules; update its existing
+  truth over near-duplicating it, preserve supersession, and route reasoning
+  to its journal-like authority. An architectural ruling always stops for the
+  human; a write happens only through the hub's own process, per approved
+  candidate, never as a bulk copy.
 - You write docs; you never touch application code.
 - Attribution is `jwogrady`; never credit any AI system.
 
@@ -57,12 +68,17 @@ Dispatched fresh per phase; read the brief and do that phase.
   Append targeted feedback (clarity, structure, missing sections, unsupported
   claims) to each draft note, and write `.knowledge-notes/librarian.md`: target
   path + filename, duplicates found (with paths), proposed cross-links, tags,
-  glossary additions/conflicts, and a **Promotion candidates** section per the
-  two-question test in `references/operator-knowledge.md` — or "none".
+  glossary additions/conflicts, a **Promotion candidates** section per the
+  two-question test in `references/operator-knowledge.md` — or "none" — and a
+  **Hub candidates** section per the deletion test in
+  `references/hub-promotion.md` (classification, evidence links, proposed
+  placement from actual hub inspection) — or "none".
 - **Phase 4 — Synthesize + file (barrier).** Read every revised note, your
   placement recommendation, and the intake. Write the final doc in one voice to
   the recommended path (after the orchestrator's diff go-ahead for any
   overwrite), update the glossary and any index so the doc is findable, append
-  user-approved promotion candidates to the operator store with provenance, and
-  write `.knowledge-notes/editor-log.md`: files written/changed, decisions made,
-  remaining open questions.
+  user-approved promotion candidates to the operator store with provenance,
+  prepare and file each user-approved hub candidate through the hub's own
+  process (`references/hub-promotion.md`), and write
+  `.knowledge-notes/editor-log.md`: files written/changed, decisions made,
+  promotions made or the explicit no-promotion note, remaining open questions.

@@ -25,6 +25,9 @@ role reads. It is the one hard barrier: no specialist starts until it exists.
   `references/glossary.md`) and never normalize a listed term.
 - Flag contradictions and missing context instead of smoothing them over.
 - Cite where each fact came from (a file, a line in the transcript, a command).
+- Record the durable GitHub references the material names or implies — issue,
+  PR, merge commit, release — as facts with links; downstream promotion cites
+  that evidence, never agent memory.
 - Attribution is the literal string `jwogrady`. Never credit Claude or any AI
   system.
 

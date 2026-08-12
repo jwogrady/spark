@@ -1,6 +1,6 @@
 ---
 name: knowledge
-description: Turn messy notes, findings, and decisions into clean, durable internal docs — ADRs, system docs, product specs, SOPs/runbooks, glossary entries — via a three-role crew (intake → author → librarian-editor). Use to record a decision or document a system or process. Not for outward-facing marketing or README glow-ups — that's `docit` (public docs).
+description: Turn messy notes, findings, and decisions into clean, durable internal docs — ADRs, system docs, product specs, SOPs/runbooks, glossary entries — via a three-role crew (intake → author → librarian-editor). Also the deliberate promotion path — glossary terms to the operator store, and durable cross-project learning to the project's configured memory hub, evidence-cited and human-approved (ADR-0028). Use to record a decision, document a system or process, or promote a durable cross-project lesson. Not for outward-facing marketing or README glow-ups — that's `docit` (public docs).
 ---
 
 # knowledge — minimal decision documentation
@@ -49,10 +49,17 @@ Three real subagents under [`agents/knowledge/`](../../agents/knowledge/)
 6. **Synthesize + file (barrier)** — the librarian-editor writes the final doc
    in one voice to the recommended path and updates the glossary/index. For any
    overwrite, **show the diff first** and get a go-ahead before writing.
-7. **Promote deliberately (optional)** — glossary-only: if operator-level
-   vocabulary candidates were flagged, present them and promote only on explicit
-   go-ahead (never copy silently; project-local wins on conflict), per
-   [`references/operator-knowledge.md`](references/operator-knowledge.md).
+7. **Promote deliberately (optional)** — two lanes, both human-gated:
+   - *Glossary → operator:* if operator-level vocabulary candidates were
+     flagged, present them and promote only on explicit go-ahead (never copy
+     silently; project-local wins on conflict), per
+     [`references/operator-knowledge.md`](references/operator-knowledge.md).
+   - *Durable learning → memory hub:* if the librarian-editor flagged hub
+     candidates (ADR-0028's deletion test passed, GitHub evidence linked),
+     resolve the destination with `spark hub`, present each candidate, and
+     promote only on explicit approval, through the hub's own rules, per
+     [`references/hub-promotion.md`](references/hub-promotion.md). No hub
+     configured, or nothing durable — then no ceremony: everything stays local.
 8. **Ship through the lifecycle** — hand the result to
    [`ship`](../ship/SKILL.md). Commit only the published docs; keep
    `.knowledge-notes/` gitignored — the docs and their git history are the
