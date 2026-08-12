@@ -239,7 +239,7 @@ unbuilt until its recorded trigger fires.
 
 ## v0.16 — Reconciled delivery architecture
 
-**Status:** In progress
+**Status:** Shipped (`v0.16.0`–`v0.16.2`) — released 2026-08-12
 
 The burn-through release: the #336–#361 reconciliation, driven by the zd-dns
 v0.1.0 field test, implemented as one coherent architectural change. What the
@@ -275,6 +275,34 @@ field proved got enforced mechanically; what it disproved got deleted.
   constitution-as-instrument removed or archived under the deletion test;
   footprint ratchet demoted to advisory; the agent contract collapsed to one
   canonical `AGENTS.md` body with a `CLAUDE.md` import stub.
+
+---
+
+## v0.17 — Provenance promotion
+
+**Status:** In progress
+
+A Spark-managed spoke stays lean while durable cross-project learning is
+deliberately promoted — with GitHub evidence and human judgment — into one
+designated memory-hub repository. GitHub milestone #14 is the version
+authority; issue #373 is the release gate. Architecture: ADR-0028; plan:
+`docs/releases/v0.17-plan.md`.
+
+- **Architecture** (#374, closed): the memory-hub/spoke model extends
+  ADR-0008 without a fourth global layer.
+- **Hub resolution** (#375, closed): one explicit project fact
+  (`project.memory-hub`, the `spark hub` verb) — never guessed, never
+  hard-coded.
+- **Knowledge promotion** (#376, closed): the `knowledge` skill classifies
+  local truth versus durable cross-project learning and promotes only with
+  evidence and human authority, through the hub's own rules.
+- **Lifecycle + proof** (#377): surface the promotion question at natural
+  lifecycle boundaries; prove positive, negative, and Cosmos dogfood cases.
+- **Release integrity** (#372): one changelog entry per logical change in the
+  v0.17 Release Please output.
+- **Release-record truth** (#380): the shipped v0.17 plan names the existing
+  milestone instead of a stale creation limitation, guarded by a
+  documentation-truth check.
 
 ---
 
