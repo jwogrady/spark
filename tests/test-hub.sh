@@ -1,0 +1,117 @@
+#!/usr/bin/env bash
+# Behavioral tests for spark hub (issue #375): the four truthful resolution
+# states (configured / explicit none / not configured / malformed), locator
+# validation, create-only recording that never disturbs other committed facts,
+# tier provenance (operator vs project), the inspect-only guarantee for the
+# bare report, and the graceful skip when no JSON parser is available.
+
+set -euo pipefail
+. "$(dirname "$0")/lib.sh"
+sandbox_init
+
+# --- not configured: truthful standalone report, exit 0, nothing written
+d="$WORK/uncfg"; make_repo "$d"
+rc=0; out="$(cd "$d" && "$SPARK" hub 2>&1)" || rc=$?
+assert_rc "unconfigured report exits 0" 0 "$rc"
+assert_contains "unconfigured is named truthfully" "not configured" "$out"
+[ ! -e "$d/.spark" ] && ok || bad "bare hub report created .spark (must stay read-only)"
+
+# --- --set records the fact, report resolves it and names the source tier
+d="$WORK/setrec"; make_repo "$d"
+rc=0; ( cd "$d" && "$SPARK" hub --set jwogrady/cosmos ) >/dev/null 2>&1 || rc=$?
+assert_rc "hub --set exits 0" 0 "$rc"
+[ -f "$d/.spark/preferences.json" ] && ok || bad "--set did not create preferences.json"
+jq empty "$d/.spark/preferences.json" 2>/dev/null && ok || bad "recorded preferences.json is not valid JSON"
+rc=0; out="$(cd "$d" && "$SPARK" hub 2>&1)" || rc=$?
+assert_rc "configured report exits 0" 0 "$rc"
+assert_contains "report names the hub" "jwogrady/cosmos" "$out"
+assert_contains "report names the source tier" "project" "$out"
+
+# --- URL and scp-style locators are valid (provider-neutral, not GitHub-shaped)
+for loc in "https://example.org/team/memory" "git@forge.internal:team/memory.git"; do
+  rc=0; ( cd "$d" && "$SPARK" hub --set "$loc" ) >/dev/null 2>&1 || rc=$?
+  assert_rc "locator accepted: $loc" 0 "$rc"
+done
+
+# --- explicit none: a declared standalone state, distinct from unconfigured
+rc=0; ( cd "$d" && "$SPARK" hub --set none ) >/dev/null 2>&1 || rc=$?
+assert_rc "hub --set none exits 0" 0 "$rc"
+rc=0; out="$(cd "$d" && "$SPARK" hub 2>&1)" || rc=$?
+assert_rc "explicit-none report exits 0" 0 "$rc"
+assert_contains "explicit none is a declaration" "declared standalone" "$out"
+
+# --- re-set behaves sanely: same value is a no-op, a different value is named
+rc=0; out="$(cd "$d" && "$SPARK" hub --set none 2>&1)" || rc=$?
+assert_rc "same-value re-set exits 0" 0 "$rc"
+assert_contains "same-value re-set is a no-op" "already recorded" "$out"
+rc=0; out="$(cd "$d" && "$SPARK" hub --set jwogrady/cosmos 2>&1)" || rc=$?
+assert_rc "changed re-set exits 0" 0 "$rc"
+assert_contains "changed re-set is called explicit" "re-set" "$out"
+
+# --- --set merges without clobbering an existing committed fact
+d="$WORK/setmerge"; make_repo "$d"
+mkdir -p "$d/.spark"
+printf '{"permissions.preset":"conservative"}\n' > "$d/.spark/preferences.json"
+( cd "$d" && "$SPARK" hub --set team/memory ) >/dev/null 2>&1
+merged="$(cat "$d/.spark/preferences.json")"
+assert_contains "existing project fact survives" "conservative" "$merged"
+assert_contains "hub key is added" "project.memory-hub" "$merged"
+
+# --- malformed locators are rejected, nothing written
+d="$WORK/setbad"; make_repo "$d"
+for badloc in "" "not a repo" "norepo" "/leading" "trailing/" "a/b/c"; do
+  rc=0; out="$(cd "$d" && "$SPARK" hub --set "$badloc" 2>&1)" || rc=$?
+  if [ "$rc" -ne 0 ]; then ok; else bad "locator '$badloc' should be rejected"; fi
+done
+assert_contains "rejection names the bad value" "invalid locator" "$out"
+[ ! -e "$d/.spark" ] && ok || bad "rejected --set still wrote state"
+
+# --- a malformed value already on disk fails truthfully, never guessed around
+d="$WORK/badrec"; make_repo "$d"
+mkdir -p "$d/.spark"
+printf '{"project.memory-hub":"bogus"}\n' > "$d/.spark/preferences.json"
+rc=0; out="$(cd "$d" && "$SPARK" hub 2>&1)" || rc=$?
+if [ "$rc" -ne 0 ]; then ok; else bad "malformed configured value should exit non-zero"; fi
+assert_contains "malformed value is named" "malformed" "$out"
+
+# --- tier provenance: an operator declaration resolves, and project wins
+d="$WORK/tiers"; make_repo "$d"
+mkdir -p "$XDG_CONFIG_HOME/spark"
+printf '{"project.memory-hub":"operator/hub"}\n' > "$XDG_CONFIG_HOME/spark/preferences.json"
+out="$(cd "$d" && "$SPARK" hub 2>&1)"
+assert_contains "operator declaration resolves" "operator/hub" "$out"
+assert_contains "source is the operator tier" "operator" "$out"
+( cd "$d" && "$SPARK" hub --set project/hub ) >/dev/null 2>&1
+out="$(cd "$d" && "$SPARK" hub 2>&1)"
+assert_contains "project tier overrides operator" "project/hub" "$out"
+rm -f "$XDG_CONFIG_HOME/spark/preferences.json"
+
+# --- doctor: valid and explicit-none pointers are healthy, malformed is an error
+d="$WORK/badrec"  # still carries the malformed value
+rc=0; out="$(cd "$d" && "$SPARK" doctor 2>&1)" || rc=$?
+if [ "$rc" -ne 0 ]; then ok; else bad "doctor should fail on a malformed hub pointer"; fi
+assert_contains "doctor names the malformed pointer" "memory hub" "$out"
+( cd "$d" && "$SPARK" hub --set jwogrady/cosmos ) >/dev/null 2>&1
+out="$(cd "$d" && "$SPARK" doctor 2>&1)" || true
+assert_contains "doctor reports a valid pointer healthy" "✓ memory hub: jwogrady/cosmos" "$out"
+
+# --- brief surfaces a recorded declaration in Load
+out="$(cd "$d" && "$SPARK" brief 2>&1)" || true
+assert_contains "brief names the declared hub" "project.memory-hub jwogrady/cosmos" "$out"
+
+# --- no jq and no python3: --set into an existing file degrades gracefully
+shim="$WORK/hshim"; mkdir -p "$shim"
+for tool in bash sh git grep sed cat cp mv rm mkdir mktemp basename dirname tr find sort head tail date env uname readlink awk cut wc ls chmod touch; do
+  src="$(command -v "$tool" 2>/dev/null || true)"
+  [ -n "$src" ] && ln -s "$src" "$shim/$tool"
+done
+d="$WORK/noparser"; make_repo "$d"
+mkdir -p "$d/.spark"
+printf '{"permissions.preset":"delivery"}\n' > "$d/.spark/preferences.json"
+before="$(cat "$d/.spark/preferences.json")"
+rc=0; out="$(cd "$d" && env PATH="$shim" "$SPARK" hub --set team/memory 2>&1)" || rc=$?
+if [ "$rc" -ne 0 ]; then ok; else bad "no-parser --set should return non-zero"; fi
+assert_contains "points at a manual edit" "by hand" "$out"
+[ "$before" = "$(cat "$d/.spark/preferences.json")" ] && ok || bad "no-parser --set modified the file"
+
+finish
