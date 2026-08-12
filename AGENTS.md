@@ -11,7 +11,9 @@
 delivery system.** The assistant writes and reviews code; GitHub organizes,
 preserves, and ships it; Spark supplies the project engineering between them —
 your standards loaded once, one traceable lifecycle, durable GitHub artifacts,
-and mechanically enforced guardrails. The full identity lives in
+and mechanically enforced guardrails. The full identity — including the north
+star, the three-column placement rule Spark carries into every repo it arms —
+lives in
 [`plugins/spark/docs/explanation/identity.md`](plugins/spark/docs/explanation/identity.md).
 
 ```

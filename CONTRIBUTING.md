@@ -65,7 +65,9 @@ deleted, what observable behavior would get worse?** If the last question has
 no credible answer, delete or consolidate it. The placement rule behind the
 test: prose carries judgment, structure carries decisions, code carries what
 must happen — never write code merely to police duplicated prose, and never
-store a fact that git or GitHub can already answer.
+store a fact that git or GitHub can already answer. That placement rule is
+Spark's north star; its canonical statement lives in
+[identity.md](plugins/spark/docs/explanation/identity.md).
 
 ## Commits
 

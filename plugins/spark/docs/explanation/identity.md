@@ -88,6 +88,23 @@ scoped work, mechanical enforcement); keeping the record honest.
 state; being a runtime or hosting environment; the specific environment a project
 runs in — that is the project's own concern, not Spark's.
 
+## The north star
+
+**Prose carries judgment. Structure carries decisions. Code carries what must
+happen.** Every artifact lives in exactly one of those three columns and earns
+its life by that column's test: prose by changing a decision, structure by
+being consumed by code or a human act, code by preventing a named failure.
+Anything that cannot say which column it lives in is ceremony — delete it. And
+a column earns machinery only from an observed failure: what failed
+mechanically gets enforced mechanically; everything else gets one sentence.
+
+The north star originated here and lives here — this section is its canonical
+statement. Spark's goal is to apply it to every repository it arms: the carried
+standard is the vehicle (the seeded `CONVENTIONS.md` states it once per armed
+repo), the lifecycle is the practice, and the guardrails are the machinery it
+has already earned. Every other document applies the north star; none restates
+it.
+
 ## Shipped vs. building toward
 
 Honest today: Spark ships the lifecycle skills, the mechanical guardrails (the
@@ -105,8 +122,8 @@ service connectivity and secrets (`spark-connect`), and public docs authorship
 
 Building toward, not yet shipped: generated projects growing from a
 standardized repository into a full per-client environment — infra, runtime,
-telemetry. That is the north star — named here so it is never mistaken for what
-exists.
+telemetry. That is the widening surface the north star applies to — named here
+so it is never mistaken for what exists.
 
 ## The name
 
