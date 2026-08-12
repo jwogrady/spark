@@ -1776,6 +1776,7 @@ PY
 hub_locator_valid() {
   case "$1" in
     ''|*[[:space:]]*) return 1 ;;   # empty or whitespace never names a repo
+    *[\"\\]*) return 1 ;;           # quotes/backslashes name no repo and would corrupt the flat-JSON write
     *://?*) return 0 ;;             # URL: any scheme, host/path present
     ?*@?*:?*) return 0 ;;           # scp-style git address
     */*/*) return 1 ;;              # shorthand has exactly one separator

@@ -59,7 +59,7 @@ assert_contains "hub key is added" "project.memory-hub" "$merged"
 
 # --- malformed locators are rejected, nothing written
 d="$WORK/setbad"; make_repo "$d"
-for badloc in "" "not a repo" "norepo" "/leading" "trailing/" "a/b/c"; do
+for badloc in "" "not a repo" "norepo" "/leading" "trailing/" "a/b/c" 'quo"te/repo' 'back\slash/repo'; do
   rc=0; out="$(cd "$d" && "$SPARK" hub --set "$badloc" 2>&1)" || rc=$?
   if [ "$rc" -ne 0 ]; then ok; else bad "locator '$badloc' should be rejected"; fi
 done
