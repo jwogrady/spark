@@ -6,8 +6,12 @@ description: Scaffold a new project's runtime — choose frontend/backend and fr
 # bootstrap — runtime scaffold
 
 `bootstrap` stands up a project's runtime by running the stack's **official
-scaffolder** with the right flags — it does not hand-roll a directory tree. The
-runtime/package-manager defaults are fixed; only the framework on top is a choice.
+scaffolder** with the right flags — it does not hand-roll a directory tree. A
+scaffold is an implementation artifact: it **materializes a design already
+accepted in `plan`** (the model → shape → design order), never discovers one —
+when the required choices are unresolved, route back to `plan` instead of
+guessing a stack. The runtime/package-manager defaults are fixed; only the
+framework on top is a choice.
 
 - **TypeScript / JavaScript → Bun** (runtime + package manager + test runner).
 - **Python → uv** (runtime/version + dependency + project manager).
