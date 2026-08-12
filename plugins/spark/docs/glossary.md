@@ -47,8 +47,11 @@ applied to a repo (`bootstrap` at generation, `spark preferences` on demand,
 the brief's `load` step on entry). **Carry-through** — within the Project
 layer: the lifecycle (Ideate → Plan → Codify → Validate → Ship) moves work
 between stages. **Carry-forward** — Session → Project (work state survives the
-session) and Project → Operator (knowledge promotion). Prefer these exact
-terms; do not coin near-synonyms. See (developer-only)
+session), Project → Operator (knowledge promotion), and Project → related
+Project memory authority (durable cross-project learning promoted to a
+configured [memory hub](#memory-hub--spoke), surfaced at natural lifecycle
+boundaries — not a sixth stage). Prefer these exact terms; do not coin
+near-synonyms. See (developer-only)
 [ADR-0008 — information architecture](https://github.com/jwogrady/spark/blob/master/docs/adr/0008-information-architecture.md).
 
 ### operator knowledge home (`~/.config/spark/knowledge/`)

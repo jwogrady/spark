@@ -49,6 +49,10 @@ ones, then drives the fixes.
 - A finding you decide *not* to fix gets recorded (a new issue or a note), never
   silently dropped.
 - Don't expand scope while fixing — new problems become new issues.
+- A finding that reveals durable cross-project learning, not just a defect,
+  is the same ADR-0028 boundary as codify's: ask the promotion question and
+  route a "yes" to [`knowledge`](../knowledge/SKILL.md). Routine findings
+  need no ceremony.
 - If tests fail, say so plainly with the output. Never report green when it
   isn't.
 

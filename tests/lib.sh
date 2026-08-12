@@ -103,3 +103,46 @@ finish() {
   echo "  $pass passed, $fail failed"
   [ "$fail" -eq 0 ]
 }
+
+# assert_flat_contains_all <file> <desc> <ere>... — every ERE must appear
+# (case-insensitive) in the file, matched against whitespace-collapsed prose
+# (runs of any whitespace become one space) so a hard-wrapped, indented line
+# can't split a phrase the guard pins. Shared by the prose-contract guards
+# (test-knowledge-promotion.sh, test-lifecycle-promotion.sh) so the technique
+# has one definition instead of a byte-for-byte copy per suite.
+assert_flat_contains_all() {
+  local f="$1" desc="$2" m flat; shift 2
+  [ -f "$f" ] || { bad "$desc: $(basename "$f") missing"; return; }
+  flat="$(tr -s '[:space:]' ' ' < "$f")"
+  for m in "$@"; do
+    printf '%s' "$flat" | grep -qiE -- "$m" \
+      || { bad "$desc: missing /$m/ in $(basename "$f")"; return; }
+  done
+  ok
+}
+
+# assert_flat_lacks <file> <desc> <ere> — the ERE must NOT appear
+# (case-insensitive) in the whitespace-collapsed file.
+assert_flat_lacks() {
+  local f="$1" desc="$2" m="$3" flat
+  [ -f "$f" ] || { bad "$desc: $(basename "$f") missing"; return; }
+  flat="$(tr -s '[:space:]' ' ' < "$f")"
+  if printf '%s' "$flat" | grep -qiE -- "$m"; then
+    bad "$desc: forbidden /$m/ found in $(basename "$f")"
+  else
+    ok
+  fi
+}
+
+# assert_no_constellation_names <root> — none of the shipped plugins under
+# <root>/plugins/*/ may hard-code a constellation/organization name (ADR-0028
+# provider neutrality). One definition shared across every suite that checks
+# this, so the pattern list can't drift between callers.
+assert_no_constellation_names() {
+  local root="$1" desc="${2:-provider neutrality}"
+  if grep -rniE 'cosmos|status26' "$root"/plugins/*/ >/dev/null 2>&1; then
+    bad "$desc: a shipped plugin hard-codes a constellation name (cosmos/status26)"
+  else
+    ok
+  fi
+}

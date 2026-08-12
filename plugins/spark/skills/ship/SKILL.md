@@ -42,7 +42,15 @@ identically.
      from [`validate`](../validate/SKILL.md) where the distinction matters.
    - Anything reviewers should look at closely.
 6. **Report the PR URL** back to the user.
-7. **Carry the state forward.** Record the close-out with
+7. **Ask the promotion question once.** Issue completion is a natural
+   provenance boundary (ADR-0028): would this work still be true and useful if
+   the implementation disappeared and were rebuilt? A "no" needs no ceremony —
+   the common case. A "yes" hands the evidence to
+   [`knowledge`](../knowledge/SKILL.md), which classifies and promotes; ship
+   never classifies or writes to a hub itself. (A milestone/release completing
+   is the other natural boundary —
+   [references/release-please.md](references/release-please.md).)
+8. **Carry the state forward.** Record the close-out with
    `spark state --set blockers="" next_action="<normally merging the PR>"`
    (writes `.spark/state.json`, [schema](../../docs/reference/state.md); `updated` is stamped for you).
 
