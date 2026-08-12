@@ -134,7 +134,7 @@ identity decision are recorded developer-only in
 ## Related docs
 
 - [`skills/ship/SKILL.md`](../../skills/ship/SKILL.md) — the canonical wording this doc explains.
-- [`explanation/sdlc-doctrine.md`](sdlc-doctrine.md) — the version ladder Release Please's bump derivation applies to.
+- [`explanation/sdlc-doctrine.md`](sdlc-doctrine.md) — the version doctrine: the milestone declares the version, Release-As mints it, always-bump-patch carries the days between.
 - [`reference/engineering-preferences.md`](../reference/engineering-preferences.md) — the same model as a generated project's default.
 - [`reference/hooks.md`](../reference/hooks.md) — the guard rule backing this boundary.
 - [`explanation/enforcement-model.md`](enforcement-model.md) — why Spark enforces rules like this mechanically.

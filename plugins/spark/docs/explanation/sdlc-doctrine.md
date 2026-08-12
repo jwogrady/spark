@@ -60,26 +60,44 @@ technique — never a standing `develop`, never the default path.
 
 ## Versioning
 
-Projects built with Spark follow one version ladder. It is a Spark
-**convention**, not stock SemVer — whose own guidance for early development is
-"start at `0.1.0`, bump minor each release." The ladder layers on top of
-SemVer's "anything MAY change in `0.y.z`" allowance:
+**The milestone is the version authority; Release Please is the release
+mechanic.** A version number names a shippable product state — the milestone's
+outcome — never the semantic category of whichever commit happened to land.
+Conventional Commits classify changes and build the release notes; they do not
+get to decide that a milestone was achieved. The zd-dns field test proved both
+halves the hard way: default bump rules minted a milestone number from an
+ordinary `feat:` commit, and the very first release defaulted toward `1.0.0`
+because release-please's `initialReleaseVersion()` is hardcoded to it when no
+release exists and no `initial-version` is set.
 
-| Version | Meaning |
-|---|---|
-| `0.0.0` | Ideate + Plan complete — formation, no code. A *phase marker*, not a released artifact. |
-| `0.0.1 → 0.0.x` | Each discrete coding contribution (one issue / one PR = one patch bump). The first Release lands at the first `0.0.x` with code. |
-| `0.1.0` | First **usable** product — earned when it's usable, not at the first feature. |
+Spark's seeded Release Please configuration encodes the policy directly:
 
-After `0.1.0`, this ladder is a project-local release policy — Release
-Please reads the conventional-commit types Spark already enforces and
-calculates the bump against it: `feat:` → minor,
-`fix:`/`docs:`/`chore:`/`refactor:`/`test:` → patch, `!` or
-`BREAKING CHANGE` → major. Release Please maintains the resulting release PR; merging it is the
-human-approved release act, not something this ladder performs on its own.
-See [release-ownership.md](release-ownership.md) for the full boundary.
+- **`versioning: always-bump-patch`** — day-to-day merges only ever advance
+  the patch line (`0.1.1 → 0.1.2 → …`). No commit type can silently consume a
+  milestone number.
+- **`initial-version: 0.0.1`** — a repository with no release cannot default
+  its first release to `1.0.0`.
+- **A milestone boundary is minted deliberately**: when the milestone's
+  outcome is real, the landing commit (or the release PR) carries
+  `Release-As: X.Y.0` with the version the milestone declared. `0.1.0` means
+  the first *usable* product — earned when it's usable, not at the first
+  feature. There is no obligation to release anything before a shippable
+  milestone exists, and no per-issue release quota.
 
-This ladder governs the project being built. Spark's own version is a separate
+```
+development   0.0.1 -> 0.0.2 -> ...          (patch line, always-bump-patch)
+milestone     Release-As: 0.1.0              (the milestone's declared version)
+development   0.1.1 -> 0.1.2 -> ...
+next          Release-As: 0.2.0
+```
+
+Release Please remains the sole owner of version-file updates, CHANGELOG
+generation, tags, and GitHub Releases, and merging its release PR remains the
+human release act — see [release-ownership.md](release-ownership.md) and the
+ship skill's Release Please reference for the operational details, including
+the stale-release-PR trap.
+
+This policy governs the project being built. Spark's own version is a separate
 line (already past `0.1.0`).
 
 ## The loop closes

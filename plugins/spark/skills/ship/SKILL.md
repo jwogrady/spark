@@ -48,12 +48,15 @@ identically.
 
 ## Releases: defer to Release Please
 
-**Ship owns the commit and the PR; Release Please owns the release** —
+**Ship owns the push and the PR; Release Please owns the release** —
 versioning, changelog, tag, and the GitHub Release (ADR-0006, ADR-0009). If the
 repo has a `release-please-config.json` (or a `release-please` workflow), never
-bump a version, roll the changelog, tag, or create a Release from this skill:
-your conventional commit types are the release input, and merging the
-release-PR that Release Please maintains is the release act — a human decision.
+bump a version, roll the changelog, tag, or create a Release from this skill.
+The milestone is the version authority — its boundary is minted with
+`Release-As`, never computed from commit types — and merging the release PR
+Release Please maintains is the release act, a human decision. The
+milestone-completion motion, the first-release guard, and the stale-release-PR
+trap: [references/release-please.md](references/release-please.md).
 
 **Fallback — repos without Release Please only,** and only with explicit user
 go-ahead (never cut a tag or Release unprompted): derive the bump from the commit
