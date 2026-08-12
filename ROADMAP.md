@@ -4,7 +4,7 @@ This roadmap reflects current intent, not a commitment or timeline.
 Priorities may shift as the project evolves.
 
 **Current phase: Alpha (v0.x).** The engineering pipeline is proven and
-`v0.15.0` has shipped; the product itself is now being validated by real users.
+`v0.16.2` has shipped; the product itself is now being validated by real users.
 The program, its evidence gates, and the Alpha → Beta → v1.0.0 promotion path
 are the [Alpha program](docs/alpha/alpha-program.md) — a stable v1.0.0 is
 **not** authorized just because the proving releases shipped.
@@ -288,13 +288,13 @@ designated memory-hub repository. GitHub milestone #14 is the version
 authority; issue #373 is the release gate. Architecture: ADR-0028; plan:
 `docs/releases/v0.17-plan.md`.
 
-- **Architecture** (#374, closed): the memory-hub/spoke model extends
-  ADR-0008 without a fourth global layer.
-- **Hub resolution** (#375, closed): one explicit project fact
+- **Architecture** (#374): the memory-hub/spoke model extends ADR-0008
+  without a fourth global layer.
+- **Hub resolution** (#375): one explicit project fact
   (`project.memory-hub`, the `spark hub` verb) — never guessed, never
   hard-coded.
-- **Knowledge promotion** (#376, closed): the `knowledge` skill classifies
-  local truth versus durable cross-project learning and promotes only with
+- **Knowledge promotion** (#376): the `knowledge` skill classifies local
+  truth versus durable cross-project learning and promotes only with
   evidence and human authority, through the hub's own rules.
 - **Lifecycle + proof** (#377): surface the promotion question at natural
   lifecycle boundaries; prove positive, negative, and Cosmos dogfood cases.

@@ -47,7 +47,9 @@ reasoning steps inside Plan, not new verbs.
    around the tools. [`bootstrap`](../bootstrap/SKILL.md) materializes this
    accepted design; scaffolding before design is guessing.
 5. **Give every feature a release decision.** Check roadmap completeness
-   first (`bash scripts/roadmap-check.sh` from this skill's directory), then
+   first (`bash scripts/roadmap-check.sh` from this skill's directory) and
+   release-record truth (`bash scripts/release-plan-check.sh` — a plan names
+   its milestone and never carries a tooling-limitation claim, #380), then
    record one disposition per feature: a named milestone, **Backlog** with the
    written reason, or **Blocked** naming the exact missing decision — rules in
    [references/release-assignment.md](references/release-assignment.md). The
