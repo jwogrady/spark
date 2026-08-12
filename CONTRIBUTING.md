@@ -55,6 +55,18 @@ One concern per PR. Keep PRs small and reviewable.
 
 Use the PR template. Fill in the summary and test plan. Reference the issue.
 
+## Governance earns its keep (the deletion test)
+
+Before adding — and periodically, against — any internal check, mirror, gate,
+or doctrine mechanism in this repo, answer five questions: what concrete
+failure does it prevent; who consumes it; what mechanical behavior depends on
+it; could its information live under an existing authority; and **if it were
+deleted, what observable behavior would get worse?** If the last question has
+no credible answer, delete or consolidate it. The placement rule behind the
+test: prose carries judgment, structure carries decisions, code carries what
+must happen — never write code merely to police duplicated prose, and never
+store a fact that git or GitHub can already answer.
+
 ## Commits
 
 Use [conventional commits](https://www.conventionalcommits.org/):

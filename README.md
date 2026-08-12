@@ -70,9 +70,9 @@ flowchart LR
 | --- | --- | --- |
 | **Ideate** | `/spark:ideate` | A confirmed problem statement, grounded in prior art and actual need |
 | **Plan** | `/spark:plan` | Architecture decisions, scoped features, GitHub issues, and acceptance criteria |
-| **Codify** | `/spark:codify` | One issue implemented on one focused feature branch |
-| **Validate** | `/spark:validate` | Code review, security review, verification, and fixes tied to the issue |
-| **Ship** | `/spark:ship` | A conventional commit, pushed branch, and focused GitHub pull request |
+| **Codify** | `/spark:codify` | One issue implemented as focused commits on one feature branch |
+| **Validate** | `/spark:validate` | Code review, security review, verification, and committed fixes tied to the issue |
+| **Ship** | `/spark:ship` | The reviewed branch published as one focused GitHub pull request |
 
 Use the whole lifecycle for a new product or enter at the stage that matches
 the work already in front of you. The workflow stays recognizable across every
@@ -139,14 +139,15 @@ time advancing it.
 
 ## Guardrails that actually run
 
-Spark's standards are more than prose — the same rules are enforced on both
-paths a git command can take:
+Spark's standards are more than prose — the same rules are enforced on every
+path that can reach the repository:
 
 | Door | Fires when | Enforces |
 | --- | --- | --- |
 | `PreToolUse` guard | Claude runs a git command | Blocks force-pushes and pushes whose destination is trunk — through leading git options, full refspecs, and compound commands |
 | Git hooks | You (or anyone) commits directly | Rejects commits on trunk, invalid conventional commits, and AI attribution |
-| `spark doctor` | Locally and in CI | Plugin structure, scripts, documentation links, manifests, enforcement parity |
+| GitHub ruleset | Anything reaches the remote — API calls, other clones, hookless clients | The same trunk policy server-side: PRs required, force-push and deletion blocked. Spark ships the policy and reports drift (`spark doctor --requirements`); applying it stays a human act |
+| `spark doctor` | Locally and in CI | Plugin structure, scripts, documentation links, manifests, enforcement lockstep |
 | Behavioral tests | Every pull request **to this repository** | Spark's own CI exercises the CLI flows and both enforcement doors against throwaway repos — this is how Spark tests itself, not a suite added to your project (`preferences --apply` scaffolds *your* stack's validation instead) |
 
 Claude can move quickly because Spark keeps the work inside boundaries you can

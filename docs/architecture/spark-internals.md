@@ -198,7 +198,7 @@ motion left the core for a companion.
 
 - `spark doctor` validates the whole marketplace (every listed plugin's
   manifest and skill frontmatter, hook JSON, executable guard, taxonomy parity,
-  doc links, enforcement parity, git-hook install state). Run it before pushing;
+  doc links, enforcement lockstep, git-hook install state). Run it before pushing;
   validation CI runs the same command on every PR, so the local and CI gates
   cannot drift (ADR-0011). See [reference/cli.md](../../plugins/spark/docs/reference/cli.md).
 - Git hooks are per-repo and must be installed with `spark setup` (or
