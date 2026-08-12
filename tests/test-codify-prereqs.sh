@@ -152,6 +152,47 @@ rc=0; out="$(cd "$repo" && env PATH="$fakebin:$PATH" bash "$script" 7 2>&1)" || 
 assert_rc "behind trunk blocks" 1 "$rc"
 assert_contains "names behind" "behind origin/master" "$out"
 
+# ATTACK: multiple merged closing PRs where only the SECOND is integrated —
+# the resolver must find the integrated one, not stop at the first.
+repo="$(fresh e2e-multi)"
+cat > "$fakebin/gh" <<EOF
+#!/usr/bin/env bash
+case "\$*" in
+  *"dependencies/blocked_by"*) printf '12\n' ;;
+  *"issue view 7 --json body"*) printf 'Implements the thing.\n' ;;
+  *"issue view 12 --json state"*) printf 'CLOSED\n' ;;
+  *graphql*"num=12"*) printf '%s\n%s\n' "$SIDE_SHA" "$PREREQ_SHA" ;;
+  *) exit 1 ;;
+esac
+EOF
+chmod +x "$fakebin/gh"
+rc=0; out="$(cd "$repo" && env PATH="$fakebin:$PATH" bash "$script" 7 2>&1)" || rc=$?
+assert_rc "any one integrated merged result proves the prerequisite" 0 "$rc"
+
+# ATTACK: a blocker declared in BOTH the native list and the body is
+# evaluated once (dedup), and the verdict still needs its proof.
+repo="$(fresh e2e-dedup)"
+cat > "$fakebin/gh" <<'EOF'
+#!/usr/bin/env bash
+log="${GH_DEDUP_LOG:-/dev/null}"; printf '%s
+' "$*" >> "$log"
+case "$*" in
+  *"dependencies/blocked_by"*) printf '12
+' ;;
+  *"issue view 7 --json body"*) printf 'Blocked by #12
+' ;;
+  *"issue view 12 --json state"*) printf 'OPEN
+' ;;
+  *) exit 1 ;;
+esac
+EOF
+export GH_DEDUP_LOG="$WORK/dedup-calls.log"
+rc=0; out="$(cd "$repo" && env PATH="$fakebin:$PATH" bash "$script" 7 2>&1)" || rc=$?
+assert_rc "duplicated declaration still blocks on the open blocker" 1 "$rc"
+[ "$(grep -c 'issue view 12 --json state' "$GH_DEDUP_LOG")" = "1" ] \
+  && ok || bad "a blocker declared twice is evaluated once"
+unset GH_DEDUP_LOG
+
 # GitHub relationship unavailable (graphql fails for the closed blocker)
 # -> NOT ASSESSED.
 repo="$(fresh e2e-noproof)"

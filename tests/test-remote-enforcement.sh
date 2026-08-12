@@ -41,6 +41,19 @@ assert_rc "a missing required check is drift" 1 "$rc"
 assert_contains "names the missing context" "tests" "$out"
 assert_contains "says extras are fine but these are required" "extra remote checks are fine" "$out"
 
+# --- ATTACK (under-block regression): a required context must never be
+# satisfied by a DIFFERENT effective context that merely contains it as a
+# word — "integration tests" does not satisfy required "tests".
+rc=0; out="$(printf 'rule\tpull_request\nrule\tnon_fast_forward\nrule\tdeletion\nrule\trequired_status_checks\nrequire\ttests\ncheck\tintegration tests\n' | remote_enforcement_verdict)" || rc=$?
+assert_rc "a superstring context does not satisfy a required name" 1 "$rc"
+assert_contains "names the missing exact context" "'tests'" "$out"
+
+# --- context names containing spaces compare as single names, both ways.
+rc=0; out="$(printf 'rule\tpull_request\nrule\tnon_fast_forward\nrule\tdeletion\nrule\trequired_status_checks\nrequire\tbuild and test\ncheck\tbuild and test\n' | remote_enforcement_verdict)" || rc=$?
+assert_rc "a spaced context name matches itself exactly" 0 "$rc"
+rc=0; out="$(printf 'rule\tpull_request\nrule\tnon_fast_forward\nrule\tdeletion\nrule\trequired_status_checks\nrequire\tbuild and test\ncheck\tbuild\ncheck\tand\ncheck\ttest\n' | remote_enforcement_verdict)" || rc=$?
+assert_rc "word fragments never satisfy a spaced required name" 1 "$rc"
+
 # --- a wrong check name (typo'd context) cannot satisfy the requirement.
 rc=0; out="$(printf 'rule\tpull_request\nrule\tnon_fast_forward\nrule\tdeletion\nrule\trequired_status_checks\nrequire\tvalidate\ncheck\tvaldiate\n' | remote_enforcement_verdict)" || rc=$?
 assert_rc "a wrong context name is drift" 1 "$rc"

@@ -2372,7 +2372,7 @@ check_reference_laziness() {
 # Pure function — gathering lives with the caller so this is testable offline.
 remote_enforcement_verdict() {
   local kind a has_pr=0 has_nff=0 has_del=0 has_rsc=0 protected=""
-  local eff_checks=" " req_checks="" nreq=0 neff=0
+  local nl=$'\n' eff_checks=$'\n' req_checks="" nreq=0 neff=0
   while IFS=$'\t' read -r kind a; do
     case "$kind" in
       rule) case "$a" in
@@ -2381,8 +2381,8 @@ remote_enforcement_verdict() {
               deletion)               has_del=1 ;;
               required_status_checks) has_rsc=1 ;;
             esac ;;
-      check)   [ -n "$a" ] && { eff_checks="$eff_checks$a "; neff=$((neff+1)); } ;;
-      require) [ -n "$a" ] && { req_checks="$req_checks $a"; nreq=$((nreq+1)); } ;;
+      check)   [ -n "$a" ] && { eff_checks="$eff_checks$a$nl"; neff=$((neff+1)); } ;;
+      require) [ -n "$a" ] && { req_checks="$req_checks$a$nl"; nreq=$((nreq+1)); } ;;
       protected) protected="$a" ;;
     esac
   done
@@ -2391,14 +2391,21 @@ remote_enforcement_verdict() {
   if [ "$has_rsc" -ne 1 ]; then
     echo "  merges are not gated on CI (no required_status_checks rule)"; rc=1
   elif [ "$nreq" -gt 0 ]; then
-    for ctx in $req_checks; do
+    # Exact, whole-name membership: contexts are newline-delimited so a
+    # required "tests" can never be satisfied by an effective
+    # "integration tests" (substring), and context names containing spaces
+    # compare as single names.
+    while IFS= read -r ctx; do
+      [ -n "$ctx" ] || continue
       case "$eff_checks" in
-        *" $ctx "*) ;;
-        *) missing="$missing $ctx" ;;
+        *"$nl$ctx$nl"*) ;;
+        *) missing="$missing '$ctx'" ;;
       esac
-    done
+    done <<EOF_REQ
+$req_checks
+EOF_REQ
     if [ -n "$missing" ]; then
-      echo "  required check(s) missing from the remote gate:${missing} — merges are not gated on the policy's checks (extra remote checks are fine; these must be present)"; rc=1
+      echo "  required check(s) missing from the remote gate:${missing} — merges are not gated on the policy's checks (extra remote checks are fine; these must be present by exact name)"; rc=1
     fi
   elif [ "$neff" -eq 0 ]; then
     echo "  the required_status_checks rule names no contexts — it gates nothing; add the repo's check names"; rc=1
