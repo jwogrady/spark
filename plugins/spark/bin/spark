@@ -379,14 +379,18 @@ cmd_version() {
 SKILL_MD_MAX_LINES=100
 SKILL_DESC_MAX_CHARS=1024
 
-# Total context-footprint budgets (#292) — the aggregate ratchet the per-file
-# budgets above cannot catch: a dozen small additions grow the whole without
-# tripping any one file. Ratcheted just above the post-#293 baseline (marketplace
-# ≈116.7 KB, largest plugin ≈72.7 KB) so growth fails CI now and trimming lowers
-# them. Bytes (FOOTPRINT_CPT converts to tokens); env-overridable so tests can
-# force the over-budget path. Enforced only in the Spark marketplace repo.
-FOOTPRINT_MARKETPLACE_MAX_BYTES="${FOOTPRINT_MARKETPLACE_MAX_BYTES:-120000}"
-FOOTPRINT_PLUGIN_MAX_BYTES="${FOOTPRINT_PLUGIN_MAX_BYTES:-76000}"
+# Total context-footprint budgets (#292; advisory since #361) — the aggregate
+# view the per-file budgets above cannot catch: a dozen small additions grow
+# the whole without tripping any one file. Doctor WARNS over these lines; the
+# hard per-file budgets above still gate. Re-based above the v0.16 measurement
+# (marketplace ≈129.2 KB, largest plugin ≈85.2 KB) after the reconciliation
+# deliberately grew the lazy references/ layer — the delivery, integration-
+# validation, and release doctrine consolidated from issues #337–#358 — while
+# the always-loaded surfaces stayed inside their per-file budgets. Bytes
+# (FOOTPRINT_CPT converts to tokens); env-overridable so tests can force the
+# over-budget path. Assessed only in the Spark marketplace repo.
+FOOTPRINT_MARKETPLACE_MAX_BYTES="${FOOTPRINT_MARKETPLACE_MAX_BYTES:-134000}"
+FOOTPRINT_PLUGIN_MAX_BYTES="${FOOTPRINT_PLUGIN_MAX_BYTES:-90000}"
 
 # Latency budgets (#213) — generous wall-clock ceilings for the three hot paths,
 # in milliseconds: the guard hook (every Bash call), the SessionStart brief
