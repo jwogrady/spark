@@ -1790,7 +1790,9 @@ cmd_hub() {
   local set_to="" set_given=0
   while [ "$#" -gt 0 ]; do
     case "$1" in
-      --set) shift; set_to="${1:-}"; set_given=1 ;;
+      # A trailing --set with no value must fall through to the invalid-locator
+      # message, not die on the loop-end shift under set -e.
+      --set) set_given=1; if [ "$#" -ge 2 ]; then set_to="$2"; shift; fi ;;
       --set=*) set_to="${1#--set=}"; set_given=1 ;;
       -h|--help) echo "$usage_line"; return 0 ;;
       *) red "unknown option: $1"; echo "$usage_line"; return 1 ;;
@@ -1814,14 +1816,16 @@ cmd_hub() {
   fi
 
   # Report mode: resolve through the preference tiers and name the source, so
-  # the configured hub is observable — never re-derived, never guessed.
-  local hub="" src=""
-  IFS=$'\t' read -r hub src <<EOF
-$(resolve_prefs | awk -F'\t' '$1=="project.memory-hub"{print $2 "\t" $3}')
-EOF
+  # the configured hub is observable — never re-derived, never guessed. The
+  # value and source are extracted separately (not via read, whose IFS
+  # whitespace rules collapse an empty value field into the source).
+  local line="" hub="" src=""
+  line="$(resolve_prefs | awk -F'\t' '$1=="project.memory-hub"{print; exit}')"
+  hub="$(printf '%s\n' "$line" | awk -F'\t' '{print $2}')"
+  src="$(printf '%s\n' "$line" | awk -F'\t' '{print $3}')"
 
   echo "Memory hub (ADR-0028)"
-  if [ -z "$hub" ]; then
+  if [ -z "$line" ]; then
     echo "  hub     not configured — this project is standalone"
     echo "  declare one (or standalone explicitly): spark hub --set <owner/repo|url|none>"
     return 0

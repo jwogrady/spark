@@ -66,6 +66,19 @@ done
 assert_contains "rejection names the bad value" "invalid locator" "$out"
 [ ! -e "$d/.spark" ] && ok || bad "rejected --set still wrote state"
 
+# --- a trailing --set with no value is a usage error, not a silent death
+rc=0; out="$(cd "$d" && "$SPARK" hub --set 2>&1)" || rc=$?
+if [ "$rc" -ne 0 ]; then ok; else bad "bare --set should fail"; fi
+assert_contains "bare --set explains itself" "invalid locator" "$out"
+
+# --- an empty configured value is malformed, and the tier is not mistaken for it
+d="$WORK/emptyval"; make_repo "$d"
+mkdir -p "$d/.spark"
+printf '{"project.memory-hub":""}\n' > "$d/.spark/preferences.json"
+rc=0; out="$(cd "$d" && "$SPARK" hub 2>&1)" || rc=$?
+if [ "$rc" -ne 0 ]; then ok; else bad "empty configured value should exit non-zero"; fi
+assert_contains "empty value is malformed, not the tier name" "value '' is malformed" "$out"
+
 # --- a malformed value already on disk fails truthfully, never guessed around
 d="$WORK/badrec"; make_repo "$d"
 mkdir -p "$d/.spark"
@@ -77,10 +90,10 @@ assert_contains "malformed value is named" "malformed" "$out"
 # --- tier provenance: an operator declaration resolves, and project wins
 d="$WORK/tiers"; make_repo "$d"
 mkdir -p "$XDG_CONFIG_HOME/spark"
-printf '{"project.memory-hub":"operator/hub"}\n' > "$XDG_CONFIG_HOME/spark/preferences.json"
+printf '{"project.memory-hub":"acme/hub"}\n' > "$XDG_CONFIG_HOME/spark/preferences.json"
 out="$(cd "$d" && "$SPARK" hub 2>&1)"
-assert_contains "operator declaration resolves" "operator/hub" "$out"
-assert_contains "source is the operator tier" "operator" "$out"
+assert_contains "operator declaration resolves" "acme/hub" "$out"
+assert_contains "source is the operator tier" "source  operator" "$out"
 ( cd "$d" && "$SPARK" hub --set project/hub ) >/dev/null 2>&1
 out="$(cd "$d" && "$SPARK" hub 2>&1)"
 assert_contains "project tier overrides operator" "project/hub" "$out"
