@@ -46,10 +46,12 @@ issue for each, with acceptance criteria. Approve, and let it create one issue.
 
 ## 3. Codify
 
-Type `/spark:codify` and point it at the issue. It opens a `feat/…` branch and
-writes code to the criteria — and stops there.
+Type `/spark:codify` and point it at the issue. It checks the issue's
+prerequisites, opens a `feat/…` branch off the fresh trunk, writes code to the
+criteria, and commits each coherent step as it lands — then stops at the
+criteria.
 
-> You learned: one issue, one branch, no scope creep.
+> You learned: one issue, one branch, focused commits, no scope creep.
 
 ## 4. Validate
 
@@ -61,8 +63,9 @@ relevant), then `verify` to actually run the thing. Fix what it finds.
 
 ## 5. Ship
 
-Type `/spark:ship` — write a conventional message (no AI attribution; the hook
-enforces it), then push and open the PR linking your issue.
+Type `/spark:ship` — it reviews the branch's commit series (sweeping any small
+remainder into one last conventional commit — no AI attribution; the hook
+enforces it), then pushes and opens the PR linking your issue.
 
 > You learned: the guardrails are mechanical. Try `git push --force` and watch
 > the guard stop you.

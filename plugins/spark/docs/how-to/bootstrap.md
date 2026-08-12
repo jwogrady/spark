@@ -33,7 +33,7 @@ uv init app && uv add "fastapi[standard]"                  # Python backend
 - TS → Biome (`bun add -d @biomejs/biome && bunx biome init`)
 - Python → Ruff (`uv add --dev ruff pytest`)
 
-Record the choice in `CLAUDE.md`; don't run two formatters.
+Record the choice in the agent contract (`AGENTS.md`); don't run two formatters.
 
 ## 4. Verify it runs
 

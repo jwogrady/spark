@@ -205,10 +205,12 @@ mutating subset to a read-only tier.
 
 Two housekeeping notes:
 
-- **Published-marketplace install** — a one-click install from a published
-  marketplace listing has not been validated end-to-end yet; it is tracked in
-  [`ROADMAP.md`](https://github.com/jwogrady/spark/blob/master/ROADMAP.md).
-  Until it lands, use the Git URL or local-clone path above.
+- **Published-marketplace install** — the Git-URL marketplace path above is
+  validated end to end (`tests/e2e-marketplace-install.sh`, run by hand as the
+  release-readiness check). A one-click install from a *published marketplace
+  listing* — a distribution channel beyond the Git URL — is a separate,
+  not-yet-validated path; until one exists, the Git URL or a local clone is
+  the supported install.
 - **Developing Spark itself** — test changes without publishing:
   `claude --plugin-dir /path/to/spark`, then `/reload-plugins` to pick up
   edits.

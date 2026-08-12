@@ -47,13 +47,15 @@ record* around that machinery — it never recreates release management.
 - [ ] **Blockers vs follow-ups are named.** Release blockers are called out;
       safe post-release follow-ups are recorded as issues, not held.
 
-## Platform Compatibility Review — the manual half (Constitution Article VII)
+## Platform compatibility — the manual release census
 
-Article VII makes the Platform Compatibility Review a permanent pre-release
-gate. Half of it is automated; this section is the **other half — the checks a
-human performs before approving each release**, because they are judgment calls
-against surfaces that live outside this repository. Do not expect a script to
-cover them; none does, by design (#305 split them out of #300 explicitly).
+These are the **checks a human performs before approving each release**,
+because they are judgment calls against surfaces that live outside this
+repository. Do not expect a script to cover them; none does — the scripted
+half that once accompanied this census (the Platform Compatibility Review
+gate, originally mandated by the now-archived constitution's Article VII) was
+retired by the #361 governance deletion test, so this manual census is the
+whole of the practice.
 
 - [ ] **Deletion-Test census against the *current* platform surfaces.** For
       each Spark club (skill, hook, CLI verb), ask: does a native Claude Code

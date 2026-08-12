@@ -17,8 +17,9 @@ point for Article VI.
 
 ## The five questions, in order
 
-Answer each in the issue (the templates collect them). Stop at the first hard No
-that the tie-break below does not rescue.
+Answer each in the proposing issue's own prose (the dedicated template fields
+were retired with the gate machinery — #361). Stop at the first hard No that
+the tie-break below does not rescue.
 
 1. **Mission.** Does this materially improve engineering discipline around Claude
    and GitHub — not merely automate GitHub or wrap Claude? Name the workflow
@@ -91,19 +92,20 @@ This is the lifecycle spine (`Ideate → Plan → Codify → Validate → Ship`)
 onto governance, so it adds no new machinery — it makes the existing spine
 auditable. Each hop has a home:
 
-| Hop | Carried by |
+| Hop | Carried by (since v0.16: all documentary — the collecting fields and the enforcing gate were retired by #361) |
 |---|---|
-| Mission → Capability → Constitution | the CEF five-question answer (issue template) |
-| → ADR → Issue | the ADR Alignment block + the issue traceability section |
-| → Pull Request | the pull-request traceability section |
-| → Evaluation | the Evaluation surface (the Q4 evidence) |
-| → Release | the Platform Compatibility Review gate (Constitution Article VII) |
+| Mission → Capability | the CEF five-question answer, written in the proposing issue |
+| → ADR → Issue | the ADR Alignment block + the issue's own reasoning |
+| → Pull Request | the PR body's what/why (no dedicated traceability section anymore) |
+| → Evaluation | the Evaluation surface (the Q4 evidence, when an evaluation is run) |
+| → Release | the manual release census in the release-docs checklist |
 
-The CEF governs *admission*; Evaluation governs *release*. Only the
-`Evaluation → Release` hop is enforced rather than documentary: a release refuses a
-capability whose evidence is absent.
+The CEF governs *admission*; release truth is gated by the milestone gate and
+release-notes verification. **No hop is mechanically enforced anymore** — the
+Platform Compatibility Review that refused a release over absent evidence was
+retired by the #361 deletion test; the questions are applied as judgment.
 
 ## See also
 
-- [Constitution Article VI](../product-constitution.md) — the invariant this procedure applies
+- [The archived constitution](../product-constitution.md) — where Article VI originally ratified this procedure (historical)
 - [ADR-0025](../adr/0025-capability-evaluation-framework.md) — the decision to adopt it

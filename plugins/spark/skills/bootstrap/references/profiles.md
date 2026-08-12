@@ -58,7 +58,7 @@ bun add -d @biomejs/biome && bunx biome init
 ```
 
 > Alternative if the team prefers it: ESLint + Prettier. Pick one per project and
-> record it in `CLAUDE.md` — don't run both.
+> record it in the agent contract (`AGENTS.md`) — don't run both.
 
 ---
 
@@ -99,7 +99,7 @@ uv run ruff check . && uv run ruff format --check .
 ```
 
 > `ruff format` covers what Black did. Keep Black only if a project already
-> depends on it; record the choice in `CLAUDE.md`.
+> depends on it; record the choice in the agent contract (`AGENTS.md`).
 
 ---
 

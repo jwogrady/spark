@@ -21,9 +21,11 @@ Validates the whole marketplace and reports health. Checks:
   manifest and skill checks as the core
 - shell syntax: `bash -n` over `bin/spark`, the guard, and both git hooks
 - doc links: every relative Markdown link in the shipped docs resolves
-- enforcement parity: the commit types, AI-attribution ban, trunk protection,
-  and force-push rules agree across the hooks and the contract files
-  (CLAUDE.md, AGENTS.md)
+- enforcement lockstep: the enumerable vocabularies agree list-vs-list — the
+  commit types across the `commit-msg` hook, `AGENTS.md`, and `hooks.md`; the
+  changelog sections against the committed vocabulary and the release-notes
+  checker; the release components against Release Please's packages. (The
+  hooks' *behavior* is pinned by the behavioral suites, not by doctor.)
 - standards boundary: in a project with the generated `CONVENTIONS.md` /
   `ENGINEERING-STANDARDS.md`, every `<!-- spark:pref key=value -->` marker names
   a real preference key and asserts the value it resolves to (drift and dangling
@@ -46,6 +48,7 @@ the *environment* can perform each Spark capability:
 | GitHub delivery | `gh`, authenticated | `plan`/`ship`/`validate` create issues and PRs |
 | JSON tooling | `jq` or `python3` | Merging the permission baseline into an existing `.claude/settings.json`; everything else degrades gracefully |
 | Release pipeline | repo wiring | `release-please-config.json` + workflow present when the resolved `release.mechanism` is `release-please`; other mechanisms are the operator's own |
+| Remote enforcement | `gh`, authenticated | The third door: the default branch's effective rules compared against the shipped trunk policy (`settings/github-ruleset-trunk.json`) — inspect-and-report only, drift degrades the summary, applying is always an explicit human act; unreachable/unauthenticated reports "not assessed" |
 
 Each missing or unauthenticated dependency prints one remediation line
 (`gh auth login`, `spark preferences --apply`, …). The exit code is non-zero
@@ -273,8 +276,9 @@ Measures Spark's context footprint — the bytes each always-loaded surface
 reports per surface, with `--json` for the machine-readable shape. `--timing`
 is the opt-in hard latency gate: it measures the hot paths (the PreToolUse
 guard, `brief --short`) against their budgets and exits non-zero when one is
-exceeded. `spark doctor` runs the same latency numbers advisorily; the gate
-form is for CI.
+exceeded. Doctor itself runs no timing — the aggregate context-footprint
+total it reports is advisory (warn-only), and this gate is the only latency
+enforcement.
 
 ## `spark version`
 

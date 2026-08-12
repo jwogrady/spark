@@ -60,7 +60,7 @@ trap: [references/release-please.md](references/release-please.md).
 
 **Fallback — repos without Release Please only,** and only with explicit user
 go-ahead (never cut a tag or Release unprompted): derive the bump from the commit
-types per the version ladder, roll `[Unreleased]` into a dated `vX.Y.Z` section,
+types (a declared milestone's version wins), roll `[Unreleased]` into a dated `vX.Y.Z` section,
 bump the version file, tag, and `gh release create`. The full steps and the
 changelog-records-product-not-process rule are in
 [references/release-fallback.md](references/release-fallback.md).

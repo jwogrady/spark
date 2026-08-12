@@ -1199,7 +1199,7 @@ EOF
   fi
   echo "Next: edit the description (it's the only thing Claude sees when choosing the skill)."
   echo "Authoring rules (description format, 100-line cap, when to split): see the"
-  echo "'Skill Authoring' section of CLAUDE.md."
+  echo "'Skill Authoring' section of AGENTS.md."
 }
 
 # The carry-in verb (ADR-0008): inspect the engineering standard resolved

@@ -16,7 +16,7 @@
 - [ ] Skill files include `SKILL.md` with valid frontmatter
 - [ ] No invented commands or fake integrations
 - [ ] No AI attribution in any file, commit, or comment
-- [ ] `CHANGELOG.md` updated if behavior changed
+- [ ] Behavior changes are described in the commit subjects/bodies — Release Please builds the changelog from them (never hand-edit `CHANGELOG.md`)
 
 ## Non-goals
 
