@@ -115,6 +115,36 @@ assert_rc "behind-trunk resume exits 0" 0 "$rc"
 assert_contains "names the missing-commit count" "2 commit(s) on origin/master are not in this branch" "$out"
 assert_contains "warns a prerequisite may be missing" "prerequisite may be missing" "$out"
 
+# --- locate inference order (#369): positional evidence outranks a missing
+# problem statement. An open PR on the current branch reads Validate/Ship —
+# never Ideate — even when docs/problem-statement.md does not exist.
+repo9="$WORK/midpr"; make_repo "$repo9"
+( cd "$repo9" && git checkout -qb feat/9-thing )
+fakepr="$WORK/fakeghpr"; mkdir -p "$fakepr"
+cat > "$fakepr/gh" <<'EOF'
+#!/usr/bin/env bash
+case "$*" in
+  *"pr view"*) printf 'PR #9 — the thing
+' ;;
+  *) exit 1 ;;
+esac
+EOF
+chmod +x "$fakepr/gh"
+rc=0; out="$(cd "$repo9" && env PATH="$fakepr:$PATH" "$SPARK" brief 2>&1)" || rc=$?
+assert_rc "mid-PR brief exits 0" 0 "$rc"
+assert_contains "an open PR outranks the missing statement" "Validate/Ship" "$out"
+case "$out" in *"Ideate"*) bad "a repo mid-PR must not locate as Ideate" ;; *) ok ;; esac
+
+# a working branch without a PR (and without a statement) reads Codify —
+# --short does no network, so this is also the short mode's inference.
+rc=0; out="$(cd "$repo9" && "$SPARK" brief --short 2>&1)" || rc=$?
+assert_rc "working-branch short brief exits 0" 0 "$rc"
+assert_contains "a working branch outranks the missing statement" "Codify — working branch feat/9-thing" "$out"
+
+# on trunk with no statement, Ideate remains the honest read.
+rc=0; out="$(cd "$repo9" && git checkout -q master && "$SPARK" brief --short 2>&1)" || rc=$?
+assert_contains "trunk without a statement is Ideate" "Ideate" "$out"
+
 # --- classified repo (issue #201): brief names the recorded classification,
 # the date it was established, and the project-local standards docs present.
 repo4="$WORK/classified"; fixture_mature_repo "$repo4"

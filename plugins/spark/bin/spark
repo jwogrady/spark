@@ -1360,14 +1360,18 @@ cmd_brief() {
       esac
     done < <(read_flat_json "$state")
   fi
-  if [ ! -f "$root/docs/problem-statement.md" ]; then
-    located="Ideate — no docs/problem-statement.md yet"
-  elif [ "$branch" = "master" ] || [ "$branch" = "main" ]; then
-    located="Plan — on trunk with a problem statement; pick the next issue"
-  elif [ -n "$pr" ]; then
+  # Positional evidence outranks convention (#369): an open PR or a working
+  # branch says where the work IS; a missing docs/problem-statement.md only
+  # means Ideate when nothing stronger contradicts it — a mature repo that
+  # never adopted the convention must not read as Ideate mid-PR forever.
+  if [ -n "$pr" ]; then
     located="Validate/Ship — $pr is open for this branch"
-  else
+  elif [ "$branch" != "master" ] && [ "$branch" != "main" ]; then
     located="Codify — working branch $branch"
+  elif [ ! -f "$root/docs/problem-statement.md" ]; then
+    located="Ideate — no docs/problem-statement.md yet"
+  else
+    located="Plan — on trunk with a problem statement; pick the next issue"
   fi
 
   # Load: one resolve_prefs pass, summarized — how big the standard bag is,
