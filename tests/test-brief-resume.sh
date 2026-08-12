@@ -55,6 +55,11 @@ rc=0; out="$(cd "$repo3" && "$SPARK" resume 2>&1)" || rc=$?
 assert_rc "legacy state still exits 0" 0 "$rc"
 assert_contains "legacy keys are flagged as ignored" "legacy keys" "$out"
 assert_contains "recorded judgment survives" "keep going" "$out"
+# this fixture has no usable remote, so if gh is present its empty answer is
+# ambiguous — the pr line must hedge, never assert a verified absence.
+if command -v gh >/dev/null 2>&1; then
+  assert_contains "an unanswerable pr lookup is hedged" "unverified" "$out"
+fi
 case "$out" in
   *"feat/branch-that-does-not-exist"*) bad "a recorded branch must never be presented" ;;
   *) ok ;;
@@ -91,6 +96,24 @@ case "$out" in
   *"What's next:"*"push and open the PR"*) bad "a pre-merge next_action must not be replayed" ;;
   *) ok ;;
 esac
+
+# --- trunk-ancestry drift (#344): commits on the remote trunk missing from
+# the current branch are surfaced with the count and the trunk name — a
+# merged prerequisite may be among them. Uses a local file remote so the
+# suite stays offline.
+repo8="$WORK/behind"; make_repo "$repo8"
+bare8="$WORK/behind-origin.git"
+git clone -q --bare "$repo8" "$bare8"
+( cd "$repo8" && git remote add origin "$bare8" && git fetch -q origin )
+# advance the remote trunk by two commits the local branch does not have
+adv8="$WORK/behind-adv"; git clone -q "$bare8" "$adv8"
+( cd "$adv8" && git commit --allow-empty -qm "feat: landed prerequisite one" \
+    && git commit --allow-empty -qm "feat: landed prerequisite two" && git push -q origin master )
+( cd "$repo8" && git fetch -q origin && git checkout -qb feat/dependent )
+rc=0; out="$(cd "$repo8" && "$SPARK" resume 2>&1)" || rc=$?
+assert_rc "behind-trunk resume exits 0" 0 "$rc"
+assert_contains "names the missing-commit count" "2 commit(s) on origin/master are not in this branch" "$out"
+assert_contains "warns a prerequisite may be missing" "prerequisite may be missing" "$out"
 
 # --- classified repo (issue #201): brief names the recorded classification,
 # the date it was established, and the project-local standards docs present.

@@ -2136,7 +2136,10 @@ cmd_resume() {
   if [ -n "$prnum" ]; then
     echo "  pr:       #$prnum ($prstate) — this branch's pull request"
   elif command -v gh >/dev/null 2>&1; then
-    echo "  pr:       none found for this branch"
+    # gh answering nothing is ambiguous: genuinely no PR, or GitHub
+    # unreachable/unauthenticated. Say so — an unverified absence presented
+    # as fact is exactly the guessing derive-first forbids.
+    echo "  pr:       none found for this branch (unverified — gh reported no PR, or GitHub was unreachable)"
   else
     echo "  pr:       unknown (gh not available)"
   fi
@@ -2643,6 +2646,15 @@ cmd_state() {
         else
           red "unknown state key: $key (valid: $STATE_KEYS)"
         fi
+        return 1 ;;
+    esac
+    # The schema is one line per value (state.md), and json_escape below
+    # handles only quote/backslash — an embedded newline/tab would write
+    # control characters into the JSON and silently destroy the record for
+    # every reader. Reject rather than green-light a corrupting write.
+    case "$val" in
+      *$'\n'*|*$'\r'*|*$'\t'*)
+        red "state values are one line ($key contains a newline/tab) — separate several facts with '; ' instead"
         return 1 ;;
     esac
     eval "$key=\$val"

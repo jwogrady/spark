@@ -43,6 +43,17 @@ fi
 rc=0; ( cd "$repo" && "$SPARK" state --set bogus=1 >/dev/null 2>&1 ) || rc=$?
 [ "$rc" -ne 0 ] && ok || bad "unknown key rejected"
 
+# --- a value with a newline would write control characters into the JSON and
+# destroy the record for every reader — rejected, nothing written.
+before="$(cat "$state")"
+rc=0; out="$( cd "$repo" && "$SPARK" state --set next_action=$'line1\nline2' 2>&1 )" || rc=$?
+[ "$rc" -ne 0 ] && ok || bad "newline value rejected"
+assert_contains "the rejection teaches one-line values" "one line" "$out"
+[ "$(cat "$state")" = "$before" ] && ok || bad "a rejected multiline write leaves state untouched"
+if command -v jq >/dev/null 2>&1; then
+  ( cd "$repo" && jq empty "$state" ) && ok || bad "state stays valid JSON after the rejection"
+fi
+
 # --- legacy (pre-v0.16) keys are rejected with a teaching message: those
 # facts are derived from git/GitHub now, never stored.
 rc=0; out="$( cd "$repo" && "$SPARK" state --set stage=codify 2>&1 )" || rc=$?
