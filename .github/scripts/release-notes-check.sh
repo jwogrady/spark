@@ -14,8 +14,9 @@
 # a human approves the PR (release-notes-runner.sh automates it per component;
 # see docs/reference/release-docs-checklist.md).
 #
-# Three failure modes, drawn from #232 (v0.10.1 shipped a feature and several
-# governance changes that never reached the generated notes) and #291:
+# Four failure modes, drawn from #232 (v0.10.1 shipped a feature and several
+# governance changes that never reached the generated notes), #291, and #372
+# (v0.16.0/v0.16.1 each listed one logical change twice):
 #
 #   1. omission  — a changelog-visible commit (feat/fix/docs) whose subject
 #                  text does not appear anywhere in the notes.
@@ -29,6 +30,20 @@
 #                  user-facing `feature` category label. The user-facing
 #                  change is real but hidden from the changelog by its commit
 #                  type — exactly how #226's feature vanished behind `chore:`.
+#   4. duplicate — two or more note bullets normalize to the identical text.
+#                  #372's mechanism: this repo's merge commits carry the PR's
+#                  conventional title as their message BODY (GitHub's
+#                  merge_commit_message=PR_TITLE), so Release Please classifies
+#                  both the branch commit and its own merge commit as the same
+#                  logical change. The completeness checks above (1-3) cannot
+#                  see this — the caller's commit list is built with
+#                  `git log --no-merges` (release-notes-runner.sh), so from
+#                  their view exactly one commit exists and it is satisfied by
+#                  ONE of the two duplicate bullets, leaving the second
+#                  invisible to an omission-only check. Detecting a duplicate
+#                  is therefore a property of the NOTES alone, checked before
+#                  any commit is matched against them, independent of what the
+#                  caller's commit list happens to include.
 #
 # Exit 0 when no finding is present; 1 when any finding is found (each
 # printed); 2 on a usage error. The success message states only what actually
@@ -129,6 +144,24 @@ subject_in_notes() { # subject_in_notes <subject> — consumes the matched bulle
 }
 
 findings=0 labels_available=0 breaking_seen=0 labels_unassessable=0
+
+# Failure mode 4: duplicate bullets, checked against the notes alone before
+# any commit is matched — a bullet seen once already is only reported once
+# even if it repeats three or more times.
+dup_seen=""
+for _b in "${note_bullets[@]}"; do
+  [ -n "$_b" ] || continue
+  case " $dup_seen " in
+    *" $(printf '%s' "$_b" | tr ' ' '\001') "*) continue ;;
+  esac
+  _n=0
+  for _c in "${note_bullets[@]}"; do [ "$_c" = "$_b" ] && _n=$((_n + 1)); done
+  if [ "$_n" -gt 1 ]; then
+    echo "duplicate: ${_b} — appears ${_n} times in the notes; one logical change should render one bullet"
+    findings=$((findings + 1))
+  fi
+  dup_seen="$dup_seen $(printf '%s' "$_b" | tr ' ' '\001')"
+done
 # `read` treats a tab IFS as whitespace and collapses runs of tabs, which
 # would eat an EMPTY middle column — an empty labels field would swallow the
 # breaking flag into `labels`. Translate tabs to the unit separator, a hard
@@ -178,7 +211,7 @@ if [ "$findings" -eq 0 ]; then
   # the hidden-feature (mislabel) half only ran if labels were supplied. Never
   # claim another component's completeness — this check sees ONE component's
   # commit range and ONE component's notes (#291).
-  msg="release-notes: ${component} subject-omission check passed — every changelog-visible commit's subject appears in the notes"
+  msg="release-notes: ${component} subject-omission check passed — every changelog-visible commit's subject appears in the notes exactly once"
   if [ "$breaking_seen" -eq 1 ]; then
     msg="$msg; every breaking change appears in the notes"
   fi
