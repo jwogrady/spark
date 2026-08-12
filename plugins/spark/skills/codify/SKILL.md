@@ -63,6 +63,12 @@ lane (Codify, stage 3).
 - No commented-out code. No debug prints in library code.
 - Don't add dependencies the issue doesn't require.
 - Don't refactor surrounding code opportunistically — open a separate issue.
+- **Surface a falsified assumption immediately, don't wait for ship.** If
+  implementation disproves a design assumption or reveals a boundary whose
+  meaning would survive this code disappearing, ask the ADR-0028 promotion
+  question now — delaying loses the context. Route a "yes" to
+  [`knowledge`](../knowledge/SKILL.md); routine implementation needs no
+  ceremony and is the common case.
 - Follow the project's `CLAUDE.md` standards (types, docstrings, formatter,
   linter) — run them before handing off. `CONVENTIONS.md` and
   `ENGINEERING-STANDARDS.md` at the repo root hold the project's branching,
