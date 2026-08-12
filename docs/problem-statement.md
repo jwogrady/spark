@@ -1,80 +1,129 @@
-# Problem statement — the plugin ships more than its identity claims
+# Problem statement — carry durable learning across project boundaries
 
-> **Historical problem statement — resolved.** A point-in-time artifact for
-> the v0.7 consolidation; the effort it framed shipped in `v0.7.0`
-> (2026-07-11): review/cleanup consolidated into one `audit` skill (#144),
-> consolidation hygiene (#143), and the marketplace reshaped into a focused
-> core plus companions (#146). Kept as the record of *why* the extraction
-> happened. Owner: `jwogrady`. Current framing lives in `ROADMAP.md` and
-> `docs/alpha/`; the next `ideate` run replaces this file.
+**Status:** Current planning problem for v0.17.0.
+**Date:** 2026-08-12.
+**Owner:** jwogrady.
 
 ## Problem
 
-Spark's identity is one thing: the operator's standards, loaded once and
-carried into every project. The plugin ships twelve skills, but the
-architecture conformance audit classifies four of them — the whole-project
-reviewer, the cleanup generator, the public-docs crew, and the secrets
-bootstrap — as support that serves none of the three carry motions. Those
-four bring nineteen subagent definitions, three near-duplicate orchestration
-protocols, a skill that emits a prompt instead of acting, dead reference
-files from a pre-plugin era, and an operator decisions store nothing reads.
-Every one of them is surface the operator must understand, doctor must
-validate, and the docs must explain — dilution that makes the core promise
-harder to see and costlier to maintain.
+Spark can already carry information from a session into a project and deliberately
+promote some project knowledge to the operator layer, but it has no first-class path
+for a different case: several related repositories share one durable body of
+architectural memory while each repository remains the authority for its own code and
+release history.
+
+That missing path produces two bad choices. A spoke can restate system-wide history and
+reasoning locally, creating duplicate provenance that drifts, or it can leave important
+learning in chat and Git history, forcing later sessions to reconstruct what the
+engineering evidence meant.
+
+The Prime/Cosmos field case made the gap concrete. Prime began as an identity primitive
+inside Cosmos, earned an independent Go service/release boundary, and later shed a
+premature Portal/Phoenix commitment. GitHub preserved the commits, issues, PRs, and
+ADRs needed to recover that evolution. Cosmos was the right home for the durable
+cross-spoke meaning of those events; Prime was the right home for its executable
+implementation and local release truth. The reusable missing capability is the process
+that recognizes that distinction and carries the learning to the right place.
 
 ## Outcome
 
-The plugin contains only what carries the standard: the five lifecycle
-skills, project inception, internal knowledge capture, the agent-contract
-maintainer, and one evidence-based audit capability that acts directly.
-Everything removed is deliberate, recorded, and recoverable from history.
-The remaining surfaces are truthful: the work state defines its own loop
-close, and the one-command carry-in covers the whole permission baseline.
+Spark v0.17.0 provides a generic, evidence-backed **provenance promotion** path for a
+spoke that belongs to a larger constellation of related projects.
+
+The ownership model is:
+
+- **GitHub** preserves engineering evidence: commits, issues, pull requests, releases,
+  source, tests, and proof references.
+- **Spark** owns the process that decides whether discovered learning is merely local or
+  a candidate for durable cross-project memory, gathers the evidence, and routes the
+  candidate through any required human judgment.
+- **A memory hub** is the durable knowledge authority for cross-project meaning within a
+  related set of spokes.
+- **A spoke** remains the authority for its implementation, tests, local architectural
+  choices required to build it, roadmap, releases, and operational documentation.
+- **Runtime** remains the source of observed operational truth.
+
+Cosmos is the first dogfood memory hub. It is evidence for the design, not a hard-coded
+Spark dependency.
+
+## Core promotion test
+
+At a natural work boundary, ask:
+
+> Did this work teach us something that should remain known even if this
+> implementation disappears and is rebuilt?
+
+A **no** ends the check. The evidence remains in the spoke and GitHub.
+
+A **yes** produces a promotion candidate. It does not authorize a write by itself. Spark
+collects the engineering evidence, inspects the configured memory hub and its current
+rules, and asks for human judgment when the candidate changes architectural meaning or
+another decision owned by the human.
+
+## Shippable release shape
+
+The release is intentionally small:
+
+1. **#374 — Architecture.** Define the memory-hub/spoke model and how it extends
+   ADR-0008 without creating a second canonical source for any information class.
+2. **#375 — Routing.** Give a spoke one explicit project fact that identifies its memory
+   hub, with truthful missing/invalid behavior and no naming-convention guesses.
+3. **#376 — Promotion.** Extend `knowledge` to classify local implementation truth versus
+   durable cross-project learning, preserve GitHub evidence, and use the destination's
+   existing knowledge structure and authority rules.
+4. **#377 — Lifecycle and proof.** Surface the promotion question at natural lifecycle
+   boundaries, prove both promotion and no-promotion cases, and dogfood the flow with
+   Cosmos.
+
+Release readiness is tracked by #373 and closes last.
 
 ## Success criteria
 
-1. One `audit` skill replaces `review` and `cleanup`, keeps the evidence
-   table and deletion-safety discipline, and performs its audit directly —
-   no copy-paste orchestrator prompt.
-2. The public-docs crew and the secrets bootstrap are out of the plugin;
-   `shred-env` remains; the skill taxonomy, doctor, and every doc surface
-   agree on the reduced inventory.
-3. The unread operator decisions store is deferred out of the shipped
-   docs/protocol until a reader exists; glossary promotion is unaffected.
-4. The agent-contract skill carries no dead reference files, and no repo
-   template demands artifacts that skills do not ship.
-5. Work state has a defined close: after the recorded pull request merges,
-   the next brief/resume names the loop restart instead of a stale action.
+1. A spoke can name a memory hub without Spark knowing anything about Cosmos, Status26,
+   Prime, or a repository naming convention.
+2. The knowledge workflow can say **no promotion** and stop cleanly for routine
+   implementation work.
+3. A real durable lesson carries source GitHub evidence rather than copied history or
+   agent recollection.
+4. The hub's own document structure, supersession rules, and human authority govern the
+   resulting record; Spark does not impose a universal provenance schema.
+5. The five public lifecycle stages remain unchanged. Promotion is a carry-forward
+   responsibility surfaced at natural boundaries, not a sixth stage or per-commit gate.
+6. A positive Prime-like fixture and negative routine-engineering fixtures make the
+   classification behavior reviewable.
+7. A Cosmos dogfood run proves the complete path while Cosmos remains outside Spark's
+   runtime dependencies.
 
-## Prior art & reusable assets
+## Prior art and evidence
 
-- The architecture map's conformance test (ADR-0008, now enforced
-  mechanically by doctor's taxonomy parity check) already classifies every
-  component; this effort implements its verdicts.
-- Precedent: `caveman`, `handoff`, and `commit` were removed or folded in
-  earlier releases — dropping skills is an established, changelogged move.
-- The cleanup skill's evidence table, confidence levels, and deletion-safety
-  categories carry into the new audit skill; the reviewer's dimension list
-  informs its assess mode.
-- Extraction is removal-with-record: extracted skills' new homes are
-  separate products seeded from this repo's git history.
-- The one-command carry-in and its composition pattern (result counters,
-  create-only application) are the model for any new CLI behavior.
+- ADR-0008 already defines Operator / Project / Session layers, one canonical source per
+  class, and explicit promotion. v0.17 extends that model to related projects rather
+  than replacing it.
+- `knowledge` already separates raw session material from durable project docs and
+  requires deliberate promotion to operator vocabulary. v0.17 reuses that discipline.
+- Cosmos PR #240 / commit `c79e033b7210975419a267ed668c343af5e19297`
+  records the Prime lineage and the hub/spoke provenance lesson that triggered this
+  release.
+- Spark issues #373–#377 hold the executable release plan and acceptance criteria.
 
 ## Constraints
 
-- POSIX-friendly Bash, zero runtime dependencies; skills are Markdown.
-- One concern per branch and pull request; every removal lands reviewable.
-- Doctor stays the single validation gate and must pass after every change.
-- Nothing already merged regresses: setup, preferences, brief, resume, and
-  the enforcement doors keep their behavior.
+- Preserve one canonical source per information class.
+- Never cite agent memory as engineering authority when durable GitHub evidence exists.
+- Do not copy whole commit/issue histories into the memory hub.
+- Do not silently accept architectural decisions; the human remains the directing
+  authority under ADR-0019.
+- Do not force cross-repository ceremony on routine engineering.
+- Stay provider-neutral at the semantic boundary even when GitHub is the first evidence
+  transport.
 
 ## Non-goals
 
-- No new homes built here for the extracted products — separate repos,
-  separate efforts.
-- No changes to the five lifecycle skills' behavior or the enforcement
-  rules.
-- No team-coordination features, no bundled MCP servers.
-- No release; the milestone ships as reviewed pull requests, and the
-  release mechanism rolls them up on its own.
+- A provenance database, event stream, or synchronization daemon.
+- A universal schema for every memory repository.
+- Moving spoke code, tests, roadmap, release notes, or local implementation ADRs into a
+  hub.
+- Making all project knowledge operator-global.
+- Replacing GitHub as the engineering record.
+- Adding a new public lifecycle stage.
+- Automatically writing a hub record after every issue, pull request, commit, or release.
