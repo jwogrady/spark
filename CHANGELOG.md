@@ -9,6 +9,13 @@ Keep a Changelog format. Do not hand-edit released sections.
 
 ---
 
+## [0.16.2](https://github.com/jwogrady/spark/compare/v0.16.1...v0.16.2) (2026-08-12)
+
+
+### Documentation
+
+* plan v0.17 provenance promotion ([#378](https://github.com/jwogrady/spark/issues/378)) ([333b85b](https://github.com/jwogrady/spark/commit/333b85bb68ded9da629f1020018ba4258e33a645))
+
 ## [0.16.1](https://github.com/jwogrady/spark/compare/v0.16.0...v0.16.1) (2026-08-12)
 
 
