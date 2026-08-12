@@ -48,7 +48,7 @@ the *environment* can perform each Spark capability:
 | GitHub delivery | `gh`, authenticated | `plan`/`ship`/`validate` create issues and PRs |
 | JSON tooling | `jq` or `python3` | Merging the permission baseline into an existing `.claude/settings.json`; everything else degrades gracefully |
 | Release pipeline | repo wiring | `release-please-config.json` + workflow present when the resolved `release.mechanism` is `release-please`; other mechanisms are the operator's own |
-| Remote enforcement | `gh`, authenticated | The third door: the default branch's effective rules compared against the shipped trunk policy (`settings/github-ruleset-trunk.json`) — inspect-and-report only, drift degrades the summary, applying is always an explicit human act; unreachable/unauthenticated reports "not assessed" |
+| Remote enforcement | `gh`, authenticated | The third door: the default branch's effective rules — including the specific required-check contexts — compared against the repo's trunk policy file (`.github/spark-trunk-ruleset.json` when present, else the shipped `settings/github-ruleset-trunk.json`) — inspect-and-report only, drift degrades the summary, applying is always an explicit human act; unreachable/unreadable evidence reports "not assessed", never healthy |
 
 Each missing or unauthenticated dependency prints one remediation line
 (`gh auth login`, `spark preferences --apply`, …). The exit code is non-zero

@@ -87,9 +87,12 @@ issue PR → `master` (ADR-0027, and the delivery section of
 [`sdlc-doctrine.md`](plugins/spark/docs/explanation/sdlc-doctrine.md)):
 
 - One issue per branch; multiple focused Conventional Commits per branch.
-- **Ordering invariant:** if issue B depends on issue A, B's base must already
-  contain A's merged result. Declare dependencies on the issue
-  (`Blocked by #N`); codify's preflight fails closed when one is missing.
+- **Ordering invariant:** if issue B depends on issue A, B's base must
+  verifiably contain A's merged result. Declare dependencies on the issue
+  (`Blocked by #N`); codify's preflight demands positive proof (merged
+  closing PR an ancestor of HEAD; HEAD exactly at the fresh trunk) and
+  blocks — or reports not-assessed — otherwise. Branch with an explicit
+  `origin/<trunk>` start point.
 - **One writer per working tree:** concurrent mutation needs genuinely
   isolated worktrees; read-only analysis may run concurrently.
 - A temporary integration branch is a recovery/exception technique — never a

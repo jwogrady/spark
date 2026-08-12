@@ -145,10 +145,14 @@ sees only one of them:
   by `spark setup` or `spark install-git-hooks`) catch git run directly in a
   shell, where the plugin hook never fires.
 - **Remote door** — a GitHub ruleset on the trunk (policy shipped as
-  `plugins/spark/settings/github-ruleset-trunk.json`) backstops every path that
-  never runs local tooling: API calls, other clones, hookless clients. Spark
-  only inspects and reports drift (`spark doctor --requirements`); applying or
-  changing remote policy is always an explicit human act.
+  `plugins/spark/settings/github-ruleset-trunk.json`: PRs required, merges
+  gated on required CI checks, force-push and deletion blocked; this repo's
+  own contract lives in `.github/spark-trunk-ruleset.json` with its `doctor`
+  and `tests` contexts) backstops every path that never runs local tooling:
+  API calls, other clones, hookless clients. Spark only inspects and reports
+  drift (`spark doctor --requirements` verifies the policy's own check
+  contexts against the effective rules); applying or changing remote policy
+  is always an explicit human act.
 
 Every door enforces the same intent — blocks force-push and trunk pushes/commits;
 allows `--force-with-lease` locally. The per-rule detail (what each blocks, exit codes,

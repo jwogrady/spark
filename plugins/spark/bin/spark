@@ -504,16 +504,31 @@ doctor_requirements() {
   if [ "$in_repo" -eq 1 ] && [ "$gh_auth" -eq 1 ]; then
     def_branch="$( (cd "$top" && gh api 'repos/{owner}/{repo}' --jq .default_branch) 2>/dev/null || true)"
     if [ -n "$def_branch" ]; then
-      # The rules call must distinguish "no rules" (200 + empty list, exit 0)
+      # The rules calls must distinguish "no rules" (200 + empty list, exit 0)
       # from "unreadable" (any failure): judging drift from a failed read
-      # would be a guess, and this section never guesses.
-      local rules prot rules_rc=0
+      # would be a guess, and this section never guesses. The contexts read
+      # runs only when a required_status_checks rule exists, and its failure
+      # also degrades to not-assessed rather than "no contexts".
+      local rules prot checks rules_rc=0
       rules="$( (cd "$top" && gh api "repos/{owner}/{repo}/rules/branches/$def_branch" --jq '.[].type') 2>/dev/null)" || rules_rc=$?
+      checks=""
+      if [ "$rules_rc" -eq 0 ]; then
+        case "$rules" in
+          *required_status_checks*)
+            checks="$( (cd "$top" && gh api "repos/{owner}/{repo}/rules/branches/$def_branch" \
+              --jq '.[] | select(.type=="required_status_checks") | .parameters.required_status_checks[].context') 2>/dev/null)" || rules_rc=$?
+            ;;
+        esac
+      fi
       prot="$( (cd "$top" && gh api "repos/{owner}/{repo}/branches/$def_branch" --jq .protected) 2>/dev/null || true)"
       if [ "$rules_rc" -eq 0 ]; then
         remote_assessed=1
+        local req_checks
+        req_checks="$(ruleset_required_checks "$top" 2>/dev/null || true)"
         if remote_out="$(
             { printf '%s\n' "$rules" | awk 'NF{printf "rule\t%s\n", $0}'
+              printf '%s\n' "$checks" | awk 'NF{printf "check\t%s\n", $0}'
+              printf '%s\n' "$req_checks" | awk 'NF{printf "require\t%s\n", $0}'
               if [ -n "$prot" ]; then printf 'protected\t%s\n' "$prot"; fi
             } | remote_enforcement_verdict)"; then
           remote_ok=1
@@ -595,7 +610,7 @@ doctor_requirements() {
   elif [ "$remote_assessed" -ne 1 ]; then
     echo "  - GitHub unreachable or branch rules unreadable — not assessed"
   elif [ "$remote_ok" -eq 1 ]; then
-    green "  ✓ trunk ($def_branch) policy held server-side: PRs required, force-push and deletion blocked"
+    green "  ✓ trunk ($def_branch) policy held server-side: PRs required, merges CI-gated, force-push and deletion blocked"
   else
     yellow "  ! the remote trunk ($def_branch) does not hold the policy the local doors enforce:"
     printf '%s\n' "$remote_out" | while IFS= read -r line; do
@@ -603,8 +618,10 @@ doctor_requirements() {
     done
     yellow "    Local hooks and the guard are bypassable by any path that never runs them"
     yellow "    (gh api, another clone, a hookless client). Apply the policy deliberately —"
-    yellow "    never automatic: gh api repos/{owner}/{repo}/rulesets --input \\"
-    yellow "      ${SPARK_ROOT}/settings/github-ruleset-trunk.json"
+    yellow "    never automatic — after setting required_status_checks contexts to YOUR"
+    yellow "    repo's check names (a wrong context blocks every merge):"
+    yellow "      gh api repos/{owner}/{repo}/rulesets --input \\"
+    yellow "        ${SPARK_ROOT}/settings/github-ruleset-trunk.json"
   fi
   echo
 
@@ -2342,30 +2359,74 @@ check_reference_laziness() {
 # server-side where no local bypass (gh api, a foreign clone, a hookless
 # client) can reach. Reads evidence lines on stdin:
 #   rule <TAB> <type>            an active rule on the default branch
+#   check <TAB> <context>        an effective required status-check context
+#   require <TAB> <context>      a context the repo's POLICY file requires
 #   protected <TAB> true|false   the classic branch-protection flag
-# Prints one line per missing element; returns 0 when the policy holds (PRs
-# required, force-push blocked, deletion blocked), 1 otherwise. Pure function
-# — gathering lives with the caller so this is testable offline.
+# Returns 0 only when the policy holds: PRs required, force-push and deletion
+# blocked, AND every `require` context is among the effective `check`
+# contexts — the CONTRACT is the specific checks, not the mere presence of a
+# required_status_checks rule (a rule naming the wrong or no contexts gates
+# nothing that matters). Extra effective checks are fine. With no `require`
+# lines (policy contexts unreadable) it falls back to demanding at least one
+# effective context. Prints one line per violated element; returns 1 on any.
+# Pure function — gathering lives with the caller so this is testable offline.
 remote_enforcement_verdict() {
-  local kind a has_pr=0 has_nff=0 has_del=0 protected=""
+  local kind a has_pr=0 has_nff=0 has_del=0 has_rsc=0 protected=""
+  local eff_checks=" " req_checks="" nreq=0 neff=0
   while IFS=$'\t' read -r kind a; do
     case "$kind" in
       rule) case "$a" in
-              pull_request)     has_pr=1 ;;
-              non_fast_forward) has_nff=1 ;;
-              deletion)         has_del=1 ;;
+              pull_request)           has_pr=1 ;;
+              non_fast_forward)       has_nff=1 ;;
+              deletion)               has_del=1 ;;
+              required_status_checks) has_rsc=1 ;;
             esac ;;
+      check)   [ -n "$a" ] && { eff_checks="$eff_checks$a "; neff=$((neff+1)); } ;;
+      require) [ -n "$a" ] && { req_checks="$req_checks $a"; nreq=$((nreq+1)); } ;;
       protected) protected="$a" ;;
     esac
   done
-  local rc=0
+  local rc=0 ctx missing=""
   [ "$has_pr" -eq 1 ]  || { echo "  trunk accepts direct pushes (no pull_request rule)"; rc=1; }
+  if [ "$has_rsc" -ne 1 ]; then
+    echo "  merges are not gated on CI (no required_status_checks rule)"; rc=1
+  elif [ "$nreq" -gt 0 ]; then
+    for ctx in $req_checks; do
+      case "$eff_checks" in
+        *" $ctx "*) ;;
+        *) missing="$missing $ctx" ;;
+      esac
+    done
+    if [ -n "$missing" ]; then
+      echo "  required check(s) missing from the remote gate:${missing} — merges are not gated on the policy's checks (extra remote checks are fine; these must be present)"; rc=1
+    fi
+  elif [ "$neff" -eq 0 ]; then
+    echo "  the required_status_checks rule names no contexts — it gates nothing; add the repo's check names"; rc=1
+  fi
   [ "$has_nff" -eq 1 ] || { echo "  force-push to trunk is not blocked server-side (no non_fast_forward rule)"; rc=1; }
   [ "$has_del" -eq 1 ] || { echo "  trunk deletion is not blocked server-side (no deletion rule)"; rc=1; }
   if [ "$rc" -eq 1 ] && [ "$protected" = "true" ]; then
     echo "  (classic branch protection is enabled — verify it covers the rules above; the rules API only reports rulesets)"
   fi
   return $rc
+}
+
+# ruleset_required_checks <repo-root> — the check contexts the repo's trunk
+# POLICY requires, read from the policy-as-data file: the repo-local
+# .github/spark-trunk-ruleset.json when present (a repo's own contract, e.g.
+# this repository requires doctor+tests), else the shipped template. Extracted
+# with grep over the file's fixed, Spark-owned shape so no JSON tool is
+# required. One context per line; empty output means unreadable/none.
+ruleset_required_checks() {
+  local root="$1" f
+  for f in "$root/.github/spark-trunk-ruleset.json" "$SPARK_ROOT/settings/github-ruleset-trunk.json"; do
+    if [ -f "$f" ]; then
+      grep -oE '"context"[[:space:]]*:[[:space:]]*"[^"]+"' "$f" \
+        | sed -E 's/.*"([^"]+)"$/\1/'
+      return 0
+    fi
+  done
+  return 1
 }
 
 check_release_component_parity() {

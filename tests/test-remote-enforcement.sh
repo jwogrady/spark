@@ -10,13 +10,41 @@ set -euo pipefail
 sandbox_init
 . "$SPARK"   # load remote_enforcement_verdict (dispatch is source-guarded)
 
-# --- pure verdict: all three rules present -> conforming.
-rc=0; out="$(printf 'rule\tpull_request\nrule\tnon_fast_forward\nrule\tdeletion\n' | remote_enforcement_verdict)" || rc=$?
+# --- pure verdict: the full policy (PRs + CI gate with a context + no
+# force-push + no deletion) conforms.
+rc=0; out="$(printf 'rule\tpull_request\nrule\tnon_fast_forward\nrule\tdeletion\nrule\trequired_status_checks\ncheck\tvalidate\n' | remote_enforcement_verdict)" || rc=$?
 assert_rc "full rule set conforms" 0 "$rc"
 
 # --- an unrelated extra rule changes nothing.
-rc=0; out="$(printf 'rule\tpull_request\nrule\tnon_fast_forward\nrule\tdeletion\nrule\trequired_status_checks\n' | remote_enforcement_verdict)" || rc=$?
+rc=0; out="$(printf 'rule\tpull_request\nrule\tnon_fast_forward\nrule\tdeletion\nrule\trequired_status_checks\ncheck\tdoctor\ncheck\ttests\nrule\tcreation\n' | remote_enforcement_verdict)" || rc=$?
 assert_rc "extra rules are fine" 0 "$rc"
+
+# --- #359: the three classic rules WITHOUT a required_status_checks rule is
+# drift — merges must be gated on CI.
+rc=0; out="$(printf 'rule\tpull_request\nrule\tnon_fast_forward\nrule\tdeletion\n' | remote_enforcement_verdict)" || rc=$?
+assert_rc "missing required checks is drift" 1 "$rc"
+assert_contains "names the missing CI gate" "not gated on CI" "$out"
+
+# --- a required_status_checks rule with zero contexts gates nothing = drift.
+rc=0; out="$(printf 'rule\tpull_request\nrule\tnon_fast_forward\nrule\tdeletion\nrule\trequired_status_checks\n' | remote_enforcement_verdict)" || rc=$?
+assert_rc "empty check contexts is drift" 1 "$rc"
+assert_contains "names the empty contexts" "names no contexts" "$out"
+
+# --- the CONTRACT is the specific required contexts (#359): all present ->
+# conforming; extra effective checks are fine.
+rc=0; out="$(printf 'rule\tpull_request\nrule\tnon_fast_forward\nrule\tdeletion\nrule\trequired_status_checks\nrequire\tdoctor\nrequire\ttests\ncheck\tdoctor\ncheck\ttests\ncheck\textra-lint\n' | remote_enforcement_verdict)" || rc=$?
+assert_rc "all required contexts present (plus extras) conforms" 0 "$rc"
+
+# --- one required check missing from the effective gate -> drift, named.
+rc=0; out="$(printf 'rule\tpull_request\nrule\tnon_fast_forward\nrule\tdeletion\nrule\trequired_status_checks\nrequire\tdoctor\nrequire\ttests\ncheck\tdoctor\n' | remote_enforcement_verdict)" || rc=$?
+assert_rc "a missing required check is drift" 1 "$rc"
+assert_contains "names the missing context" "tests" "$out"
+assert_contains "says extras are fine but these are required" "extra remote checks are fine" "$out"
+
+# --- a wrong check name (typo'd context) cannot satisfy the requirement.
+rc=0; out="$(printf 'rule\tpull_request\nrule\tnon_fast_forward\nrule\tdeletion\nrule\trequired_status_checks\nrequire\tvalidate\ncheck\tvaldiate\n' | remote_enforcement_verdict)" || rc=$?
+assert_rc "a wrong context name is drift" 1 "$rc"
+assert_contains "names the required context" "validate" "$out"
 
 # --- no rules at all -> drift, every missing element named.
 rc=0; out="$(printf 'protected\tfalse\n' | remote_enforcement_verdict)" || rc=$?
@@ -40,7 +68,8 @@ case "$*" in
   --version*) echo "gh version 0.0.0-stub" ;;
   "auth status") exit 0 ;;
   *"api repos/{owner}/{repo} --jq .default_branch"*) echo "master" ;;
-  *"rules/branches/master"*) printf 'pull_request\nnon_fast_forward\ndeletion\n' ;;
+  *"required_status_checks"*"rules/branches/master"*|*"rules/branches/master"*"required_status_checks"*) printf 'validate\nextra-scan\n' ;;
+  *"rules/branches/master"*) printf 'pull_request\nnon_fast_forward\ndeletion\nrequired_status_checks\n' ;;
   *"branches/master --jq .protected"*) echo "false" ;;
   *) exit 0 ;;
 esac
@@ -49,6 +78,50 @@ chmod +x "$fakebin/gh"
 rc=0; out="$(cd "$repo" && env PATH="$fakebin:$PATH" "$SPARK" doctor --requirements 2>&1)" || rc=$?
 assert_rc "conforming remote exits 0" 0 "$rc"
 assert_contains "reports the held policy" "policy held server-side" "$out"
+assert_contains "the held policy includes the CI gate" "merges CI-gated" "$out"
+
+# --- a repo-local policy file overrides the shipped template's contexts: the
+# remote must carry THIS repo's required checks (doctor+tests), and one
+# missing is drift even though the rule exists and names another context.
+mkdir -p "$repo/.github"
+cat > "$repo/.github/spark-trunk-ruleset.json" <<'EOF'
+{ "rules": [ { "type": "required_status_checks", "parameters": { "required_status_checks": [
+  { "context": "doctor" }, { "context": "tests" } ] } } ] }
+EOF
+cat > "$fakebin/gh" <<'EOF'
+#!/usr/bin/env bash
+case "$*" in
+  --version*) echo "gh version 0.0.0-stub" ;;
+  "auth status") exit 0 ;;
+  *"api repos/{owner}/{repo} --jq .default_branch"*) echo "master" ;;
+  *"required_status_checks"*"rules/branches/master"*|*"rules/branches/master"*"required_status_checks"*) printf 'doctor\n' ;;
+  *"rules/branches/master"*) printf 'pull_request\nnon_fast_forward\ndeletion\nrequired_status_checks\n' ;;
+  *"branches/master --jq .protected"*) echo "false" ;;
+  *) exit 0 ;;
+esac
+EOF
+rc=0; out="$(cd "$repo" && env PATH="$fakebin:$PATH" "$SPARK" doctor --requirements 2>&1)" || rc=$?
+assert_rc "missing repo-required check still exits 0 (advisory)" 0 "$rc"
+assert_contains "names the drift" "does not hold the policy" "$out"
+assert_contains "names the missing repo-required context" "tests" "$out"
+
+# --- same repo-local policy, remote carries both (plus an extra) -> healthy.
+cat > "$fakebin/gh" <<'EOF'
+#!/usr/bin/env bash
+case "$*" in
+  --version*) echo "gh version 0.0.0-stub" ;;
+  "auth status") exit 0 ;;
+  *"api repos/{owner}/{repo} --jq .default_branch"*) echo "master" ;;
+  *"required_status_checks"*"rules/branches/master"*|*"rules/branches/master"*"required_status_checks"*) printf 'doctor\ntests\nlint\n' ;;
+  *"rules/branches/master"*) printf 'pull_request\nnon_fast_forward\ndeletion\nrequired_status_checks\n' ;;
+  *"branches/master --jq .protected"*) echo "false" ;;
+  *) exit 0 ;;
+esac
+EOF
+rc=0; out="$(cd "$repo" && env PATH="$fakebin:$PATH" "$SPARK" doctor --requirements 2>&1)" || rc=$?
+assert_rc "repo-required checks all present exits 0" 0 "$rc"
+assert_contains "reports the held policy with the repo's contract" "policy held server-side" "$out"
+rm -rf "$repo/.github"
 
 # --- conforming rules with an UNREADABLE protected flag must still report
 # conforming (regression: the empty-prot evidence group used to fail the
@@ -59,7 +132,8 @@ case "$*" in
   --version*) echo "gh version 0.0.0-stub" ;;
   "auth status") exit 0 ;;
   *"api repos/{owner}/{repo} --jq .default_branch"*) echo "master" ;;
-  *"rules/branches/master"*) printf 'pull_request\nnon_fast_forward\ndeletion\n' ;;
+  *"required_status_checks"*"rules/branches/master"*|*"rules/branches/master"*"required_status_checks"*) printf 'validate\n' ;;
+  *"rules/branches/master"*) printf 'pull_request\nnon_fast_forward\ndeletion\nrequired_status_checks\n' ;;
   *"branches/master --jq .protected"*) exit 1 ;;
   *) exit 0 ;;
 esac
@@ -112,6 +186,41 @@ case "$(cat "$GH_STUB_LOG")" in
 esac
 unset GH_STUB_LOG
 
+# --- the CONTEXTS read failing (types read fine) is not assessed, never a
+# guessed "no contexts" drift.
+cat > "$fakebin/gh" <<'EOF'
+#!/usr/bin/env bash
+case "$*" in
+  --version*) echo "gh version 0.0.0-stub" ;;
+  "auth status") exit 0 ;;
+  *"api repos/{owner}/{repo} --jq .default_branch"*) echo "master" ;;
+  *"required_status_checks"*"rules/branches/master"*|*"rules/branches/master"*"required_status_checks"*) exit 1 ;;
+  *"rules/branches/master"*) printf 'pull_request\nnon_fast_forward\ndeletion\nrequired_status_checks\n' ;;
+  *"branches/master --jq .protected"*) echo "false" ;;
+  *) exit 0 ;;
+esac
+EOF
+rc=0; out="$(cd "$repo" && env PATH="$fakebin:$PATH" "$SPARK" doctor --requirements 2>&1)" || rc=$?
+assert_rc "failed contexts read exits 0" 0 "$rc"
+assert_contains "failed contexts read is not assessed" "not assessed" "$out"
+
+# --- the shipped policy template satisfies the verdict it is measured
+# against, and carries the CI-gate rule with at least one context.
+if command -v jq >/dev/null 2>&1; then
+  tpl="$WORK/plugin/settings/github-ruleset-trunk.json"
+  jq empty "$tpl" && ok || bad "ruleset template is valid JSON"
+  rc=0; out="$(
+    { jq -r '.rules[].type' "$tpl" | awk 'NF{printf "rule\t%s\n", $0}'
+      jq -r '.rules[] | select(.type=="required_status_checks") | .parameters.required_status_checks[].context' "$tpl" \
+        | awk 'NF{printf "check\t%s\n", $0}'
+      jq -r '.rules[] | select(.type=="required_status_checks") | .parameters.required_status_checks[].context' "$tpl" \
+        | awk 'NF{printf "require\t%s\n", $0}'
+    } | remote_enforcement_verdict)" || rc=$?
+  assert_rc "the shipped template conforms to its own verdict" 0 "$rc"
+  [ "$(jq -r '.rules[] | select(.type=="required_status_checks") | .parameters.required_status_checks | length' "$tpl")" -ge 1 ] \
+    && ok || bad "template carries at least one required check context"
+fi
+
 # --- json output carries the assessed/ready pair.
 if command -v jq >/dev/null 2>&1; then
   cat > "$fakebin/gh" <<'EOF'
@@ -120,7 +229,8 @@ case "$*" in
   --version*) echo "gh version 0.0.0-stub" ;;
   "auth status") exit 0 ;;
   *"api repos/{owner}/{repo} --jq .default_branch"*) echo "master" ;;
-  *"rules/branches/master"*) printf 'pull_request\nnon_fast_forward\ndeletion\n' ;;
+  *"required_status_checks"*"rules/branches/master"*|*"rules/branches/master"*"required_status_checks"*) printf 'validate\n' ;;
+  *"rules/branches/master"*) printf 'pull_request\nnon_fast_forward\ndeletion\nrequired_status_checks\n' ;;
   *"branches/master --jq .protected"*) echo "false" ;;
   *) exit 0 ;;
 esac

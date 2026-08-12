@@ -45,10 +45,14 @@ issue → issue branch → focused commits → validation → issue PR → maste
 - **The ordering invariant:** if issue B depends on issue A, the state used to
   Codify B must contain A's accepted, integrated result. Plan records the
   dependency durably in GitHub (native blocked-by links via the issue
-  manifest, `Blocked by #N` in the body); Codify **fails closed** when a
-  prerequisite is open or the base is behind the remote trunk
-  (`check-prereqs.sh`); `resume` surfaces trunk-ancestry drift on re-entry.
-  Drift is reported, never silently repaired.
+  manifest, `Blocked by #N` in the body); Codify demands **positive proof**
+  before branching (`check-prereqs.sh`): every blocker's merged closing PR is
+  an ancestor of HEAD — a closed issue alone proves nothing — and HEAD sits
+  exactly at the fresh remote trunk, neither behind nor diverged, with the
+  new branch created from an explicit `origin/<trunk>` start point. Violation
+  blocks; unavailable proof is *not assessed*, never guessed; `resume`
+  surfaces trunk-ancestry drift on re-entry. Drift is reported, never
+  silently repaired.
 - **Independent issues may proceed in parallel.** Dependent issues wait for
   their prerequisite to merge, then branch from the fresh trunk. Sequential-
   when-dependent is the norm, and the field record shows it scales to real
@@ -84,7 +88,9 @@ the same motion as publishing an issue branch.
 - GitHub's native traceability (`Closes #N` per PR) stays intact; no
   deterministic issue↔commit map has to be reconstructed in PR bodies.
 - The enforcement doors are unchanged; server-side trunk protection (the
-  third door) composes with PR-based integration directly.
+  third door: PRs required, merges gated on the repo's required CI checks,
+  force-push and deletion blocked) composes with PR-based integration
+  directly.
 - The rejected alternative is recorded: #339/#358's canonical milestone
   integration branch, and #356's milestone-publishing Ship rewrite, do not
   land. Their vocabulary (milestone = shippable state; issue = capability;

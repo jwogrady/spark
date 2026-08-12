@@ -58,8 +58,9 @@ above are *local*: a `gh api` call, a clone on another machine, or any client
 that never runs the hooks walks straight past them — the zd-dns field test
 deleted a published tag through the API on the same afternoon the guard
 correctly blocked a push. The backstop is server-side: a GitHub ruleset on the
-trunk that requires pull requests and blocks force-pushes and deletion, so the
-policy holds no matter which path reaches the remote. Spark ships the policy
+trunk that requires pull requests, gates merges on the repo's required CI
+checks, and blocks force-pushes and deletion, so the policy holds no matter
+which path reaches the remote. Spark ships the policy
 as data (`settings/github-ruleset-trunk.json`, solo-operator defaults: PRs
 required, zero mandatory approvals) and **inspects, never applies**:
 `spark doctor --requirements` reports whether the remote matches the policy

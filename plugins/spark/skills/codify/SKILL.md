@@ -21,21 +21,24 @@ lane (Codify, stage 3).
    `plan`, don't guess a stack mid-implementation.
 2. **Read the issue.** The acceptance criteria are the contract. If they're
    missing or vague, go back to [`plan`](../plan/SKILL.md) — don't guess.
-3. **Check prerequisites — fail closed.** From the **project root** (the
-   script reads the *current* repo's issues and trunk — running it from the
-   skill's own directory would assess the wrong repository), run the script by
-   its path in this skill: `bash <path-to-this-skill>/scripts/check-prereqs.sh <issue>`.
-   It reads the issue's declared dependencies (GitHub blocked-by links and
-   `Blocked by #N` body lines) and blocks when a prerequisite is still open
-   or the base is behind the remote trunk — the ordering invariant: dependent
-   work starts from a state that already contains its prerequisites. Blocked →
-   stop and name the missing prerequisite; `not assessed` → verify by hand
-   before branching. Never repair drift silently.
-4. **Branch from a fresh trunk.** Never work on `master`/`main`. Create a
-   focused branch off the current remote trunk:
+3. **Check prerequisites — positive proof, fail closed.** From the **project
+   root** (it reads the *current* repo's issues and trunk), run this skill's
+   script: `bash <path-to-this-skill>/scripts/check-prereqs.sh <issue>`. It
+   demands proof of the ordering invariant on two axes: every declared
+   blocker's **merged result is an ancestor of HEAD** (a closed issue alone
+   proves nothing), and **HEAD sits exactly at the fresh remote trunk**
+   (neither behind nor diverged). `ready` = proven; `blocked` = the invariant
+   is positively violated — stop and fix the base; `not assessed` = the proof
+   is unavailable — verify by hand before branching. Never repair drift
+   silently, and never treat "no problem detected" as ready.
+4. **Branch from the fresh trunk — explicitly.** Never work on
+   `master`/`main`, and never branch from whatever HEAD happens to be:
    ```bash
-   git checkout -b feat/<short-slug>      # or fix/, refactor/, docs/
+   git fetch origin
+   git checkout -b feat/<short-slug> origin/<trunk>   # or fix/, refactor/, docs/
    ```
+   The explicit start point is what makes the new branch demonstrably
+   originate at the accepted base.
 5. **Match the surrounding code.** Read neighboring files first; mirror their
    naming, structure, and idioms. Write code that reads like it was already
    there.

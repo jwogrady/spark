@@ -47,9 +47,11 @@ issue → issue branch → focused commits → validation → issue PR → trunk
 An issue branch carries **multiple focused Conventional Commits** — Codify
 commits each coherent implementation step, Validate commits its review fixes,
 and Ship publishes what already exists. Two invariants make parallel work
-safe: **ordering** — if issue B depends on issue A, B's base must already
-contain A's merged result (Plan records the dependency in GitHub, Codify fails
-closed when it's missing) — and **one writer per working tree** — concurrent
+safe: **ordering** — if issue B depends on issue A, B's base must verifiably
+contain A's merged result (Plan records the dependency in GitHub; Codify
+demands the proof — merged result an ancestor of HEAD, HEAD exactly at the
+fresh trunk — and blocks or reports not-assessed otherwise) — and **one
+writer per working tree** — concurrent
 reading is fine, concurrent mutation needs genuinely isolated worktrees.
 
 The trunk is the development line, integrated only through PRs; the *release*

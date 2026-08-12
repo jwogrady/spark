@@ -146,7 +146,7 @@ path that can reach the repository:
 | --- | --- | --- |
 | `PreToolUse` guard | Claude runs a git command | Blocks force-pushes and pushes whose destination is trunk — through leading git options, full refspecs, and compound commands |
 | Git hooks | You (or anyone) commits directly | Rejects commits on trunk, invalid conventional commits, and AI attribution |
-| GitHub ruleset | Anything reaches the remote — API calls, other clones, hookless clients | The same trunk policy server-side: PRs required, force-push and deletion blocked. Spark ships the policy and reports drift (`spark doctor --requirements`); applying it stays a human act |
+| GitHub ruleset | Anything reaches the remote — API calls, other clones, hookless clients | The same trunk policy server-side: PRs required, merges gated on the repo's required CI checks, force-push and deletion blocked. Spark ships the policy and reports drift (`spark doctor --requirements`); applying it stays a human act |
 | `spark doctor` | Locally and in CI | Plugin structure, scripts, documentation links, manifests, enforcement lockstep |
 | Behavioral tests | Every pull request **to this repository** | Spark's own CI exercises the CLI flows and the local enforcement doors against throwaway repos — this is how Spark tests itself, not a suite added to your project (`preferences --apply` scaffolds *your* stack's validation instead) |
 
