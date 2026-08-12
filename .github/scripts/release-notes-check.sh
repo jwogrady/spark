@@ -107,26 +107,38 @@ has_feature_label() { # has_feature_label <comma-separated-labels>
 # notes_normalize: lowercase; drop linkified refs `([x](url))`; linkified
 # `[#12](url)` -> `#12`; drop trailing `, closes …` metadata; drop bare `(#N)`
 # refs (anywhere — conventional-changelog linkifies mid-subject refs too);
-# strip a leading `**scope:** `; squeeze whitespace.
+# squeeze whitespace. `--keep-scope` skips the leading `**scope:** ` strip —
+# duplicate detection (below) needs scope kept, since two commits scoped to
+# different components ("**docs:** add examples" / "**cli:** add examples")
+# are genuinely different changes that happen to share description text; only
+# subject-to-commit matching should fold the scope away, because a commit's
+# own subject never carries the bolded-scope decoration Release Please adds.
 notes_normalize() {
-  printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E \
+  local keep_scope="" out
+  [ "${2:-}" = "--keep-scope" ] && keep_scope=1
+  out="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E \
     -e 's/\(\[[^]]*\]\([^)]*\)\)//g' \
     -e 's/\[(#[0-9]+)\]\([^)]*\)/\1/g' \
     -e 's/,? *closes .*$//' \
-    -e 's/\(#[0-9]+\)//g' \
-    -e 's/^\*\*[^*]+\*\* *//' \
-    -e 's/[[:space:]]+/ /g' -e 's/^ //' -e 's/ $//'
+    -e 's/\(#[0-9]+\)//g')"
+  [ -n "$keep_scope" ] || out="$(printf '%s' "$out" | sed -E 's/^\*\*[^*]+\*\* *//')"
+  printf '%s' "$out" | sed -E -e 's/[[:space:]]+/ /g' -e 's/^ //' -e 's/ $//'
 }
 
-# Collect the notes bullets (lines starting `* ` or `- `), normalized, into a
-# consumable pool. Non-bullet lines (headings, prose, URLs) are never matched.
+# Collect the notes bullets (lines starting `* ` or `- `) into two parallel,
+# same-indexed pools: `note_bullets` (scope-stripped, consumed by subject
+# matching below — unchanged behavior) and `note_bullets_full` (scope kept,
+# read-only, used only by duplicate detection). Non-bullet lines (headings,
+# prose, URLs) are never matched.
 note_bullets=()
+note_bullets_full=()
 while IFS= read -r _line || [ -n "$_line" ]; do   # || catches a final line with no newline
   case "$_line" in
     [*-]\ *|" "[*-]\ *|"  "[*-]\ *)
       _b="${_line#"${_line%%[*-]*}"}"     # strip leading indent
       _b="${_b#? }"                        # strip the bullet marker + space
-      note_bullets+=("$(notes_normalize "$_b")") ;;
+      note_bullets+=("$(notes_normalize "$_b")")
+      note_bullets_full+=("$(notes_normalize "$_b" --keep-scope)") ;;
   esac
 done < "$notes"
 
@@ -143,25 +155,21 @@ subject_in_notes() { # subject_in_notes <subject> — consumes the matched bulle
   return 1
 }
 
-findings=0 labels_available=0 breaking_seen=0 labels_unassessable=0
+findings=0 labels_available=0 breaking_seen=0 labels_unassessable=0 dup_findings=0
 
 # Failure mode 4: duplicate bullets, checked against the notes alone before
-# any commit is matched — a bullet seen once already is only reported once
-# even if it repeats three or more times.
-dup_seen=""
-for _b in "${note_bullets[@]}"; do
+# any commit is matched. Compared on note_bullets_full (scope kept) so two
+# differently-scoped bullets that share description text are never a false
+# duplicate. Bullets were read via `read -r`, so none can contain an embedded
+# newline — one bullet per line is safe for a plain sort | uniq -c reduction
+# rather than a hand-rolled O(n²) scan.
+while read -r _n _b || [ -n "$_b" ]; do
   [ -n "$_b" ] || continue
-  case " $dup_seen " in
-    *" $(printf '%s' "$_b" | tr ' ' '\001') "*) continue ;;
-  esac
-  _n=0
-  for _c in "${note_bullets[@]}"; do [ "$_c" = "$_b" ] && _n=$((_n + 1)); done
-  if [ "$_n" -gt 1 ]; then
-    echo "duplicate: ${_b} — appears ${_n} times in the notes; one logical change should render one bullet"
-    findings=$((findings + 1))
-  fi
-  dup_seen="$dup_seen $(printf '%s' "$_b" | tr ' ' '\001')"
-done
+  [ "$_n" -gt 1 ] || continue
+  echo "duplicate: ${_b} — appears ${_n} times in the notes; one logical change should render one bullet"
+  findings=$((findings + 1))
+  dup_findings=$((dup_findings + 1))
+done < <(printf '%s\n' "${note_bullets_full[@]}" | grep -v '^$' | sort | uniq -c | sed -E 's/^[[:space:]]*([0-9]+) /\1 /')
 # `read` treats a tab IFS as whitespace and collapses runs of tabs, which
 # would eat an EMPTY middle column — an empty labels field would swallow the
 # breaking flag into `labels`. Translate tabs to the unit separator, a hard
@@ -211,7 +219,7 @@ if [ "$findings" -eq 0 ]; then
   # the hidden-feature (mislabel) half only ran if labels were supplied. Never
   # claim another component's completeness — this check sees ONE component's
   # commit range and ONE component's notes (#291).
-  msg="release-notes: ${component} subject-omission check passed — every changelog-visible commit's subject appears in the notes exactly once"
+  msg="release-notes: ${component} subject-omission check passed — every changelog-visible commit's subject appears in the notes exactly once; no bullet is duplicated"
   if [ "$breaking_seen" -eq 1 ]; then
     msg="$msg; every breaking change appears in the notes"
   fi
@@ -224,5 +232,16 @@ if [ "$findings" -eq 0 ]; then
   echo "$msg"
   exit 0
 fi
-echo "release-notes: ${findings} omission/mislabel finding(s) in ${component} — reconcile before approving the release PR" >&2
+# Name only the categories that actually fired — a pure-duplicate failure
+# must never read as "omission/mislabel" to the human triaging it, and a
+# mixed run names both rather than picking one arbitrarily.
+other_findings=$((findings - dup_findings))
+if [ "$dup_findings" -gt 0 ] && [ "$other_findings" -gt 0 ]; then
+  categories="omission/mislabel/duplicate"
+elif [ "$dup_findings" -gt 0 ]; then
+  categories="duplicate"
+else
+  categories="omission/mislabel"
+fi
+echo "release-notes: ${findings} ${categories} finding(s) in ${component} — reconcile before approving the release PR" >&2
 exit 1

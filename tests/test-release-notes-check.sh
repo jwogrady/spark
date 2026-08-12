@@ -291,6 +291,28 @@ fix	normalize issue state case in the milestone gate		" \
 * normalize issue state case in the milestone gate ([bbb2222](https://x/b))" \
   "subject-omission check passed"
 
+# --- two differently-scoped bullets sharing description text are NOT a false
+# duplicate — scope is kept for duplicate detection even though it's stripped
+# for subject matching (a real commit subject never carries the bolded-scope
+# decoration Release Please adds).
+check 0 "same description, different scope, is not a false duplicate" \
+"fix	add examples		" \
+"### Bug Fixes
+
+* **docs:** add examples ([abc1111](https://x/a))
+* **cli:** add examples ([bbb2222](https://x/b))" \
+
+# --- a pure-duplicate failure must be named "duplicate", never blamed on
+# "omission/mislabel" — the category a human triaging the message would go
+# looking for and not find.
+check 1 "duplicate failure names its own category, not omission/mislabel" \
+"fix	normalize issue state case		" \
+"### Bug Fixes
+
+* normalize issue state case ([5a95763](https://x/a))
+* normalize issue state case ([15181a8](https://x/b))" \
+  "1 duplicate finding(s)"
+
 # --- usage errors exit 2.
 rc=0; bash "$script" --commits "$work/nope.tsv" --notes "$work/notes.md" >/dev/null 2>&1 || rc=$?
 [ "$rc" -eq 2 ] && ok || bad "missing commits file — want exit 2, got $rc"
