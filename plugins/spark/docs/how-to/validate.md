@@ -2,7 +2,7 @@
 
 > How-to — task-oriented.
 
-Use this after `codify`, before committing.
+Use this after `codify`, before `ship` publishes the branch.
 
 1. Invoke `/spark:validate`.
 2. Run the built-in reviews — Spark orchestrates them, it doesn't replace them:

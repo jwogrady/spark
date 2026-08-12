@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Behavioral suite for the total context-footprint ratchet and cache-stability
-# check doctor enforces (#292). Sources bin/spark (the dispatch is source-
-# guarded) to drive the factored gate functions against a throwaway fixture
-# marketplace with env-set budgets — the "--root fixture" path the issue asks
-# for, with no dependency on the real repo's size.
+# Behavioral suite for the total context-footprint measurement and its
+# advisory rendering (#292; demoted to warn-only by #361 — the per-file
+# budgets in lint_skill_md remain the hard errors). Sources bin/spark (the
+# dispatch is source-guarded) to drive the factored gate functions against a
+# throwaway fixture marketplace with env-set budgets, and proves doctor WARNS
+# rather than fails when the total is exceeded.
 set -euo pipefail
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 
@@ -87,5 +88,22 @@ sum=0
 for d in "$mkt"/plugins/*/; do sum=$((sum + $(fp_plugin_bytes "$d"))); done
 audit="$("$SPARK" footprint --root "$mkt" --json | sed -E 's/.*"total":\{"bytes":([0-9]+).*/\1/')"
 [ "$sum" = "$audit" ] && ok || bad "gate summation ($sum) != footprint audit total ($audit) — authority drift"
+
+# --- the demotion itself (#361): doctor over the marketplace budget must WARN
+# and still exit 0 — the total is advisory, never a gate. Run the real doctor
+# in the sandbox plugin copy with an impossible budget; the sandbox lacks a
+# marketplace.json two levels up, so build a minimal one around the plugin.
+mkt2="$WORK/advisorymkt"
+mkdir -p "$mkt2/.claude-plugin" "$mkt2/plugins"
+printf '{ "name": "fixture" }\n' > "$mkt2/.claude-plugin/marketplace.json"
+cp -r "$WORK/plugin" "$mkt2/plugins/spark"
+rc=0; out="$(cd "$mkt2" && env FOOTPRINT_MARKETPLACE_MAX_BYTES=1 FOOTPRINT_PLUGIN_MAX_BYTES=1 CI=1 \
+  bash "$mkt2/plugins/spark/bin/spark" doctor 2>&1)" || rc=$?
+assert_rc "doctor over the footprint budget still exits 0" 0 "$rc"
+assert_contains "the overrun is a warning" "! over budget" "$out"
+case "$out" in
+  *"✗ over budget"*) bad "footprint overrun must not be an error" ;;
+  *) ok ;;
+esac
 
 finish

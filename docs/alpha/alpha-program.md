@@ -191,12 +191,14 @@ Grounded in the current repository (post-v0.15.0). Three buckets.
 
 ### Preserve — already validated, protect from churn
 
-- The **enforcement doors** (PreToolUse guard + git hooks) — engineering-proven,
+- The **enforcement doors** (PreToolUse guard + git hooks + the trunk-ruleset
+  policy for the remote, human-applied) — engineering-proven,
   hostile-tested; do not weaken without extraordinary evidence.
 - **Release Please ownership** of tags/changelog/releases — proven end-to-end by
   v0.14.0; the human-merges-the-release-PR gate held correctly.
-- **The three release gates** (milestone, release-notes, platform-compat) and
-  the evidence-index contract — hardened and adversarially reviewed.
+- **The release gates** (milestone readiness, release-notes truth) — hardened
+  and adversarially reviewed. (A third gate, the platform-compat review, was
+  retired with the CEF gate machinery by the #361 governance deletion test.)
 - **The stability contract** as the honesty backbone — extend it, don't dilute
   it.
 - **Create-only / idempotent setup** — a safety property, not a preference.

@@ -5,9 +5,17 @@
 > evaluation suite shares. The **mechanism** that implements it is
 > [`../../evaluations/lib/eval.sh`](../../evaluations/lib/eval.sh). A dev-doc — it
 > governs how Spark is built and never ships. Owner: `jwogrady`.
+>
+> **Status (v0.16):** the recorded suites and the library remain the evidence
+> behind Spark's measured decisions (v0.12 orchestration, v0.15 routing), and
+> the library still runs future measurements. The *CI gates* that consumed the
+> evidence index — the platform-compat review and the PR traceability check —
+> were retired by the governance deletion test (#361). Nothing enforces this
+> contract on ordinary changes anymore; it applies when an evaluation is run.
 
-Spark owns evaluation (Constitution [Article II.4](../product-constitution.md);
-adopted by [ADR-0025](../adr/0025-capability-evaluation-framework.md)). This
+Spark owns evaluation (adopted by
+[ADR-0025](../adr/0025-capability-evaluation-framework.md); historically via
+Constitution Article II.4, now archived). This
 document is the reusable contract: a capability's Q4 evidence (see the
 [Capability Evaluation Framework](../governance/capability-evaluation.md)) is
 produced here, in a form any suite can adopt.
@@ -79,7 +87,7 @@ Spark verifies three different things three different ways. Keep them distinct:
 | Instrument | Nature | Home | Records |
 |---|---|---|---|
 | `spark doctor` | static, pass/fail | the CLI ([ADR-0011](../adr/0011-doctor-is-the-validation-gate.md)) | layout, JSON, frontmatter, links |
-| behavioral tests | executed, pass/fail | `tests/` ([ADR-0018](../adr/0018-behavioral-tests-are-the-second-ci-gate.md)) | shipped flows and both enforcement doors |
+| behavioral tests | executed, pass/fail | `tests/` ([ADR-0018](../adr/0018-behavioral-tests-are-the-second-ci-gate.md)) | shipped flows and all three enforcement doors (the remote door's inspect-only check included) |
 | **evaluation** | graded measurement | `evaluations/` (this doc) | quality/correctness/latency/cost of a capability |
 
 Doctor and behavioral tests answer *is it well-formed / does it work?* Evaluation
@@ -107,13 +115,14 @@ An evaluation exists to decide something. State the decision rule up front:
 - Research evidence is marked as such at its source (a banner) and never promoted
   to a product claim until an implementation ships and validates.
 
-## The Evaluation → Release seam
+## The Evaluation → Release seam (historical)
 
-Capability Traceability ends `… → Evaluation → Release`. The
-[Platform Compatibility Review gate](../product-constitution.md) (Constitution
-Article VII) consumes evaluation results at release time: a capability whose
-declared `required` evidence is absent or malformed does not ship. This document
-defines the evidence and the declaration; the gate enforces it.
+Capability Traceability ended `… → Evaluation → Release`: the Platform
+Compatibility Review gate consumed evaluation results at release time, so a
+capability whose declared `required` evidence was absent or malformed did not
+ship. That gate was retired by the #361 governance deletion test (see the
+status note above); the declaration format below remains the recorded form
+evidence takes when an evaluation is run.
 
 ## The evidence index (capability → evidence)
 
@@ -159,5 +168,5 @@ No new mechanism is needed — reuse the library:
 
 - [`../../evaluations/lib/eval.sh`](../../evaluations/lib/eval.sh) — the shared mechanism
 - [`../../evaluations/orchestration/README.md`](../../evaluations/orchestration/README.md) — the first suite
-- [Constitution Article II.4](../product-constitution.md) and [ADR-0025](../adr/0025-capability-evaluation-framework.md) — the surface's authority
+- [ADR-0025](../adr/0025-capability-evaluation-framework.md) — the surface's authority (originally Constitution Article II.4, archived)
 - [Applying the CEF](../governance/capability-evaluation.md) — where evaluation supplies the Q4 evidence

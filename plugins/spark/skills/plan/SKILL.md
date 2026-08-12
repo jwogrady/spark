@@ -7,61 +7,74 @@ description: Turn a framed problem into an implementation approach (stack/archit
 
 `Ideate → Plan → Codify → Validate → Ship`
 
-Plan converts a confirmed problem statement into a small set of features, each
-expressed as a GitHub issue that `codify` can pick up. The unit of work is a
-feature, not a task list.
+Plan converts a confirmed problem statement into a milestone `codify` can
+execute. It reasons in a deliberate internal order — **model, then shape, then
+design** — so technology is chosen as an answer to the domain and the shaped
+outcome, never before them. The public lifecycle stays five stages; these are
+reasoning steps inside Plan, not new verbs.
 
 ## Do this
 
 1. **Read the problem statement.** Look at `docs/problem-statement.md` first —
    that's where `ideate` persists it. If it's not there and the user hasn't
    pointed at one, run [`ideate`](../ideate/SKILL.md) first.
-2. **Decide the implementation approach.** Pick up the tech choice `ideate`
-   deferred: language/runtime, top-level layout, and key dependencies. Record
-   each decision as an ADR under `docs/adr/` (use the `0000-template.md`
-   format). A plan with no stack is not a plan `codify` can execute. Read the
-   repo-root `ENGINEERING-STANDARDS.md` first — it holds the project's stack and
-   quality contract; a deviation belongs in an ADR and its committed preference.
-3. **Decompose into features.** Each feature is independently shippable and maps
-   to one issue. Prefer 3–7 features for a first milestone; if you have more,
-   the milestone is too big — cut scope.
-4. **Draft each issue** using the repo's templates in
-   `.github/ISSUE_TEMPLATE/` (`feature.yml`, `bug.yml`). For each:
-   - Title: imperative, specific (`Add NAP export endpoint`, not `NAP stuff`).
-   - Body: the user-facing outcome, acceptance criteria, and any constraints
-     inherited from the problem statement.
-   - Labels that already exist in the repo — do not invent label taxonomies.
-5. **Propose a milestone** that groups the issues and names the outcome. Name
-   its target version with the [version ladder](../../docs/explanation/sdlc-doctrine.md):
-   a first usable-product milestone targets `0.1.0`; the contributions under it
-   ship as `0.0.x`.
-6. **Give every feature a release decision.** Check roadmap completeness
+2. **Model the domain — enough to name what is load-bearing.** Identify the
+   concepts, roles, relationships, lifecycles, invariants, and ownership
+   boundaries the implementation must satisfy ("a Zone exists independently of
+   a VM"; "the serial must never regress"). Small projects may record "no
+   deeper model needed" and move on — never force ceremony. Persist material
+   invariants where later work will cite them (the problem statement, or the
+   Context of the ADRs step 4 produces): later steps must be able to point at
+   an invariant as the reason for a decision.
+3. **Shape the milestone and its issues.** A milestone is a coherent working
+   state good enough to ship, named by its observable outcome ("authoritative
+   DNS survives one nameserver failing"), not a ticket bucket. Derive issues
+   from the capabilities that outcome requires — not from framework or file
+   structure. Prefer 3–7 features; more means the milestone is too big — cut
+   scope. Express acceptance criteria as domain/product behavior where
+   possible. **Capture dependencies now**: when issue B builds on issue A,
+   record it — the manifest's `blockedby` records become GitHub blocked-by
+   links, and `codify` refuses to start dependent work whose prerequisite
+   isn't in its base.
+4. **Design the implementation — last.** Now pick the stack the shaped outcome
+   needs: language/runtime, top-level layout, key dependencies, deployment and
+   security boundaries where relevant. Record each material choice as an ADR
+   under `docs/adr/` (use the `0000-template.md` format) that says how it
+   satisfies the model's invariants. Read the repo-root
+   `ENGINEERING-STANDARDS.md` first — deviations belong in an ADR and its
+   committed preference. If feasibility disproves a shaped assumption, loop
+   back to steps 2–3 explicitly — never silently redefine the milestone
+   around the tools. [`bootstrap`](../bootstrap/SKILL.md) materializes this
+   accepted design; scaffolding before design is guessing.
+5. **Give every feature a release decision.** Check roadmap completeness
    first (`bash scripts/roadmap-check.sh` from this skill's directory), then
    record one disposition per feature: a named milestone, **Backlog** with the
    written reason, or **Blocked** naming the exact missing decision — rules in
-   [references/release-assignment.md](references/release-assignment.md). A
-   roadmap gap is a planning blocker: report it with the smallest human
-   decision needed; never guess a priority or version.
-7. **Confirm before creating anything on GitHub.**
-8. **Carry the state forward.** Record the close-out with
-   `spark state --set stage=plan issue=<number picked for codify, or issue="" until one is — GitHub owns the backlog> next_action="<…>"`
+   [references/release-assignment.md](references/release-assignment.md). The
+   milestone declares its intended version (see the version doctrine in
+   [sdlc-doctrine.md](../../docs/explanation/sdlc-doctrine.md)). A roadmap gap
+   is a planning blocker: report it with the smallest human decision needed;
+   never guess a priority or version.
+6. **Confirm before creating anything on GitHub.**
+7. **Carry the state forward.** Record the close-out with
+   `spark state --set next_action="<codify #<n>, or the next planning step — GitHub owns the backlog>"`
    (writes `.spark/state.json`, [schema](../../docs/reference/state.md); `updated` is stamped for you).
 
 ## Creating the issues
 
 Draft first; create on GitHub only after explicit confirmation. Then create
-and wire the whole approved slate with one deterministic helper — write a
-manifest, preview it with `bash scripts/issue-manifest.sh --dry-run <file>`
-(run from this skill's directory), and rerun without `--dry-run` to execute.
-Manifest format and resume rules:
-[references/creating-issues.md](references/creating-issues.md).
+and wire the whole approved slate — issues, sub-issues, and blocked-by
+dependencies — with one deterministic helper: write a manifest, preview it
+with `bash scripts/issue-manifest.sh --dry-run <file>` (run from this skill's
+directory), and rerun without `--dry-run` to execute. Manifest format and
+resume rules: [references/creating-issues.md](references/creating-issues.md).
 
 ## Guardrails
 
 - Acceptance criteria must be verifiable — they become the `Validate` stage's
   definition of done.
-- The implementation approach must be decided and recorded as ADRs — an issue
-  with crisp acceptance criteria but no stack is not
+- Technology answers the model and the shaped outcome, never the reverse. An
+  issue with crisp acceptance criteria but no recorded stack is not
   [Codify-ready](../../docs/reference/codify-readiness.md).
 - Do not create issues, milestones, labels, or projects without explicit
   instruction.

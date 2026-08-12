@@ -96,4 +96,4 @@ six-file diff against #57's two-file diff). Naming the three steps above as
 
 - [0006-cosmics-use-release-please.md](0006-cosmics-use-release-please.md) — the Cosmic-side decision this closes the open question of
 - [0005-cosmics-ship-ci-spark-stays-ci-free.md](0005-cosmics-ship-ci-spark-stays-ci-free.md) — the CI-free stance #70 amends, which gates adoption
-- [../../plugins/spark/docs/explanation/sdlc-doctrine.md](../../plugins/spark/docs/explanation/sdlc-doctrine.md) — the version ladder the bump mapping follows
+- [../../plugins/spark/docs/explanation/sdlc-doctrine.md](../../plugins/spark/docs/explanation/sdlc-doctrine.md) — the version doctrine (since v0.16: the milestone declares the version, Release-As mints it, always-bump-patch carries the days between; the version ladder this pointer originally named is superseded)

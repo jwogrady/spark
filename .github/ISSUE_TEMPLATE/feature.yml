@@ -129,25 +129,6 @@ body:
     validations:
       required: false
 
-  - type: textarea
-    id: capability_traceability
-    attributes:
-      label: Capability traceability
-      description: >
-        Answer the Capability Evaluation Framework — the standing entry test.
-        Procedure: docs/governance/capability-evaluation.md · Invariant:
-        docs/product-constitution.md (Article VI). This collects evidence; it
-        does not define policy.
-      value: |
-        - **Constitution article(s):**
-        - **Owned surface:** (sequence | gaps | standards | evaluation)
-        - **Ownership boundary:** what Spark owns here vs. what it delegates
-        - **User outcome:** the workflow outcome (not a Spark-internal gain)
-        - **Deletion Test:** if deleted, what outcome is lost that Claude / GitHub / Git / the OS cannot provide?
-        - **Why Spark and not the platform:**
-    validations:
-      required: true
-
   - type: checkboxes
     id: attribution
     attributes:

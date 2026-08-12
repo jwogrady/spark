@@ -43,7 +43,8 @@ companions, each under `plugins/<name>/`:
   [canonical taxonomy](../../plugins/spark/docs/reference/skills.md)
   (lifecycle, setup, supporting), `setup` (one-command carry-in), preferences
   and project overrides, `brief`/`resume` and the durable work state, the two
-  enforcement doors, `doctor`, and Release Please scaffolding.
+  local enforcement doors plus the shipped trunk-ruleset policy for the third,
+  `doctor`, and Release Please scaffolding.
 - **`spark-audit`** — whole-project assessment and evidence-backed cleanup
   (`/spark-audit:audit`).
 - **`spark-connect`** — service connectivity + secrets via 1Password
@@ -88,8 +89,9 @@ The core plugin is layered:
 
 The CLI verbs live in [reference/cli.md](../../plugins/spark/docs/reference/cli.md):
 the `VERBS` dispatch table in `bin/spark` is the mechanical source of truth,
-and doctor holds both that reference and `CLAUDE.md`'s repo-map mirror in
-parity with it — this map deliberately does not restate the list.
+and doctor holds that canonical reference in parity with it — this map (and
+the agent contract, which links instead of restating) deliberately does not
+restate the list.
 (`shred-env` moved to `spark-connect` with the connect skill — it has no
 independent core purpose.)
 
@@ -126,14 +128,15 @@ Two flows run through Spark:
    doctrine and the per-stage "done when". The `knowledge` skill hangs off the
    Ship+ end of the loop, capturing what the work taught.
 
-2. **Enforcement flow** (the two doors — see below). Every git operation passes
-   through one of two guards depending on who issued it.
+2. **Enforcement flow** (the three doors — see below). Every git operation
+   passes a guard chosen by its path: Claude-driven, human-local, or straight
+   at the remote.
 
-## The two-doors enforcement model
+## The three-doors enforcement model
 
-Spark enforces the same git-hygiene rules through **two independent doors**,
-because a git operation can arrive by two paths and a plugin hook only sees one
-of them:
+Spark enforces the same git-hygiene rules through **three independent doors**,
+because a git operation can reach the repository by three paths and each door
+sees only one of them:
 
 - **Claude-driven door** — the `PreToolUse` guard (`plugins/spark/hooks/hooks.json`
   → `plugins/spark/hooks/guard-bash.sh`) inspects each `Bash` git command before
@@ -141,12 +144,22 @@ of them:
 - **Human-driven door** — the `commit-msg` and `pre-commit` git hooks (installed
   by `spark setup` or `spark install-git-hooks`) catch git run directly in a
   shell, where the plugin hook never fires.
+- **Remote door** — a GitHub ruleset on the trunk (policy shipped as
+  `plugins/spark/settings/github-ruleset-trunk.json`: PRs required, merges
+  gated on required CI checks, force-push and deletion blocked; this repo's
+  own contract lives in `.github/spark-trunk-ruleset.json` with its `doctor`
+  and `tests` contexts) backstops every path that never runs local tooling:
+  API calls, other clones, hookless clients. Spark only inspects and reports
+  drift (`spark doctor --requirements` verifies the policy's own check
+  contexts against the effective rules); applying or changing remote policy
+  is always an explicit human act.
 
-Both doors enforce the same intent — blocks force-push and trunk pushes/commits;
-allows `--force-with-lease`. The per-rule detail (what each blocks, exit codes,
+Every door enforces the same intent — blocks force-push and trunk pushes/commits;
+allows `--force-with-lease` locally. The per-rule detail (what each blocks, exit codes,
 fail-safe behavior) lives in [reference/hooks.md](../../plugins/spark/docs/reference/hooks.md), and
-the decision and its scope in
-[../adr/0003-zero-dependency-bash-and-enforcement-hooks.md](../adr/0003-zero-dependency-bash-and-enforcement-hooks.md).
+the decisions in
+[../adr/0003-zero-dependency-bash-and-enforcement-hooks.md](../adr/0003-zero-dependency-bash-and-enforcement-hooks.md)
+and [../adr/0027-delivery-model.md](../adr/0027-delivery-model.md).
 
 ## The subagent-orchestration pattern
 
@@ -198,7 +211,7 @@ motion left the core for a companion.
 
 - `spark doctor` validates the whole marketplace (every listed plugin's
   manifest and skill frontmatter, hook JSON, executable guard, taxonomy parity,
-  doc links, enforcement parity, git-hook install state). Run it before pushing;
+  doc links, enforcement lockstep, git-hook install state). Run it before pushing;
   validation CI runs the same command on every PR, so the local and CI gates
   cannot drift (ADR-0011). See [reference/cli.md](../../plugins/spark/docs/reference/cli.md).
 - Git hooks are per-repo and must be installed with `spark setup` (or
@@ -207,10 +220,13 @@ motion left the core for a companion.
 
 ## Risks / Unknowns
 
-- **Two enforcement layers, one intent.** The two-doors model expresses the same
-  rule twice (hook script + git hook). Deliberate redundancy for coverage, but a
-  maintenance point: a rule change must land in both places — doctor's
-  enforcement-parity check watches it. See ADR 0003 and ADR 0011.
+- **Three enforcement doors, one intent.** The doors model expresses the same
+  rule in more than one place (hook script + git hook + ruleset policy).
+  Deliberate redundancy for coverage, but a maintenance point: a rule change
+  must land everywhere — the behavioral suites pin each local door, doctor's
+  enforcement-lockstep check watches the enumerable vocabulary, and
+  `doctor --requirements` compares the remote against the shipped policy. See
+  ADR 0003, ADR 0011, and ADR 0027.
 - **Zero-dependency Bash tradeoff.** Portability buys reach into any forked project
   at the cost of richer tooling; JSON handling degrades gracefully. See ADR 0003.
 - **Commit paths drive companion versions.** Release Please runs in

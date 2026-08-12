@@ -75,10 +75,14 @@ addressable:
   `spark install-git-hooks`.
 
 This split is deliberate: the plugin enforces the *Claude-driven* path
-(PreToolUse guard), while git hooks enforce the *human-driven* path. Same rules,
-both doors covered.
+(PreToolUse guard), git hooks enforce the *human-driven* local path, and the
+shipped trunk-ruleset policy (`settings/github-ruleset-trunk.json`, applied
+only by the operator) covers the remote. Same rules at every door.
 
 ## See also
 
-The dated decision records: ../adr/0001-plugin-not-framework.md (the plugin
-decision) and ../adr/0002-additive-to-anthropic-spec.md (the additive stance).
+The dated decision records (developer-only, in the Spark repo):
+[ADR-0001](https://github.com/jwogrady/spark/blob/master/docs/adr/0001-plugin-not-framework.md)
+(the plugin decision) and
+[ADR-0002](https://github.com/jwogrady/spark/blob/master/docs/adr/0002-additive-to-anthropic-spec.md)
+(the additive stance).

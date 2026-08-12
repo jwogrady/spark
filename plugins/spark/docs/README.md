@@ -51,10 +51,10 @@ supporting skills:
 - [how-to/plan.md](how-to/plan.md) — `/spark:plan` · decompose the problem into scoped work items.
 - [how-to/codify.md](how-to/codify.md) — `/spark:codify` · implement one work item on a feature branch.
 - [how-to/validate.md](how-to/validate.md) — `/spark:validate` · review and harden the change until it's ready.
-- [how-to/ship.md](how-to/ship.md) — `/spark:ship` · commit, push, and open a focused PR.
+- [how-to/ship.md](how-to/ship.md) — `/spark:ship` · publish the reviewed, committed branch as one focused PR.
 - [how-to/knowledge.md](how-to/knowledge.md) — `/spark:knowledge` · capture internal knowledge as durable docs.
-- [how-to/agents-md.md](how-to/agents-md.md) — `/spark:agents-md` · maintain and sync `CLAUDE.md` + `AGENTS.md`.
-- [how-to/resume.md](how-to/resume.md) — `spark resume` · pick up where a past session left off via the committed work state.
+- [how-to/agents-md.md](how-to/agents-md.md) — `/spark:agents-md` · maintain the canonical `AGENTS.md` body and its `CLAUDE.md` import stub.
+- [how-to/resume.md](how-to/resume.md) — `spark resume` · pick up where a past session left off, derived live from git and GitHub.
 
 The companion plugins — `spark-audit`, `spark-connect`, `spark-docs` — ship
 their own docs inside their own plugin directories.

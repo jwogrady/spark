@@ -1,7 +1,12 @@
 # ADR: Capability-to-evidence declaration and the Evaluation → Release gate
 
 Date: 2026-07-22
-Status: Accepted
+Status: Accepted (enforcement retired 2026-08-11: the evidence-index remains
+the recorded declaration format for evaluation evidence, but the Platform
+Compatibility Review that enforced the `Evaluation → Release` seam was removed
+by the #361 governance deletion test. Release truth is still gated — the
+milestone gate and release-notes verification stay live; capability-evidence
+declarations are now judgment applied when an evaluation is actually run.)
 Owner: jwogrady
 
 > Records how a capability declares its evaluation evidence and how the Platform

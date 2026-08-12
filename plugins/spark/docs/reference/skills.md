@@ -7,7 +7,7 @@
 All core skills are invoked namespaced under the plugin: `/spark:<name>`.
 
 This page is the **canonical skill taxonomy** for the core plugin — nine
-skills in three categories: Lifecycle, Setup, Supporting. `CLAUDE.md` and
+skills in three categories: Lifecycle, Setup, Supporting. `AGENTS.md` and
 `README.md` use the same grouping; if they ever disagree, this page wins.
 `spark doctor` enforces this mechanically for the core: every **core** skill
 that ships must appear here (the companion skills live under
@@ -83,7 +83,7 @@ on its own for a repo that already exists. See [cli.md](cli.md).
 | Skill | Purpose |
 |---|---|
 | `knowledge` | Internal-knowledge crew that captures decisions, architecture, and processes as durable docs (ADRs, SOPs, specs), and promotes portable vocabulary to the operator layer. |
-| `agents-md` | Maintains and audits a project's `CLAUDE.md` and `AGENTS.md`, keeping the two in sync. |
+| `agents-md` | Maintains and audits a project's agent contract — the canonical `AGENTS.md` body plus its `CLAUDE.md` import stub (one body, so the two cannot drift). |
 
 ## Companion plugins
 
@@ -143,4 +143,4 @@ the skill, so it must name concrete triggers. Optional `references/` and
 `agents/` subdirectories hold supporting material loaded on demand.
 
 To author a new skill, scaffold it with `spark new-skill <name>` and follow the
-"Skill Authoring" section of `CLAUDE.md`.
+"Skill Authoring" section of `AGENTS.md` (the canonical agent contract).

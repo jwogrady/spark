@@ -379,14 +379,18 @@ cmd_version() {
 SKILL_MD_MAX_LINES=100
 SKILL_DESC_MAX_CHARS=1024
 
-# Total context-footprint budgets (#292) — the aggregate ratchet the per-file
-# budgets above cannot catch: a dozen small additions grow the whole without
-# tripping any one file. Ratcheted just above the post-#293 baseline (marketplace
-# ≈116.7 KB, largest plugin ≈72.7 KB) so growth fails CI now and trimming lowers
-# them. Bytes (FOOTPRINT_CPT converts to tokens); env-overridable so tests can
-# force the over-budget path. Enforced only in the Spark marketplace repo.
-FOOTPRINT_MARKETPLACE_MAX_BYTES="${FOOTPRINT_MARKETPLACE_MAX_BYTES:-120000}"
-FOOTPRINT_PLUGIN_MAX_BYTES="${FOOTPRINT_PLUGIN_MAX_BYTES:-76000}"
+# Total context-footprint budgets (#292; advisory since #361) — the aggregate
+# view the per-file budgets above cannot catch: a dozen small additions grow
+# the whole without tripping any one file. Doctor WARNS over these lines; the
+# hard per-file budgets above still gate. Re-based above the v0.16 measurement
+# (marketplace ≈129.2 KB, largest plugin ≈85.2 KB) after the reconciliation
+# deliberately grew the lazy references/ layer — the delivery, integration-
+# validation, and release doctrine consolidated from issues #337–#358 — while
+# the always-loaded surfaces stayed inside their per-file budgets. Bytes
+# (FOOTPRINT_CPT converts to tokens); env-overridable so tests can force the
+# over-budget path. Assessed only in the Spark marketplace repo.
+FOOTPRINT_MARKETPLACE_MAX_BYTES="${FOOTPRINT_MARKETPLACE_MAX_BYTES:-134000}"
+FOOTPRINT_PLUGIN_MAX_BYTES="${FOOTPRINT_PLUGIN_MAX_BYTES:-90000}"
 
 # Latency budgets (#213) — generous wall-clock ceilings for the three hot paths,
 # in milliseconds: the guard hook (every Bash call), the SessionStart brief
@@ -491,6 +495,57 @@ doctor_requirements() {
     fi
   fi
 
+  # The third enforcement door (#359): read the default branch's effective
+  # rules and classic-protection flag, and judge them against the trunk policy
+  # the local doors enforce. Inspect-and-report only — applying or changing
+  # remote policy is always an explicit human action. Degrades to
+  # "not assessed" (never a guess) without auth or reachable rules.
+  local remote_assessed=0 remote_ok=0 remote_out="" def_branch="" remote_policy_bad=""
+  if [ "$in_repo" -eq 1 ] && [ "$gh_auth" -eq 1 ]; then
+    def_branch="$( (cd "$top" && gh api 'repos/{owner}/{repo}' --jq .default_branch) 2>/dev/null || true)"
+    if [ -n "$def_branch" ]; then
+      # The rules calls must distinguish "no rules" (200 + empty list, exit 0)
+      # from "unreadable" (any failure): judging drift from a failed read
+      # would be a guess, and this section never guesses. The contexts read
+      # runs only when a required_status_checks rule exists, and its failure
+      # also degrades to not-assessed rather than "no contexts".
+      local rules prot checks rules_rc=0
+      rules="$( (cd "$top" && gh api "repos/{owner}/{repo}/rules/branches/$def_branch" --jq '.[].type') 2>/dev/null)" || rules_rc=$?
+      checks=""
+      if [ "$rules_rc" -eq 0 ]; then
+        case "$rules" in
+          *required_status_checks*)
+            checks="$( (cd "$top" && gh api "repos/{owner}/{repo}/rules/branches/$def_branch" \
+              --jq '.[] | select(.type=="required_status_checks") | .parameters.required_status_checks[].context') 2>/dev/null)" || rules_rc=$?
+            ;;
+        esac
+      fi
+      prot="$( (cd "$top" && gh api "repos/{owner}/{repo}/branches/$def_branch" --jq .protected) 2>/dev/null || true)"
+      if [ "$rules_rc" -eq 0 ]; then
+        # The policy file is the contract's other half: if it exists but its
+        # required contexts cannot be read, the comparison is impossible and
+        # the honest answer is not-assessed — never the weaker any-context
+        # fallback, which would report a wrong-check remote as healthy.
+        local req_checks="" policy_rc=0
+        req_checks="$(ruleset_required_checks "$top" 2>/dev/null)" || policy_rc=$?
+        if [ "$policy_rc" -eq 2 ]; then
+          remote_policy_bad="$req_checks"
+        else
+          [ "$policy_rc" -ne 0 ] && req_checks=""
+          remote_assessed=1
+          if remote_out="$(
+              { printf '%s\n' "$rules" | awk 'NF{printf "rule\t%s\n", $0}'
+                printf '%s\n' "$checks" | awk 'NF{printf "check\t%s\n", $0}'
+                printf '%s\n' "$req_checks" | awk 'NF{printf "require\t%s\n", $0}'
+                if [ -n "$prot" ]; then printf 'protected\t%s\n' "$prot"; fi
+              } | remote_enforcement_verdict)"; then
+            remote_ok=1
+          fi
+        fi
+      fi
+    fi
+  fi
+
   if [ "$as_json" -eq 1 ]; then
     # Zero-dependency JSON: a fixed shape emitted with printf, strings
     # stripped of quotes and backslashes so the output always parses. The
@@ -504,9 +559,11 @@ doctor_requirements() {
       "$(bool "$github_ready")" "$(js "$gh_v")" "$(bool "$gh_auth")"
     printf '  "json": {"ready": %s, "jq": %s, "python3": %s},\n' \
       "$(bool "$json_ready")" "$(bool "$jq_ok")" "$(bool "$py_ok")"
-    printf '  "release": {"ready": %s, "assessed": %s, "mechanism": "%s", "config": %s, "workflow": %s}\n' \
+    printf '  "release": {"ready": %s, "assessed": %s, "mechanism": "%s", "config": %s, "workflow": %s},\n' \
       "$(bool "$release_ready")" "$(bool "$in_repo")" "$(js "$mech")" \
       "$(bool "$rp_config")" "$(bool "$rp_wf")"
+    printf '  "remote_enforcement": {"assessed": %s, "ready": %s}\n' \
+      "$(bool "$remote_assessed")" "$(bool "$remote_ok")"
     printf '}\n'
     [ "$core_ready" -eq 1 ]
     return
@@ -554,6 +611,32 @@ doctor_requirements() {
       || yellow "  ! .github/workflows/release-please.yml missing — run: spark preferences --apply"
   fi
   echo
+  echo "Remote enforcement (capability: the third door — server-side trunk policy):"
+  if [ "$in_repo" -ne 1 ]; then
+    echo "  - not inside a git repo — not assessed"
+  elif [ "$gh_auth" -ne 1 ]; then
+    echo "  - needs an authenticated gh — not assessed"
+  elif [ -n "$remote_policy_bad" ]; then
+    echo "  - the trunk policy file (${remote_policy_bad#"$top"/}) exists but no required"
+    echo "    check contexts could be read from it — not assessed, never assumed healthy;"
+    echo "    fix the policy file, then re-run"
+  elif [ "$remote_assessed" -ne 1 ]; then
+    echo "  - GitHub unreachable or branch rules unreadable — not assessed"
+  elif [ "$remote_ok" -eq 1 ]; then
+    green "  ✓ trunk ($def_branch) policy held server-side: PRs required, merges CI-gated, force-push and deletion blocked"
+  else
+    yellow "  ! the remote trunk ($def_branch) does not hold the policy the local doors enforce:"
+    printf '%s\n' "$remote_out" | while IFS= read -r line; do
+      [ -n "$line" ] && yellow "  $line"
+    done
+    yellow "    Local hooks and the guard are bypassable by any path that never runs them"
+    yellow "    (gh api, another clone, a hookless client). Apply the policy deliberately —"
+    yellow "    never automatic — after setting required_status_checks contexts to YOUR"
+    yellow "    repo's check names (a wrong context blocks every merge):"
+    yellow "      gh api repos/{owner}/{repo}/rulesets --input \\"
+    yellow "        ${SPARK_ROOT}/settings/github-ruleset-trunk.json"
+  fi
+  echo
 
   if [ "$core_ready" -ne 1 ]; then
     red "Not ready for basic local use — install the core tools above."
@@ -563,6 +646,7 @@ doctor_requirements() {
   [ "$github_ready" -eq 1 ] || degraded="$degraded github"
   [ "$json_ready" -eq 1 ]   || degraded="$degraded json"
   [ "$release_ready" -eq 1 ] || degraded="$degraded release"
+  [ "$remote_assessed" -eq 1 ] && [ "$remote_ok" -ne 1 ] && degraded="$degraded remote-enforcement"
   if [ -n "$degraded" ]; then
     yellow "Ready for basic local use; degraded:${degraded}."
   else
@@ -853,42 +937,34 @@ cmd_doctor() {
   done < <(find "$doc_root" -type f -name '*.md' ! -path '*/.git/*' ! -path '*/node_modules/*' ! -path '*/.claude/*' | sort)
   [ "$broken" -eq 0 ] && green "  ✓ no broken relative links"
 
-  # Enforcement parity: Spark deliberately states each rule on more than one
-  # surface — the PreToolUse guard (Claude's door), the git hooks (the human
-  # door), and the docs. That redundancy gives coverage but drifts silently
-  # (ADR-0003), so inside the Spark repo doctor proves the surfaces still
-  # agree. Skipped elsewhere: user repos don't carry these docs.
+  # Enforcement lockstep: the rules a hook enforces are also stated as
+  # enumerable vocabulary on structured surfaces (the agent contract, the hooks
+  # reference, the release config). Doctor proves the enumerable sets still
+  # agree — list-vs-list, never phrase-grepping prose. Whether prose *describes*
+  # behavior truthfully is a docs-truth judgment (the audit skill owns it), not
+  # a grep. Skipped outside the Spark repo: user repos don't carry these docs.
   local repo_root=""
   [ -f "$SPARK_ROOT/../../.claude-plugin/marketplace.json" ] \
     && repo_root="$(cd "$SPARK_ROOT/../.." && pwd)"
-  if [ -n "$repo_root" ] && [ -f "$repo_root/CLAUDE.md" ] && [ -f "$repo_root/AGENTS.md" ]; then
+  if [ -n "$repo_root" ] && [ -f "$repo_root/AGENTS.md" ]; then
     echo
-    echo "Enforcement parity:"
-    local guard="$SPARK_ROOT/hooks/guard-bash.sh"
+    echo "Enforcement lockstep:"
     local cmsg="$SPARK_ROOT/scripts/hooks/commit-msg"
-    local precommit="$SPARK_ROOT/scripts/hooks/pre-commit"
-    local cm="$repo_root/CLAUDE.md" am="$repo_root/AGENTS.md"
-
-    # parity <pattern> <file> <fix-hint> — one missing surface = one error.
-    parity() {
-      grep -qiE -e "$1" "$2" 2>/dev/null && return 0
-      red "  ✗ ${2#"$repo_root"/}: $3"; errors=$((errors+1)); return 1
-    }
+    local am="$repo_root/AGENTS.md"
 
     # (a) The conventional-commit type list must be one set everywhere it is
-    # stated: the hook that enforces it, both agent contracts, and the hooks
+    # stated: the hook that enforces it, the agent contract, and the hooks
     # reference that documents it (#270 — hooks.md was previously excluded).
-    local hook_types cm_types am_types hm_types
+    local hook_types am_types hm_types
     # Each extraction ends in || true: with pipefail, a surface that lost its
     # rule would otherwise abort doctor instead of being reported as drift.
     hook_types="$(grep -oE '\(feat\|[a-z|]+\)' "$cmsg" 2>/dev/null | head -n1 | tr -d '()' | tr '|' '\n' | sort | tr '\n' ' ' || true)"
-    cm_types="$(grep -i 'conventional commits' "$cm" | grep -oE '`[a-z]+:`' | tr -d '`:' | sort | tr '\n' ' ' || true)"
     am_types="$(grep -i 'conventional commits' "$am" | grep -oE '`[a-z]+:`' | tr -d '`:' | sort | tr '\n' ' ' || true)"
     hm_types="$(grep -oE 'feat\|[a-z|]+' "$SPARK_ROOT/docs/reference/hooks.md" 2>/dev/null | head -n1 | tr '|' '\n' | sort | tr '\n' ' ' || true)"
-    if [ -n "$hook_types" ] && [ "$hook_types" = "$cm_types" ] && [ "$hook_types" = "$am_types" ] && [ "$hook_types" = "$hm_types" ]; then
-      green "  ✓ commit types agree across commit-msg, CLAUDE.md, AGENTS.md, hooks.md (${hook_types% })"
+    if [ -n "$hook_types" ] && [ "$hook_types" = "$am_types" ] && [ "$hook_types" = "$hm_types" ]; then
+      green "  ✓ commit types agree across commit-msg, AGENTS.md, hooks.md (${hook_types% })"
     else
-      red "  ✗ commit type lists drift — commit-msg: [${hook_types% }] CLAUDE.md: [${cm_types% }] AGENTS.md: [${am_types% }] hooks.md: [${hm_types% }]. Align the list on all four surfaces."
+      red "  ✗ commit type lists drift — commit-msg: [${hook_types% }] AGENTS.md: [${am_types% }] hooks.md: [${hm_types% }]. Align the list on all three surfaces."
       errors=$((errors+1))
     fi
 
@@ -935,64 +1011,6 @@ cmd_doctor() {
       2) yellow "  ! jq/python3 absent — skipping the release-component parity check"; warnings=$((warnings+1)) ;;
     esac
 
-    # (a3) The CLI verb list must match what CLAUDE.md's Repo Map documents
-    # (#266). The shipped set is the VERBS dispatch table itself; the doc set is
-    # the parenthesized list on the bin/spark line. They drift whenever a verb
-    # ships without the doc being updated (as profiles/orient/state/footprint did).
-    local ship_verbs doc_verbs
-    ship_verbs="$(printf '%s\n' "$VERBS" | awk -F'|' 'NF{print $1}' | sort | tr '\n' ' ' || true)"
-    doc_verbs="$(grep 'the CLI (' "$cm" | sed -n 's/.*the CLI (\([^)]*\)).*/\1/p' | tr ',' '\n' | tr -d ' ' | sort | tr '\n' ' ' || true)"
-    if [ -n "$ship_verbs" ] && [ "$ship_verbs" = "$doc_verbs" ]; then
-      green "  ✓ CLI verbs agree between the VERBS table and CLAUDE.md's Repo Map"
-    else
-      red "  ✗ CLI verb lists drift — dispatch: [${ship_verbs% }] CLAUDE.md: [${doc_verbs% }]. Sync the bin/spark line in the Repo Map."
-      errors=$((errors+1))
-    fi
-
-    # (a4) Skill-taxonomy mirrors: README.md and CLAUDE.md deliberately restate
-    # the skill taxonomy (the front door and the always-loaded agent contract);
-    # every other doc links to reference/skills.md instead. Restatement without
-    # parity is exactly how the architecture map drifted, so the two surviving
-    # mirrors are gated the same way the CLI-verb mirror is (a3).
-    local tm_out tm_rc=0 tm_line
-    tm_out="$(check_taxonomy_mirrors "$repo_root" "$SPARK_ROOT")" || tm_rc=$?
-    if [ "$tm_rc" -eq 0 ]; then
-      green "  ✓ README.md and CLAUDE.md name every shipped core skill"
-    elif [ "$tm_rc" -eq 1 ]; then
-      while IFS= read -r tm_line; do
-        [ -n "$tm_line" ] || continue
-        red "  ✗ ${tm_line#  }"; errors=$((errors+1))
-      done <<EOF_TM
-$tm_out
-EOF_TM
-    fi
-
-    # (b) AI-attribution prohibition: implemented in the hook, documented twice.
-    local ok=1
-    parity 'co-authored-by' "$cmsg" "must reject AI co-author trailers" || ok=0
-    parity 'ai attribution' "$cmsg" "must reject AI attribution in commit bodies" || ok=0
-    parity 'never credit an ai' "$cm" "must document the AI-attribution prohibition" || ok=0
-    parity 'ai tool names|never credit an ai' "$am" "must document the AI-attribution prohibition" || ok=0
-    [ "$ok" -eq 1 ] && green "  ✓ AI-attribution ban implemented (commit-msg) and documented (CLAUDE.md, AGENTS.md)"
-
-    # (c) Trunk protection: guard blocks pushes, pre-commit blocks commits,
-    # docs state both rules.
-    ok=1
-    parity 'master\|main' "$guard" "must block pushes to master/main" || ok=0
-    parity 'master\|main' "$precommit" "must block commits on master/main" || ok=0
-    parity 'do not push directly to .master' "$cm" "must document the no-push-to-trunk rule" || ok=0
-    parity 'never commit directly to .master' "$cm" "must document the no-commit-on-trunk rule" || ok=0
-    parity 'never commit to .master. directly|never commit directly to .master' "$am" "must document the no-commit-on-trunk rule" || ok=0
-    [ "$ok" -eq 1 ] && green "  ✓ trunk protection implemented (guard-bash.sh, pre-commit) and documented (CLAUDE.md, AGENTS.md)"
-
-    # (d) Force-push: guard blocks --force but allows --force-with-lease;
-    # docs state the same split.
-    ok=1
-    parity 'force-push is blocked' "$guard" "must block force-pushes" || ok=0
-    parity 'force-with-lease' "$guard" "must allow the safer --force-with-lease" || ok=0
-    parity 'force-with-lease' "$cm" "must document the force-push rule and the --force-with-lease exception" || ok=0
-    parity 'force-push' "$am" "must document the force-push rule" || ok=0
-    [ "$ok" -eq 1 ] && green "  ✓ force-push rules implemented (guard-bash.sh) and documented (CLAUDE.md, AGENTS.md)"
   fi
 
   # Issue metadata governance (#192): category labels are governed by
@@ -1034,33 +1052,6 @@ EOF_TM
         fi
       done
     fi
-  fi
-
-  # ADR status integrity (#255): once an ADR's Status line reads Accepted, it must
-  # not still carry a live proposal-state banner — "is a research proposal" or
-  # "must not be presented as adopted" — because that contradicts its own header
-  # and misreads ratified architecture as still awaiting approval. Only present-
-  # tense live banners are caught; a past-tense historical mention ("was a research
-  # proposal until …") reads clean, which is the intended escape hatch. Spark-repo
-  # self-check: ADRs are DEV docs that never ship into a user project.
-  local adr_dir="$repo_root/docs/adr"
-  if [ -n "$repo_root" ] && [ -d "$adr_dir" ]; then
-    echo
-    echo "ADR status integrity:"
-    local adr adr_status banner_ok=1
-    for adr in "$adr_dir"/[0-9]*.md; do
-      [ -e "$adr" ] || continue
-      adr_status="$(grep -iE '^Status:' "$adr" | head -n1 || true)"
-      case "$adr_status" in
-        *[Aa]ccepted*) ;;
-        *) continue ;;
-      esac
-      if grep -qiE 'is a research proposal|must not be presented as adopted' "$adr"; then
-        red "  ✗ ${adr#"$repo_root"/}: Accepted ADR still carries a live proposal-state banner — restate it as Accepted or mark the mention historical"
-        errors=$((errors+1)); banner_ok=0
-      fi
-    done
-    [ "$banner_ok" -eq 1 ] && green "  ✓ no Accepted ADR carries a live proposal-state banner"
   fi
 
   # Standards boundary (#200, ADR-0020): #182 makes the prose standards docs the
@@ -1154,19 +1145,20 @@ EOF_TM
     fi
   fi
 
-  # Context footprint budget (#292): the aggregate ratchet the per-file budgets
-  # cannot catch. Meaningful only in the Spark marketplace repo (companions
-  # present); a standalone install has no marketplace total to gate. Reuses the
-  # footprint primitives so the gate and the `spark footprint` audit agree.
+  # Context footprint (#292, demoted to advisory by #361): the aggregate total
+  # across the marketplace. The per-file budgets above stay hard errors — they
+  # bound what a single surface loads — but the marketplace-total ratchet is
+  # internal governance, so it warns rather than gates. The opt-in
+  # `spark footprint` audit remains the measuring tool.
   if [ -f "$SPARK_ROOT/../../.claude-plugin/marketplace.json" ]; then
     local mroot fp_summary cache_summary
     mroot="$(cd "$SPARK_ROOT/../.." && pwd)"
     echo
-    echo "Context footprint budget:"
+    echo "Context footprint (advisory):"
     if fp_summary="$(fp_footprint_gate "$mroot")"; then
       green "  ✓ $fp_summary"
     else
-      red "  ✗ $fp_summary — trim, or raise the budget in bin/spark with rationale"; errors=$((errors+1))
+      yellow "  ! $fp_summary — trim, or raise the budget in bin/spark with rationale"; warnings=$((warnings+1))
     fi
     # Cache stability (heuristic): the always-loaded prefix should not embed a
     # volatile token (date / "updated" / "as of N") that would bust Claude Code's
@@ -1188,42 +1180,6 @@ EOF_TM
       red "  ✗ progressive disclosure broken:"; printf '%s\n' "$ref_out"; errors=$((errors+1))
     fi
 
-    # Capability-traceability templates (#301): the CEF's collection seam must
-    # not silently disappear from the contribution templates.
-    echo
-    echo "Capability-traceability templates:"
-    local tt_out tt_root
-    tt_root="$(cd "$SPARK_ROOT/../.." && pwd)"
-    if tt_out="$(check_traceability_templates "$tt_root")"; then
-      green "  ✓ issue + PR templates carry the traceability seam"
-    else
-      red "  ✗ traceability seam missing from a template:"; printf '%s\n' "$tt_out"; errors=$((errors+1))
-    fi
-  fi
-
-  # Latency advisory (#213): wall clock is machine-dependent, so this only WARNS
-  # when a hot path exceeds its budget — the hard gate is the opt-in
-  # `spark footprint --timing`. Measures the guard and the brief (cheap, no
-  # recursion); doctor cannot time itself from within, so its own budget is
-  # checked only by that gate.
-  echo
-  echo "Latency (advisory — hard gate: spark footprint --timing):"
-  local d_gms d_bms
-  d_gms=$(fp_run_ms fp_hot_guard) || d_gms=""
-  d_bms=$(fp_run_ms fp_hot_brief) || d_bms=""
-  if [ -z "$d_gms" ]; then
-    echo "  - guard hook: not measured (no ms-resolution clock — needs GNU date +%s%N or python3)"
-  elif [ "$d_gms" -gt "$LATENCY_GUARD_MS" ]; then
-    yellow "  ! guard hook ${d_gms}ms — over the ${LATENCY_GUARD_MS}ms budget"; warnings=$((warnings+1))
-  else
-    green "  ✓ guard hook ${d_gms}ms (budget ${LATENCY_GUARD_MS}ms)"
-  fi
-  if [ -z "$d_bms" ]; then
-    echo "  - session brief: not measured (no ms-resolution clock)"
-  elif [ "$d_bms" -gt "$LATENCY_BRIEF_MS" ]; then
-    yellow "  ! session brief ${d_bms}ms — over the ${LATENCY_BRIEF_MS}ms budget"; warnings=$((warnings+1))
-  else
-    green "  ✓ session brief ${d_bms}ms (budget ${LATENCY_BRIEF_MS}ms)"
   fi
 
   echo
@@ -1273,7 +1229,7 @@ EOF
   fi
   echo "Next: edit the description (it's the only thing Claude sees when choosing the skill)."
   echo "Authoring rules (description format, 100-line cap, when to split): see the"
-  echo "'Skill Authoring' section of CLAUDE.md."
+  echo "'Skill Authoring' section of AGENTS.md."
 }
 
 # The carry-in verb (ADR-0008): inspect the engineering standard resolved
@@ -1388,34 +1344,30 @@ cmd_brief() {
     pr="$(gh pr view --json number,title --template 'PR #{{.number}} — {{.title}}' 2>/dev/null || true)"
   fi
 
-  # Locate: durable state when a lifecycle skill has written it (schema:
-  # docs/reference/state.md); otherwise infer the stage from what the repo
-  # already proves about itself.
+  # Locate: derived from what the repo proves about itself, never from a
+  # recorded stage — a stored lifecycle position goes stale the moment work
+  # happens outside a skill close-out (#347), so brief refuses to trust one.
+  # The state file contributes only the judgment the repo cannot answer: the
+  # recorded next action and blockers, always shown with their recorded date.
   local state="$root/.spark/state.json"
-  local stage='' issue='' next='' blockers='' updated='' located='' k v
+  local next='' blockers='' updated='' located='' k v
   if [ -f "$state" ]; then
     while IFS=$'\t' read -r k v; do
       case "$k" in
-        stage)       stage="$v" ;;
-        issue)       issue="$v" ;;
         next_action) next="$v" ;;
         blockers)    blockers="$v" ;;
         updated)     updated="$v" ;;
       esac
     done < <(read_flat_json "$state")
   fi
-  if [ -n "$stage" ]; then
-    # The state schema stores lowercase stage names; capitalize for display
-    # so the recorded and inferred lines read alike.
-    located="$(printf '%s' "$stage" | awk '{ print toupper(substr($0,1,1)) substr($0,2) }')${issue:+ — issue #${issue#\#}}"
-  elif [ ! -f "$root/docs/problem-statement.md" ]; then
-    located="Ideate (inferred) — no docs/problem-statement.md yet"
+  if [ ! -f "$root/docs/problem-statement.md" ]; then
+    located="Ideate — no docs/problem-statement.md yet"
   elif [ "$branch" = "master" ] || [ "$branch" = "main" ]; then
-    located="Plan (inferred) — on trunk with a problem statement; pick the next issue"
+    located="Plan — on trunk with a problem statement; pick the next issue"
   elif [ -n "$pr" ]; then
-    located="Validate/Ship (inferred) — $pr is open for this branch"
+    located="Validate/Ship — $pr is open for this branch"
   else
-    located="Codify (inferred) — working branch $branch"
+    located="Codify — working branch $branch"
   fi
 
   # Load: one resolve_prefs pass, summarized — how big the standard bag is,
@@ -1460,7 +1412,7 @@ cmd_brief() {
     [ "$dirty" -gt 0 ] && line="$line · $dirty uncommitted"
     [ -n "$ahead" ] && line="$line · ↑$ahead ↓$behind"
     echo "$line"
-    echo "[spark] $located${next:+ · next: $next}"
+    echo "[spark] $located${next:+ · next: $next (recorded ${updated:-date unknown})}"
     if [ -n "$prefs" ]; then
       echo "[spark] standards: $total prefs, $overridden overridden${stack_pref:+ · stack=$stack_pref}${release_pref:+ · release=$release_pref}"
     fi
@@ -1491,12 +1443,12 @@ cmd_brief() {
     echo "  class     unclassified — run the guided first run /spark:onboard (or 'spark orient' directly)"
   fi
   echo
-  echo "Locate"
+  echo "Locate (derived from the repo)"
   echo "  $located"
-  [ -n "$next" ] && echo "  next      $next"
+  [ -n "$next" ] && echo "  next      $next (recorded ${updated:-date unknown} — verify against the repo)"
   [ -n "$blockers" ] && echo "  blockers  $blockers"
   if [ -f "$state" ]; then
-    echo "  state     .spark/state.json${updated:+, updated $updated} — full view: spark resume"
+    echo "  state     .spark/state.json holds the recorded intent — cross-checked view: spark resume"
   fi
   echo
   echo "Load"
@@ -2170,123 +2122,114 @@ PY
 # against the live repo before it is presented, because state written in a
 # past session may have been overtaken — drift is reported, never trusted.
 cmd_resume() {
+  # Derive-first (#347): every fact the repo or GitHub can answer is read live
+  # — current branch, its PR, trunk ancestry. The state file contributes only
+  # recorded judgment (next_action, blockers), presented as a dated claim, so
+  # a stale recorded fact can never masquerade as current reality.
   local root
   root="$(git_root)"
   [ -n "$root" ] || { red "not inside a git repo — nothing to resume"; return 1; }
   local state="$root/.spark/state.json"
-  if [ ! -f "$state" ]; then
-    yellow "No work state at .spark/state.json — nothing recorded yet."
-    echo "The lifecycle skills write it at each stage's close-out. Start with"
-    echo "/spark:ideate, or orient from GitHub: gh issue list, gh pr list."
-    return 0
-  fi
 
-  local key value got=0 stage="" problem="" issue="" branch="" pr="" blockers="" next="" updated=""
-  while IFS=$'\t' read -r key value; do
-    got=1
-    case "$key" in
-      stage)             stage="$value" ;;
-      problem_statement) problem="$value" ;;
-      issue)             issue="$value" ;;
-      branch)            branch="$value" ;;
-      pr)                pr="$value" ;;
-      blockers)          blockers="$value" ;;
-      next_action)       next="$value" ;;
-      updated)           updated="$value" ;;
+  local branch dirty
+  branch="$(git -C "$root" symbolic-ref --quiet --short HEAD || echo '(detached)')"
+  dirty="$(git -C "$root" status --porcelain 2>/dev/null | awk 'NF{n++} END{print n+0}')"
+
+  # Trunk ancestry (#344): commits on the remote trunk that this branch lacks
+  # may include a merged prerequisite. Report the drift; never repair it.
+  local trunk='' behind_trunk='' t
+  trunk="$(git -C "$root" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)"
+  if [ -z "$trunk" ]; then
+    for t in origin/master origin/main; do
+      git -C "$root" show-ref --verify --quiet "refs/remotes/$t" && { trunk="$t"; break; }
+    done
+  fi
+  [ -n "$trunk" ] && [ "$branch" != "${trunk#origin/}" ] \
+    && behind_trunk="$(git -C "$root" rev-list --count "HEAD..$trunk" 2>/dev/null || true)"
+
+  # The current branch's PR, live from GitHub when gh can answer.
+  local prnum='' prstate=''
+  if command -v gh >/dev/null 2>&1; then
+    local prline
+    prline="$(cd "$root" && gh pr view --json number,state --template '{{.number}}|{{.state}}' 2>/dev/null || true)"
+    case "$prline" in
+      *\|*) prnum="${prline%%|*}"; prstate="${prline##*|}" ;;
     esac
-  done < <(read_flat_json "$state")
-
-  # A file that parses to nothing is a claim resume cannot read — say so
-  # rather than presenting an empty briefing as if nothing was recorded.
-  if [ "$got" -eq 0 ]; then
-    yellow ".spark/state.json exists but no facts could be read from it — it may"
-    yellow "be malformed. Trust the repo; the next close-out rewrites the file."
-    return 0
   fi
 
-  # Facts the repo contradicts are flagged and counted — the repo wins over
-  # the state file, always.
-  local drift=0 loop_closed=0
-  note() { yellow "    ! $1"; drift=$((drift+1)); }
-
-  echo "Where you were${updated:+ (recorded $updated)}:"
-  if [ -z "$stage" ]; then
-    note "no stage recorded"
-  elif [ "$stage" = "idle" ]; then
-    echo "  stage:    idle (between loops)"
-  elif is_stage "$stage"; then
-    echo "  stage:    $stage"
+  echo "Current reality (derived from the repo):"
+  if [ "$dirty" -gt 0 ]; then
+    echo "  branch:   $branch ($dirty uncommitted file(s))"
   else
-    echo "  stage:    $stage"
-    note "not a lifecycle stage (expected ${STATE_STAGES// /|})"
+    echo "  branch:   $branch (clean tree)"
+  fi
+  if [ -n "$prnum" ]; then
+    echo "  pr:       #$prnum ($prstate) — this branch's pull request"
+  elif command -v gh >/dev/null 2>&1; then
+    # gh answering nothing is ambiguous: genuinely no PR, or GitHub
+    # unreachable/unauthenticated. Say so — an unverified absence presented
+    # as fact is exactly the guessing derive-first forbids.
+    echo "  pr:       none found for this branch (unverified — gh reported no PR, or GitHub was unreachable)"
+  else
+    echo "  pr:       unknown (gh not available)"
+  fi
+  if [ -f "$root/docs/problem-statement.md" ]; then
+    echo "  problem:  docs/problem-statement.md"
+  else
+    echo "  problem:  no docs/problem-statement.md yet"
+  fi
+  if [ -n "$behind_trunk" ] && [ "$behind_trunk" -gt 0 ]; then
+    yellow "    ! $behind_trunk commit(s) on $trunk are not in this branch — a merged"
+    yellow "      prerequisite may be missing here. Verify before building on this base"
+    yellow "      (rebase or re-branch from $trunk if a dependency landed there)."
   fi
 
-  if [ -n "$problem" ]; then
-    echo "  problem:  $problem"
-    [ -f "$root/$problem" ] || note "that file is missing from the repo"
-  fi
-
-  if [ -n "$issue" ]; then
-    issue="${issue#\#}"
-    echo "  issue:    #$issue"
-    if command -v gh >/dev/null 2>&1; then
-      local istate
-      istate="$(gh issue view "$issue" --json state --jq .state 2>/dev/null || true)"
-      [ "$istate" = "CLOSED" ] && note "issue #$issue is closed — this may be finished work"
-    fi
-  fi
-
-  if [ -n "$branch" ]; then
-    echo "  branch:   $branch"
-    local here; here="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
-    if ! git show-ref --verify --quiet "refs/heads/$branch"; then
-      note "branch does not exist locally (merged and deleted, or never fetched)"
-    elif [ "$here" != "$branch" ]; then
-      note "you are on '$here' — git checkout $branch to pick the work back up"
-    fi
-  fi
-
-  if [ -n "$pr" ]; then
-    if command -v gh >/dev/null 2>&1; then
-      local prstate
-      prstate="$(gh pr view "$pr" --json state --jq .state 2>/dev/null || true)"
-      echo "  pr:       #$pr${prstate:+ ($prstate)}"
-      case "$prstate" in
-        MERGED) note "already merged — this state describes a finished loop"
-                loop_closed=1 ;;
-        CLOSED) note "closed unmerged — decide whether this work is abandoned" ;;
-        "")     note "could not reach GitHub — treat the PR's state as unverified" ;;
+  # Recorded intent: the judgment half, read from the state file as a claim.
+  local key value got=0 legacy=0 blockers="" next="" updated=""
+  if [ -f "$state" ]; then
+    while IFS=$'\t' read -r key value; do
+      got=1
+      case "$key" in
+        blockers)    blockers="$value" ;;
+        next_action) next="$value" ;;
+        updated)     updated="$value" ;;
+        *) is_legacy_key "$key" && [ -n "$value" ] && legacy=1 ;;
       esac
-    else
-      echo "  pr:       #$pr"
-      note "gh not available — the PR's state is unverified"
-    fi
+    done < <(read_flat_json "$state")
   fi
 
-  [ -n "$blockers" ] && echo "  blockers: $blockers"
+  echo
+  if [ ! -f "$state" ]; then
+    echo "Recorded intent: none (.spark/state.json not written yet — the lifecycle"
+    echo "skills record next_action/blockers at each stage's close-out)."
+  elif [ "$got" -eq 0 ]; then
+    # A file that parses to nothing is a claim resume cannot read — say so
+    # rather than presenting an empty briefing as if nothing was recorded.
+    yellow ".spark/state.json exists but no facts could be read from it — it may"
+    yellow "be malformed. Trust the reality above; the next close-out rewrites it."
+  else
+    echo "Recorded intent${updated:+ (recorded $updated)}:"
+    [ -n "$next" ]     && echo "  next:     $next"
+    [ -n "$blockers" ] && echo "  blockers: $blockers"
+    [ -z "$next$blockers" ] && echo "  (nothing recorded)"
+    [ "$legacy" -eq 1 ] \
+      && yellow "    ! legacy keys (stage/issue/branch/pr) found and ignored — those facts are derived above now; the next close-out migrates the file"
+  fi
 
   echo
   echo "What's next:"
-  # A merged recorded PR closes the loop: whatever next_action says predates
-  # the merge, so presenting it would send you back into finished work. An
-  # idle stage is the same fact recorded deliberately at close-out.
-  if [ "$loop_closed" -eq 1 ]; then
-    echo "  This loop is closed — PR #$pr merged. Start the next problem, or"
-    echo "  re-frame from docs/problem-statement.md. The next stage close-out"
-    echo "  rewrites .spark/state.json."
-  elif [ "$stage" = "idle" ]; then
-    echo "  Between loops — frame the next problem. The next stage close-out"
-    echo "  rewrites .spark/state.json."
+  # A merged PR on the current branch closes the loop: whatever next_action
+  # says predates the merge, so presenting it would send you back into
+  # finished work.
+  if [ "$prstate" = "MERGED" ]; then
+    echo "  This loop is closed — PR #$prnum for this branch is merged. Start the"
+    echo "  next problem, or re-frame from docs/problem-statement.md."
   elif [ -n "$next" ]; then
     echo "  $next"
+    echo "  (recorded intent — verify it against the reality above before acting)"
   else
-    yellow "  (no next_action recorded — decide from the stage above)"
-  fi
-
-  if [ "$drift" -gt 0 ]; then
-    echo
-    yellow "$drift fact(s) drifted since this state was written — trust the repo,"
-    yellow "then let the current stage's close-out rewrite .spark/state.json."
+    echo "  Nothing recorded — decide from the derived position above, or orient"
+    echo "  from GitHub: gh issue list, gh pr list."
   fi
 }
 
@@ -2424,11 +2367,99 @@ check_reference_laziness() {
   return $rc
 }
 
-# check_traceability_templates <repo-root> — the Capability-Traceability prompt
-# the CEF collects through (#296, ADR-0025/0026) must stay present in the
-# contribution templates, so an edit that removes the field/section is caught. Verifies
-# the feature + skill issue templates carry the capability_traceability field and
-# the PR template carries the traceability section. Echoes findings; returns 1.
+# remote_enforcement_verdict — the third enforcement door (#359): the trunk
+# policy the PreToolUse guard and git hooks enforce locally, verified
+# server-side where no local bypass (gh api, a foreign clone, a hookless
+# client) can reach. Reads evidence lines on stdin:
+#   rule <TAB> <type>            an active rule on the default branch
+#   check <TAB> <context>        an effective required status-check context
+#   require <TAB> <context>      a context the repo's POLICY file requires
+#   protected <TAB> true|false   the classic branch-protection flag
+# Returns 0 only when the policy holds: PRs required, force-push and deletion
+# blocked, AND every `require` context is among the effective `check`
+# contexts — the CONTRACT is the specific checks, not the mere presence of a
+# required_status_checks rule (a rule naming the wrong or no contexts gates
+# nothing that matters). Extra effective checks are fine. With no `require`
+# lines (policy contexts unreadable) it falls back to demanding at least one
+# effective context. Prints one line per violated element; returns 1 on any.
+# Pure function — gathering lives with the caller so this is testable offline.
+remote_enforcement_verdict() {
+  local kind a has_pr=0 has_nff=0 has_del=0 has_rsc=0 protected=""
+  local nl=$'\n' eff_checks=$'\n' req_checks="" nreq=0 neff=0
+  while IFS=$'\t' read -r kind a; do
+    case "$kind" in
+      rule) case "$a" in
+              pull_request)           has_pr=1 ;;
+              non_fast_forward)       has_nff=1 ;;
+              deletion)               has_del=1 ;;
+              required_status_checks) has_rsc=1 ;;
+            esac ;;
+      check)   [ -n "$a" ] && { eff_checks="$eff_checks$a$nl"; neff=$((neff+1)); } ;;
+      require) [ -n "$a" ] && { req_checks="$req_checks$a$nl"; nreq=$((nreq+1)); } ;;
+      protected) protected="$a" ;;
+    esac
+  done
+  local rc=0 ctx missing=""
+  [ "$has_pr" -eq 1 ]  || { echo "  trunk accepts direct pushes (no pull_request rule)"; rc=1; }
+  if [ "$has_rsc" -ne 1 ]; then
+    echo "  merges are not gated on CI (no required_status_checks rule)"; rc=1
+  elif [ "$nreq" -gt 0 ]; then
+    # Exact, whole-name membership: contexts are newline-delimited so a
+    # required "tests" can never be satisfied by an effective
+    # "integration tests" (substring), and context names containing spaces
+    # compare as single names.
+    while IFS= read -r ctx; do
+      [ -n "$ctx" ] || continue
+      case "$eff_checks" in
+        *"$nl$ctx$nl"*) ;;
+        *) missing="$missing '$ctx'" ;;
+      esac
+    done <<EOF_REQ
+$req_checks
+EOF_REQ
+    if [ -n "$missing" ]; then
+      echo "  required check(s) missing from the remote gate:${missing} — merges are not gated on the policy's checks (extra remote checks are fine; these must be present by exact name)"; rc=1
+    fi
+  elif [ "$neff" -eq 0 ]; then
+    echo "  the required_status_checks rule names no contexts — it gates nothing; add the repo's check names"; rc=1
+  fi
+  [ "$has_nff" -eq 1 ] || { echo "  force-push to trunk is not blocked server-side (no non_fast_forward rule)"; rc=1; }
+  [ "$has_del" -eq 1 ] || { echo "  trunk deletion is not blocked server-side (no deletion rule)"; rc=1; }
+  if [ "$rc" -eq 1 ] && [ "$protected" = "true" ]; then
+    echo "  (classic branch protection is enabled — verify it covers the rules above; the rules API only reports rulesets)"
+  fi
+  return $rc
+}
+
+# ruleset_required_checks <repo-root> — the check contexts the repo's trunk
+# POLICY requires, read from the policy-as-data file: the repo-local
+# .github/spark-trunk-ruleset.json when present (a repo's own contract, e.g.
+# this repository requires doctor+tests), else the shipped template. Extracted
+# with grep over the file's fixed, Spark-owned shape so no JSON tool is
+# required. One context per line on rc 0. The policy file is EVIDENCE, so its
+# failure modes are distinguished, never collapsed into "no requirements":
+#   0  contexts extracted (>=1)
+#   1  no policy file exists anywhere
+#   2  a policy file exists but is unreadable or yields zero contexts — the
+#      first file found decides; a broken repo-local contract never silently
+#      falls back to the template (that would verify the wrong contract)
+ruleset_required_checks() {
+  local root="$1" f ctxs
+  for f in "$root/.github/spark-trunk-ruleset.json" "$SPARK_ROOT/settings/github-ruleset-trunk.json"; do
+    if [ -f "$f" ]; then
+      ctxs="$(grep -oE '"context"[[:space:]]*:[[:space:]]*"[^"]+"' "$f" 2>/dev/null \
+        | sed -E 's/.*"([^"]+)"$/\1/' || true)"
+      if [ -n "$ctxs" ]; then
+        printf '%s\n' "$ctxs"
+        return 0
+      fi
+      printf '%s\n' "$f"
+      return 2
+    fi
+  done
+  return 1
+}
+
 check_release_component_parity() {
   # The release-notes runner verifies one component per Release Please package
   # from a HARD-CODED list; a package with no matching component ships its
@@ -2456,39 +2487,6 @@ check_release_component_parity() {
   fi
   echo "  release-component drift — release-please-config packages: [${expect% }] vs release-notes-runner NOTES_COMPONENTS: [${comps% }]. A package with no component ships UNVERIFIED notes; align both sets."
   return 1
-}
-
-check_traceability_templates() {
-  local root="$1" rc=0 f
-  for f in "$root/.github/ISSUE_TEMPLATE/feature.yml" "$root/.github/ISSUE_TEMPLATE/skill.yml"; do
-    if [ ! -f "$f" ]; then echo "  missing template: ${f#"$root"/}"; rc=1
-    elif ! grep -q 'capability_traceability' "$f"; then echo "  ${f#"$root"/}: lost the capability_traceability field"; rc=1; fi
-  done
-  f="$root/.github/PULL_REQUEST_TEMPLATE.md"
-  if [ ! -f "$f" ]; then echo "  missing PR template"; rc=1
-  elif ! grep -qi 'Capability traceability' "$f"; then echo "  ${f#"$root"/}: lost the Capability traceability section"; rc=1; fi
-  return $rc
-}
-
-# check_taxonomy_mirrors <repo-root> <spark-root> — inside the Spark repo,
-# README.md and CLAUDE.md insist on restating the skill taxonomy; the canonical
-# source stays reference/skills.md (gated by taxonomy parity), and a mirror is
-# tolerated only while it is held in parity: every shipped core skill must
-# appear backticked in both mirrors. Echoes one line per omission; returns 1 on
-# drift, 3 when either mirror is absent (not this repo). Factored for offline
-# testing.
-check_taxonomy_mirrors() {
-  local repo_root="$1" spark_root="$2" rc=0 d name doc
-  [ -f "$repo_root/README.md" ] && [ -f "$repo_root/CLAUDE.md" ] || return 3
-  for d in "$spark_root"/skills/*/; do
-    [ -d "$d" ] || continue
-    name="$(basename "$d")"
-    for doc in README.md CLAUDE.md; do
-      grep -q "\`$name\`" "$repo_root/$doc" \
-        || { echo "  $doc mirrors the skill taxonomy but omits \`$name\`"; rc=1; }
-    done
-  done
-  return $rc
 }
 
 # now_ms — current time in milliseconds. GNU date has %N; macOS/BSD date does
@@ -2675,18 +2673,19 @@ cmd_footprint() {
   return 0
 }
 
-# state (#210): the mechanical half of the work-state write. The lifecycle
-# skills decide WHAT to record — the issue picked, the blockers, the next action
-# — and that judgment stays with the model. But formatting valid one-level JSON,
-# stamping `updated`, and keeping the key set stable is mechanical, and a
-# hand-written file drifts from the schema (docs/reference/state.md). The skill
-# passes the judgment values as key=value pairs; this writes them canonically,
-# merging into any existing state and always re-stamping `updated`.
-STATE_KEYS="stage problem_statement issue branch pr blockers next_action updated"
-# The stage enum, declared once (#273) so cmd_state's validation and cmd_resume's
-# display read one authority instead of each hard-coding the list.
-STATE_STAGES="ideate plan codify validate ship idle"
-is_stage() { case " $STATE_STAGES " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
+# state (#210, schema shrunk by #347): the mechanical half of the work-state
+# write. Everything git and GitHub can answer — branch, PR, issue, lifecycle
+# position — is DERIVED at read time by brief/resume, never stored: a stored
+# copy of a derivable fact is a staleness generator. What survives in
+# .spark/state.json is only the judgment no repo can answer: the next action
+# and the blockers. The skill passes those as key=value pairs; this writes them
+# canonically (docs/reference/state.md), merging into any existing state and
+# always re-stamping `updated`.
+STATE_KEYS="next_action blockers updated"
+# Keys the pre-v0.16 schema stored and the current one derives — recognized
+# only to explain their rejection, and to flag them when found on disk.
+STATE_LEGACY_KEYS="stage problem_statement issue branch pr"
+is_legacy_key() { case " $STATE_LEGACY_KEYS " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
 
 cmd_state() {
   local usage_line="usage: spark state [--set key=value ...]"
@@ -2708,13 +2707,13 @@ cmd_state() {
   fi
   local state="$top/.spark/state.json"
 
-  # Load any existing state into per-key shell vars (empty when unset).
-  local stage='' problem_statement='' issue='' branch='' pr='' blockers='' next_action='' updated='' k v
+  # Load any existing state into per-key shell vars (empty when unset). Legacy
+  # keys from the pre-v0.16 schema are ignored on read; the next write migrates
+  # the file to the current key set.
+  local blockers='' next_action='' updated='' k v
   if [ -f "$state" ]; then
     while IFS=$'\t' read -r k v; do
       case "$k" in
-        stage) stage="$v" ;; problem_statement) problem_statement="$v" ;;
-        issue) issue="$v" ;; branch) branch="$v" ;; pr) pr="$v" ;;
         blockers) blockers="$v" ;; next_action) next_action="$v" ;; updated) updated="$v" ;;
       esac
     done < <(read_flat_json "$state")
@@ -2727,20 +2726,29 @@ cmd_state() {
     return 0
   fi
 
-  # Set mode: merge the passed judgment values, validating each key and the
-  # stage enum, then always re-stamp `updated`.
+  # Set mode: merge the passed judgment values, then always re-stamp `updated`.
   local pair key val
   for pair in "${pairs[@]}"; do
     key="${pair%%=*}"; val="${pair#*=}"
     case " $STATE_KEYS " in
       *" $key "*) ;;
-      *) red "unknown state key: $key (valid: $STATE_KEYS)"; return 1 ;;
+      *)
+        if is_legacy_key "$key"; then
+          red "state no longer stores '$key' — it is derived from git/GitHub at read time (spark resume shows it). State records only judgment: next_action, blockers."
+        else
+          red "unknown state key: $key (valid: $STATE_KEYS)"
+        fi
+        return 1 ;;
     esac
-    if [ "$key" = "stage" ]; then
-      if ! is_stage "$val"; then
-        red "invalid stage: $val (one of: $STATE_STAGES)"; return 1
-      fi
-    fi
+    # The schema is one line per value (state.md), and json_escape below
+    # handles only quote/backslash — an embedded newline/tab would write
+    # control characters into the JSON and silently destroy the record for
+    # every reader. Reject rather than green-light a corrupting write.
+    case "$val" in
+      *$'\n'*|*$'\r'*|*$'\t'*)
+        red "state values are one line ($key contains a newline/tab) — separate several facts with '; ' instead"
+        return 1 ;;
+    esac
     eval "$key=\$val"
   done
   updated="$(date +%F)"
@@ -2759,7 +2767,7 @@ cmd_state() {
     done
     printf '\n}\n'
   } > "$state" || { red "could not write $state"; return 1; }
-  green "state: $state (stage ${stage:-?}, updated $updated)"
+  green "state: $state (updated $updated)"
 }
 
 # Dispatch only when executed, not when sourced — sourcing (e.g. from behavioral

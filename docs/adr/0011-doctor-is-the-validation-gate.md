@@ -1,7 +1,7 @@
 # ADR: `spark doctor` is the single validation gate, and two-door parity is mechanical
 
 Date: 2026-07-09
-Status: Accepted (amended 2026-07-21 — the "single gate / CI runs exactly doctor" framing is superseded in part by ADR-0018; see Amendment)
+Status: Accepted (amended 2026-07-21 — the "single gate / CI runs exactly doctor" framing is superseded in part by ADR-0018; see Amendment. Note 2026-08-11: the two-door prose-parity checks this ADR made mechanical were narrowed to enumerable lockstep checks, and a third, server-side enforcement door was added — see ADR-0027 and the #361 deletion test)
 Owner: jwogrady
 
 ## Context

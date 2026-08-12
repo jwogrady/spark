@@ -22,11 +22,13 @@ disagree, one of them has drifted; treat that as a bug.
 
 ## Core plugin dependencies
 
-The same four groups `spark doctor --requirements` reports:
+The same five groups `spark doctor --requirements` reports (the fifth — the
+remote-enforcement door — reuses the GitHub delivery row's dependency: an
+authenticated `gh`, degrading to "not assessed" without it):
 
 | Tool | Tier | Serves | Without it |
 | --- | --- | --- | --- |
-| `bash`, `git` | **Required** | Everything — the CLI, both enforcement doors, the whole local loop | Spark does not run. This is the only group whose absence fails `doctor --requirements`. |
+| `bash`, `git` | **Required** | Everything — the CLI, both local enforcement doors, the whole local loop | Spark does not run. This is the only group whose absence fails `doctor --requirements`. |
 | `gh`, authenticated | Capability: GitHub delivery | `plan`, `ship`, and `validate` create and read issues and PRs; `brief`/`resume` verify recorded state against live GitHub | The local loop still works. Issue/PR steps are unavailable, and `brief`/`resume` report GitHub-backed facts as unverified instead of inventing them. Remediation: install <https://cli.github.com>, then `gh auth login`. |
 | `jq` (preferred) or `python3` | Capability: safe JSON merges | Merging the permission baseline into an *existing* `.claude/settings.json`; JSON validation in `doctor` | With neither: preference reading degrades to a line-based parser for the documented flat schema, `doctor`'s JSON checks are skipped (not failed), and `apply-permissions` refuses the merge with hand-merge instructions rather than risking the file. Creating a fresh `settings.json` needs no parser. |
 | Release-pipeline wiring | Capability: versioned releases | Release Please turns merged conventional commits into versions, changelogs, tags, and releases | Assessed only when the resolved `release.mechanism` is `release-please`; the wiring (`release-please-config.json` + workflow) is created by `spark preferences --apply` or `spark setup`. Any other mechanism is the operator's own machinery. |

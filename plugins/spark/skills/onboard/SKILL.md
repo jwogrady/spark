@@ -55,7 +55,13 @@ clobbering the profile, so the whole lifecycle shares one answer.
 ### 4. BRIEF — close the loop
 Run `spark brief` as the closing summary: what was created, what was kept, the
 classification now recorded, the standards docs present, and any decision still
-open. This is the honest statement of where the repo landed.
+open. When `gh` is authenticated, also relay the **Remote enforcement** line
+from `spark doctor --requirements` as one readiness item: the local doors are
+armed by SEED, and a trunk without server-side protection is a
+`! needs attention` fact the operator should know — offer the policy
+(`settings/github-ruleset-trunk.json`), never apply it; changing remote
+protection is always the operator's explicit act. This is the honest statement
+of where the repo landed.
 
 ## Guardrails
 

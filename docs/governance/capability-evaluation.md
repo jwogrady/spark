@@ -1,19 +1,25 @@
 # Applying the Capability Evaluation Framework
 
 > **Procedure — how to run Spark's capability entry test.** This doc explains
-> *how*; it never redefines *what*. The five questions and the tie-break are
-> invariants owned by [Constitution Article VI](../product-constitution.md); the
-> decision to make them binding is [ADR-0025](../adr/0025-capability-evaluation-framework.md).
+> *how*; it never redefines *what*. The five questions come from
+> [ADR-0025](../adr/0025-capability-evaluation-framework.md) (historically via
+> Constitution Article VI, now archived).
 > A dev-doc — it governs how Spark is built and never ships. Owner: `jwogrady`.
+>
+> **Status (v0.16):** judgment guidance only. The template fields and CI checks
+> that mechanically collected and enforced these answers were retired by the
+> #361 governance deletion test — apply the questions when proposing a
+> capability; nothing polices the paperwork.
 
 Use this when proposing, reviewing, or re-examining any capability — a skill, a
 helper, an enforcement rule, an orchestration slice. It is the standing entry
-point for Article VI.
+test ADR-0025 adopted (originally the archived constitution's Article VI).
 
 ## The five questions, in order
 
-Answer each in the issue (the templates collect them). Stop at the first hard No
-that the tie-break below does not rescue.
+Answer each in the proposing issue's own prose (the dedicated template fields
+were retired with the gate machinery — #361). Stop at the first hard No that
+the tie-break below does not rescue.
 
 1. **Mission.** Does this materially improve engineering discipline around Claude
    and GitHub — not merely automate GitHub or wrap Claude? Name the workflow
@@ -72,7 +78,8 @@ Question 5 is where duplication is caught. Before proposing new infrastructure,
 find the existing work and show why it cannot be extended. The v1 review nearly
 filed an "establish the evaluation framework" issue before confirming the harness
 already existed — the correct move was to *promote and govern* it, not rebuild it.
-Rebuilding what exists violates Constitution Article V.
+Rebuilding what exists violates the extend-don't-rebuild rule (originally the
+archived constitution's Article V; the judgment survives in question 5).
 
 ## Capability Traceability
 
@@ -86,19 +93,20 @@ This is the lifecycle spine (`Ideate → Plan → Codify → Validate → Ship`)
 onto governance, so it adds no new machinery — it makes the existing spine
 auditable. Each hop has a home:
 
-| Hop | Carried by |
+| Hop | Carried by (since v0.16: all documentary — the collecting fields and the enforcing gate were retired by #361) |
 |---|---|
-| Mission → Capability → Constitution | the CEF five-question answer (issue template) |
-| → ADR → Issue | the ADR Alignment block + the issue traceability section |
-| → Pull Request | the pull-request traceability section |
-| → Evaluation | the Evaluation surface (the Q4 evidence) |
-| → Release | the Platform Compatibility Review gate (Constitution Article VII) |
+| Mission → Capability | the CEF five-question answer, written in the proposing issue |
+| → ADR → Issue | the ADR Alignment block + the issue's own reasoning |
+| → Pull Request | the PR body's what/why (no dedicated traceability section anymore) |
+| → Evaluation | the Evaluation surface (the Q4 evidence, when an evaluation is run) |
+| → Release | the manual release census in the release-docs checklist |
 
-The CEF governs *admission*; Evaluation governs *release*. Only the
-`Evaluation → Release` hop is enforced rather than documentary: a release refuses a
-capability whose evidence is absent.
+The CEF governs *admission*; release truth is gated by the milestone gate and
+release-notes verification. **No hop is mechanically enforced anymore** — the
+Platform Compatibility Review that refused a release over absent evidence was
+retired by the #361 deletion test; the questions are applied as judgment.
 
 ## See also
 
-- [Constitution Article VI](../product-constitution.md) — the invariant this procedure applies
+- [The archived constitution](../product-constitution.md) — where Article VI originally ratified this procedure (historical)
 - [ADR-0025](../adr/0025-capability-evaluation-framework.md) — the decision to adopt it

@@ -70,9 +70,9 @@ flowchart LR
 | --- | --- | --- |
 | **Ideate** | `/spark:ideate` | A confirmed problem statement, grounded in prior art and actual need |
 | **Plan** | `/spark:plan` | Architecture decisions, scoped features, GitHub issues, and acceptance criteria |
-| **Codify** | `/spark:codify` | One issue implemented on one focused feature branch |
-| **Validate** | `/spark:validate` | Code review, security review, verification, and fixes tied to the issue |
-| **Ship** | `/spark:ship` | A conventional commit, pushed branch, and focused GitHub pull request |
+| **Codify** | `/spark:codify` | One issue implemented as focused commits on one feature branch |
+| **Validate** | `/spark:validate` | Code review, security review, verification, and committed fixes tied to the issue |
+| **Ship** | `/spark:ship` | The reviewed branch published as one focused GitHub pull request |
 
 Use the whole lifecycle for a new product or enter at the stage that matches
 the work already in front of you. The workflow stays recognizable across every
@@ -124,26 +124,31 @@ useful to Claude when the next session begins.
 
 ## Claude stops waking up with amnesia
 
-Spark records lifecycle progress in `.spark/state.json`. At session start,
-`spark brief --short` orients Claude to the current branch, working state,
-lifecycle position, and resolved preferences. When you need the complete
-picture, `spark resume` cross-checks recorded state against the live
-repository and flags drift instead of inventing certainty.
+At session start, `spark brief --short` orients Claude by **deriving** the
+current branch, working state, lifecycle position, and resolved preferences
+from git and GitHub — never by trusting a recorded snapshot, which is how
+orientation goes stale. The one thing a repository cannot answer — what you
+meant to do next, and what was blocking — is recorded by each lifecycle
+stage's close-out in `.spark/state.json` and presented with its date. When
+you need the complete picture, `spark resume` prints the derived reality
+first and the recorded intent second, and refuses to replay an intent whose
+pull request has already merged.
 
 That means less subscription time spent rediscovering the project and more
 time advancing it.
 
 ## Guardrails that actually run
 
-Spark's standards are more than prose — the same rules are enforced on both
-paths a git command can take:
+Spark's standards are more than prose — the same rules are enforced on every
+path that can reach the repository:
 
 | Door | Fires when | Enforces |
 | --- | --- | --- |
 | `PreToolUse` guard | Claude runs a git command | Blocks force-pushes and pushes whose destination is trunk — through leading git options, full refspecs, and compound commands |
 | Git hooks | You (or anyone) commits directly | Rejects commits on trunk, invalid conventional commits, and AI attribution |
-| `spark doctor` | Locally and in CI | Plugin structure, scripts, documentation links, manifests, enforcement parity |
-| Behavioral tests | Every pull request **to this repository** | Spark's own CI exercises the CLI flows and both enforcement doors against throwaway repos — this is how Spark tests itself, not a suite added to your project (`preferences --apply` scaffolds *your* stack's validation instead) |
+| GitHub ruleset | Anything reaches the remote — API calls, other clones, hookless clients | The same trunk policy server-side: PRs required, merges gated on the repo's required CI checks, force-push and deletion blocked. Spark ships the policy and reports drift (`spark doctor --requirements`); applying it stays a human act |
+| `spark doctor` | Locally and in CI | Plugin structure, scripts, documentation links, manifests, enforcement lockstep |
+| Behavioral tests | Every pull request **to this repository** | Spark's own CI exercises the CLI flows and the local enforcement doors against throwaway repos — this is how Spark tests itself, not a suite added to your project (`preferences --apply` scaffolds *your* stack's validation instead) |
 
 Claude can move quickly because Spark keeps the work inside boundaries you can
 trust.
@@ -203,7 +208,7 @@ install a companion only when you need its job.
 
 | Plugin | Job | Entry point | Install |
 | --- | --- | --- | --- |
-| **spark** | The shipping loop: the five lifecycle skills plus `onboard`, `bootstrap`, `knowledge`, `agents-md`, the CLI, and both enforcement doors | `/spark:<skill>` | `/plugin install spark` |
+| **spark** | The shipping loop: the five lifecycle skills plus `onboard`, `bootstrap`, `knowledge`, `agents-md`, the CLI, and the enforcement doors (both local ones, plus the trunk-ruleset policy for the third) | `/spark:<skill>` | `/plugin install spark` |
 | **spark-audit** | Whole-project assessment and evidence-backed cleanup | `/spark-audit:audit` | `/plugin install spark-audit` |
 | **spark-connect** | Service connectivity and secrets via 1Password, including plaintext shredding | `/spark-connect:connect` | `/plugin install spark-connect` |
 | **spark-docs** | Public docs and positioning through author personas | `/spark-docs:docit` | `/plugin install spark-docs` |

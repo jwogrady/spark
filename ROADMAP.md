@@ -237,6 +237,47 @@ unbuilt until its recorded trigger fires.
 
 ---
 
+## v0.16 — Reconciled delivery architecture
+
+**Status:** In progress
+
+The burn-through release: the #336–#361 reconciliation, driven by the zd-dns
+v0.1.0 field test, implemented as one coherent architectural change. What the
+field proved got enforced mechanically; what it disproved got deleted.
+
+- **Derive-first orientation** (#347): `brief`/`resume` read branch, PR, and
+  lifecycle position live from git/GitHub; `.spark/state.json` shrinks to the
+  two judgment values no repo can answer (`next_action`, `blockers`). The
+  observed stale-brief failure is structurally unreproducible.
+- **The dependency-order invariant** (#344, absorbing #337/#338): Plan records
+  blocked-by in GitHub; Codify fails closed when a prerequisite is missing
+  from the base; resume surfaces ancestry drift.
+- **Delivery decided** (ADR-0027; #358/#339/#340): canonical issue PRs to
+  trunk, sequential-when-dependent; the temporary integration branch is a
+  documented exception/recovery technique, never a develop branch.
+- **Plan reasons model → shape → design** (#350, absorbing #345/#346/#348/#349).
+- **Commit ownership** (#354/#355, conventions from #353): Codify and Validate
+  commit their own work; Ship publishes the existing series.
+- **Integration validation consolidated** (#341, absorbing #342/#343/#352):
+  one judgment reference — combined-tree identity, finding provenance,
+  docs-truth, and the CODE IMPLEMENTED / STATICALLY PROVEN / LIVE PROVEN /
+  LIVE UNPROVEN evidence vocabulary taught by `validate`.
+- **Milestone as version authority** (#357): the seeded Release Please policy
+  becomes `always-bump-patch` + `initial-version`, so a fresh project's first
+  release cannot default to 1.0.0 and no commit type mints a milestone
+  version; `Release-As` does, deliberately.
+- **The third enforcement door** (#359): a shipped GitHub trunk ruleset,
+  inspect-and-report in `doctor --requirements`, applying always human.
+- **One first-run command** (#360): install → `/spark:onboard` → `/spark:ideate`;
+  the `delivery`/`conservative` preset terminology corrected.
+- **Governance subtraction** (#361, absorbing #336): the CEF gate machinery,
+  taxonomy-mirror guard, prose-parity greps, ADR-banner scan, and the
+  constitution-as-instrument removed or archived under the deletion test;
+  footprint ratchet demoted to advisory; the agent contract collapsed to one
+  canonical `AGENTS.md` body with a `CLAUDE.md` import stub.
+
+---
+
 ## Later — Project inception
 
 Project inception — `/plugin install spark` plus the `bootstrap` skill —

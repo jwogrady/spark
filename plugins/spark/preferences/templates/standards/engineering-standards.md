@@ -51,8 +51,9 @@ is documented in the Spark reference `project-standards.md`.
 ## Release posture
 
 - Release mechanism `{{release.mechanism}}`: it owns versioning, the changelog,
-  tags, and GitHub Releases; `ship` does the commit and PR and defers the
-  release to it. <!-- spark:pref release.mechanism={{release.mechanism}} -->
+  tags, and GitHub Releases. Implementation commits land during development
+  (several focused commits per branch); `ship` pushes and opens the PR and
+  defers the release to it. <!-- spark:pref release.mechanism={{release.mechanism}} -->
 
 ## Security & configuration
 

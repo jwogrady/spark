@@ -5,10 +5,12 @@
 > unprompted. Where Release Please is configured, ship never touches versions,
 > changelog, tags, or Releases (ADR-0006/0009).
 
-Derive the bump from the commit types in the range per the version ladder in
-[`../../../docs/explanation/sdlc-doctrine.md`](../../../docs/explanation/sdlc-doctrine.md)
-(`feat:` → minor; `fix:`/`docs:`/`chore:`/`refactor:`/`test:` → patch; `!` or
-`BREAKING CHANGE:` → major; take the highest), then in order: roll
+Derive the bump from the commit types in the range (`feat:` → minor;
+`fix:`/`docs:`/`chore:`/`refactor:`/`test:` → patch; `!` or
+`BREAKING CHANGE:` → major; take the highest) — and when the change completes a
+declared milestone, the milestone's version wins over the derivation
+([sdlc-doctrine.md](../../../docs/explanation/sdlc-doctrine.md)). Then in
+order: roll
 `[Unreleased]` into a dated `vX.Y.Z` section, bump the version file, annotated
 tag, `gh release create` with the CHANGELOG section as notes, fresh
 `[Unreleased]`.

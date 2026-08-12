@@ -82,7 +82,7 @@ version number does not imply more than the evidence supports.
 
 `spark doctor` mechanically enforces several of the promises above (skill
 taxonomy parity, the CLI-verb table matching the implementation, the
-release-component set matching Release Please's packages, enforcement parity
-across both git doors). If this page claims something `doctor` or the code
+release-component set matching Release Please's packages, enforcement
+lockstep across the enumerable vocabulary). If this page claims something `doctor` or the code
 contradicts, treat it as a bug in this page and open an issue — the same rule
 [compatibility.md](compatibility.md) states for itself.

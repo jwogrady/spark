@@ -9,19 +9,24 @@ generated project inherits the same model as its default
 
 ## The one ownership model
 
-**Ship owns the commit and the PR. Release Please owns the release** —
-versioning, changelog, the tag, and the GitHub Release.
+**Ship owns the push and the PR. Release Please owns the release** —
+versioning, changelog, the tag, and the GitHub Release. (The implementation
+commits belong to `codify` and the review-fix commits to `validate`; by Ship
+the branch's commit series already exists — ADR-0027.)
 
 | Release Please owns | Spark (`ship`) owns |
 |---|---|
-| Deriving the version bump from conventional-commit types | The conventional commit — type, subject, body |
-| Rolling `CHANGELOG.md` entries into a dated version section | Curating `[Unreleased]` entries as behavior ships |
+| Executing the repo's version policy — in Spark-seeded projects `always-bump-patch` + `initial-version`, with a milestone's declared version minted via `Release-As` (commit types classify changes, they never decide a milestone happened); this repo itself runs Release Please's default bump semantics | Verifying the branch's focused commit series (and sweeping a small coherent tail into one last commit) |
+| Generating `CHANGELOG.md` from the trunk's conventional commits — never hand-edited | Pushing the branch |
 | Cutting the annotated tag | Opening the focused PR |
 | Creating the GitHub Release | Everything that ends at "PR is open" |
 
-Already decided, verbatim, in [`skills/ship/SKILL.md`](../../skills/ship/SKILL.md)'s
-"Releases: defer to Release Please" section and the ADRs below; this doc
-exists so the same wording holds everywhere else it's mentioned.
+The authority for this boundary is
+[`skills/ship/SKILL.md`](../../skills/ship/SKILL.md)'s "Releases: defer to
+Release Please" section (with the milestone-completion motion in
+[`skills/ship/references/release-please.md`](../../skills/ship/references/release-please.md))
+and the ADRs below; this doc exists so the same boundary holds everywhere
+else it's mentioned.
 
 The rule is conditional: it applies wherever a `release-please-config.json`
 (or a `release-please` workflow) exists. A repo without one keeps `ship`'s
@@ -134,7 +139,7 @@ identity decision are recorded developer-only in
 ## Related docs
 
 - [`skills/ship/SKILL.md`](../../skills/ship/SKILL.md) — the canonical wording this doc explains.
-- [`explanation/sdlc-doctrine.md`](sdlc-doctrine.md) — the version ladder Release Please's bump derivation applies to.
+- [`explanation/sdlc-doctrine.md`](sdlc-doctrine.md) — the version doctrine: the milestone declares the version, Release-As mints it, always-bump-patch carries the days between.
 - [`reference/engineering-preferences.md`](../reference/engineering-preferences.md) — the same model as a generated project's default.
 - [`reference/hooks.md`](../reference/hooks.md) — the guard rule backing this boundary.
 - [`explanation/enforcement-model.md`](enforcement-model.md) — why Spark enforces rules like this mechanically.

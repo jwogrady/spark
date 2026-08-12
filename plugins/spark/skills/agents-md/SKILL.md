@@ -1,49 +1,51 @@
 ---
 name: agents-md
-description: Create, maintain, audit, and sync a repo's AI-agent contract files — AGENTS.md (any agent) and CLAUDE.md (Claude Code). Use to write, update, audit, or drift-check AGENTS.md or CLAUDE.md. Defers net-new CLAUDE.md creation to native /init. Not prose docs — use `docit` (public) or `knowledge` (internal).
+description: Create, maintain, and audit a repo's AI-agent contract — one canonical AGENTS.md body plus a CLAUDE.md pointer stub that imports it. Use to write, update, audit, or drift-check AGENTS.md or CLAUDE.md, or to collapse a dual-body pair into the single-body model. Defers net-new repo scanning to native /init. Not for prose docs — use `docit` (public) or `knowledge` (internal).
 ---
 
 # agents-md — the agent behavioral-contract skill
 
-A repo speaks to its AI contributors through two files:
+A repo speaks to its AI contributors through **one canonical contract body**:
 
-- **`CLAUDE.md`** — read by Claude Code specifically. Full project context: repo
-  map, commands, workflow, and the doctrine Claude must follow.
-- **`AGENTS.md`** — the tool-agnostic companion. The same behavioral contract,
-  restated so *any* AI coding agent absorbs it regardless of vendor.
+- **`AGENTS.md`** — the contract. Tool-agnostic: repo map, commands, workflow,
+  and the doctrine every AI agent must follow. Any agent reads it directly.
+- **`CLAUDE.md`** — a pointer stub whose body is `@AGENTS.md`, so Claude Code
+  imports the same contract other tools read. Claude-specific notes may follow
+  the import, but only when genuinely tool-specific.
 
-This skill owns **both**. They share one behavioral contract and must stay in
-sync; when a rule changes in one, it is reviewed in the other.
+One body means the two files **cannot drift** — the dual-body model this skill
+previously maintained required editing every rule twice, and the two paid a
+truth-pass tax on every change. This skill owns both files.
 
 ## Division with native `/init`
 
 Claude Code's native `/init` already *creates* a first `CLAUDE.md` by scanning a
-repo. **Do not reimplement that.** This skill's jobs are the ones `/init` does not
-do:
+repo. **Do not reimplement that.** This skill's jobs are the ones `/init` does
+not do:
 
-- **Author `AGENTS.md`** — `/init` only writes `CLAUDE.md`; the tool-agnostic file
-  has no native generator.
-- **Maintain & audit** both files — patch missing sections, refresh stale content,
-  inject Spark's required doctrine (attribution, GitHub guardrails, agent safety).
-- **Sync-check** the two for drift.
+- **Author `AGENTS.md`** — the canonical body has no native generator. When
+  `/init` produced a full `CLAUDE.md`, move its body into `AGENTS.md` and leave
+  the `@AGENTS.md` stub behind.
+- **Maintain & audit** the contract — patch missing sections, refresh stale
+  content, inject Spark's required doctrine (attribution, GitHub guardrails,
+  agent safety).
+- **Migrate** a legacy dual-body pair (full `CLAUDE.md` + full `AGENTS.md`) to
+  the single-body model: merge, dedupe, keep the stricter rule on conflict, and
+  present the diff before writing.
 
-For a brand-new `CLAUDE.md`, run `/init` first, then this skill to enforce the
-Spark sections and generate the matching `AGENTS.md`.
+## What the contract carries
 
-## What both files carry
-
-Both files share one **non-negotiable behavioral contract** — attribution,
-branch/PR discipline, conventional commits, destructive-action confirmation, the
-GitHub boundary, and scope discipline — and a **required-sections** layout (rich
-for `CLAUDE.md`, scannable for `AGENTS.md`). The full contract and the per-file
-section lists are in
+The **non-negotiable behavioral contract** — attribution, branch/PR discipline,
+conventional commits, destructive-action confirmation, the GitHub boundary, and
+scope discipline — and a **required-sections** layout. The full contract and
+section list are in
 [references/contract-and-sections.md](references/contract-and-sections.md);
-consult it when authoring or auditing, and keep the two files in sync on it.
+consult it when authoring or auditing.
 
 ## Link the methodology, don't paste it
 
 The Spark methodology lives in Spark and is edited once; a project repo carries
-only its own product. When a contract file needs to say *how* the project is
+only its own product. When the contract needs to say *how* the project is
 built, **link Spark's doctrine instead of restating it** — never generate a
 project-local copy of the process, and strip Spark-internal process framing
 (`Phase N` headers, `/spark:` stage references) when auditing. The full rule and
@@ -53,26 +55,25 @@ the canonical "How this project is built" pointer are in
 ## How the skill behaves
 
 1. **Read both files first.** Never overwrite blindly.
-2. **Defer creation of `CLAUDE.md` to `/init`;** this skill maintains and audits it.
-3. **Derive `AGENTS.md` from `CLAUDE.md`** — restate, don't duplicate verbatim; it
-   must read as a standalone document.
-4. **Prefer real commands over placeholders.** Read the repo for actual scripts and
-   entrypoints; add a TODO marker when a value can't be verified.
-5. **Add missing sections; remove vague content carefully.** When uncertain, keep it.
-6. **Flag drift, don't silently resolve it.** If the two files contradict, surface
-   the conflict. `CLAUDE.md` is authoritative for Claude Code; `AGENTS.md` for all
-   other agents; update them together.
-7. **Keep both tight.** A short accurate contract beats a long one. Present a diff
+2. **`AGENTS.md` is the body; `CLAUDE.md` is the stub.** A repo with a full
+   `CLAUDE.md` and no `AGENTS.md` gets the migration: body moves, stub stays.
+3. **Prefer real commands over placeholders.** Read the repo for actual scripts
+   and entrypoints; add a TODO marker when a value can't be verified.
+4. **Add missing sections; remove vague content carefully.** When uncertain, keep it.
+5. **Flag conflicts, don't silently resolve them.** If the stub has grown
+   Claude-specific rules that contradict the body, surface it — the body wins
+   unless the rule is genuinely tool-specific.
+6. **Keep it tight.** A short accurate contract beats a long one. Present a diff
    and get a go-ahead before overwriting an existing file.
 
 ## Outputs
 
-Full file (new `AGENTS.md`, or a `/init`-seeded `CLAUDE.md` brought up to standard);
-section patches; a sync audit (drift between the two); or a diff review for human
-approval. Ask which is wanted if unspecified.
+Full contract (new `AGENTS.md` + stub, or a legacy pair migrated); section
+patches; an audit (stale claims, missing doctrine, stub drift); or a diff
+review for human approval. Ask which is wanted if unspecified.
 
 ## Non-goals
 
-- Does **not** reimplement `/init`'s `CLAUDE.md` creation — it defers to it.
+- Does **not** reimplement `/init`'s repo scan — it defers to it for discovery.
 - Does **not** run as an automated CLI command, or modify any file unless invoked.
 - Does **not** define project-specific commands — those come from reading the repo.

@@ -44,7 +44,7 @@ You never re-state these — Spark already holds them.
 | GitHub Flow · never commit to `master` · PRs only | [`hooks/guard-bash.sh`](../reference/hooks.md) + `pre-commit` |
 | Conventional Commits · subject ≤72 · one logical change | [`commit-msg`](../reference/hooks.md) |
 | Never AI attribution | `commit-msg` + every skill |
-| Semantic Versioning · bump derived from commit type | Release Please (scaffolded by [`preferences`](../reference/cli.md); `ship` defers — see [Releases](#releases) below) |
+| Semantic Versioning · milestone declares the version (`Release-As`), day-to-day merges bump the patch line (`always-bump-patch`), first release starts at `initial-version` | Release Please (scaffolded by [`preferences`](../reference/cli.md); `ship` defers — see [Releases](#releases) below) |
 | Design before code · acceptance criteria before dev | [`ideate`](../reference/skills.md) · [`plan`](../reference/skills.md) · [codify-readiness](../reference/codify-readiness.md) |
 | One problem / one issue / one PR | [scope doctrine](../explanation/philosophy.md) |
 | ADRs · decisions explicit and traceable | `docs/adr/` |
@@ -76,7 +76,7 @@ operator guidance Spark does not check or enforce.
 
 ### Releases
 - **Release Please** owns versioning, changelog, GitHub Releases, and annotated tags — `release.mechanism`. — *ADR-0006*
-- `ship` defers to it: `ship` does the commit + PR, Release Please does the release.
+- `ship` defers to it: `codify`/`validate` make the commits, `ship` pushes and opens the PR, Release Please does the release.
 - See [release-ownership](../explanation/release-ownership.md) for how this plays out in Spark's own repo — the root package plus three independently versioned companions.
 
 ### CI & automation

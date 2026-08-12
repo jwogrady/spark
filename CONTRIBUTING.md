@@ -55,6 +55,18 @@ One concern per PR. Keep PRs small and reviewable.
 
 Use the PR template. Fill in the summary and test plan. Reference the issue.
 
+## Governance earns its keep (the deletion test)
+
+Before adding — and periodically, against — any internal check, mirror, gate,
+or doctrine mechanism in this repo, answer five questions: what concrete
+failure does it prevent; who consumes it; what mechanical behavior depends on
+it; could its information live under an existing authority; and **if it were
+deleted, what observable behavior would get worse?** If the last question has
+no credible answer, delete or consolidate it. The placement rule behind the
+test: prose carries judgment, structure carries decisions, code carries what
+must happen — never write code merely to police duplicated prose, and never
+store a fact that git or GitHub can already answer.
+
 ## Commits
 
 Use [conventional commits](https://www.conventionalcommits.org/):
@@ -69,6 +81,12 @@ chore: add .editorconfig
 Subject line: imperative mood, under 72 characters, no trailing period.
 Body: explain why, not what. Reference issues when relevant.
 
+Commit when one coherent problem → solution step is complete and sensibly
+checked — a branch normally carries several focused commits that tell the
+implementation story. Avoid per-edit WIP/checkpoint commits, and avoid holding
+everything back for one end-of-work commit. Unrelated work becomes another
+issue and another branch.
+
 Do not rewrite published history. Do not force push to shared branches.
 
 ## Testing
@@ -76,7 +94,7 @@ Do not rewrite published history. Do not force push to shared branches.
 Two gates run on every PR, and both are one local command:
 
 - `./plugins/spark/bin/spark doctor` — the static gate: layout, JSON,
-  frontmatter, `bash -n`, doc links, enforcement parity.
+  frontmatter, `bash -n`, doc links, enforcement lockstep.
 - `bash tests/run.sh` — the behavioral gate: every `tests/test-*.sh` suite,
   exercising the CLI flows (`setup`, `apply-permissions`, `preferences`,
   `brief`/`resume`, `new-skill`) and the enforcement hooks (`guard-bash.sh`,

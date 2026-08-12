@@ -21,9 +21,11 @@ Validates the whole marketplace and reports health. Checks:
   manifest and skill checks as the core
 - shell syntax: `bash -n` over `bin/spark`, the guard, and both git hooks
 - doc links: every relative Markdown link in the shipped docs resolves
-- enforcement parity: the commit types, AI-attribution ban, trunk protection,
-  and force-push rules agree across the hooks and the contract files
-  (CLAUDE.md, AGENTS.md)
+- enforcement lockstep: the enumerable vocabularies agree list-vs-list — the
+  commit types across the `commit-msg` hook, `AGENTS.md`, and `hooks.md`; the
+  changelog sections against the committed vocabulary and the release-notes
+  checker; the release components against Release Please's packages. (The
+  hooks' *behavior* is pinned by the behavioral suites, not by doctor.)
 - standards boundary: in a project with the generated `CONVENTIONS.md` /
   `ENGINEERING-STANDARDS.md`, every `<!-- spark:pref key=value -->` marker names
   a real preference key and asserts the value it resolves to (drift and dangling
@@ -46,6 +48,7 @@ the *environment* can perform each Spark capability:
 | GitHub delivery | `gh`, authenticated | `plan`/`ship`/`validate` create issues and PRs |
 | JSON tooling | `jq` or `python3` | Merging the permission baseline into an existing `.claude/settings.json`; everything else degrades gracefully |
 | Release pipeline | repo wiring | `release-please-config.json` + workflow present when the resolved `release.mechanism` is `release-please`; other mechanisms are the operator's own |
+| Remote enforcement | `gh`, authenticated | The third door: the default branch's effective rules — including the specific required-check contexts — compared against the repo's trunk policy file (`.github/spark-trunk-ruleset.json` when present, else the shipped `settings/github-ruleset-trunk.json`) — inspect-and-report only, drift degrades the summary, applying is always an explicit human act; unreachable/unreadable evidence reports "not assessed", never healthy |
 
 Each missing or unauthenticated dependency prints one remediation line
 (`gh auth login`, `spark preferences --apply`, …). The exit code is non-zero
@@ -212,16 +215,19 @@ standard, [engineering-preferences.md](engineering-preferences.md).
 
 ## `spark resume`
 
-Rebuilds "where you were / what's next" from the committed work state at
-`.spark/state.json` ([schema](state.md)), written by the lifecycle skills at
-each stage's close-out. Every recorded fact is cross-checked against the live
-repo before it is shown — branch existence and checkout via git, issue and PR
-state via `gh` when available, the problem statement's presence on disk — and
-whatever drifted is flagged with a `!` line: the repo is the truth, the state
-is a claim. With no state file it prints how to get one; a malformed file
-degrades to "no facts could be read", never an invented answer. Exits 0 in
-both cases; exits 1 only outside a git repo. For the three-line automatic
-version at session start, see `spark brief`.
+Rebuilds "where you are / what's next" derive-first ([state.md](state.md)):
+**Current reality** is read live — branch and tree from git, the branch's PR
+and its state via `gh` when available, the problem statement's presence on
+disk, and the trunk-ancestry check (commits on `origin/<trunk>` missing from
+this branch are flagged, since a merged prerequisite may be among them —
+reported, never silently repaired). **Recorded intent** then shows what the
+state file claims — `next_action`/`blockers` with their recorded date — and
+"What's next" tells you to verify the claim against the reality above. When
+the current branch's PR reports `MERGED`, the loop is declared closed and a
+pre-merge `next_action` is never replayed. Legacy pre-v0.16 keys found in the
+file are flagged and ignored; a malformed file degrades to "no facts could be
+read", never an invented answer. Exits 1 only outside a git repo. For the
+three-line automatic version at session start, see `spark brief`.
 
 ## `spark brief [--short]`
 
@@ -234,11 +240,12 @@ reported as such with a pointer to the first-run flow rather than a guess.
 Because the classification is a durable fact that can go stale, the brief
 re-runs the inspect-only classifier and flags a repo recorded `new` that has
 since grown real sources (now classifying `existing`) for re-orientation — a
-flag only, never a silent rewrite. **Locate** — the lifecycle position, read
-from `.spark/state.json` (see [state.md](state.md)) when a lifecycle skill has
-written it, otherwise inferred from repo shape (problem statement present,
-trunk vs. working branch, open PR); `spark resume` gives the full
-cross-checked view. **Load** — the resolved standard bag summarized: how many
+flag only, never a silent rewrite. **Locate** — the lifecycle position,
+always derived from repo shape (problem statement present, trunk vs. working
+branch, open PR), never read from a recorded stage; the recorded
+`next_action`/`blockers` are appended with their recorded date as intent to
+verify (see [state.md](state.md)); `spark resume` gives the full derived
+view. **Load** — the resolved standard bag summarized: how many
 preference keys resolved, how many the operator or project tiers override, the
 `stack.default` and `release.mechanism` headlines, and which project-local
 standards docs (`CONVENTIONS.md`, `ENGINEERING-STANDARDS.md`) exist; `spark
@@ -254,11 +261,13 @@ start clean.
 
 Shows the committed work state at `.spark/state.json` ([schema](state.md)), or
 writes it: `--set key=value` records a stage close-out (e.g. `spark state
---set stage=plan issue=42 next_action="codify #42"`), stamping `updated` for
-you. Only the schema's keys are accepted; the file is created on first write.
-This is the mechanical writer the lifecycle skills call at each stage's
-close-out — `spark resume` and `spark brief` are its readers. Exits 1 outside
-a git repo.
+--set next_action="codify #42"`), stamping `updated` for you. Only the two
+judgment keys (`next_action`, `blockers`) are accepted — derivable facts like
+stage, issue, branch, and PR are rejected with a message naming their live
+source, because `brief`/`resume` derive them from git and GitHub at read time.
+The file is created on first write; a write migrates a legacy-schema file to
+the current key set. This is the mechanical writer the lifecycle skills call
+at each stage's close-out. Exits 1 outside a git repo.
 
 ## `spark footprint [--json] [--timing]`
 
@@ -267,8 +276,9 @@ Measures Spark's context footprint — the bytes each always-loaded surface
 reports per surface, with `--json` for the machine-readable shape. `--timing`
 is the opt-in hard latency gate: it measures the hot paths (the PreToolUse
 guard, `brief --short`) against their budgets and exits non-zero when one is
-exceeded. `spark doctor` runs the same latency numbers advisorily; the gate
-form is for CI.
+exceeded. Doctor itself runs no timing — the aggregate context-footprint
+total it reports is advisory (warn-only), and this gate is the only latency
+enforcement.
 
 ## `spark version`
 
