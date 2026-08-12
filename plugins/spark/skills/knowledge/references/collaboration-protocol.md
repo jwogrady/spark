@@ -38,7 +38,8 @@ Phase 1 — Draft
 Phase 2 — Review + shelve
   Dispatch spark:knowledge:librarian-editor. It appends feedback to each draft
   and writes .knowledge-notes/librarian.md: placement, filename, duplicates,
-  cross-links, glossary changes, and promotion candidates (or "none").
+  cross-links, glossary changes, operator promotion candidates (or "none"),
+  and hub candidates per hub-promotion.md (or "none").
 
 Phase 3 — Revise
   Re-dispatch spark:knowledge:author with a "revise" brief; it folds the
@@ -50,8 +51,10 @@ Phase 4 — Synthesize + file (barrier)
   voice to the recommended path — the orchestrator shows the user a diff and
   gets go-ahead before any overwrite — updates the glossary/index so the doc
   is findable, appends any explicitly user-approved promotion candidates to
-  the operator store with provenance (operator-knowledge.md), and writes
-  .knowledge-notes/editor-log.md.
+  the operator store with provenance (operator-knowledge.md), files each
+  explicitly user-approved hub candidate through the hub's own process
+  (hub-promotion.md), and writes .knowledge-notes/editor-log.md — including
+  the explicit no-promotion note when nothing crossed the deletion test.
 ```
 
 ## Shared notes
