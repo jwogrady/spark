@@ -36,6 +36,28 @@ the when/why*, not a competing reviewer.
 issue per branch, one concern per PR. Scope creep becomes a new issue, never a
 silent addition.
 
+## Delivery
+
+Canonical delivery is GitHub Flow at the issue level:
+
+```
+issue → issue branch → focused commits → validation → issue PR → trunk
+```
+
+An issue branch carries **multiple focused Conventional Commits** — Codify
+commits each coherent implementation step, Validate commits its review fixes,
+and Ship publishes what already exists. Two invariants make parallel work
+safe: **ordering** — if issue B depends on issue A, B's base must already
+contain A's merged result (Plan records the dependency in GitHub, Codify fails
+closed when it's missing) — and **one writer per working tree** — concurrent
+reading is fine, concurrent mutation needs genuinely isolated worktrees.
+
+The trunk is the development line, integrated only through PRs; the *release*
+is the coherent product state, gated separately by Release Please and the
+human merge. A temporary integration branch (combine several coupled branches,
+validate the combined tree, one PR, delete it) is a recovery/exception
+technique — never a standing `develop`, never the default path.
+
 ## Versioning
 
 Projects built with Spark follow one version ladder. It is a Spark
