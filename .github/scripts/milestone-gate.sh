@@ -93,7 +93,9 @@ fi
 open_nums="" open_count=0 closed_count=0
 while IFS=$'\t' read -r num state; do
   [ -n "$num" ] || continue
-  case "$state" in
+  # gh emits issue states UPPERCASE ("OPEN"); normalize before matching, or
+  # every issue falls to the closed arm and any milestone reads complete.
+  case "$(printf '%s' "$state" | tr '[:upper:]' '[:lower:]')" in
     open) open_count=$((open_count + 1)); open_nums="$open_nums #$num" ;;
     *)    closed_count=$((closed_count + 1)) ;;
   esac
