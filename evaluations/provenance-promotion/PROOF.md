@@ -16,8 +16,8 @@
   not depend on Prime's specific code — a rebuilt Prime meets the identical
   question. **Verdict: promote.**
 - `[reasoned]` The evidence bundle cites GitHub objects; it does not propose
-  transcribing Prime's commit history into Cosmos (ADR-0028's "cited, not
-  copied" rule).
+  transcribing Prime's commit history into Cosmos (ADR-0028's "cited rather
+  than transcribed" rule).
 - `[human]` Where the record should land inside Cosmos (which document, what
   supersedes what) is a placement decision under Cosmos's own governance —
   the dogfood run below shows this stopping for that ruling rather than

@@ -179,7 +179,8 @@ The following is the exact content prepared for
 ## 5. Where this stops
 
 `[human]` Per ADR-0028 ("a candidate that would create or change an
-architectural ruling stops for the explicit human decision") and Cosmos's own
+architectural decision stops for the human ruling required by ADR-0019 and by
+the destination repository's own governance") and Cosmos's own
 `CONTRIBUTING.md` (feature branch, PR, human-only attribution), **this content
 is prepared, not filed.** No branch was opened and no PR was created against
 `jwogrady/cosmos`. Filing it is the one action this proof deliberately leaves
