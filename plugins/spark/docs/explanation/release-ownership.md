@@ -135,6 +135,13 @@ identity decision are recorded developer-only in
 - The ADR audit (issue #180) is the ADR-visible record of this boundary and
   any superseded decisions; this doc cross-references it, not substitutes.
 - The token-identity decision above, this repo's standing release blocker.
+- Whether this repository's merge-commit settings duplicate a changelog
+  entry per PR (a repo-operations fact, not a shipped-model gap): recorded
+  developer-only in
+  <https://github.com/jwogrady/spark/blob/master/docs/reference/release-merge-convention.md>
+  (issue #372). The shipped mechanical backstop is the duplicate-bullet
+  detection in `release-notes-check.sh`; the setting change itself is a
+  pending human action outside what an agent may apply.
 
 ## Related docs
 
