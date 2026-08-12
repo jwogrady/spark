@@ -33,6 +33,11 @@ rc=0; out="$(printf 'blocker\t12\tCLOSED\nbehind\t4\torigin/master\n' | prereq_v
 assert_rc "stale base blocks" 1 "$rc"
 assert_contains "names the trunk and count" "4 commit(s) behind origin/master" "$out"
 
+# --- garbage freshness evidence fails closed, never silently passes.
+rc=0; out="$(printf 'behind\tnonsense\torigin/master\n' | prereq_verdict)" || rc=$?
+assert_rc "non-numeric behind blocks" 1 "$rc"
+assert_contains "names the unreadable evidence" "unreadable" "$out"
+
 # --- end-to-end with a fake gh: native blocked-by plus a body "Blocked by #N"
 # line are unioned and deduped; the open one blocks.
 repo="$WORK/prj"; make_repo "$repo"
@@ -70,6 +75,23 @@ EOF
 rc=0; out="$(cd "$repo" && env PATH="$fakebin:$PATH" bash "$script" 7 2>&1)" || rc=$?
 assert_rc "closed prerequisites are ready" 0 "$rc"
 assert_contains "says ready" "ready" "$out"
+# the sandbox repo has no remote trunk, so the ready line must not claim
+# freshness it never measured.
+assert_contains "freshness honestly not assessed" "trunk freshness not assessed" "$out"
+
+# --- the native blocked-by endpoint FAILING (vs answering empty) is
+# "cannot answer", never "no blockers": exit 3, not a false ready.
+cat > "$fakebin/gh" <<'EOF'
+#!/usr/bin/env bash
+case "$*" in
+  *"dependencies/blocked_by"*) exit 1 ;;
+  *"issue view 7 --json body"*) printf 'No body deps.\n' ;;
+  *) exit 1 ;;
+esac
+EOF
+rc=0; out="$(cd "$repo" && env PATH="$fakebin:$PATH" bash "$script" 7 2>&1)" || rc=$?
+assert_rc "failed blocked-by endpoint degrades to not-assessed" 3 "$rc"
+assert_contains "instructs manual verification on endpoint failure" "verify prerequisites by hand" "$out"
 
 # --- no gh at all -> not assessed (exit 3), instructs manual verification.
 bare="$WORK/barebin"; mkdir -p "$bare"

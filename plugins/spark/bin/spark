@@ -504,14 +504,17 @@ doctor_requirements() {
   if [ "$in_repo" -eq 1 ] && [ "$gh_auth" -eq 1 ]; then
     def_branch="$( (cd "$top" && gh api 'repos/{owner}/{repo}' --jq .default_branch) 2>/dev/null || true)"
     if [ -n "$def_branch" ]; then
-      local rules prot
-      rules="$( (cd "$top" && gh api "repos/{owner}/{repo}/rules/branches/$def_branch" --jq '.[].type') 2>/dev/null || true)"
+      # The rules call must distinguish "no rules" (200 + empty list, exit 0)
+      # from "unreadable" (any failure): judging drift from a failed read
+      # would be a guess, and this section never guesses.
+      local rules prot rules_rc=0
+      rules="$( (cd "$top" && gh api "repos/{owner}/{repo}/rules/branches/$def_branch" --jq '.[].type') 2>/dev/null)" || rules_rc=$?
       prot="$( (cd "$top" && gh api "repos/{owner}/{repo}/branches/$def_branch" --jq .protected) 2>/dev/null || true)"
-      if [ -n "$prot" ] || [ -n "$rules" ]; then
+      if [ "$rules_rc" -eq 0 ]; then
         remote_assessed=1
         if remote_out="$(
             { printf '%s\n' "$rules" | awk 'NF{printf "rule\t%s\n", $0}'
-              [ -n "$prot" ] && printf 'protected\t%s\n' "$prot"
+              if [ -n "$prot" ]; then printf 'protected\t%s\n' "$prot"; fi
             } | remote_enforcement_verdict)"; then
           remote_ok=1
         fi
@@ -1379,7 +1382,7 @@ cmd_brief() {
     [ "$dirty" -gt 0 ] && line="$line · $dirty uncommitted"
     [ -n "$ahead" ] && line="$line · ↑$ahead ↓$behind"
     echo "$line"
-    echo "[spark] $located${next:+ · next: $next${updated:+ (recorded $updated)}}"
+    echo "[spark] $located${next:+ · next: $next (recorded ${updated:-date unknown})}"
     if [ -n "$prefs" ]; then
       echo "[spark] standards: $total prefs, $overridden overridden${stack_pref:+ · stack=$stack_pref}${release_pref:+ · release=$release_pref}"
     fi
@@ -1412,7 +1415,7 @@ cmd_brief() {
   echo
   echo "Locate (derived from the repo)"
   echo "  $located"
-  [ -n "$next" ] && echo "  next      $next${updated:+ (recorded $updated — verify against the repo)}"
+  [ -n "$next" ] && echo "  next      $next (recorded ${updated:-date unknown} — verify against the repo)"
   [ -n "$blockers" ] && echo "  blockers  $blockers"
   if [ -f "$state" ]; then
     echo "  state     .spark/state.json holds the recorded intent — cross-checked view: spark resume"

@@ -50,6 +50,41 @@ rc=0; out="$(cd "$repo" && env PATH="$fakebin:$PATH" "$SPARK" doctor --requireme
 assert_rc "conforming remote exits 0" 0 "$rc"
 assert_contains "reports the held policy" "policy held server-side" "$out"
 
+# --- conforming rules with an UNREADABLE protected flag must still report
+# conforming (regression: the empty-prot evidence group used to fail the
+# pipeline under pipefail and print a zero-finding false drift).
+cat > "$fakebin/gh" <<'EOF'
+#!/usr/bin/env bash
+case "$*" in
+  --version*) echo "gh version 0.0.0-stub" ;;
+  "auth status") exit 0 ;;
+  *"api repos/{owner}/{repo} --jq .default_branch"*) echo "master" ;;
+  *"rules/branches/master"*) printf 'pull_request\nnon_fast_forward\ndeletion\n' ;;
+  *"branches/master --jq .protected"*) exit 1 ;;
+  *) exit 0 ;;
+esac
+EOF
+rc=0; out="$(cd "$repo" && env PATH="$fakebin:$PATH" "$SPARK" doctor --requirements 2>&1)" || rc=$?
+assert_rc "unreadable protected flag still exits 0" 0 "$rc"
+assert_contains "full rules conform without the protected probe" "policy held server-side" "$out"
+
+# --- a FAILED rules read (vs an empty rule list) is not assessed, never a
+# guessed drift verdict.
+cat > "$fakebin/gh" <<'EOF'
+#!/usr/bin/env bash
+case "$*" in
+  --version*) echo "gh version 0.0.0-stub" ;;
+  "auth status") exit 0 ;;
+  *"api repos/{owner}/{repo} --jq .default_branch"*) echo "master" ;;
+  *"rules/branches/master"*) exit 1 ;;
+  *"branches/master --jq .protected"*) echo "true" ;;
+  *) exit 0 ;;
+esac
+EOF
+rc=0; out="$(cd "$repo" && env PATH="$fakebin:$PATH" "$SPARK" doctor --requirements 2>&1)" || rc=$?
+assert_rc "failed rules read exits 0" 0 "$rc"
+assert_contains "failed rules read is not assessed" "not assessed" "$out"
+
 # --- end-to-end: an unprotected trunk is reported as drift with the explicit
 # (human) apply path — and the run itself never calls a mutating endpoint.
 cat > "$fakebin/gh" <<'EOF'
