@@ -239,6 +239,80 @@ chore	some tweak	docs	" \
 * add widget (#10)" \
   "labels unretrievable for 1 commit(s)"
 
+# --- #372: the real v0.16.0 duplicate — one fix, both the branch commit and
+# its own merge commit classified as changelog-visible, rendering two
+# identical bullets for one logical change. The commits TSV here mirrors
+# release-notes-runner.sh's actual --no-merges collection (only the branch
+# commit is ever in range), so this fixture proves the duplicate is caught
+# from the NOTES alone, independent of what the caller's commit list contains.
+check 1 "the real v0.16.0 duplicate is caught" \
+"fix	normalize issue state case in the milestone gate		" \
+"### Bug Fixes
+
+* normalize issue state case in the milestone gate ([5a95763](https://github.com/jwogrady/spark/commit/5a95763ef9060ad750600574b181f14b207dea0a))
+* normalize issue state case in the milestone gate ([15181a8](https://github.com/jwogrady/spark/commit/15181a86163d66b8da8520fbc14abf50fc172837))" \
+  "duplicate: normalize issue state case in the milestone gate — appears 2 times"
+
+# --- the real v0.16.1 duplicate — same mechanism, a different commit.
+check 1 "the real v0.16.1 duplicate is caught" \
+"fix	let positional evidence outrank a missing problem statement		" \
+"### Bug Fixes
+
+* let positional evidence outrank a missing problem statement ([5c0bce6](https://github.com/jwogrady/spark/commit/5c0bce679fd75bf91783f49a000948aa7aba0094))
+* let positional evidence outrank a missing problem statement ([dd75e3b](https://github.com/jwogrady/spark/commit/dd75e3b2ec0e230f5ea48516d6b4cd47b331d4d3))" \
+  "duplicate: let positional evidence outrank a missing problem statement — appears 2 times"
+
+# --- the same fixed, once each — no duplicate finding.
+check 0 "one bullet per logical change passes" \
+"fix	normalize issue state case in the milestone gate		" \
+"### Bug Fixes
+
+* normalize issue state case in the milestone gate ([15181a8](https://github.com/jwogrady/spark/commit/15181a86163d66b8da8520fbc14abf50fc172837))" \
+  "subject-omission check passed"
+
+# --- a bullet repeated three times reports once, naming the true count —
+# proof the finding doesn't just fire per extra copy without saying how many.
+check 1 "triple duplicate reports one finding naming the count" \
+"fix	one fix, three bullets somehow		" \
+"### Bug Fixes
+
+* one fix, three bullets somehow ([aaa1111](https://x/a))
+* one fix, three bullets somehow ([bbb2222](https://x/b))
+* one fix, three bullets somehow ([ccc3333](https://x/c))" \
+  "appears 3 times"
+
+# --- two DIFFERENT changes must never collide as a false duplicate.
+check 0 "two distinct bullets are never mistaken for duplicates" \
+"fix	stop the crash on empty input
+fix	normalize issue state case in the milestone gate		" \
+"### Bug Fixes
+
+* stop the crash on empty input ([aaa1111](https://x/a))
+* normalize issue state case in the milestone gate ([bbb2222](https://x/b))" \
+  "subject-omission check passed"
+
+# --- two differently-scoped bullets sharing description text are NOT a false
+# duplicate — scope is kept for duplicate detection even though it's stripped
+# for subject matching (a real commit subject never carries the bolded-scope
+# decoration Release Please adds).
+check 0 "same description, different scope, is not a false duplicate" \
+"fix	add examples		" \
+"### Bug Fixes
+
+* **docs:** add examples ([abc1111](https://x/a))
+* **cli:** add examples ([bbb2222](https://x/b))" \
+
+# --- a pure-duplicate failure must be named "duplicate", never blamed on
+# "omission/mislabel" — the category a human triaging the message would go
+# looking for and not find.
+check 1 "duplicate failure names its own category, not omission/mislabel" \
+"fix	normalize issue state case		" \
+"### Bug Fixes
+
+* normalize issue state case ([5a95763](https://x/a))
+* normalize issue state case ([15181a8](https://x/b))" \
+  "1 duplicate finding(s)"
+
 # --- usage errors exit 2.
 rc=0; bash "$script" --commits "$work/nope.tsv" --notes "$work/notes.md" >/dev/null 2>&1 || rc=$?
 [ "$rc" -eq 2 ] && ok || bad "missing commits file — want exit 2, got $rc"
