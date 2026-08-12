@@ -22,7 +22,9 @@ disagree, one of them has drifted; treat that as a bug.
 
 ## Core plugin dependencies
 
-The same four groups `spark doctor --requirements` reports:
+The same five groups `spark doctor --requirements` reports (the fifth — the
+remote-enforcement door — reuses the GitHub delivery row's dependency: an
+authenticated `gh`, degrading to "not assessed" without it):
 
 | Tool | Tier | Serves | Without it |
 | --- | --- | --- | --- |

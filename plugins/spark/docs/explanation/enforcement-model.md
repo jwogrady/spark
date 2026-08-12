@@ -37,8 +37,9 @@ operation can take, and a fourth check validates the artifacts themselves:
 
 **1. A PreToolUse guard, for AI-mediated git actions.** `hooks/guard-bash.sh` runs
 *before* Claude Code executes a Bash command. It inspects the command and exits
-non-zero — blocking the action before it happens — for two cases: a force-push
-without `--force-with-lease`, and a push to `master`/`main`. The safer
+non-zero — blocking the action before it happens — for a force-push without
+`--force-with-lease`, a push to `master`/`main`, and (where Release Please is
+configured) hand-cut tags and Releases. The safer
 `--force-with-lease` is deliberately allowed. This catches the agent before it
 acts, not after.
 

@@ -13,7 +13,7 @@
 
 Use this when proposing, reviewing, or re-examining any capability — a skill, a
 helper, an enforcement rule, an orchestration slice. It is the standing entry
-point for Article VI.
+test ADR-0025 adopted (originally the archived constitution's Article VI).
 
 ## The five questions, in order
 
@@ -78,7 +78,8 @@ Question 5 is where duplication is caught. Before proposing new infrastructure,
 find the existing work and show why it cannot be extended. The v1 review nearly
 filed an "establish the evaluation framework" issue before confirming the harness
 already existed — the correct move was to *promote and govern* it, not rebuild it.
-Rebuilding what exists violates Constitution Article V.
+Rebuilding what exists violates the extend-don't-rebuild rule (originally the
+archived constitution's Article V; the judgment survives in question 5).
 
 ## Capability Traceability
 

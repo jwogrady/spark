@@ -16,7 +16,7 @@ the branch's commit series already exists — ADR-0027.)
 
 | Release Please owns | Spark (`ship`) owns |
 |---|---|
-| Executing the seeded version policy (`always-bump-patch`; a milestone's declared version minted with `Release-As` — commit types classify changes, they never decide a milestone happened) | Verifying the branch's focused commit series (and sweeping a small coherent tail into one last commit) |
+| Executing the repo's version policy — in Spark-seeded projects `always-bump-patch` + `initial-version`, with a milestone's declared version minted via `Release-As` (commit types classify changes, they never decide a milestone happened); this repo itself runs Release Please's default bump semantics | Verifying the branch's focused commit series (and sweeping a small coherent tail into one last commit) |
 | Generating `CHANGELOG.md` from the trunk's conventional commits — never hand-edited | Pushing the branch |
 | Cutting the annotated tag | Opening the focused PR |
 | Creating the GitHub Release | Everything that ends at "PR is open" |
