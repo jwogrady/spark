@@ -21,17 +21,26 @@ lane (Codify, stage 3).
    `plan`, don't guess a stack mid-implementation.
 2. **Read the issue.** The acceptance criteria are the contract. If they're
    missing or vague, go back to [`plan`](../plan/SKILL.md) — don't guess.
-3. **Branch.** Never work on `master`/`main`. Create a focused branch:
+3. **Check prerequisites — fail closed.** Run
+   `bash scripts/check-prereqs.sh <issue>` (from this skill's directory). It
+   reads the issue's declared dependencies (GitHub blocked-by links and
+   `Blocked by #N` body lines) and blocks when a prerequisite is still open
+   or the base is behind the remote trunk — the ordering invariant: dependent
+   work starts from a state that already contains its prerequisites. Blocked →
+   stop and name the missing prerequisite; `not assessed` → verify by hand
+   before branching. Never repair drift silently.
+4. **Branch from a fresh trunk.** Never work on `master`/`main`. Create a
+   focused branch off the current remote trunk:
    ```bash
    git checkout -b feat/<short-slug>      # or fix/, refactor/, docs/
    ```
-4. **Match the surrounding code.** Read neighboring files first; mirror their
+5. **Match the surrounding code.** Read neighboring files first; mirror their
    naming, structure, and idioms. Write code that reads like it was already
    there.
-5. **Implement to the criteria, then stop.** Resist scope creep — anything not
+6. **Implement to the criteria, then stop.** Resist scope creep — anything not
    in the issue is a new issue, not a freebie.
-6. **Self-check** against each acceptance criterion before declaring done.
-7. **Carry the state forward.** Record the close-out with
+7. **Self-check** against each acceptance criterion before declaring done.
+8. **Carry the state forward.** Record the close-out with
    `spark state --set next_action="<normally the validate run>"`
    (writes `.spark/state.json`, [schema](../../docs/reference/state.md); `updated` is stamped for you).
 
