@@ -146,6 +146,18 @@ Recording is create-only: a same-value `--set` is a no-op, and a changed value
 is treated as an explicit human re-set. See
 [cli.md](../reference/cli.md) for `spark orient` and its inspect-only classifier.
 
+### Cross-project memory
+One optional **project-tier** fact points at the repository that owns this
+project's cross-project provenance — the memory-hub/spoke model is decided in
+ADR-0028, not restated here.
+- `project.memory-hub` — a provider-neutral repository locator (`owner/repo`,
+  a URL, or an scp-style git address), or the literal `none` to declare the
+  project standalone explicitly. Absent means standalone by default. The value
+  is a pointer, never a mirror of the hub's contents, and Spark never guesses
+  one. Recorded by `spark hub --set`, resolved and reported (value + source
+  tier) by `spark hub`; it is not part of the shipped-defaults bag, though a
+  human may deliberately place it in the operator tier.
+
 ---
 
 ## Guiding principles
