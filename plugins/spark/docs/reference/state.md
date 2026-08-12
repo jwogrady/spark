@@ -67,7 +67,7 @@ What `brief`/`resume` derive instead of reading from a file:
 |---|---|
 | branch, dirty count, ahead/behind | `git` |
 | the branch's pull request and its state | `gh pr view` (skipped without `gh`; reported as unknown, never guessed) |
-| lifecycle position | inference: no `docs/problem-statement.md` → Ideate; on trunk → Plan; open PR → Validate/Ship; else Codify |
+| lifecycle position | inference, positional evidence first: open PR → Validate/Ship; working (non-trunk) branch → Codify; then no `docs/problem-statement.md` → Ideate; else (on trunk with a statement) → Plan |
 | trunk ancestry (commits on `origin/<trunk>` missing here) | `git rev-list` — surfaced by `resume` so a merged prerequisite is never silently missing (see the delivery ADR) |
 | loop close | the current branch's PR reports `MERGED` — `resume` then refuses to replay a pre-merge `next_action` |
 
