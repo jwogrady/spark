@@ -59,6 +59,34 @@ check is what stands between a doubled entry and a published release — it
 will fail the advisory check and require reconciliation before a human
 approves the release PR, rather than letting the pattern repeat silently.
 
+## Live confirmation against the actual v0.17.0 release PR
+
+The mechanism and the fix were both confirmed against production, not just
+fixtures. PR #382 (`chore: release spark v0.17.0`) currently carries one real
+exact duplicate — "reconcile the v0.17 release record with milestone
+reality," once for #380's branch commit (`4656c7e`) and once for its merge
+commit (`4fc7bef`) — and the `release-notes` advisory check on that PR is
+**failing right now** because of it, exactly as #372's fix is meant to do:
+
+```
+$ gh pr checks 382
+release-notes  fail  0  core: fail; spark-audit: not-assessed; ...
+```
+
+The same PR also shows a **broader, related pattern #372 was not scoped to
+fix**: three feature PRs (#375, #376, #377) each render as two Features
+entries — one from the branch's lead commit subject, one from the merge
+commit's body (the PR title) — because the two texts were worded
+*differently*, not identically. `notes_normalize`'s exact-match comparison
+correctly does not flag these as duplicates (collapsing differently-worded
+entries would risk false positives on genuinely distinct changes that happen
+to read similarly), so this pattern reaches the published changelog as extra,
+not-technically-duplicate entries. It has the same root cause as the exact
+case above and the same pending fix; closing it further would mean either the
+GitHub setting change (this doc's recommendation) or discipline going
+forward: write the branch's lead commit subject and the PR title to match,
+so the merge commit's body restates rather than adds.
+
 ## Historical notes: not corrected
 
 `CHANGELOG.md` and the published `v0.16.0`/`v0.16.1` GitHub Releases keep
@@ -71,6 +99,18 @@ second, unreviewable source of release truth those decisions exist to
 prevent. The duplication is cosmetic — it overstates the count of changes,
 it does not misrepresent what shipped — so it is left as the historical
 record, explained here rather than silently rewritten.
+
+The same decision extends forward to v0.17.0 itself: its release PR's
+duplicate and near-duplicate entries (above) exist because the commits
+producing them are already merged with the old setting in effect — a repo
+setting change only prevents the pattern in future merges, it cannot
+retroactively rewrite an immutable commit's own message. Hand-editing PR
+#382's generated body would (a) violate the same never-hand-edit-the-changelog
+rule and (b) get silently overwritten the next time a push to `master`
+regenerates it, which further work on this milestone guarantees will happen
+at least once more. The `release-notes` advisory check surfaces the known
+duplicate to whoever merges the release PR; that visibility, not a clean
+render, is what the check is for.
 
 ## Related docs
 

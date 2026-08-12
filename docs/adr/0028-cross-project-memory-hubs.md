@@ -75,9 +75,22 @@ This extends ADR-0008's carry-forward motion from `Session -> Project` and `Proj
 
 ## Open Questions
 
-- The exact project key and representation used to identify a memory hub is owned by #375.
-- The exact evidence bundle and classification output contract is owned by #376.
-- The smallest lifecycle surfaces that should ask the promotion question are owned by #377.
+Resolved by implementation (#375/#376/#377, closed):
+
+- The project key is `project.memory-hub`, resolved through the standard
+  preference tiers; `spark hub` reports the value and its source. The locator
+  is a provider-neutral string (`owner/repo`, a URL, or an scp-style git
+  address) — GitHub-backed today without GitHub-specific transport as the
+  semantic model.
+- The evidence bundle and classification contract live in `knowledge`'s
+  `hub-promotion.md`: the ADR-0028 deletion test classifies local versus
+  durable versus needs-ruling, candidates carry source-repo GitHub evidence
+  cited rather than transcribed, and any write goes through the hub's own
+  inspected structure and rules.
+- The lifecycle surfaces are `codify` (falsified-assumption discovery,
+  triggered immediately rather than deferred), `validate` (a finding that
+  reveals durable learning), and `ship` (issue completion, plus milestone
+  completion via the release motion) — three boundaries, no sixth stage.
 
 ## Related Docs
 
