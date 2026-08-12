@@ -491,6 +491,30 @@ doctor_requirements() {
     fi
   fi
 
+  # The third enforcement door (#359): read the default branch's effective
+  # rules and classic-protection flag, and judge them against the trunk policy
+  # the local doors enforce. Inspect-and-report only — applying or changing
+  # remote policy is always an explicit human action. Degrades to
+  # "not assessed" (never a guess) without auth or reachable rules.
+  local remote_assessed=0 remote_ok=0 remote_out="" def_branch=""
+  if [ "$in_repo" -eq 1 ] && [ "$gh_auth" -eq 1 ]; then
+    def_branch="$( (cd "$top" && gh api 'repos/{owner}/{repo}' --jq .default_branch) 2>/dev/null || true)"
+    if [ -n "$def_branch" ]; then
+      local rules prot
+      rules="$( (cd "$top" && gh api "repos/{owner}/{repo}/rules/branches/$def_branch" --jq '.[].type') 2>/dev/null || true)"
+      prot="$( (cd "$top" && gh api "repos/{owner}/{repo}/branches/$def_branch" --jq .protected) 2>/dev/null || true)"
+      if [ -n "$prot" ] || [ -n "$rules" ]; then
+        remote_assessed=1
+        if remote_out="$(
+            { printf '%s\n' "$rules" | awk 'NF{printf "rule\t%s\n", $0}'
+              [ -n "$prot" ] && printf 'protected\t%s\n' "$prot"
+            } | remote_enforcement_verdict)"; then
+          remote_ok=1
+        fi
+      fi
+    fi
+  fi
+
   if [ "$as_json" -eq 1 ]; then
     # Zero-dependency JSON: a fixed shape emitted with printf, strings
     # stripped of quotes and backslashes so the output always parses. The
@@ -504,9 +528,11 @@ doctor_requirements() {
       "$(bool "$github_ready")" "$(js "$gh_v")" "$(bool "$gh_auth")"
     printf '  "json": {"ready": %s, "jq": %s, "python3": %s},\n' \
       "$(bool "$json_ready")" "$(bool "$jq_ok")" "$(bool "$py_ok")"
-    printf '  "release": {"ready": %s, "assessed": %s, "mechanism": "%s", "config": %s, "workflow": %s}\n' \
+    printf '  "release": {"ready": %s, "assessed": %s, "mechanism": "%s", "config": %s, "workflow": %s},\n' \
       "$(bool "$release_ready")" "$(bool "$in_repo")" "$(js "$mech")" \
       "$(bool "$rp_config")" "$(bool "$rp_wf")"
+    printf '  "remote_enforcement": {"assessed": %s, "ready": %s}\n' \
+      "$(bool "$remote_assessed")" "$(bool "$remote_ok")"
     printf '}\n'
     [ "$core_ready" -eq 1 ]
     return
@@ -554,6 +580,26 @@ doctor_requirements() {
       || yellow "  ! .github/workflows/release-please.yml missing — run: spark preferences --apply"
   fi
   echo
+  echo "Remote enforcement (capability: the third door — server-side trunk policy):"
+  if [ "$in_repo" -ne 1 ]; then
+    echo "  - not inside a git repo — not assessed"
+  elif [ "$gh_auth" -ne 1 ]; then
+    echo "  - needs an authenticated gh — not assessed"
+  elif [ "$remote_assessed" -ne 1 ]; then
+    echo "  - GitHub unreachable or branch rules unreadable — not assessed"
+  elif [ "$remote_ok" -eq 1 ]; then
+    green "  ✓ trunk ($def_branch) policy held server-side: PRs required, force-push and deletion blocked"
+  else
+    yellow "  ! the remote trunk ($def_branch) does not hold the policy the local doors enforce:"
+    printf '%s\n' "$remote_out" | while IFS= read -r line; do
+      [ -n "$line" ] && yellow "  $line"
+    done
+    yellow "    Local hooks and the guard are bypassable by any path that never runs them"
+    yellow "    (gh api, another clone, a hookless client). Apply the policy deliberately —"
+    yellow "    never automatic: gh api repos/{owner}/{repo}/rulesets --input \\"
+    yellow "      ${SPARK_ROOT}/settings/github-ruleset-trunk.json"
+  fi
+  echo
 
   if [ "$core_ready" -ne 1 ]; then
     red "Not ready for basic local use — install the core tools above."
@@ -563,6 +609,7 @@ doctor_requirements() {
   [ "$github_ready" -eq 1 ] || degraded="$degraded github"
   [ "$json_ready" -eq 1 ]   || degraded="$degraded json"
   [ "$release_ready" -eq 1 ] || degraded="$degraded release"
+  [ "$remote_assessed" -eq 1 ] && [ "$remote_ok" -ne 1 ] && degraded="$degraded remote-enforcement"
   if [ -n "$degraded" ]; then
     yellow "Ready for basic local use; degraded:${degraded}."
   else
@@ -2277,6 +2324,37 @@ check_reference_laziness() {
       grep -q "references/$base" "$s" || { echo "  ${s#"$root"/}: references/$base is never linked"; rc=1; }
     done
   done < <(find "$root/plugins" -type f -name 'SKILL.md' 2>/dev/null | sort)
+  return $rc
+}
+
+# remote_enforcement_verdict — the third enforcement door (#359): the trunk
+# policy the PreToolUse guard and git hooks enforce locally, verified
+# server-side where no local bypass (gh api, a foreign clone, a hookless
+# client) can reach. Reads evidence lines on stdin:
+#   rule <TAB> <type>            an active rule on the default branch
+#   protected <TAB> true|false   the classic branch-protection flag
+# Prints one line per missing element; returns 0 when the policy holds (PRs
+# required, force-push blocked, deletion blocked), 1 otherwise. Pure function
+# — gathering lives with the caller so this is testable offline.
+remote_enforcement_verdict() {
+  local kind a has_pr=0 has_nff=0 has_del=0 protected=""
+  while IFS=$'\t' read -r kind a; do
+    case "$kind" in
+      rule) case "$a" in
+              pull_request)     has_pr=1 ;;
+              non_fast_forward) has_nff=1 ;;
+              deletion)         has_del=1 ;;
+            esac ;;
+      protected) protected="$a" ;;
+    esac
+  done
+  local rc=0
+  [ "$has_pr" -eq 1 ]  || { echo "  trunk accepts direct pushes (no pull_request rule)"; rc=1; }
+  [ "$has_nff" -eq 1 ] || { echo "  force-push to trunk is not blocked server-side (no non_fast_forward rule)"; rc=1; }
+  [ "$has_del" -eq 1 ] || { echo "  trunk deletion is not blocked server-side (no deletion rule)"; rc=1; }
+  if [ "$rc" -eq 1 ] && [ "$protected" = "true" ]; then
+    echo "  (classic branch protection is enabled — verify it covers the rules above; the rules API only reports rulesets)"
+  fi
   return $rc
 }
 
