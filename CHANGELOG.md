@@ -9,6 +9,43 @@ Keep a Changelog format. Do not hand-edit released sections.
 
 ---
 
+## [0.16.0](https://github.com/jwogrady/spark/compare/v0.15.1...v0.16.0) (2026-08-12)
+
+
+### Features
+
+* derive the session brief from the repo instead of recorded state ([21ebd5f](https://github.com/jwogrady/spark/commit/21ebd5f6623983d1769b380b09deb4c93f69fef8))
+* fail closed when an issue's prerequisites are absent from the base ([b01e42c](https://github.com/jwogrady/spark/commit/b01e42c684f0c116e6a3f76119246147440030fc))
+* implement the v0.16 reconciled delivery architecture ([3b9509c](https://github.com/jwogrady/spark/commit/3b9509cdd4880ccf7a41c1781d798dab619b5cce))
+* make the milestone the version authority in the seeded release ([c5f3b52](https://github.com/jwogrady/spark/commit/c5f3b529e9a34ec6a2114875bcd77025fbd58767))
+* move commit ownership into codify and validate ([63a3e2f](https://github.com/jwogrady/spark/commit/63a3e2f3d4c0418a2d26437bbb491b38d95bd221))
+* report GitHub trunk protection as the third enforcement door ([068c165](https://github.com/jwogrady/spark/commit/068c16501b30334a7418e536e3e5764135f6d007))
+
+
+### Bug Fixes
+
+* carry repository identity on every native dependency edge ([945e7b2](https://github.com/jwogrady/spark/commit/945e7b2caa5fc86e63fab13f7560e75f3d51d706))
+* close the fail-open edges the combined-tree review found ([75a0ec9](https://github.com/jwogrady/spark/commit/75a0ec9655dcbfbe8e3af993067f80cb401f06ef))
+* match required check contexts by exact name, never substring ([75f4cc0](https://github.com/jwogrady/spark/commit/75f4cc07433249b3f7786086e733a71bfcb714be))
+* normalize issue state case in the milestone gate ([5a95763](https://github.com/jwogrady/spark/commit/5a95763ef9060ad750600574b181f14b207dea0a))
+* normalize issue state case in the milestone gate ([15181a8](https://github.com/jwogrady/spark/commit/15181a86163d66b8da8520fbc14abf50fc172837))
+* prove the two invariants the third door and codify preflight claim ([47947a5](https://github.com/jwogrady/spark/commit/47947a5276fb3971400a8ed8ec350ae2abe43717))
+* reject multiline state values and hedge an unverified PR lookup ([eaa69b9](https://github.com/jwogrady/spark/commit/eaa69b9835a85633225253198bcdd2eec53dccdf))
+* treat an unusable policy file and a failed refresh as not assessed ([980b7ab](https://github.com/jwogrady/spark/commit/980b7ab1f820c39ea097a0f1d2cec03ef4b4bc84))
+
+
+### Documentation
+
+* archive the product constitution as history ([aeea787](https://github.com/jwogrady/spark/commit/aeea7870c859d27ccdeb8a29ebc3c0e1bb090df2))
+* consolidate integration validation into one reference ([3dede1d](https://github.com/jwogrady/spark/commit/3dede1d50ff5869d4e15111846318c5a74412149))
+* finish the commit-ownership and version-authority truth pass ([508f44d](https://github.com/jwogrady/spark/commit/508f44d1a41b25f317e31a402f465bd50965ac9a))
+* finish the two-door to three-door vocabulary reconciliation ([d7a1c0c](https://github.com/jwogrady/spark/commit/d7a1c0c397d0d4cbe86715a7158b7d7546fe08ed))
+* order Plan's internal reasoning as model, shape, design ([42e7e75](https://github.com/jwogrady/spark/commit/42e7e75ee5b4914e01922715773c2980a41cbbf5))
+* reconcile the public record with the v0.16 architecture ([979842d](https://github.com/jwogrady/spark/commit/979842de919cd856ef22459fd0a60f51d2eeee22))
+* record delivery as canonical issue PRs plus one exception ([254866f](https://github.com/jwogrady/spark/commit/254866f1f474942331e54be1a1dc5c063b267e28))
+* settle the last four truth-audit residuals ([115acc6](https://github.com/jwogrady/spark/commit/115acc6afabc850b3dfe560eb35f2fff932a8f12))
+* teach one first-run command and fix the preset terminology ([017f91c](https://github.com/jwogrady/spark/commit/017f91ce828b6dc0b1936805babb7914ff4c9dcd))
+
 ## [0.15.1](https://github.com/jwogrady/spark/compare/v0.15.0...v0.15.1) (2026-07-23)
 
 
