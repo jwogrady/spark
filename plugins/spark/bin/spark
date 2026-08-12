@@ -500,7 +500,7 @@ doctor_requirements() {
   # the local doors enforce. Inspect-and-report only — applying or changing
   # remote policy is always an explicit human action. Degrades to
   # "not assessed" (never a guess) without auth or reachable rules.
-  local remote_assessed=0 remote_ok=0 remote_out="" def_branch=""
+  local remote_assessed=0 remote_ok=0 remote_out="" def_branch="" remote_policy_bad=""
   if [ "$in_repo" -eq 1 ] && [ "$gh_auth" -eq 1 ]; then
     def_branch="$( (cd "$top" && gh api 'repos/{owner}/{repo}' --jq .default_branch) 2>/dev/null || true)"
     if [ -n "$def_branch" ]; then
@@ -522,16 +522,25 @@ doctor_requirements() {
       fi
       prot="$( (cd "$top" && gh api "repos/{owner}/{repo}/branches/$def_branch" --jq .protected) 2>/dev/null || true)"
       if [ "$rules_rc" -eq 0 ]; then
-        remote_assessed=1
-        local req_checks
-        req_checks="$(ruleset_required_checks "$top" 2>/dev/null || true)"
-        if remote_out="$(
-            { printf '%s\n' "$rules" | awk 'NF{printf "rule\t%s\n", $0}'
-              printf '%s\n' "$checks" | awk 'NF{printf "check\t%s\n", $0}'
-              printf '%s\n' "$req_checks" | awk 'NF{printf "require\t%s\n", $0}'
-              if [ -n "$prot" ]; then printf 'protected\t%s\n' "$prot"; fi
-            } | remote_enforcement_verdict)"; then
-          remote_ok=1
+        # The policy file is the contract's other half: if it exists but its
+        # required contexts cannot be read, the comparison is impossible and
+        # the honest answer is not-assessed — never the weaker any-context
+        # fallback, which would report a wrong-check remote as healthy.
+        local req_checks="" policy_rc=0
+        req_checks="$(ruleset_required_checks "$top" 2>/dev/null)" || policy_rc=$?
+        if [ "$policy_rc" -eq 2 ]; then
+          remote_policy_bad="$req_checks"
+        else
+          [ "$policy_rc" -ne 0 ] && req_checks=""
+          remote_assessed=1
+          if remote_out="$(
+              { printf '%s\n' "$rules" | awk 'NF{printf "rule\t%s\n", $0}'
+                printf '%s\n' "$checks" | awk 'NF{printf "check\t%s\n", $0}'
+                printf '%s\n' "$req_checks" | awk 'NF{printf "require\t%s\n", $0}'
+                if [ -n "$prot" ]; then printf 'protected\t%s\n' "$prot"; fi
+              } | remote_enforcement_verdict)"; then
+            remote_ok=1
+          fi
         fi
       fi
     fi
@@ -607,6 +616,10 @@ doctor_requirements() {
     echo "  - not inside a git repo — not assessed"
   elif [ "$gh_auth" -ne 1 ]; then
     echo "  - needs an authenticated gh — not assessed"
+  elif [ -n "$remote_policy_bad" ]; then
+    echo "  - the trunk policy file (${remote_policy_bad#"$top"/}) exists but no required"
+    echo "    check contexts could be read from it — not assessed, never assumed healthy;"
+    echo "    fix the policy file, then re-run"
   elif [ "$remote_assessed" -ne 1 ]; then
     echo "  - GitHub unreachable or branch rules unreadable — not assessed"
   elif [ "$remote_ok" -eq 1 ]; then
@@ -2423,14 +2436,25 @@ EOF_REQ
 # .github/spark-trunk-ruleset.json when present (a repo's own contract, e.g.
 # this repository requires doctor+tests), else the shipped template. Extracted
 # with grep over the file's fixed, Spark-owned shape so no JSON tool is
-# required. One context per line; empty output means unreadable/none.
+# required. One context per line on rc 0. The policy file is EVIDENCE, so its
+# failure modes are distinguished, never collapsed into "no requirements":
+#   0  contexts extracted (>=1)
+#   1  no policy file exists anywhere
+#   2  a policy file exists but is unreadable or yields zero contexts — the
+#      first file found decides; a broken repo-local contract never silently
+#      falls back to the template (that would verify the wrong contract)
 ruleset_required_checks() {
-  local root="$1" f
+  local root="$1" f ctxs
   for f in "$root/.github/spark-trunk-ruleset.json" "$SPARK_ROOT/settings/github-ruleset-trunk.json"; do
     if [ -f "$f" ]; then
-      grep -oE '"context"[[:space:]]*:[[:space:]]*"[^"]+"' "$f" \
-        | sed -E 's/.*"([^"]+)"$/\1/'
-      return 0
+      ctxs="$(grep -oE '"context"[[:space:]]*:[[:space:]]*"[^"]+"' "$f" 2>/dev/null \
+        | sed -E 's/.*"([^"]+)"$/\1/' || true)"
+      if [ -n "$ctxs" ]; then
+        printf '%s\n' "$ctxs"
+        return 0
+      fi
+      printf '%s\n' "$f"
+      return 2
     fi
   done
   return 1

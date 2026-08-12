@@ -234,6 +234,43 @@ if command -v jq >/dev/null 2>&1; then
     && ok || bad "template carries at least one required check context"
 fi
 
+# --- ATTACK (policy-evidence regression): a repo-local policy file that
+# exists but yields no readable contexts must be NOT ASSESSED — never the
+# any-one-context fallback that would pass a wrong-check remote as healthy.
+mkdir -p "$repo/.github"
+printf '{}\n' > "$repo/.github/spark-trunk-ruleset.json"
+cat > "$fakebin/gh" <<'EOF'
+#!/usr/bin/env bash
+case "$*" in
+  --version*) echo "gh version 0.0.0-stub" ;;
+  "auth status") exit 0 ;;
+  *"api repos/{owner}/{repo} --jq .default_branch"*) echo "master" ;;
+  *"required_status_checks"*"rules/branches/master"*|*"rules/branches/master"*"required_status_checks"*) printf 'totally-wrong-check\n' ;;
+  *"rules/branches/master"*) printf 'pull_request\nnon_fast_forward\ndeletion\nrequired_status_checks\n' ;;
+  *"branches/master --jq .protected"*) echo "false" ;;
+  *) exit 0 ;;
+esac
+EOF
+rc=0; out="$(cd "$repo" && env PATH="$fakebin:$PATH" "$SPARK" doctor --requirements 2>&1)" || rc=$?
+assert_rc "zero-context policy file exits 0" 0 "$rc"
+assert_contains "zero-context policy is not assessed" "not assessed" "$out"
+case "$out" in *"policy held server-side"*) bad "an unusable policy file must never verify healthy" ;; *) ok ;; esac
+
+# --- same for an unreadable policy file (skipped when running as root,
+# where mode 000 is still readable).
+printf '{ "rules": [ { "type": "required_status_checks", "parameters": { "required_status_checks": [ { "context": "doctor" } ] } } ] }\n' > "$repo/.github/spark-trunk-ruleset.json"
+chmod 000 "$repo/.github/spark-trunk-ruleset.json"
+if [ -r "$repo/.github/spark-trunk-ruleset.json" ]; then
+  echo "  (running privileged - unreadable-policy case skipped)"
+else
+  rc=0; out="$(cd "$repo" && env PATH="$fakebin:$PATH" "$SPARK" doctor --requirements 2>&1)" || rc=$?
+  assert_rc "unreadable policy file exits 0" 0 "$rc"
+  assert_contains "unreadable policy is not assessed" "not assessed" "$out"
+  case "$out" in *"policy held server-side"*) bad "an unreadable policy file must never verify healthy" ;; *) ok ;; esac
+fi
+chmod 644 "$repo/.github/spark-trunk-ruleset.json"
+rm -rf "$repo/.github"
+
 # --- json output carries the assessed/ready pair.
 if command -v jq >/dev/null 2>&1; then
   cat > "$fakebin/gh" <<'EOF'

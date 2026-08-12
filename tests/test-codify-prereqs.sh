@@ -79,6 +79,16 @@ rc=0; out="$(printf 'blocker\t12\tINTEGRATED\ntrunk\tnone\n' | prereq_verdict)" 
 assert_rc "integrated without a provable base is not assessed" 3 "$rc"
 assert_contains "says the base is unproven" "no remote trunk is readable" "$out"
 
+# ATTACK (fetch-failure regression): a trunk whose refresh FAILED must never
+# back a positive fresh-trunk claim — prerequisites present -> NOT ASSESSED.
+rc=0; out="$(printf 'blocker\t12\tINTEGRATED\ntrunk\tunrefreshed\torigin/master\n' | prereq_verdict)" || rc=$?
+assert_rc "unrefreshed trunk with prerequisites is not assessed" 3 "$rc"
+assert_contains "names the failed refresh" "could not be refreshed" "$out"
+case "$out" in *"exactly at"*) bad "a stale tracking ref must never claim fresh" ;; *) ok ;; esac
+rc=0; out="$(printf 'trunk\tunrefreshed\torigin/master\n' | prereq_verdict)" || rc=$?
+assert_rc "unrefreshed trunk with no prerequisites is ready with caveat" 0 "$rc"
+assert_contains "caveats the failed refresh" "could not be refreshed" "$out"
+
 # malformed evidence -> never READY.
 rc=0; out="$(printf 'behind\tnonsense\torigin/master\n' | prereq_verdict)" || rc=$?
 assert_rc "non-numeric freshness blocks" 1 "$rc"
@@ -253,6 +263,16 @@ case "$(cat "$GH_STUB_LOG" 2>/dev/null)" in
   *) ok ;;
 esac
 unset GH_STUB_LOG
+
+# ATTACK e2e: origin unreachable (fetch fails), blocker's merged oid already
+# local and ancestral, remote trunk actually newer -> NOT ASSESSED, never a
+# positive "exactly at the fresh trunk" READY from the stale tracking ref.
+repo="$(fresh e2e-fetchfail)"; mk_gh "$PREREQ_SHA"
+( cd "$adv" && git checkout -q master && git commit --allow-empty -qm "feat: remote moved on" && git push -q origin master )
+( cd "$repo" && git remote set-url origin /nonexistent-origin.git )
+rc=0; out="$(cd "$repo" && env PATH="$fakebin:$PATH" bash "$script" 7 2>&1)" || rc=$?
+assert_rc "failed refresh with prerequisites is not assessed" 3 "$rc"
+assert_contains "names the failed refresh" "could not be refreshed" "$out"
 
 # no gh at all -> NOT ASSESSED (exit 3).
 bare2="$WORK/barebin"; mkdir -p "$bare2"

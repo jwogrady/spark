@@ -27,7 +27,8 @@
 #   NOT ASSESSED (exit 3) insufficient evidence (gh unreachable, a closed
 #                         blocker with no merged closing PR to verify, a
 #                         merged result not present in local history, no
-#                         resolvable trunk while prerequisites exist). Verify
+#                         resolvable trunk — or a trunk whose refresh FAILED —
+#                         while prerequisites exist). Verify
 #                         by hand; this script never guesses.
 #
 # Blockers come from GitHub's native blocked-by dependencies (what the plan
@@ -43,9 +44,9 @@ set -euo pipefail
 #   blocker <TAB> <n> <TAB> OPEN|UNKNOWN|INTEGRATED|UNINTEGRATED|UNPROVEN:<why>
 #   behind  <TAB> <count> <TAB> <trunk-ref>
 #   ahead   <TAB> <count> <TAB> <trunk-ref>
-#   trunk   <TAB> none
+#   trunk   <TAB> none | unrefreshed <TAB> <trunk-ref>
 prereq_verdict() {
-  local kind a b blockers=0 blocked=0 unassessed=0 trunk="" fresh_seen=0 fresh_ok=1
+  local kind a b blockers=0 blocked=0 unassessed=0 trunk="" fresh_seen=0 fresh_ok=1 unrefreshed=
   local blocked_lines="" unassessed_lines=""
   bl() { blocked_lines="${blocked_lines}${1}
 "; blocked=$((blocked+1)); }
@@ -87,7 +88,10 @@ prereq_verdict() {
         esac
         trunk="$b" ;;
       trunk)
-        [ "$a" = "none" ] && fresh_seen=0 ;;
+        case "$a" in
+          none) fresh_seen=0 ;;
+          unrefreshed) fresh_seen=0; unrefreshed="$b" ;;
+        esac ;;
     esac
   done
 
@@ -102,7 +106,11 @@ prereq_verdict() {
   fi
   if [ "$blockers" -gt 0 ]; then
     if [ "$fresh_seen" -ne 1 ]; then
-      echo "not assessed: prerequisites are integrated into HEAD, but no remote trunk is readable to prove this base is the accepted fresh trunk — verify by hand"
+      if [ -n "$unrefreshed" ]; then
+        echo "not assessed: prerequisites are integrated into HEAD, but $unrefreshed could not be refreshed (git fetch failed) — the freshness of this base is unproven; fetch and re-run"
+      else
+        echo "not assessed: prerequisites are integrated into HEAD, but no remote trunk is readable to prove this base is the accepted fresh trunk — verify by hand"
+      fi
       return 3
     fi
     # fresh_seen=1 and nothing blocked: ahead=0 and behind=0 were proven.
@@ -112,6 +120,8 @@ prereq_verdict() {
   # No prerequisites: the ordering invariant is satisfied vacuously.
   if [ "$fresh_seen" -eq 1 ] && [ "$fresh_ok" -eq 1 ]; then
     echo "ready: no prerequisites declared, and HEAD is exactly at $trunk"
+  elif [ -n "$unrefreshed" ]; then
+    echo "ready: no prerequisites declared ($unrefreshed could not be refreshed — freshness not assessed; fetch before branching)"
   else
     echo "ready: no prerequisites declared (no remote trunk readable — freshness not assessed; branch deliberately)"
   fi
@@ -158,14 +168,19 @@ gather_evidence() {
   command -v gh >/dev/null 2>&1 || return 3
 
   # Resolve and refresh the trunk FIRST, so merged prerequisite commits are in
-  # local history before ancestry is judged.
+  # local history before ancestry is judged. A FAILED refresh is recorded —
+  # freshness judged against an unrefreshed tracking ref would positively
+  # claim "exactly at the fresh trunk" from evidence that may be stale.
+  local fetch_ok=1
   trunk="$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)"
   if [ -z "$trunk" ]; then
     for t in origin/master origin/main; do
       git show-ref --verify --quiet "refs/remotes/$t" && { trunk="$t"; break; }
     done
   fi
-  [ -n "$trunk" ] && git fetch -q origin "${trunk#origin/}" 2>/dev/null || true
+  if [ -n "$trunk" ]; then
+    git fetch -q origin "${trunk#origin/}" 2>/dev/null || fetch_ok=0
+  fi
 
   # The native blocked-by list is the canonical channel, so a FAILED read is
   # "cannot answer", never "no blockers" — return 3 rather than fail open. An
@@ -192,9 +207,13 @@ gather_evidence() {
 
   # Base freshness: both directions. "Not behind" alone is not fresh — a
   # diverged HEAD shows zero behind while starting a branch somewhere else
-  # entirely. A failed count emits nothing → freshness stays unproven.
+  # entirely. A failed count emits nothing → freshness stays unproven, and a
+  # failed refresh downgrades the whole freshness axis: counts against a
+  # stale tracking ref must never back a positive "fresh trunk" claim.
   if [ -n "$trunk" ]; then
-    if counts="$(git rev-list --left-right --count "$trunk...HEAD" 2>/dev/null)"; then
+    if [ "$fetch_ok" -ne 1 ]; then
+      printf 'trunk\tunrefreshed\t%s\n' "$trunk"
+    elif counts="$(git rev-list --left-right --count "$trunk...HEAD" 2>/dev/null)"; then
       behind="$(printf '%s' "$counts" | awk '{print $1}')"
       ahead="$(printf '%s' "$counts" | awk '{print $2}')"
       printf 'behind\t%s\t%s\n' "$behind" "$trunk"
