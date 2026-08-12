@@ -23,6 +23,18 @@ is documented in the Spark reference `project-standards.md`.
 
 ---
 
+## North star
+
+**Prose carries judgment. Structure carries decisions. Code carries what must
+happen.** Every artifact in this repository lives in exactly one of those three
+columns and earns its life by that column's test: prose by changing a decision,
+structure by being consumed by code or a human act, code by preventing a named
+failure. Anything that cannot say which column it lives in is ceremony — delete
+it. Machinery is added only after an observed failure — what failed mechanically
+gets enforced mechanically; everything else gets one sentence. The principle
+originates in Spark's identity; this section carries it so the repo can hold
+every artifact to it locally.
+
 ## Branching
 
 - Branch model `github-flow`: short-lived feature branches off the trunk;
