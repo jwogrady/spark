@@ -241,8 +241,9 @@ Because the classification is a durable fact that can go stale, the brief
 re-runs the inspect-only classifier and flags a repo recorded `new` that has
 since grown real sources (now classifying `existing`) for re-orientation — a
 flag only, never a silent rewrite. **Locate** — the lifecycle position,
-always derived from repo shape (problem statement present, trunk vs. working
-branch, open PR), never read from a recorded stage; the recorded
+always derived from repo shape with positional evidence first (open PR →
+Validate/Ship, working branch → Codify, then problem-statement presence on
+the trunk), never read from a recorded stage; the recorded
 `next_action`/`blockers` are appended with their recorded date as intent to
 verify (see [state.md](state.md)); `spark resume` gives the full derived
 view. **Load** — the resolved standard bag summarized: how many
