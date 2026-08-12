@@ -89,6 +89,18 @@ rc=0; out="$(printf 'trunk\tunrefreshed\torigin/master\n' | prereq_verdict)" || 
 assert_rc "unrefreshed trunk with no prerequisites is ready with caveat" 0 "$rc"
 assert_contains "caveats the failed refresh" "could not be refreshed" "$out"
 
+# #363: a cross-repository blocker is never resolved against this repo —
+# OPEN in its owning repo is a positive violation; otherwise its integration
+# into this base is unprovable here.
+rc=0; out="$(printf 'blocker\t12\tXREPO-OPEN:other/elsewhere\n' | prereq_verdict)" || rc=$?
+assert_rc "cross-repo open blocker blocks" 1 "$rc"
+assert_contains "names the owning repository" "other/elsewhere#12 is OPEN" "$out"
+rc=0; out="$(printf 'blocker\t12\tXREPO-UNPROVEN:other/elsewhere\nbehind\t0\torigin/master\nahead\t0\torigin/master\n' | prereq_verdict)" || rc=$?
+assert_rc "cross-repo closed blocker is not assessed" 3 "$rc"
+assert_contains "says it cannot be proven here" "cannot be proven here" "$out"
+rc=0; out="$(printf 'blocker\t12\tXREPO-UNPROVEN:unknown-repository\n' | prereq_verdict)" || rc=$?
+assert_rc "unidentifiable owning repo is not assessed" 3 "$rc"
+
 # malformed evidence -> never READY.
 rc=0; out="$(printf 'behind\tnonsense\torigin/master\n' | prereq_verdict)" || rc=$?
 assert_rc "non-numeric freshness blocks" 1 "$rc"
@@ -114,7 +126,8 @@ mk_gh() { # mk_gh <merged-oid-or-NONE> — graphql answers for blocker 12
   cat > "$fakebin/gh" <<EOF
 #!/usr/bin/env bash
 case "\$*" in
-  *"dependencies/blocked_by"*) printf '12\n' ;;
+  *"api repos/{owner}/{repo} --jq .full_name"*) printf 'o/self\n' ;;
+  *"dependencies/blocked_by"*) printf '12\thttps://api.github.com/repos/o/self\n' ;;
   *"issue view 7 --json body"*) printf 'Implements the thing.\n' ;;
   *"issue view 12 --json state"*) printf 'CLOSED\n' ;;
   *graphql*"num=12"*) [ "$oid" = "NONE" ] || printf '%s\n' "$oid" ;;
@@ -168,7 +181,8 @@ repo="$(fresh e2e-multi)"
 cat > "$fakebin/gh" <<EOF
 #!/usr/bin/env bash
 case "\$*" in
-  *"dependencies/blocked_by"*) printf '12\n' ;;
+  *"api repos/{owner}/{repo} --jq .full_name"*) printf 'o/self\n' ;;
+  *"dependencies/blocked_by"*) printf '12\thttps://api.github.com/repos/o/self\n' ;;
   *"issue view 7 --json body"*) printf 'Implements the thing.\n' ;;
   *"issue view 12 --json state"*) printf 'CLOSED\n' ;;
   *graphql*"num=12"*) printf '%s\n%s\n' "$SIDE_SHA" "$PREREQ_SHA" ;;
@@ -187,7 +201,9 @@ cat > "$fakebin/gh" <<'EOF'
 log="${GH_DEDUP_LOG:-/dev/null}"; printf '%s
 ' "$*" >> "$log"
 case "$*" in
-  *"dependencies/blocked_by"*) printf '12
+  *"api repos/{owner}/{repo} --jq .full_name"*) printf 'o/self
+' ;;
+  *"dependencies/blocked_by"*) printf '12\thttps://api.github.com/repos/o/self
 ' ;;
   *"issue view 7 --json body"*) printf 'Blocked by #12
 ' ;;
@@ -209,7 +225,8 @@ repo="$(fresh e2e-noproof)"
 cat > "$fakebin/gh" <<'EOF'
 #!/usr/bin/env bash
 case "$*" in
-  *"dependencies/blocked_by"*) printf '12\n' ;;
+  *"api repos/{owner}/{repo} --jq .full_name"*) printf 'o/self\n' ;;
+  *"dependencies/blocked_by"*) printf '12\thttps://api.github.com/repos/o/self\n' ;;
   *"issue view 7 --json body"*) printf 'No body deps.\n' ;;
   *"issue view 12 --json state"*) printf 'CLOSED\n' ;;
   *graphql*) exit 1 ;;
@@ -225,6 +242,7 @@ assert_contains "instructs manual verification" "verify" "$out"
 cat > "$fakebin/gh" <<'EOF'
 #!/usr/bin/env bash
 case "$*" in
+  *"api repos/{owner}/{repo} --jq .full_name"*) printf 'o/self\n' ;;
   *"dependencies/blocked_by"*) exit 1 ;;
   *"issue view 7 --json body"*) printf 'No body deps.\n' ;;
   *) exit 1 ;;
@@ -241,6 +259,7 @@ repo="$(fresh e2e-nodeps)"
 cat > "$fakebin/gh" <<'EOF'
 #!/usr/bin/env bash
 case "$*" in
+  *"api repos/{owner}/{repo} --jq .full_name"*) printf 'o/self\n' ;;
   *"dependencies/blocked_by"*) : ;;
   *"issue view 7 --json body"*) printf 'No deps here.\n' ;;
   *) exit 1 ;;
@@ -273,6 +292,65 @@ repo="$(fresh e2e-fetchfail)"; mk_gh "$PREREQ_SHA"
 rc=0; out="$(cd "$repo" && env PATH="$fakebin:$PATH" bash "$script" 7 2>&1)" || rc=$?
 assert_rc "failed refresh with prerequisites is not assessed" 3 "$rc"
 assert_contains "names the failed refresh" "could not be refreshed" "$out"
+
+# ATTACK (#363): the same-number trap — the native edge names issue 12 of
+# ANOTHER repository, while THIS repo's issue 12 is closed with an integrated
+# merged result. The unrelated local issue must never satisfy the dependency:
+# not READY, no local graphql resolution, the owning repo named.
+repo="$(fresh e2e-xrepo)"
+cat > "$fakebin/gh" <<'EOF'
+#!/usr/bin/env bash
+log="${GH_XREPO_LOG:-/dev/null}"; printf '%s\n' "$*" >> "$log"
+case "$*" in
+  *"api repos/{owner}/{repo} --jq .full_name"*) printf 'o/self\n' ;;
+  *"dependencies/blocked_by"*) printf '12\thttps://api.github.com/repos/other/elsewhere\n' ;;
+  *"issue view 7 --json body"*) printf 'Implements the thing.\n' ;;
+  *"issue view 12 -R other/elsewhere"*) printf 'CLOSED\n' ;;
+  *"issue view 12 --json state"*) printf 'CLOSED\n' ;;
+  *graphql*"num=12"*) printf 'SHOULD-NEVER-BE-CALLED\n' ;;
+  *) exit 1 ;;
+esac
+EOF
+chmod +x "$fakebin/gh"
+export GH_XREPO_LOG="$WORK/xrepo-calls.log"
+rc=0; out="$(cd "$repo" && env PATH="$fakebin:$PATH" bash "$script" 7 2>&1)" || rc=$?
+assert_rc "same-number cross-repo blocker is not assessed" 3 "$rc"
+assert_contains "names the owning repository" "other/elsewhere" "$out"
+case "$out" in *"ready"*) bad "a cross-repo blocker must never produce ready" ;; *) ok ;; esac
+case "$(cat "$GH_XREPO_LOG")" in
+  *graphql*) bad "the local repo's same-numbered issue must never be resolved" ;;
+  *) ok ;;
+esac
+unset GH_XREPO_LOG
+
+# cross-repo blocker OPEN in its owning repo -> BLOCKED, named.
+cat > "$fakebin/gh" <<'EOF'
+#!/usr/bin/env bash
+case "$*" in
+  *"api repos/{owner}/{repo} --jq .full_name"*) printf 'o/self\n' ;;
+  *"dependencies/blocked_by"*) printf '12\thttps://api.github.com/repos/other/elsewhere\n' ;;
+  *"issue view 7 --json body"*) printf 'Implements the thing.\n' ;;
+  *"issue view 12 -R other/elsewhere"*) printf 'OPEN\n' ;;
+  *) exit 1 ;;
+esac
+EOF
+rc=0; out="$(cd "$repo" && env PATH="$fakebin:$PATH" bash "$script" 7 2>&1)" || rc=$?
+assert_rc "cross-repo open blocker blocks end-to-end" 1 "$rc"
+assert_contains "names owning repo and number" "other/elsewhere#12" "$out"
+
+# a native edge with no identifiable owning repository -> NOT ASSESSED.
+cat > "$fakebin/gh" <<'EOF'
+#!/usr/bin/env bash
+case "$*" in
+  *"api repos/{owner}/{repo} --jq .full_name"*) printf 'o/self\n' ;;
+  *"dependencies/blocked_by"*) printf '12\t\n' ;;
+  *"issue view 7 --json body"*) printf 'Implements the thing.\n' ;;
+  *) exit 1 ;;
+esac
+EOF
+rc=0; out="$(cd "$repo" && env PATH="$fakebin:$PATH" bash "$script" 7 2>&1)" || rc=$?
+assert_rc "unidentifiable owning repo is not assessed end-to-end" 3 "$rc"
+assert_contains "never assumed local" "never assumed local" "$out"
 
 # no gh at all -> NOT ASSESSED (exit 3).
 bare2="$WORK/barebin"; mkdir -p "$bare2"

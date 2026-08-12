@@ -42,6 +42,7 @@ set -euo pipefail
 # prereq_verdict — read evidence lines on stdin, print the human verdict,
 # return 0 READY / 1 BLOCKED / 3 NOT ASSESSED.
 #   blocker <TAB> <n> <TAB> OPEN|UNKNOWN|INTEGRATED|UNINTEGRATED|UNPROVEN:<why>
+#                             |XREPO-OPEN:<owner/repo>|XREPO-UNPROVEN:<owner/repo|unknown-repository>
 #   behind  <TAB> <count> <TAB> <trunk-ref>
 #   ahead   <TAB> <count> <TAB> <trunk-ref>
 #   trunk   <TAB> none | unrefreshed <TAB> <trunk-ref>
@@ -62,6 +63,12 @@ prereq_verdict() {
             bl "blocked: prerequisite issue #$a is ${b} — its result cannot be in any base yet" ;;
           UNINTEGRATED)
             bl "blocked: prerequisite issue #$a has a merged result that is NOT in this base — start from a base that contains it" ;;
+          XREPO-OPEN:*)
+            bl "blocked: prerequisite ${b#XREPO-OPEN:}#$a is OPEN in another repository — its result cannot be in any base yet" ;;
+          XREPO-UNPROVEN:unknown-repository)
+            na "not assessed: prerequisite #$a's owning repository could not be identified — never assumed local; verify by hand" ;;
+          XREPO-UNPROVEN:*)
+            na "not assessed: prerequisite ${b#XREPO-UNPROVEN:}#$a lives in another repository — its integration into this base cannot be proven here; verify by hand" ;;
           UNPROVEN:no-merged-result)
             na "not assessed: prerequisite issue #$a is closed but GitHub records no merged pull request closing it — a manual close is not an accepted result; verify integration by hand" ;;
           UNPROVEN:result-not-local)
@@ -185,15 +192,45 @@ gather_evidence() {
   # The native blocked-by list is the canonical channel, so a FAILED read is
   # "cannot answer", never "no blockers" — return 3 rather than fail open. An
   # issue with no dependencies answers 200 + [] (rc 0, empty output).
-  nums="$(gh api "repos/{owner}/{repo}/issues/$issue/dependencies/blocked_by" \
-            --jq '.[].number' 2>/dev/null)" || return 3
+  # REPOSITORY IDENTITY travels with every native edge (#363): GitHub
+  # dependencies can be cross-repository, and a bare number re-resolved
+  # against THIS repo could mistake an unrelated same-numbered issue for the
+  # real blocker — a false READY. Same-repo blockers get the full proof;
+  # cross-repo blockers are resolved against their OWNING repo for state
+  # (OPEN is a positive violation) and are otherwise NOT ASSESSED — their
+  # integration into this base is never provable here, and the current
+  # repository is never silently substituted.
+  local self deps slug
+  self="$(gh api "repos/{owner}/{repo}" --jq .full_name 2>/dev/null)" || return 3
+  deps="$(gh api "repos/{owner}/{repo}/issues/$issue/dependencies/blocked_by" \
+            --jq '.[] | "\(.number)\t\(.repository_url // "")"' 2>/dev/null)" || return 3
   body="$(gh issue view "$issue" --json body --jq .body 2>/dev/null)" || return 3
-  nums="$(printf '%s\n%s\n' "$nums" \
+  # Number first, owning-repo slug second: tab is IFS whitespace, so only a
+  # TRAILING empty field survives `read` — a leading one would be stripped
+  # and silently drop the unknown-repository case.
+  deps="$(printf '%s\n%s\n' \
+      "$(printf '%s\n' "$deps" | awk -F'\t' 'NF{sub(".*/repos/","",$2); print $1"\t"$2}')" \
       "$(printf '%s\n' "$body" | grep -ioE 'blocked[- ]by[: ]*(#[0-9]+[, ]*)+' \
-         | grep -oE '#[0-9]+' | tr -d '#' || true)" \
-    | awk 'NF' | sort -un)"
+         | grep -oE '#[0-9]+' | tr -d '#' | awk -v s="$self" 'NF{print $0"\t"s}' || true)" \
+    | awk 'NF' | sort -u)"
 
-  for n in $nums; do
+  while IFS=$'\t' read -r n slug; do
+    [ -n "$n" ] || continue
+    if [ -z "$slug" ]; then
+      # An edge whose owning repository cannot be identified is unprovable —
+      # never assume it is local.
+      printf 'blocker\t%s\tXREPO-UNPROVEN:unknown-repository\n' "$n"
+      continue
+    fi
+    if [ "$slug" != "$self" ]; then
+      state="$(gh issue view "$n" -R "$slug" --json state --jq .state 2>/dev/null || echo UNKNOWN)"
+      if [ "$state" = "OPEN" ]; then
+        printf 'blocker\t%s\tXREPO-OPEN:%s\n' "$n" "$slug"
+      else
+        printf 'blocker\t%s\tXREPO-UNPROVEN:%s\n' "$n" "$slug"
+      fi
+      continue
+    fi
     state="$(gh issue view "$n" --json state --jq .state 2>/dev/null || echo UNKNOWN)"
     if [ "$state" = "CLOSED" ]; then
       # CLOSED alone proves nothing (#344): resolve the accepted merged
@@ -203,7 +240,9 @@ gather_evidence() {
     else
       printf 'blocker\t%s\t%s\n' "$n" "$state"
     fi
-  done
+  done <<EOF_DEPS
+$deps
+EOF_DEPS
 
   # Base freshness: both directions. "Not behind" alone is not fresh — a
   # diverged HEAD shows zero behind while starting a branch somewhere else
