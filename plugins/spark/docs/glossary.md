@@ -27,6 +27,18 @@ explicit: commit/PR/issue moves Session → Project; the `knowledge` skill's
 deliberate promotion moves Project → Operator. See (developer-only)
 [ADR-0008 — information architecture](https://github.com/jwogrady/spark/blob/master/docs/adr/0008-information-architecture.md).
 
+### memory hub / spoke
+
+An ownership relationship between related projects, not a fourth layer. A
+**memory hub** is a Project-layer repository designated as the durable
+authority for cross-project meaning within a related set of **spokes**; each
+spoke keeps its implementation, tests, and release truth local and may declare
+at most one hub via the `project.memory-hub` project fact (`spark hub`). The
+pointer identifies the destination — the hub's contents are never mirrored
+into the spoke, and a project with no hub (or an explicit `none`) is simply
+standalone. See (developer-only)
+[ADR-0028 — cross-project memory hubs](https://github.com/jwogrady/spark/blob/master/docs/adr/0028-cross-project-memory-hubs.md).
+
 ### carry-in / carry-through / carry-forward
 
 The three motions of information across the layers, and the architecture's

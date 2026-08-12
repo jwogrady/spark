@@ -55,6 +55,7 @@ brief|cmd_brief|Print the session brief: orient, locate, load (--short for the S
 state|cmd_state|Show or write the work state (.spark/state.json); --set key=value records a stage close-out
 footprint|cmd_footprint|Measure Spark'\''s context footprint per surface (--json); --timing gates hot-path latency
 orient|cmd_orient|Classify this repo as new, existing, or ambiguous before setup; --set records the decision
+hub|cmd_hub|Report the memory hub this project declares and where the value came from; --set records it (or none)
 help|usage|Show this help'
 
 usage() {
@@ -1105,6 +1106,23 @@ cmd_doctor() {
     fi
   fi
 
+  # Memory-hub pointer (ADR-0028, #375). Project-scoped: absence is the normal
+  # standalone state and "none" the explicit standalone declaration — both
+  # healthy. A configured locator must be well-formed, because a malformed
+  # pointer would make every consumer guess, which is exactly what the fact
+  # exists to prevent.
+  local hub_val
+  if hub_val="$(pref_get project.memory-hub 2>/dev/null)"; then
+    echo
+    if [ "$hub_val" = "none" ]; then
+      green "✓ memory hub: declared standalone (project.memory-hub=none)"
+    elif hub_locator_valid "$hub_val"; then
+      green "✓ memory hub: $hub_val ('spark hub' names the source tier)"
+    else
+      red "✗ memory hub: project.memory-hub='$hub_val' is malformed — expected owner/repo, a URL, or none (fix: spark hub --set …)"; errors=$((errors+1))
+    fi
+  fi
+
   # Git hooks installed in the current repo? In an arbitrary project this is
   # advice (warning). Inside the Spark repo itself the hooks *are* the
   # enforcement door, so their absence is an error — except in CI, where a
@@ -1376,7 +1394,7 @@ cmd_brief() {
 
   # Load: one resolve_prefs pass, summarized — how big the standard bag is,
   # how much of it is overridden, and the two headline conventions.
-  local prefs total=0 overridden=0 stack_pref='' release_pref=''
+  local prefs total=0 overridden=0 stack_pref='' release_pref='' hub_pref=''
   prefs="$(resolve_prefs 2>/dev/null || true)"
   if [ -n "$prefs" ]; then
     total="$(printf '%s\n' "$prefs" | awk 'NF{n++} END{print n+0}')"
@@ -1426,6 +1444,10 @@ cmd_brief() {
     return 0
   fi
 
+  # Full mode only (the --short hot path never prints it): the recorded
+  # memory-hub declaration, extracted here so SessionStart pays nothing for it.
+  [ -n "$prefs" ] && hub_pref="$(printf '%s\n' "$prefs" | awk -F'\t' '$1=="project.memory-hub"{print $2; exit}')"
+
   echo "Spark brief — $root"
   echo
   echo "Orient"
@@ -1460,6 +1482,16 @@ cmd_brief() {
     echo "  $total preference key(s) resolved, $overridden overridden (operator/project)"
     [ -n "$stack_pref" ] && echo "  stack.default      $stack_pref"
     [ -n "$release_pref" ] && echo "  release.mechanism  $release_pref"
+    # The memory hub is a declaration, not a shipped default — name it only
+    # when a human recorded one (ADR-0028); silence means standalone. A value
+    # spark hub would reject must not read as a healthy fact here.
+    if [ -n "$hub_pref" ]; then
+      if [ "$hub_pref" = "none" ] || hub_locator_valid "$hub_pref"; then
+        echo "  project.memory-hub $hub_pref"
+      else
+        yellow "  project.memory-hub $hub_pref ! malformed — see: spark hub"
+      fi
+    fi
     echo "  full resolution: spark preferences"
   else
     echo "  no preferences resolved — is preferences/defaults.json shipped with the plugin?"
@@ -1737,6 +1769,156 @@ PY
     rm -f "$tmp"; red "orient: could not replace $target"; return 1
   fi
   green "orient: recorded project.classification=$value in .spark/preferences.json"
+}
+
+# ---------------------------------------------------------------------------
+# Memory hub (ADR-0028, #375). A spoke names at most one repository as the
+# durable authority for its cross-project provenance. The pointer is a single
+# project fact — project.memory-hub — resolved through the normal preference
+# tiers; the hub's contents are never mirrored into the spoke, and an absent
+# or invalid pointer is reported truthfully, never guessed around.
+# ---------------------------------------------------------------------------
+
+# hub_locator_valid <value> — true when the value names a repository in a
+# provider-neutral way: "owner/repo" shorthand, a URL (scheme://…), or an
+# scp-style git address (user@host:path). The literal "none" — the explicit
+# standalone declaration — is a state, not a locator; callers handle it.
+hub_locator_valid() {
+  case "$1" in
+    ''|*[[:space:]]*) return 1 ;;   # empty or whitespace never names a repo
+    *[\"\\]*) return 1 ;;           # quotes/backslashes name no repo and would corrupt the flat-JSON write
+    ?*://?*) return 0 ;;            # URL: scheme and host/path both present
+    ?*@?*:?*) return 0 ;;           # scp-style git address
+    */*/*) return 1 ;;              # shorthand has exactly one separator
+    ?*/?*) return 0 ;;              # owner/repo
+    *) return 1 ;;
+  esac
+}
+
+cmd_hub() {
+  local usage_line="usage: spark hub [--set <owner/repo|url|none>]"
+  local set_to="" set_given=0
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      # A trailing --set with no value must fall through to the invalid-locator
+      # message, not die on the loop-end shift under set -e.
+      --set) set_given=1; if [ "$#" -ge 2 ]; then set_to="$2"; shift; fi ;;
+      --set=*) set_to="${1#--set=}"; set_given=1 ;;
+      -h|--help) echo "$usage_line"; return 0 ;;
+      *) red "unknown option: $1"; echo "$usage_line"; return 1 ;;
+    esac
+    shift
+  done
+
+  if [ "$set_given" -eq 1 ]; then
+    local root; root="$(git_root)"
+    if [ -z "$root" ]; then
+      red "hub: not inside a git repository — the memory hub is a committed project fact"
+      return 1
+    fi
+    if [ "$set_to" != "none" ] && ! hub_locator_valid "$set_to"; then
+      red "hub: invalid locator '${set_to}' (expected owner/repo, a URL, or the literal none)"
+      echo "$usage_line"
+      return 1
+    fi
+    hub_set "$root" "$set_to"
+    return
+  fi
+
+  # Report mode: resolve through the preference tiers and name the source, so
+  # the configured hub is observable — never re-derived, never guessed. The
+  # value and source are extracted separately (not via read, whose IFS
+  # whitespace rules collapse an empty value field into the source).
+  local line="" hub="" src=""
+  line="$(resolve_prefs | awk -F'\t' '$1=="project.memory-hub"{print; exit}')"
+  hub="$(printf '%s\n' "$line" | awk -F'\t' '{print $2}')"
+  src="$(printf '%s\n' "$line" | awk -F'\t' '{print $3}')"
+
+  echo "Memory hub (ADR-0028)"
+  if [ -z "$line" ]; then
+    echo "  hub     not configured — this project is standalone"
+    echo "  declare one (or standalone explicitly): spark hub --set <owner/repo|url|none>"
+    return 0
+  fi
+  if [ "$hub" = "none" ]; then
+    echo "  hub     none — declared standalone"
+    echo "  source  $src"
+    return 0
+  fi
+  if ! hub_locator_valid "$hub"; then
+    red "hub: configured value '$hub' is malformed (expected owner/repo, a URL, or none)"
+    echo "  source  $src"
+    echo "  fix it with: spark hub --set <owner/repo|url|none>"
+    return 1
+  fi
+  echo "  hub     $hub"
+  echo "  source  $src"
+  return 0
+}
+
+# hub_set <root> <locator|none> — record the memory-hub pointer as a project
+# fact in .spark/preferences.json, with the same create-only discipline and
+# jq→python3 degradation as orient_set: a same-value set is a no-op, a changed
+# value is named as an explicit human re-set, and no other committed fact is
+# ever disturbed.
+hub_set() {
+  local root="$1" value="$2"
+  local dir="$root/.spark" target="$root/.spark/preferences.json"
+
+  local current=""
+  [ -f "$target" ] && current="$(read_flat_json "$target" | awk -F'\t' '$1=="project.memory-hub"{print $2}')"
+  if [ "$current" = "$value" ]; then
+    green "hub: project.memory-hub=$value already recorded (kept)."
+    return 0
+  fi
+  [ -n "$current" ] && yellow "hub: changing recorded memory hub $current → $value (explicit re-set)."
+
+  if [ ! -d "$dir" ] && ! mkdir -p "$dir"; then
+    red "hub: could not create $dir"; return 1
+  fi
+
+  # No file yet: write flat JSON directly — a fresh create needs no parser and
+  # matches the schema read_flat_json expects.
+  if [ ! -f "$target" ]; then
+    printf '{\n  "project.memory-hub": "%s"\n}\n' "$value" > "$target" \
+      || { red "hub: could not write $target"; return 1; }
+    green "hub: recorded project.memory-hub=$value in .spark/preferences.json"
+    return 0
+  fi
+
+  # Existing file: merge safely, jq then python3, exactly like orient_set.
+  local have_jq=0 have_py=0
+  command -v jq >/dev/null 2>&1 && have_jq=1
+  command -v python3 >/dev/null 2>&1 && have_py=1
+  if [ "$have_jq" -eq 0 ] && [ "$have_py" -eq 0 ]; then
+    yellow "hub: neither jq nor python3 is available, so Spark can't merge JSON safely."
+    echo "  Add this key to $target by hand:"
+    echo "    \"project.memory-hub\": \"$value\""
+    return 1
+  fi
+
+  if ! check_json "$target"; then
+    red "hub: $target is not valid JSON — fix it before recording"; return 1
+  fi
+
+  local tmp
+  tmp="$(mktemp "$target.XXXXXX")" || { red "hub: could not create a temp file"; return 1; }
+  if [ "$have_jq" -eq 1 ]; then
+    jq --arg v "$value" '. + {"project.memory-hub": $v}' "$target" > "$tmp" \
+      || { rm -f "$tmp"; red "hub: merge failed"; return 1; }
+  else
+    python3 - "$target" "$value" > "$tmp" <<'PY' || { rm -f "$tmp"; red "hub: merge failed"; return 1; }
+import json, sys
+target, value = sys.argv[1], sys.argv[2]
+cur = json.load(open(target))
+cur["project.memory-hub"] = value
+print(json.dumps(cur, indent=2))
+PY
+  fi
+  if ! mv "$tmp" "$target"; then
+    rm -f "$tmp"; red "hub: could not replace $target"; return 1
+  fi
+  green "hub: recorded project.memory-hub=$value in .spark/preferences.json"
 }
 
 cmd_install_git_hooks() {

@@ -100,6 +100,38 @@ treated as the explicit human re-set the flag names. Without `jq` or `python3`,
 merging into an existing file prints the keys to add by hand. An `ambiguous`
 inspection is never recorded automatically — the `--set` is the human's call.
 
+## `spark hub [--set <owner/repo|url|none>]`
+
+Reports the memory hub this project declares — the one repository designated
+as the durable authority for its cross-project provenance — and the preference
+tier the value came from. The model behind the pointer (hub/spoke ownership,
+the promotion chain, what may and may not live in a hub) is decided in
+ADR-0028; this verb only records and resolves the pointer.
+
+Bare, it resolves `project.memory-hub` through the normal three-tier
+preference resolution and prints one of four truthful states:
+
+| State | Meaning | Exit |
+| --- | --- | --- |
+| configured | A well-formed locator plus its source tier | 0 |
+| `none` | The human explicitly declared this project standalone | 0 |
+| not configured | No declaration anywhere — the normal standalone default | 0 |
+| malformed | A configured value that names no repository | 1 |
+
+Spark never guesses a hub from repository naming, siblings, or history — a
+missing or malformed pointer is reported as exactly that.
+
+`--set` records the declaration as a project fact in
+`.spark/preferences.json`, merged with the same jq→python3 graceful
+degradation `orient --set` uses so no other committed fact is disturbed. A
+locator is provider-neutral: `owner/repo` shorthand, a URL, or an scp-style
+git address — the value identifies a repository; it never mirrors that
+repository's contents. A same-value `--set` is a no-op (`kept`), a different
+value is named as the explicit human re-set, and the literal `none` records
+the standalone decision explicitly. `setup` and onboarding preserve an
+existing declaration but never choose one — declaring a hub is always the
+human's call.
+
 ## `spark profiles`
 
 Lists the shipped setup profiles — small, flat-JSON sets of project facts
