@@ -15,9 +15,9 @@ Ideate → Plan → Codify → Validate → Ship
 |---|---|---|---|
 | **Ideate** | `/spark:ideate` | Turn a fuzzy idea into a written problem statement | You can state the problem and success criteria in one screen |
 | **Plan** | `/spark:plan` | Decompose the problem into features as GitHub issues | Each issue has verifiable acceptance criteria |
-| **Codify** | `/spark:codify` | Implement one issue on a feature branch | The issue's criteria are met in code |
+| **Codify** | `/spark:codify` | Implement one issue as focused commits on a feature branch | The issue's criteria are met in committed code |
 | **Validate** | `/spark:validate` | Review and harden the change | Reviews pass and the app/tests verify |
-| **Ship** | `/spark:ship` | Commit cleanly and open a focused PR | PR is open and links the issue |
+| **Ship** | `/spark:ship` | Publish the committed branch as one focused PR | PR is open and links the issue |
 
 ## Why these five, in this order
 

@@ -28,7 +28,11 @@ ones, then drives the fixes.
    identify the tree by commit, re-verify what the combination could have
    changed, classify blocking findings by provenance, and ask what
    documentation became false.
-3. **Fix the must/should items** on the same branch.
+3. **Fix the must/should items** on the same branch, and **commit each
+   coherent fix** as its own Conventional Commit (distinct concerns get
+   distinct commits; no per-edit checkpoint noise, no squashing the
+   implementation history). Out-of-scope findings become issues, never
+   commits here.
 4. **Re-verify** against the issue's acceptance criteria. The criteria are the
    definition of done. Report each claim with its evidence class — **CODE
    IMPLEMENTED** (written, nothing observed), **STATICALLY PROVEN**

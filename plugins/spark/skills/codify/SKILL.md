@@ -1,6 +1,6 @@
 ---
 name: codify
-description: Implement one planned GitHub issue on a feature branch, scoped to that issue's acceptance criteria. Use to start coding an issue or a planned feature. Not for reviewing/hardening the result (`validate`) or committing and opening the PR (`ship`).
+description: Implement one planned GitHub issue on a feature branch as focused conventional commits, scoped to that issue's acceptance criteria. Use to start coding an issue or a planned feature. Not for reviewing/hardening the result (`validate`) or publishing the branch as a PR (`ship`).
 ---
 
 # codify — Stage 3 of the Spark lifecycle
@@ -39,8 +39,14 @@ lane (Codify, stage 3).
    there.
 6. **Implement to the criteria, then stop.** Resist scope creep — anything not
    in the issue is a new issue, not a freebie.
-7. **Self-check** against each acceptance criterion before declaring done.
-8. **Carry the state forward.** Record the close-out with
+7. **Commit each coherent step.** When one problem → solution step is complete
+   and sensibly checked, commit it as a Conventional Commit (the `commit-msg`
+   hook enforces the format; body says *why*). Multiple focused commits per
+   issue branch are the norm — the branch's history should tell the
+   implementation story. Never per-edit WIP/checkpoint noise, and never one
+   end-of-issue blob held back for Ship.
+8. **Self-check** against each acceptance criterion before declaring done.
+9. **Carry the state forward.** Record the close-out with
    `spark state --set next_action="<normally the validate run>"`
    (writes `.spark/state.json`, [schema](../../docs/reference/state.md); `updated` is stamped for you).
 
@@ -61,5 +67,6 @@ lane (Codify, stage 3).
 
 ## Next
 
-Send the change to [`validate`](../validate/SKILL.md) to review and harden,
-then to [`ship`](../ship/SKILL.md) to commit and open a PR.
+Send the branch — implementation commits included — to
+[`validate`](../validate/SKILL.md) to review and harden, then to
+[`ship`](../ship/SKILL.md) to push and open the PR.

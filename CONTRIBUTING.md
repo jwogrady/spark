@@ -69,6 +69,12 @@ chore: add .editorconfig
 Subject line: imperative mood, under 72 characters, no trailing period.
 Body: explain why, not what. Reference issues when relevant.
 
+Commit when one coherent problem → solution step is complete and sensibly
+checked — a branch normally carries several focused commits that tell the
+implementation story. Avoid per-edit WIP/checkpoint commits, and avoid holding
+everything back for one end-of-work commit. Unrelated work becomes another
+issue and another branch.
+
 Do not rewrite published history. Do not force push to shared branches.
 
 ## Testing

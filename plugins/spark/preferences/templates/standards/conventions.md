@@ -27,7 +27,11 @@ is documented in the Spark reference `project-standards.md`.
 
 - Branch model `{{branch.model}}`: short-lived feature branches off the trunk;
   never commit to the trunk directly. <!-- spark:pref branch.model={{branch.model}} -->
-- Name branches by type: `feat/…`, `fix/…`, `docs/…`, `chore/…`.
+- One issue per branch. Name branches by type, with the issue number when
+  practical: `feat/42-password-reset`, `fix/…`, `docs/…`, `chore/…`.
+- When issue B depends on issue A, start B only from a base that already
+  contains A's merged result — merge A's PR first, then branch from the fresh
+  trunk. Declare the dependency on the issue (`Blocked by #A`).
 
 ## Commits
 
@@ -35,10 +39,16 @@ is documented in the Spark reference `project-standards.md`.
 - Subject line in the imperative mood, under `{{commit.subject-max}}` characters,
   no trailing period. <!-- spark:pref commit.subject-max={{commit.subject-max}} -->
 - The body explains *why*, not *what*. One logical change per commit.
+- Commit when one coherent problem → solution step is complete and sensibly
+  checked — an issue branch normally carries **several focused commits**, and
+  its history should tell the implementation story. No per-edit WIP/checkpoint
+  noise; no single end-of-work blob. Unrelated work becomes another issue.
 
 ## Pull requests & review
 
 - Open a pull request for every change, even small ones. One concern per PR.
+- The PR is the delivery unit to the trunk; keep the branch's focused commits
+  rather than squashing the story away.
 - `[ADAPT]` What "approved and mergeable" requires for this repo (passing
   checks, review count, up-to-date branch).
 - `TODO(decision)`: required reviewers and any review SLA.

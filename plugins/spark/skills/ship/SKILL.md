@@ -1,39 +1,45 @@
 ---
 name: ship
-description: Land a reviewed change — write a conventional commit, push the branch, and open one focused pull request. Use to commit, write a commit message, push, or open a PR for finished work. Not for writing the code (`codify`) or running the reviews (`validate`); it assumes an already-reviewed change.
+description: Publish reviewed work — verify the branch's commit series, push it, and open one focused pull request. Use to push, open a PR, or land finished work. Not for writing the code or its commits (`codify`), or running the reviews (`validate`); it assumes an already-reviewed, already-committed branch.
 ---
 
 # ship — Stage 5 of the Spark lifecycle
 
 `Ideate → Plan → Codify → Validate → Ship`
 
-Ship turns a reviewed branch into landed work: one logical commit that explains
-*why*, then one focused PR. Spark's `commit-msg` git hook enforces the message
-rules mechanically; this skill produces a commit and PR that pass the first time.
+Ship publishes work that already exists: the implementation commits belong to
+[`codify`](../codify/SKILL.md) and the review-fix commits to
+[`validate`](../validate/SKILL.md), so by Ship the branch tells its story
+already. Ship verifies that series, pushes, and opens one focused PR. The
+motion is the same whatever the branch is — an issue branch or a temporary
+integration branch (the delivery ADR's exception pattern) publishes
+identically.
 
 ## Do this
 
 1. **Confirm the branch.** Never commit or push on `master`/`main` — if you're on
    it, branch first. Confirm the change passed [`validate`](../validate/SKILL.md).
-2. **Review what's staged.** `git status`, then `git diff --staged`. Stage only
-   what belongs in this one logical change.
-3. **Commit** with a conventional message:
+2. **Review the commit series.** `git log --oneline <trunk>..HEAD` — each
+   commit a coherent Conventional Commit, the series scoped to this one issue.
+   Two concerns in the series means the branch should split before it ships.
+3. **Sweep the tail.** `git status` — a clean tree ships as-is. A small
+   coherent remainder (close-out edits, a final doc touch) becomes one last
+   focused commit:
    ```
    <type>: <imperative subject, under 72 chars, no trailing period>
 
    <body: why this change exists, not a restatement of the diff>
    ```
-   - Types: `feat`, `fix`, `docs`, `chore`, `refactor`, `test`.
-   - Subject in imperative mood (`add`, not `added`/`adds`).
-   - Body explains the reason; reference issues (`Refs #12`) when relevant.
-   - One logical change per commit — if the diff spans two concerns, make two.
+   A large uncommitted tail means Codify/Validate skipped their commit steps —
+   commit it as the focused series it should have been, not one blob.
 4. **Push** the branch:
    ```bash
    git push -u origin <branch>
    ```
 5. **Open the PR** into the default branch. Body should cover:
    - **What** changed and **why** (link the issue: `Closes #12`).
-   - How it was verified (tests run, app exercised).
+   - How it was verified (tests run, app exercised) — use the evidence classes
+     from [`validate`](../validate/SKILL.md) where the distinction matters.
    - Anything reviewers should look at closely.
 6. **Report the PR URL** back to the user.
 7. **Carry the state forward.** Record the close-out with
