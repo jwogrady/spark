@@ -15,12 +15,13 @@ ok()  { pass=$((pass + 1)); }
 bad() { fail=$((fail + 1)); echo "  ✖ $1"; }
 
 # has <file> <desc> <ere>... — every ERE must appear (case-insensitive) in the
-# file, matched against whitespace-flattened prose so hard-wrapped lines can't
-# split a phrase the guard pins.
+# file, matched against whitespace-collapsed prose (runs of any whitespace
+# become one space) so hard-wrapped, indented lines can't split a phrase the
+# guard pins.
 has() {
   local f="$1" desc="$2" m flat; shift 2
   [ -f "$f" ] || { bad "$desc: $(basename "$f") missing"; return; }
-  flat="$(tr '\n' ' ' < "$f")"
+  flat="$(tr -s '[:space:]' ' ' < "$f")"
   for m in "$@"; do
     printf '%s' "$flat" | grep -qiE -- "$m" \
       || { bad "$desc: missing /$m/ in $(basename "$f")"; return; }
@@ -72,13 +73,16 @@ printf '%s' "$desc" | grep -qiE 'memory hub' && ok || bad "skill description: mi
 has "$agents/02-librarian-editor.md" "librarian duties" \
   'Hub candidates' 'deletion test' 'spark hub' "hub's own process" 'bulk copy'
 
-# Intake records the GitHub evidence the candidates will cite.
+# Intake records the GitHub evidence the candidates will cite — pinned as the
+# one phrase so a trimmed evidence list can't hide behind substring noise
+# ("PR" inside "product", "issue" inside "issues").
 has "$agents/00-intake.md" "intake evidence" \
-  'issue' 'PR' 'merge commit' 'release' 'agent memory'
+  'issue, PR, merge commit, release' 'agent memory'
 
-# Provider neutrality: the shipped plugin never names a constellation.
-if grep -rniE 'cosmos|status26' "$root/plugins/spark" >/dev/null 2>&1; then
-  bad "shipped plugin hard-codes a constellation name (cosmos/status26)"
+# Provider neutrality: nothing shipped — core or companion — names a
+# constellation.
+if grep -rniE 'cosmos|status26' "$root"/plugins/*/ >/dev/null 2>&1; then
+  bad "a shipped plugin hard-codes a constellation name (cosmos/status26)"
 else
   ok
 fi
