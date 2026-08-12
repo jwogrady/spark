@@ -1401,7 +1401,6 @@ cmd_brief() {
     overridden="$(printf '%s\n' "$prefs" | awk -F'\t' '$3=="operator" || $3=="project" {n++} END{print n+0}')"
     stack_pref="$(printf '%s\n' "$prefs" | awk -F'\t' '$1=="stack.default"{print $2; exit}')"
     release_pref="$(printf '%s\n' "$prefs" | awk -F'\t' '$1=="release.mechanism"{print $2; exit}')"
-    hub_pref="$(printf '%s\n' "$prefs" | awk -F'\t' '$1=="project.memory-hub"{print $2; exit}')"
   fi
 
   # Orientation carry-forward (issue #201, building on #183's classifier and
@@ -1445,6 +1444,10 @@ cmd_brief() {
     return 0
   fi
 
+  # Full mode only (the --short hot path never prints it): the recorded
+  # memory-hub declaration, extracted here so SessionStart pays nothing for it.
+  [ -n "$prefs" ] && hub_pref="$(printf '%s\n' "$prefs" | awk -F'\t' '$1=="project.memory-hub"{print $2; exit}')"
+
   echo "Spark brief — $root"
   echo
   echo "Orient"
@@ -1480,8 +1483,15 @@ cmd_brief() {
     [ -n "$stack_pref" ] && echo "  stack.default      $stack_pref"
     [ -n "$release_pref" ] && echo "  release.mechanism  $release_pref"
     # The memory hub is a declaration, not a shipped default — name it only
-    # when a human recorded one (ADR-0028); silence means standalone.
-    [ -n "$hub_pref" ] && echo "  project.memory-hub $hub_pref"
+    # when a human recorded one (ADR-0028); silence means standalone. A value
+    # spark hub would reject must not read as a healthy fact here.
+    if [ -n "$hub_pref" ]; then
+      if [ "$hub_pref" = "none" ] || hub_locator_valid "$hub_pref"; then
+        echo "  project.memory-hub $hub_pref"
+      else
+        yellow "  project.memory-hub $hub_pref ! malformed — see: spark hub"
+      fi
+    fi
     echo "  full resolution: spark preferences"
   else
     echo "  no preferences resolved — is preferences/defaults.json shipped with the plugin?"
@@ -1777,7 +1787,7 @@ hub_locator_valid() {
   case "$1" in
     ''|*[[:space:]]*) return 1 ;;   # empty or whitespace never names a repo
     *[\"\\]*) return 1 ;;           # quotes/backslashes name no repo and would corrupt the flat-JSON write
-    *://?*) return 0 ;;             # URL: any scheme, host/path present
+    ?*://?*) return 0 ;;            # URL: scheme and host/path both present
     ?*@?*:?*) return 0 ;;           # scp-style git address
     */*/*) return 1 ;;              # shorthand has exactly one separator
     ?*/?*) return 0 ;;              # owner/repo

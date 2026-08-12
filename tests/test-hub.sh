@@ -59,7 +59,7 @@ assert_contains "hub key is added" "project.memory-hub" "$merged"
 
 # --- malformed locators are rejected, nothing written
 d="$WORK/setbad"; make_repo "$d"
-for badloc in "" "not a repo" "norepo" "/leading" "trailing/" "a/b/c" 'quo"te/repo' 'back\slash/repo'; do
+for badloc in "" "not a repo" "norepo" "/leading" "trailing/" "a/b/c" 'quo"te/repo' 'back\slash/repo' '://no-scheme'; do
   rc=0; out="$(cd "$d" && "$SPARK" hub --set "$badloc" 2>&1)" || rc=$?
   if [ "$rc" -ne 0 ]; then ok; else bad "locator '$badloc' should be rejected"; fi
 done
@@ -103,7 +103,9 @@ rm -f "$XDG_CONFIG_HOME/spark/preferences.json"
 d="$WORK/badrec"  # still carries the malformed value
 rc=0; out="$(cd "$d" && "$SPARK" doctor 2>&1)" || rc=$?
 if [ "$rc" -ne 0 ]; then ok; else bad "doctor should fail on a malformed hub pointer"; fi
-assert_contains "doctor names the malformed pointer" "memory hub" "$out"
+assert_contains "doctor flags the malformed pointer" "✗ memory hub" "$out"
+out="$(cd "$d" && "$SPARK" brief 2>&1)" || true
+assert_contains "brief marks the malformed value, not healthy" "malformed" "$out"
 ( cd "$d" && "$SPARK" hub --set jwogrady/cosmos ) >/dev/null 2>&1
 out="$(cd "$d" && "$SPARK" doctor 2>&1)" || true
 assert_contains "doctor reports a valid pointer healthy" "✓ memory hub: jwogrady/cosmos" "$out"
