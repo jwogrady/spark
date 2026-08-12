@@ -3,15 +3,21 @@
 > How-to — task-oriented.
 
 Do this once. Spark's promise is your standards **loaded once, carried
-everywhere** — this is the loading. Four steps: install the plugin, make the
-shipped standard yours, arm a repo, run the lifecycle.
+everywhere** — this is the loading. The normal path is two commands and then
+the lifecycle:
 
-Inside a repo, the canonical first run is the guided flow **`/spark:onboard`**.
-It sequences the whole first run as one narrative — orient the repo, choose a
-setup profile, seed hooks + permissions + the standards docs, and close with a
-brief of what was created, kept, and still open — stopping at each human
-decision rather than guessing. It drives the same CLI verbs this guide walks
-through by hand below, so you can run either.
+```text
+install Spark  →  /spark:onboard  →  /spark:ideate
+```
+
+**`/spark:onboard` is the one first-run command.** It sequences the whole
+first run as a narrative — orient the repo, choose a setup profile, seed
+hooks + permissions + the standards docs, report GitHub-side enforcement when
+it can, and close with a brief of what was created, kept, and still open —
+stopping at each human decision rather than guessing. You do not need to learn
+`orient`, `setup`, `profiles`, `preferences`, or `brief` first; onboard
+composes them, and every decision still stops for you. The rest of this guide
+walks the same ground by hand for when you want the granular verbs.
 
 The flow always opens with `spark orient` — it classifies the repo as **new**
 (safe to scaffold), **existing** (discover and adopt create-only, never scaffold
@@ -132,10 +138,12 @@ One idempotent run does the whole carry-in:
 
 - **Git hooks** — `commit-msg` and `pre-commit` enforce the commit rules and
   block direct commits to trunk. Existing non-Spark hooks are left untouched.
-- **Permission baseline** — Spark's conservative allowlist
+- **Permission baseline** — the default `delivery` preset
   ([`settings/permission-baseline.json`](../../settings/permission-baseline.json))
   is merged into `.claude/settings.json` after you confirm; `--yes` skips the
-  prompt.
+  prompt. (`delivery` is the default trust tier; the separate `conservative`
+  preset is the read-only/minimal-mutation tier — `spark apply-permissions
+  --preset conservative`.)
 - **Resolved standard** — your three-tier preferences materialize as project
   files, create-only: what the repo already has is kept and reported
   (`+ created`, `= exists, kept`, `! needs a manual decision`), never
@@ -188,11 +196,12 @@ the [tutorial](../tutorials/build-your-first-project.md) or go straight to
   every project, merge the same file into `~/.claude/settings.json` instead.
 - `spark preferences --apply` — just the resolved standard.
 
-The baseline is deliberately conservative: read-only git inspection, commits
-and branch pushes (the PreToolUse guard still blocks force-pushes and pushes to
-trunk), read-only `gh` queries plus `gh pr create`, and the `spark` setup
-verbs. Nothing destructive — no `rm`, no `git reset`, no `gh pr merge`, no
-releases.
+The default `delivery` baseline is deliberately narrow: read-only git
+inspection, commits and branch pushes (the PreToolUse guard still blocks
+force-pushes and pushes to trunk), read-only `gh` queries plus `gh pr create`,
+and the `spark` setup verbs. Nothing destructive — no `rm`, no `git reset`, no
+`gh pr merge`, no releases. The stricter `conservative` preset drops even the
+mutating subset to a read-only tier.
 
 Two housekeeping notes:
 
