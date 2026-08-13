@@ -41,7 +41,7 @@ done
 # extraction with a separate existence check let a repeated delimiter smuggle
 # an empty leading segment through (://a://b, @a@host:path) because the gate
 # and the extraction anchored to different occurrences of it.
-for loc in "https:///repo" "https://github.com" "x://y" "https:////repo" "https://///repo" "file:///repo" "file:///home/user/repo" "https://host//" "https://host/" "git@host:/" "git@host:" "git@host:///" "git@ho/st:path" "://a://b" "@a@host:path" "user@@:path" "https://github.com?a=1/2" "https://host/?x=y"; do
+for loc in "https:///repo" "https://github.com" "x://y" "https:////repo" "https://///repo" "file:///repo" "file:///home/user/repo" "https://host//" "https://host/" "git@host:/" "git@host:" "git@host:///" "git@ho/st:path" "://a://b" "@a@host:path" "user@@:path" "https://github.com?a=1/2" "https://host/?x=y" "owner/repo@host:path" "not/a/scheme://host/path" "user@ho#st:path"; do
   rc=0; ( cd "$d" && "$SPARK" hub --set "$loc" ) >/dev/null 2>&1 || rc=$?
   if [ "$rc" -ne 0 ]; then ok; else bad "#385: '$loc' names no repository and should be rejected"; fi
 done
@@ -72,7 +72,7 @@ assert_contains "hub key is added" "project.memory-hub" "$merged"
 
 # --- malformed locators are rejected, nothing written
 d="$WORK/setbad"; make_repo "$d"
-for badloc in "" "not a repo" "norepo" "/leading" "trailing/" "a/b/c" 'quo"te/repo' 'back\slash/repo' '://no-scheme' "https:///repo" "https://github.com" "x://y" "https:////repo" "https://///repo" "file:///repo" "file:///home/user/repo" "https://host//" "https://host/" "git@host:/" "git@host:" "git@host:///" "git@ho/st:path" "://a://b" "@a@host:path" "user@@:path" "https://github.com?a=1/2" "https://host/?x=y"; do
+for badloc in "" "not a repo" "norepo" "/leading" "trailing/" "a/b/c" 'quo"te/repo' 'back\slash/repo' '://no-scheme' "https:///repo" "https://github.com" "x://y" "https:////repo" "https://///repo" "file:///repo" "file:///home/user/repo" "https://host//" "https://host/" "git@host:/" "git@host:" "git@host:///" "git@ho/st:path" "://a://b" "@a@host:path" "user@@:path" "https://github.com?a=1/2" "https://host/?x=y" "owner/repo@host:path" "not/a/scheme://host/path" "user@ho#st:path"; do
   rc=0; out="$(cd "$d" && "$SPARK" hub --set "$badloc" 2>&1)" || rc=$?
   if [ "$rc" -ne 0 ]; then ok; else bad "locator '$badloc' should be rejected"; fi
 done

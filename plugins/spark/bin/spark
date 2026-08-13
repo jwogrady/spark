@@ -1821,7 +1821,7 @@ hub_locator_valid() {
   rest="${1#*://}"
   if [ "$rest" != "$1" ]; then                # a real "://" exists somewhere
     scheme="${1%%://*}"                       # longest match: the earliest "://" wins, so
-    [ -n "$scheme" ] || return 1               # a leading "://" (empty scheme) is caught, not absorbed
+    case "$scheme" in ''|*/*|*@*) return 1 ;; esac   # empty, or a hybrid straddling shorthand/scp (owner/x://…)
     host="${rest%%[/?#]*}"                     # up to the first "/", "?", or "#" in rest
     [ -n "$host" ] || return 1                 # scheme://, scheme:///path -> empty host
     path="${rest#"$host"}"                     # literal removal (quoted expansion): the rest after the host
@@ -1835,9 +1835,9 @@ hub_locator_valid() {
   afterat="${1#*@}"
   if [ "$afterat" != "$1" ]; then              # a real "@" exists somewhere
     user="${1%%@*}"                            # longest match: same leading-empty-segment protection
-    [ -n "$user" ] || return 1
+    case "$user" in ''|*/*) return 1 ;; esac   # empty, or a hybrid straddling shorthand (owner/repo@host:path)
     scphost="${afterat%%:*}"
-    case "$scphost" in ''|*/*|*@*) return 1 ;; esac   # empty, holds a "/", or holds a second "@"
+    case "$scphost" in ''|*[/@?#]*) return 1 ;; esac  # empty, or holds a "/", "@", "?", or "#"
     scppath="${afterat#"$scphost"}"
     scppath="${scppath#:}"                     # drop the separating ":" itself
     case "$scppath" in
