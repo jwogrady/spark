@@ -176,14 +176,24 @@ The following is the exact content prepared for
 >
 > ---
 
-## 5. Where this stops
+## 5. Where this stopped, and what happened next
 
 `[human]` Per ADR-0028 ("a candidate that would create or change an
 architectural decision stops for the human ruling required by ADR-0019 and by
 the destination repository's own governance") and Cosmos's own
-`CONTRIBUTING.md` (feature branch, PR, human-only attribution), **this content
-is prepared, not filed.** No branch was opened and no PR was created against
-`jwogrady/cosmos`. Filing it is the one action this proof deliberately leaves
-for John's explicit go-ahead — the same gate the mechanism enforces for every
-promotion candidate, demonstrated by actually stopping there rather than
-narrating that it would.
+`CONTRIBUTING.md` (feature branch, PR, human-only attribution), this content
+was prepared, not filed automatically. The write — opening a branch and PR
+against `jwogrady/cosmos` — was the one action this proof deliberately left
+for John's explicit go-ahead, demonstrated by actually stopping there rather
+than narrating that it would.
+
+`[human]` John reviewed the prepared candidate and explicitly authorized
+filing it. The branch and PR were then opened for real:
+**[jwogrady/cosmos#244](https://github.com/jwogrady/cosmos/pull/244)**,
+following Cosmos's own contribution rules (feature branch, one concern,
+human-only attribution). The filed entry additionally records Spark issue
+#385 (found after v0.17.0 shipped) as evidence, per the journal's own rule
+that execution evidence outranks a design that reviewed cleanly. Merging
+#244 into Cosmos's `master` remains a separate human decision — the same
+release-act boundary that applies to Spark's own PRs applies here too; this
+proof filed the candidate, it did not merge it.

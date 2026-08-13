@@ -75,8 +75,8 @@ assert_flat_contains_all "$evalroot/PROOF.md" "proof tags evidence class" '\[obs
 [ -f "$evalroot/dogfood-cosmos.md" ] && ok || bad "missing dogfood-cosmos.md"
 assert_flat_contains_all "$evalroot/dogfood-cosmos.md" "dogfood run is real, not narrated" \
   'jwogrady/cosmos' 'spark hub' '\[human\]'
-assert_flat_contains_all "$evalroot/dogfood-cosmos.md" "dogfood stops for human go-ahead, doesn't write" \
-  'prepared, not filed|not written|not executed'
+assert_flat_contains_all "$evalroot/dogfood-cosmos.md" "dogfood names the human gate and its outcome" \
+  'human ruling required by ADR-0019' 'explicitly authorized filing it'
 
 # --- provider neutrality holds after this change too (every shipped plugin)
 assert_no_constellation_names "$root"
