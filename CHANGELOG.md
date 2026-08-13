@@ -9,6 +9,36 @@ Keep a Changelog format. Do not hand-edit released sections.
 
 ---
 
+## [0.17.0](https://github.com/jwogrady/spark/compare/v0.16.2...v0.17.0) (2026-08-12)
+
+
+### Features
+
+* let a spoke declare its memory hub with spark hub ([#375](https://github.com/jwogrady/spark/issues/375)) ([5ede6a7](https://github.com/jwogrady/spark/commit/5ede6a7f068e81d19cc881cc4a8a0f8c4f3bb600))
+* promote durable cross-project learning through knowledge ([#376](https://github.com/jwogrady/spark/issues/376)) ([a11032a](https://github.com/jwogrady/spark/commit/a11032a66cf09fd316f8d99537a80a4f92a5591d))
+* surface promotion at natural lifecycle boundaries ([#377](https://github.com/jwogrady/spark/issues/377)) ([1a5c9ab](https://github.com/jwogrady/spark/commit/1a5c9abe009af81de0108c202503d0937d3cf24c))
+
+
+### Bug Fixes
+
+* close the review gaps in locator validation and brief truthfulness ([7f32ea5](https://github.com/jwogrady/spark/commit/7f32ea5a6dadd642c79b1a7ae9f8a15c393220d6)), closes [#375](https://github.com/jwogrady/spark/issues/375)
+* correct the duplicate check's scope handling and message accuracy ([6bc60a5](https://github.com/jwogrady/spark/commit/6bc60a5ef2cc45f5f784fcbe136ac6081d671dfb)), closes [#372](https://github.com/jwogrady/spark/issues/372)
+* correct two ADR-0028 misquotes and dedupe the guard suites ([4451293](https://github.com/jwogrady/spark/commit/4451293be930d94fec1c8617cd13e53a50f62fef)), closes [#377](https://github.com/jwogrady/spark/issues/377)
+* detect duplicate release-note bullets per change ([#372](https://github.com/jwogrady/spark/issues/372)) ([89822b8](https://github.com/jwogrady/spark/commit/89822b829f171333037b68ced889958b3af4a1a5))
+* harden the release-plan truth guard against the review findings ([740efb5](https://github.com/jwogrady/spark/commit/740efb517dc4be53f295c1a67a40e389fdbe5a65)), closes [#380](https://github.com/jwogrady/spark/issues/380)
+* make the promotion contract guard discriminating under reflow ([cfb2f59](https://github.com/jwogrady/spark/commit/cfb2f59bfab414bdba702cfa9a6105a1abf139d5)), closes [#376](https://github.com/jwogrady/spark/issues/376)
+* reject quote and backslash characters in hub locators ([c1fcfe0](https://github.com/jwogrady/spark/commit/c1fcfe006a1c67f2750aaa735cb317444101da83)), closes [#375](https://github.com/jwogrady/spark/issues/375)
+* report hub edge states truthfully instead of dying or misnaming ([81b673a](https://github.com/jwogrady/spark/commit/81b673a7b8a9089b4c85205810111d46672e2d34)), closes [#375](https://github.com/jwogrady/spark/issues/375)
+
+
+### Documentation
+
+* document the memory-hub project fact and spark hub verb ([458e0aa](https://github.com/jwogrady/spark/commit/458e0aad8c83c0801982e0faa1ff71b77ab6df8f)), closes [#375](https://github.com/jwogrady/spark/issues/375)
+* mark ADR-0028's open questions resolved by shipped work ([#373](https://github.com/jwogrady/spark/issues/373)) ([33009bc](https://github.com/jwogrady/spark/commit/33009bc3be62da61d8b19a74512d781100949cec))
+* reconcile the v0.17 plan against closed-issue reality ([#373](https://github.com/jwogrady/spark/issues/373)) ([769b54c](https://github.com/jwogrady/spark/commit/769b54c0472bc9ad4eac853911945a9239d48df6))
+* reconcile the v0.17 release record with milestone reality ([#380](https://github.com/jwogrady/spark/issues/380)) ([4656c7e](https://github.com/jwogrady/spark/commit/4656c7e40e71a35fdabfe80cf6bc00f003b2f7ed))
+* record the merge-commit duplication mechanism and its fix ([#372](https://github.com/jwogrady/spark/issues/372)) ([465c734](https://github.com/jwogrady/spark/commit/465c7341439eefeb79061355a29815d61f8a0f7f))
+
 ## [0.16.2](https://github.com/jwogrady/spark/compare/v0.16.1...v0.16.2) (2026-08-12)
 
 
