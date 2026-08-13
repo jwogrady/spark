@@ -28,9 +28,16 @@ assert_contains "report names the hub" "jwogrady/cosmos" "$out"
 assert_contains "report names the source tier" "project" "$out"
 
 # --- URL and scp-style locators are valid (provider-neutral, not GitHub-shaped)
-for loc in "https://example.org/team/memory" "git@forge.internal:team/memory.git"; do
+for loc in "https://example.org/team/memory" "git@forge.internal:team/memory.git" "https://example.org:8443/team/memory" "ssh://git@example.org/team/memory.git"; do
   rc=0; ( cd "$d" && "$SPARK" hub --set "$loc" ) >/dev/null 2>&1 || rc=$?
   assert_rc "locator accepted: $loc" 0 "$rc"
+done
+
+# --- #385: a URL with an empty host, no host at all, or no repository path
+# names no repository and must be rejected, not accepted as "healthy".
+for loc in "https:///repo" "https://github.com" "x://y"; do
+  rc=0; ( cd "$d" && "$SPARK" hub --set "$loc" ) >/dev/null 2>&1 || rc=$?
+  if [ "$rc" -ne 0 ]; then ok; else bad "#385: '$loc' names no repository and should be rejected"; fi
 done
 
 # --- explicit none: a declared standalone state, distinct from unconfigured
@@ -59,7 +66,7 @@ assert_contains "hub key is added" "project.memory-hub" "$merged"
 
 # --- malformed locators are rejected, nothing written
 d="$WORK/setbad"; make_repo "$d"
-for badloc in "" "not a repo" "norepo" "/leading" "trailing/" "a/b/c" 'quo"te/repo' 'back\slash/repo' '://no-scheme'; do
+for badloc in "" "not a repo" "norepo" "/leading" "trailing/" "a/b/c" 'quo"te/repo' 'back\slash/repo' '://no-scheme' "https:///repo" "https://github.com" "x://y"; do
   rc=0; out="$(cd "$d" && "$SPARK" hub --set "$badloc" 2>&1)" || rc=$?
   if [ "$rc" -ne 0 ]; then ok; else bad "locator '$badloc' should be rejected"; fi
 done
@@ -86,6 +93,20 @@ printf '{"project.memory-hub":"bogus"}\n' > "$d/.spark/preferences.json"
 rc=0; out="$(cd "$d" && "$SPARK" hub 2>&1)" || rc=$?
 if [ "$rc" -ne 0 ]; then ok; else bad "malformed configured value should exit non-zero"; fi
 assert_contains "malformed value is named" "malformed" "$out"
+
+# --- #385 reproduction: a host-only URL committed on disk (no repository
+# path) must never be reported healthy by hub, brief, or doctor.
+d="$WORK/badurl"; make_repo "$d"
+mkdir -p "$d/.spark"
+printf '{"project.memory-hub":"https://github.com"}\n' > "$d/.spark/preferences.json"
+rc=0; out="$(cd "$d" && "$SPARK" hub 2>&1)" || rc=$?
+if [ "$rc" -ne 0 ]; then ok; else bad "#385: host-only URL should exit non-zero, not report healthy"; fi
+assert_contains "#385: hub names it malformed" "malformed" "$out"
+rc=0; out="$(cd "$d" && "$SPARK" doctor 2>&1)" || rc=$?
+if [ "$rc" -ne 0 ]; then ok; else bad "#385: doctor should fail on a host-only URL"; fi
+assert_contains "#385: doctor flags it, not healthy" "✗ memory hub" "$out"
+out="$(cd "$d" && "$SPARK" brief 2>&1)" || true
+assert_contains "#385: brief marks it malformed, not healthy" "malformed" "$out"
 
 # --- tier provenance: an operator declaration resolves, and project wins
 d="$WORK/tiers"; make_repo "$d"

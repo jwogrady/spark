@@ -1781,14 +1781,18 @@ PY
 # ---------------------------------------------------------------------------
 
 # hub_locator_valid <value> — true when the value names a repository in a
-# provider-neutral way: "owner/repo" shorthand, a URL (scheme://…), or an
-# scp-style git address (user@host:path). The literal "none" — the explicit
-# standalone declaration — is a state, not a locator; callers handle it.
+# provider-neutral way: "owner/repo" shorthand, a URL (scheme://host/path,
+# both host and path non-empty — scheme://host alone or scheme:///path with
+# an empty host names no repository), or an scp-style git address
+# (user@host:path, all three segments non-empty). The literal "none" — the
+# explicit standalone declaration — is a state, not a locator; callers
+# handle it. (#385: the URL branch previously accepted any scheme://X shape
+# regardless of whether X held a real host and path.)
 hub_locator_valid() {
   case "$1" in
     ''|*[[:space:]]*) return 1 ;;   # empty or whitespace never names a repo
     *[\"\\]*) return 1 ;;           # quotes/backslashes name no repo and would corrupt the flat-JSON write
-    ?*://?*) return 0 ;;            # URL: scheme and host/path both present
+    ?*://?*/?*) return 0 ;;         # URL: scheme, non-empty host, and non-empty path all present
     ?*@?*:?*) return 0 ;;           # scp-style git address
     */*/*) return 1 ;;              # shorthand has exactly one separator
     ?*/?*) return 0 ;;              # owner/repo
