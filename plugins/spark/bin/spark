@@ -1782,47 +1782,71 @@ PY
 
 # hub_locator_valid <value> — true when the value names a repository in a
 # provider-neutral way: "owner/repo" shorthand, a URL (scheme://host/path,
-# both host and path non-empty), or an scp-style git address
-# (user@host:path, all three segments non-empty). The literal "none" — the
-# explicit standalone declaration — is a state, not a locator; callers
-# handle it.
+# non-empty scheme/host/path — a query string or fragment never counts as
+# path content), or an scp-style git address (user@host:path, all three
+# segments non-empty). The literal "none" — the explicit standalone
+# declaration — is a state, not a locator; callers handle it.
 #
-# #385/review: a glob check alone cannot express "the host segment holds no
-# slash" — case-pattern `?` and `*` both match `/`, so `?*://?*/?*` still let
-# stray slashes (https:////repo) or an all-slash remainder stand in for a
-# non-empty "host". The URL branch below extracts the actual host substring
-# with parameter expansion (up to the first "/" after the scheme) and checks
-# ITS length directly, instead of inferring emptiness from slash counts.
+# #385 went through three rounds before landing here, each closing a real
+# bypass review found in the last:
+#   1. A glob alone can't express "this segment holds no slash" — `?`/`*`
+#      match "/" too, so slash-COUNTING patterns (?*://?*/?*) still let stray
+#      slashes or an all-slash remainder stand in for a non-empty host/path.
+#   2. A stricter path check still allowed an all-slash *remainder*
+#      (https://host//) because "one more character" was never required to
+#      be a NON-slash character.
+#   3. Gating the URL/scp forms with a separate glob existence check
+#      (?*://*, ?*@*:*) and then extracting with `${1#*://}` /  `${1#*@}`
+#      let the two disagree: the glob is satisfied by ANY occurrence of the
+#      delimiter, while `#` extraction anchors to the FIRST — so garbage
+#      before a real delimiter (://a://b, @a@host:path) passed the gate
+#      while extraction silently re-parsed from the wrong anchor.
+#
+# The fix for (3) removes the separate gate entirely: extract unconditionally
+# and prove the delimiter was real by comparing before/after (parameter-
+# expansion prefix removal is a no-op when the pattern never matches, so an
+# unchanged string is the only reliable "not present at all" signal — a glob
+# existence check can be satisfied by a LATER occurrence while extraction
+# anchors to the first). The scheme/user segment is validated with a
+# longest-match removal from the END (%%) so a leading, empty segment before
+# a repeated delimiter (the ://a://b / @a@host:path shapes) is caught
+# instead of silently absorbed.
 hub_locator_valid() {
-  local rest host path afterat scphost scppath
+  local rest scheme host path pathonly afterat user scphost scppath
   case "$1" in
     ''|*[[:space:]]*) return 1 ;;   # empty or whitespace never names a repo
     *[\"\\]*) return 1 ;;           # quotes/backslashes name no repo and would corrupt the flat-JSON write
-    ?*://*)
-      rest="${1#*://}"             # everything after the scheme
-      host="${rest%%/*}"           # up to (not including) the first "/" in rest
-      [ -n "$host" ] || return 1   # scheme://, scheme:///path -> empty host
-      path="${rest#"$host"}"       # literal removal (quoted expansion): the rest after the host
-      case "$path" in
-        /*[!/]*) return 0 ;;       # starts with "/" and holds a non-slash character somewhere
-        *) return 1 ;;             # no path, or all-slash (host//, host///…) — names nothing
-      esac
-      ;;
-    ?*@*:*)
-      # scp-style: user@host:path. Same extraction discipline as the URL
-      # branch above, and for the same reason: a glob alone can't stop a
-      # slash standing in for "host", and a bare "/" is a real path by
-      # length but names nothing (git@host:/ was accepted before this).
-      afterat="${1#*@}"            # everything after the first "@"
-      scphost="${afterat%%:*}"     # up to (not including) the first ":" in that remainder
-      case "$scphost" in ''|*/*) return 1 ;; esac   # empty, or the "host" itself holds a "/"
-      scppath="${afterat#"$scphost"}"
-      scppath="${scppath#:}"       # drop the separating ":" itself
-      case "$scppath" in
-        *[!/]*) return 0 ;;        # holds a non-slash character somewhere (leading "/" is optional here)
-        *) return 1 ;;             # empty or all-slash (git@host:, git@host:/, git@host:///) — names nothing
-      esac
-      ;;
+  esac
+
+  rest="${1#*://}"
+  if [ "$rest" != "$1" ]; then                # a real "://" exists somewhere
+    scheme="${1%%://*}"                       # longest match: the earliest "://" wins, so
+    [ -n "$scheme" ] || return 1               # a leading "://" (empty scheme) is caught, not absorbed
+    host="${rest%%[/?#]*}"                     # up to the first "/", "?", or "#" in rest
+    [ -n "$host" ] || return 1                 # scheme://, scheme:///path -> empty host
+    path="${rest#"$host"}"                     # literal removal (quoted expansion): the rest after the host
+    pathonly="${path%%[?#]*}"                  # drop a query string / fragment before judging real path content
+    case "$pathonly" in
+      /*[!/]*) return 0 ;;                     # "/" plus at least one non-slash character
+      *) return 1 ;;                           # no path, all-slash, or only a query/fragment — names nothing
+    esac
+  fi
+
+  afterat="${1#*@}"
+  if [ "$afterat" != "$1" ]; then              # a real "@" exists somewhere
+    user="${1%%@*}"                            # longest match: same leading-empty-segment protection
+    [ -n "$user" ] || return 1
+    scphost="${afterat%%:*}"
+    case "$scphost" in ''|*/*|*@*) return 1 ;; esac   # empty, holds a "/", or holds a second "@"
+    scppath="${afterat#"$scphost"}"
+    scppath="${scppath#:}"                     # drop the separating ":" itself
+    case "$scppath" in
+      *[!/]*) return 0 ;;                      # holds a non-slash character (leading "/" is optional here)
+      *) return 1 ;;                           # empty or all-slash — names nothing
+    esac
+  fi
+
+  case "$1" in
     */*/*) return 1 ;;              # shorthand has exactly one separator
     ?*/?*) return 0 ;;              # owner/repo
     *) return 1 ;;

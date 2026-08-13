@@ -28,18 +28,20 @@ assert_contains "report names the hub" "jwogrady/cosmos" "$out"
 assert_contains "report names the source tier" "project" "$out"
 
 # --- URL and scp-style locators are valid (provider-neutral, not GitHub-shaped)
-for loc in "https://example.org/team/memory" "git@forge.internal:team/memory.git" "https://example.org:8443/team/memory" "ssh://git@example.org/team/memory.git"; do
+for loc in "https://example.org/team/memory" "git@forge.internal:team/memory.git" "https://example.org:8443/team/memory" "ssh://git@example.org/team/memory.git" "https://example.org/team/memory?ref=main" "https://example.org/team/memory#readme"; do
   rc=0; ( cd "$d" && "$SPARK" hub --set "$loc" ) >/dev/null 2>&1 || rc=$?
   assert_rc "locator accepted: $loc" 0 "$rc"
 done
 
-# --- #385: a URL with an empty host, no host at all, or no repository path
-# names no repository and must be rejected, not accepted as "healthy". The
-# multi-slash cases guard against a glob-only check: '?'/'*' match '/' too,
-# so slash-COUNTING alone can't tell an empty host from a real one (a first
-# attempt at this fix passed review's own token-level tests while still
-# accepting "https:////repo" outright).
-for loc in "https:///repo" "https://github.com" "x://y" "https:////repo" "https://///repo" "file:///repo" "file:///home/user/repo" "https://host//" "https://host/" "git@host:/" "git@host:" "git@host:///" "git@ho/st:path"; do
+# --- #385: a URL/scp-style value with an empty scheme, host, user, or
+# repository path names no repository and must be rejected, not accepted as
+# "healthy". This list is the accumulated evidence from three review rounds:
+# slash-counting can't tell an empty host from a real one ('?'/'*' match '/'
+# too); an all-slash remainder is a real string but names nothing; and gating
+# extraction with a separate existence check let a repeated delimiter smuggle
+# an empty leading segment through (://a://b, @a@host:path) because the gate
+# and the extraction anchored to different occurrences of it.
+for loc in "https:///repo" "https://github.com" "x://y" "https:////repo" "https://///repo" "file:///repo" "file:///home/user/repo" "https://host//" "https://host/" "git@host:/" "git@host:" "git@host:///" "git@ho/st:path" "://a://b" "@a@host:path" "user@@:path" "https://github.com?a=1/2" "https://host/?x=y"; do
   rc=0; ( cd "$d" && "$SPARK" hub --set "$loc" ) >/dev/null 2>&1 || rc=$?
   if [ "$rc" -ne 0 ]; then ok; else bad "#385: '$loc' names no repository and should be rejected"; fi
 done
@@ -70,7 +72,7 @@ assert_contains "hub key is added" "project.memory-hub" "$merged"
 
 # --- malformed locators are rejected, nothing written
 d="$WORK/setbad"; make_repo "$d"
-for badloc in "" "not a repo" "norepo" "/leading" "trailing/" "a/b/c" 'quo"te/repo' 'back\slash/repo' '://no-scheme' "https:///repo" "https://github.com" "x://y" "https:////repo" "https://///repo" "file:///repo" "file:///home/user/repo" "https://host//" "https://host/" "git@host:/" "git@host:" "git@host:///" "git@ho/st:path"; do
+for badloc in "" "not a repo" "norepo" "/leading" "trailing/" "a/b/c" 'quo"te/repo' 'back\slash/repo' '://no-scheme' "https:///repo" "https://github.com" "x://y" "https:////repo" "https://///repo" "file:///repo" "file:///home/user/repo" "https://host//" "https://host/" "git@host:/" "git@host:" "git@host:///" "git@ho/st:path" "://a://b" "@a@host:path" "user@@:path" "https://github.com?a=1/2" "https://host/?x=y"; do
   rc=0; out="$(cd "$d" && "$SPARK" hub --set "$badloc" 2>&1)" || rc=$?
   if [ "$rc" -ne 0 ]; then ok; else bad "locator '$badloc' should be rejected"; fi
 done
