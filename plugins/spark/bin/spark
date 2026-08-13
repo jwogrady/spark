@@ -1812,7 +1812,7 @@ PY
 # a repeated delimiter (the ://a://b / @a@host:path shapes) is caught
 # instead of silently absorbed.
 hub_locator_valid() {
-  local rest scheme host path pathonly afterat user scphost scppath
+  local rest scheme host hostafteruser hostname path pathonly afterat user scphost scppath
   case "$1" in
     ''|*[[:space:]]*) return 1 ;;   # empty or whitespace never names a repo
     *[\"\\]*) return 1 ;;           # quotes/backslashes name no repo and would corrupt the flat-JSON write
@@ -1822,8 +1822,12 @@ hub_locator_valid() {
   if [ "$rest" != "$1" ]; then                # a real "://" exists somewhere
     scheme="${1%%://*}"                       # longest match: the earliest "://" wins, so
     case "$scheme" in ''|*/*|*@*) return 1 ;; esac   # empty, or a hybrid straddling shorthand/scp (owner/x://…)
-    host="${rest%%[/?#]*}"                     # up to the first "/", "?", or "#" in rest
-    [ -n "$host" ] || return 1                 # scheme://, scheme:///path -> empty host
+    host="${rest%%[/?#]*}"                     # up to the first "/", "?", or "#" in rest — may still
+                                                # carry userinfo@ and :port, neither of which is a hostname
+    hostafteruser="${host#*@}"
+    [ "$hostafteruser" != "$host" ] || hostafteruser="$host"   # no userinfo present
+    hostname="${hostafteruser%%:*}"            # drop a trailing :port
+    [ -n "$hostname" ] || return 1             # scheme://, scheme:///path, scheme://:8080/, scheme://@/path -> no real host
     path="${rest#"$host"}"                     # literal removal (quoted expansion): the rest after the host
     pathonly="${path%%[?#]*}"                  # drop a query string / fragment before judging real path content
     case "$pathonly" in

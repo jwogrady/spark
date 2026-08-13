@@ -28,20 +28,32 @@ assert_contains "report names the hub" "jwogrady/cosmos" "$out"
 assert_contains "report names the source tier" "project" "$out"
 
 # --- URL and scp-style locators are valid (provider-neutral, not GitHub-shaped)
-for loc in "https://example.org/team/memory" "git@forge.internal:team/memory.git" "https://example.org:8443/team/memory" "ssh://git@example.org/team/memory.git" "https://example.org/team/memory?ref=main" "https://example.org/team/memory#readme"; do
+for loc in "https://example.org/team/memory" "git@forge.internal:team/memory.git" "https://example.org:8443/team/memory" "ssh://git@example.org/team/memory.git" "https://example.org/team/memory?ref=main" "https://example.org/team/memory#readme" "https://user@example.org/team/memory" "https://user@example.org:8443/team/memory"; do
   rc=0; ( cd "$d" && "$SPARK" hub --set "$loc" ) >/dev/null 2>&1 || rc=$?
   assert_rc "locator accepted: $loc" 0 "$rc"
 done
 
 # --- #385: a URL/scp-style value with an empty scheme, host, user, or
 # repository path names no repository and must be rejected, not accepted as
-# "healthy". This list is the accumulated evidence from three review rounds:
+# "healthy". This list is the accumulated evidence from five review rounds:
 # slash-counting can't tell an empty host from a real one ('?'/'*' match '/'
-# too); an all-slash remainder is a real string but names nothing; and gating
+# too); an all-slash remainder is a real string but names nothing; gating
 # extraction with a separate existence check let a repeated delimiter smuggle
 # an empty leading segment through (://a://b, @a@host:path) because the gate
-# and the extraction anchored to different occurrences of it.
-for loc in "https:///repo" "https://github.com" "x://y" "https:////repo" "https://///repo" "file:///repo" "file:///home/user/repo" "https://host//" "https://host/" "git@host:/" "git@host:" "git@host:///" "git@ho/st:path" "://a://b" "@a@host:path" "user@@:path" "https://github.com?a=1/2" "https://host/?x=y" "owner/repo@host:path" "not/a/scheme://host/path" "user@ho#st:path"; do
+# and the extraction anchored to different occurrences of it; a hybrid string
+# can straddle two locator forms (owner/repo@host:path); and userinfo/port
+# punctuation alone (://:8080/repo, ://@/repo) is not a real hostname. Defined
+# once (BAD_HUB_LOCATORS) and reused below so the two loops can't drift apart.
+BAD_HUB_LOCATORS=(
+  "https:///repo" "https://github.com" "x://y" "https:////repo" "https://///repo"
+  "file:///repo" "file:///home/user/repo" "https://host//" "https://host/"
+  "git@host:/" "git@host:" "git@host:///" "git@ho/st:path"
+  "://a://b" "@a@host:path" "user@@:path"
+  "https://github.com?a=1/2" "https://host/?x=y"
+  "owner/repo@host:path" "not/a/scheme://host/path" "user@ho#st:path"
+  "https://:8080/repo" "https://:/repo" "https://@:8080/repo" "scheme://@/repo" "https://user@/path"
+)
+for loc in "${BAD_HUB_LOCATORS[@]}"; do
   rc=0; ( cd "$d" && "$SPARK" hub --set "$loc" ) >/dev/null 2>&1 || rc=$?
   if [ "$rc" -ne 0 ]; then ok; else bad "#385: '$loc' names no repository and should be rejected"; fi
 done
@@ -72,7 +84,7 @@ assert_contains "hub key is added" "project.memory-hub" "$merged"
 
 # --- malformed locators are rejected, nothing written
 d="$WORK/setbad"; make_repo "$d"
-for badloc in "" "not a repo" "norepo" "/leading" "trailing/" "a/b/c" 'quo"te/repo' 'back\slash/repo' '://no-scheme' "https:///repo" "https://github.com" "x://y" "https:////repo" "https://///repo" "file:///repo" "file:///home/user/repo" "https://host//" "https://host/" "git@host:/" "git@host:" "git@host:///" "git@ho/st:path" "://a://b" "@a@host:path" "user@@:path" "https://github.com?a=1/2" "https://host/?x=y" "owner/repo@host:path" "not/a/scheme://host/path" "user@ho#st:path"; do
+for badloc in "" "not a repo" "norepo" "/leading" "trailing/" "a/b/c" 'quo"te/repo' 'back\slash/repo' '://no-scheme' "${BAD_HUB_LOCATORS[@]}"; do
   rc=0; out="$(cd "$d" && "$SPARK" hub --set "$badloc" 2>&1)" || rc=$?
   if [ "$rc" -ne 0 ]; then ok; else bad "locator '$badloc' should be rejected"; fi
 done
