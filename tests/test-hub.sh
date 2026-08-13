@@ -39,7 +39,7 @@ done
 # so slash-COUNTING alone can't tell an empty host from a real one (a first
 # attempt at this fix passed review's own token-level tests while still
 # accepting "https:////repo" outright).
-for loc in "https:///repo" "https://github.com" "x://y" "https:////repo" "https://///repo" "file:///repo" "file:///home/user/repo" "https://host//" "https://host/"; do
+for loc in "https:///repo" "https://github.com" "x://y" "https:////repo" "https://///repo" "file:///repo" "file:///home/user/repo" "https://host//" "https://host/" "git@host:/" "git@host:" "git@host:///" "git@ho/st:path"; do
   rc=0; ( cd "$d" && "$SPARK" hub --set "$loc" ) >/dev/null 2>&1 || rc=$?
   if [ "$rc" -ne 0 ]; then ok; else bad "#385: '$loc' names no repository and should be rejected"; fi
 done
@@ -70,7 +70,7 @@ assert_contains "hub key is added" "project.memory-hub" "$merged"
 
 # --- malformed locators are rejected, nothing written
 d="$WORK/setbad"; make_repo "$d"
-for badloc in "" "not a repo" "norepo" "/leading" "trailing/" "a/b/c" 'quo"te/repo' 'back\slash/repo' '://no-scheme' "https:///repo" "https://github.com" "x://y" "https:////repo" "https://///repo" "file:///repo" "file:///home/user/repo" "https://host//" "https://host/"; do
+for badloc in "" "not a repo" "norepo" "/leading" "trailing/" "a/b/c" 'quo"te/repo' 'back\slash/repo' '://no-scheme' "https:///repo" "https://github.com" "x://y" "https:////repo" "https://///repo" "file:///repo" "file:///home/user/repo" "https://host//" "https://host/" "git@host:/" "git@host:" "git@host:///" "git@ho/st:path"; do
   rc=0; out="$(cd "$d" && "$SPARK" hub --set "$badloc" 2>&1)" || rc=$?
   if [ "$rc" -ne 0 ]; then ok; else bad "locator '$badloc' should be rejected"; fi
 done

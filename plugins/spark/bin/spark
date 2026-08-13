@@ -1794,7 +1794,7 @@ PY
 # with parameter expansion (up to the first "/" after the scheme) and checks
 # ITS length directly, instead of inferring emptiness from slash counts.
 hub_locator_valid() {
-  local rest host path
+  local rest host path afterat scphost scppath
   case "$1" in
     ''|*[[:space:]]*) return 1 ;;   # empty or whitespace never names a repo
     *[\"\\]*) return 1 ;;           # quotes/backslashes name no repo and would corrupt the flat-JSON write
@@ -1808,7 +1808,21 @@ hub_locator_valid() {
         *) return 1 ;;             # no path, or all-slash (host//, host///…) — names nothing
       esac
       ;;
-    ?*@?*:?*) return 0 ;;           # scp-style git address
+    ?*@*:*)
+      # scp-style: user@host:path. Same extraction discipline as the URL
+      # branch above, and for the same reason: a glob alone can't stop a
+      # slash standing in for "host", and a bare "/" is a real path by
+      # length but names nothing (git@host:/ was accepted before this).
+      afterat="${1#*@}"            # everything after the first "@"
+      scphost="${afterat%%:*}"     # up to (not including) the first ":" in that remainder
+      case "$scphost" in ''|*/*) return 1 ;; esac   # empty, or the "host" itself holds a "/"
+      scppath="${afterat#"$scphost"}"
+      scppath="${scppath#:}"       # drop the separating ":" itself
+      case "$scppath" in
+        *[!/]*) return 0 ;;        # holds a non-slash character somewhere (leading "/" is optional here)
+        *) return 1 ;;             # empty or all-slash (git@host:, git@host:/, git@host:///) — names nothing
+      esac
+      ;;
     */*/*) return 1 ;;              # shorthand has exactly one separator
     ?*/?*) return 0 ;;              # owner/repo
     *) return 1 ;;
