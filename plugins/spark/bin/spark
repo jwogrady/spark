@@ -1848,6 +1848,7 @@ hub_locator_valid() {
         hostname="${hostname#\[}"
         hostname="${hostname%%]*}"
         ;;
+      \[*) return 1 ;;                         # "[" opened but never closed -> not a real host
       *) hostname="${hostname%%:*}" ;;         # not bracketed: drop a trailing :port
     esac
     [ -n "$hostname" ] || return 1             # scheme://, scheme:///path, scheme://:8080/, scheme://[]/path -> no real host
@@ -1863,10 +1864,25 @@ hub_locator_valid() {
   if [ "$afterat" != "$1" ]; then              # a real "@" exists somewhere
     user="${1%%@*}"                            # longest match: same leading-empty-segment protection
     case "$user" in ''|*/*) return 1 ;; esac   # empty, or a hybrid straddling shorthand (owner/repo@host:path)
-    scphost="${afterat%%:*}"
-    case "$scphost" in ''|*[/@?#]*) return 1 ;; esac  # empty, or holds a "/", "@", "?", or "#"
-    scppath="${afterat#"$scphost"}"
-    scppath="${scppath#:}"                     # drop the separating ":" itself
+    case "$afterat" in
+      \[*\]*)
+        # bracketed IPv6 host (git@[::1]:path) — same reasoning as the URL
+        # branch: its colons are address content, not the host:path
+        # separator, so a naive first-":" split lands mid-address.
+        scphost="${afterat#\[}"
+        scphost="${scphost%%]*}"
+        [ -n "$scphost" ] || return 1          # "[]" -> empty
+        scppath="${afterat#*]}"                # everything after the closing "]"
+        scppath="${scppath#:}"                 # drop the separating ":" if present
+        ;;
+      \[*) return 1 ;;                         # "[" opened but never closed -> not a real host
+      *)
+        scphost="${afterat%%:*}"
+        case "$scphost" in ''|*[/@?#]*) return 1 ;; esac  # empty, or holds a "/", "@", "?", or "#"
+        scppath="${afterat#"$scphost"}"
+        scppath="${scppath#:}"                 # drop the separating ":" itself
+        ;;
+    esac
     case "$scppath" in
       *[!/]*) return 0 ;;                      # holds a non-slash character (leading "/" is optional here)
       *) return 1 ;;                           # empty or all-slash — names nothing

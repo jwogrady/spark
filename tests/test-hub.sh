@@ -28,7 +28,7 @@ assert_contains "report names the hub" "jwogrady/cosmos" "$out"
 assert_contains "report names the source tier" "project" "$out"
 
 # --- URL and scp-style locators are valid (provider-neutral, not GitHub-shaped)
-for loc in "https://example.org/team/memory" "git@forge.internal:team/memory.git" "https://example.org:8443/team/memory" "ssh://git@example.org/team/memory.git" "https://example.org/team/memory?ref=main" "https://example.org/team/memory#readme" "https://user@example.org/team/memory" "https://user@example.org:8443/team/memory" "https://[::1]:8443/team/memory" "https://[2001:db8::1]/team/memory"; do
+for loc in "https://example.org/team/memory" "git@forge.internal:team/memory.git" "https://example.org:8443/team/memory" "ssh://git@example.org/team/memory.git" "https://example.org/team/memory?ref=main" "https://example.org/team/memory#readme" "https://user@example.org/team/memory" "https://user@example.org:8443/team/memory" "https://[::1]:8443/team/memory" "https://[2001:db8::1]/team/memory" "https://user@[::1]:8443/team/memory" "git@[::1]:team/memory.git"; do
   rc=0; ( cd "$d" && "$SPARK" hub --set "$loc" ) >/dev/null 2>&1 || rc=$?
   assert_rc "locator accepted: $loc" 0 "$rc"
 done
@@ -54,6 +54,8 @@ BAD_HUB_LOCATORS=(
   "git@host:/" "git@host:" "git@host:///" "git@ho/st:path"
   "https://a@b@/repo" "https://user@pass@/repo" "https://@@/repo" "https://a:b@c:d@/repo"
   "https://[]:8080/repo" "https://[]/repo" "https://user@[]:8080/repo"
+  "user@[]:path" "user@[::1]:"
+  "https://[192.168.1.1/repo" "https://[::1/path" "https://[/repo" "https://[::/repo" "https://[:8080/repo"
   "://a://b" "@a@host:path" "user@@:path"
   "https://github.com?a=1/2" "https://host/?x=y"
   "owner/repo@host:path" "not/a/scheme://host/path" "user@ho#st:path"
