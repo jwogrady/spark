@@ -35,19 +35,22 @@ done
 
 # --- #385: a URL/scp-style value with an empty scheme, host, user, or
 # repository path names no repository and must be rejected, not accepted as
-# "healthy". This list is the accumulated evidence from five review rounds:
+# "healthy". This list is the accumulated evidence from six review rounds:
 # slash-counting can't tell an empty host from a real one ('?'/'*' match '/'
 # too); an all-slash remainder is a real string but names nothing; gating
 # extraction with a separate existence check let a repeated delimiter smuggle
 # an empty leading segment through (://a://b, @a@host:path) because the gate
 # and the extraction anchored to different occurrences of it; a hybrid string
-# can straddle two locator forms (owner/repo@host:path); and userinfo/port
-# punctuation alone (://:8080/repo, ://@/repo) is not a real hostname. Defined
-# once (BAD_HUB_LOCATORS) and reused below so the two loops can't drift apart.
+# can straddle two locator forms (owner/repo@host:path); userinfo/port
+# punctuation alone (://:8080/repo, ://@/repo) is not a real hostname; and a
+# SECOND embedded "@" (://a@b@/repo) defeated a first-"@" split the same way
+# a repeated "://" defeated a first-occurrence split in round 3. Defined once
+# (BAD_HUB_LOCATORS) and reused below so the two loops can't drift apart.
 BAD_HUB_LOCATORS=(
   "https:///repo" "https://github.com" "x://y" "https:////repo" "https://///repo"
   "file:///repo" "file:///home/user/repo" "https://host//" "https://host/"
   "git@host:/" "git@host:" "git@host:///" "git@ho/st:path"
+  "https://a@b@/repo" "https://user@pass@/repo" "https://@@/repo" "https://a:b@c:d@/repo"
   "://a://b" "@a@host:path" "user@@:path"
   "https://github.com?a=1/2" "https://host/?x=y"
   "owner/repo@host:path" "not/a/scheme://host/path" "user@ho#st:path"
