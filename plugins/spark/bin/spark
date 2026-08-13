@@ -1828,8 +1828,18 @@ hub_locator_valid() {
                                                 # syntax — userinfo is everything up to the last "@"; a
                                                 # shortest-match first-"@" split left a second embedded "@"
                                                 # producing a non-empty leftover for a genuinely empty host)
-    hostname="${hostname%%:*}"                 # drop a trailing :port
-    [ -n "$hostname" ] || return 1             # scheme://, scheme:///path, scheme://:8080/, scheme://@@/path -> no real host
+    case "$hostname" in
+      \[*\]*)
+        # bracketed IPv6 literal (RFC 3986) — its own colons are address
+        # content, not a port separator, so stripping at the first ":" would
+        # mangle a real address into a truncated-but-still-non-empty string
+        # (e.g. "[::1]:8080" -> "["). Validate the bracket CONTENT instead.
+        hostname="${hostname#\[}"
+        hostname="${hostname%%]*}"
+        ;;
+      *) hostname="${hostname%%:*}" ;;         # not bracketed: drop a trailing :port
+    esac
+    [ -n "$hostname" ] || return 1             # scheme://, scheme:///path, scheme://:8080/, scheme://[]/path -> no real host
     path="${rest#"$host"}"                     # literal removal (quoted expansion): the rest after the host
     pathonly="${path%%[?#]*}"                  # drop a query string / fragment before judging real path content
     case "$pathonly" in
