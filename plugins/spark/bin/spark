@@ -1804,8 +1804,8 @@ hub_locator_valid() {
       [ -n "$host" ] || return 1   # scheme://, scheme:///path -> empty host
       path="${rest#"$host"}"       # literal removal (quoted expansion): the rest after the host
       case "$path" in
-        /?*) return 0 ;;           # "/" plus at least one more character
-        *) return 1 ;;             # scheme://host (no path) or scheme://host/ (empty path)
+        /*[!/]*) return 0 ;;       # starts with "/" and holds a non-slash character somewhere
+        *) return 1 ;;             # no path, or all-slash (host//, host///…) — names nothing
       esac
       ;;
     ?*@?*:?*) return 0 ;;           # scp-style git address
