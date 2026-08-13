@@ -28,9 +28,43 @@ assert_contains "report names the hub" "jwogrady/cosmos" "$out"
 assert_contains "report names the source tier" "project" "$out"
 
 # --- URL and scp-style locators are valid (provider-neutral, not GitHub-shaped)
-for loc in "https://example.org/team/memory" "git@forge.internal:team/memory.git"; do
+for loc in "https://example.org/team/memory" "git@forge.internal:team/memory.git" "https://example.org:8443/team/memory" "ssh://git@example.org/team/memory.git" "https://example.org/team/memory?ref=main" "https://example.org/team/memory#readme" "https://user@example.org/team/memory" "https://user@example.org:8443/team/memory" "https://[::1]:8443/team/memory" "https://[2001:db8::1]/team/memory" "https://user@[::1]:8443/team/memory" "git@[::1]:team/memory.git"; do
   rc=0; ( cd "$d" && "$SPARK" hub --set "$loc" ) >/dev/null 2>&1 || rc=$?
   assert_rc "locator accepted: $loc" 0 "$rc"
+done
+
+# --- #385: a URL/scp-style value with an empty scheme, host, user, or
+# repository path names no repository and must be rejected, not accepted as
+# "healthy". This list is the accumulated evidence from seven review rounds:
+# slash-counting can't tell an empty host from a real one ('?'/'*' match '/'
+# too); an all-slash remainder is a real string but names nothing; gating
+# extraction with a separate existence check let a repeated delimiter smuggle
+# an empty leading segment through (://a://b, @a@host:path) because the gate
+# and the extraction anchored to different occurrences of it; a hybrid string
+# can straddle two locator forms (owner/repo@host:path); userinfo/port
+# punctuation alone (://:8080/repo, ://@/repo) is not a real hostname; a
+# SECOND embedded "@" (://a@b@/repo) defeated a first-"@" split the same way
+# a repeated "://" defeated a first-occurrence split in round 3; and empty
+# IPv6 brackets (://[]:8080/repo) survived naive colon-based port stripping
+# by accident (the truncated leftover stayed non-empty). Defined once
+# (BAD_HUB_LOCATORS) and reused below so the two loops can't drift apart.
+BAD_HUB_LOCATORS=(
+  "https:///repo" "https://github.com" "x://y" "https:////repo" "https://///repo"
+  "file:///repo" "file:///home/user/repo" "https://host//" "https://host/"
+  "git@host:/" "git@host:" "git@host:///" "git@ho/st:path"
+  "https://a@b@/repo" "https://user@pass@/repo" "https://@@/repo" "https://a:b@c:d@/repo"
+  "https://[]:8080/repo" "https://[]/repo" "https://user@[]:8080/repo"
+  "user@[]:path" "user@[::1]:"
+  "https://[192.168.1.1/repo" "https://[::1/path" "https://[/repo" "https://[::/repo" "https://[:8080/repo"
+  "git@[::1]repo" "git@[fo/o]:path" "git@[fo@o]:path" "https://[fo@o]/team/memory" "https://[@]/path"
+  "://a://b" "@a@host:path" "user@@:path"
+  "https://github.com?a=1/2" "https://host/?x=y"
+  "owner/repo@host:path" "not/a/scheme://host/path" "user@ho#st:path"
+  "https://:8080/repo" "https://:/repo" "https://@:8080/repo" "scheme://@/repo" "https://user@/path"
+)
+for loc in "${BAD_HUB_LOCATORS[@]}"; do
+  rc=0; ( cd "$d" && "$SPARK" hub --set "$loc" ) >/dev/null 2>&1 || rc=$?
+  if [ "$rc" -ne 0 ]; then ok; else bad "#385: '$loc' names no repository and should be rejected"; fi
 done
 
 # --- explicit none: a declared standalone state, distinct from unconfigured
@@ -59,7 +93,7 @@ assert_contains "hub key is added" "project.memory-hub" "$merged"
 
 # --- malformed locators are rejected, nothing written
 d="$WORK/setbad"; make_repo "$d"
-for badloc in "" "not a repo" "norepo" "/leading" "trailing/" "a/b/c" 'quo"te/repo' 'back\slash/repo' '://no-scheme'; do
+for badloc in "" "not a repo" "norepo" "/leading" "trailing/" "a/b/c" 'quo"te/repo' 'back\slash/repo' '://no-scheme' "${BAD_HUB_LOCATORS[@]}"; do
   rc=0; out="$(cd "$d" && "$SPARK" hub --set "$badloc" 2>&1)" || rc=$?
   if [ "$rc" -ne 0 ]; then ok; else bad "locator '$badloc' should be rejected"; fi
 done
@@ -86,6 +120,20 @@ printf '{"project.memory-hub":"bogus"}\n' > "$d/.spark/preferences.json"
 rc=0; out="$(cd "$d" && "$SPARK" hub 2>&1)" || rc=$?
 if [ "$rc" -ne 0 ]; then ok; else bad "malformed configured value should exit non-zero"; fi
 assert_contains "malformed value is named" "malformed" "$out"
+
+# --- #385 reproduction: a host-only URL committed on disk (no repository
+# path) must never be reported healthy by hub, brief, or doctor.
+d="$WORK/badurl"; make_repo "$d"
+mkdir -p "$d/.spark"
+printf '{"project.memory-hub":"https://github.com"}\n' > "$d/.spark/preferences.json"
+rc=0; out="$(cd "$d" && "$SPARK" hub 2>&1)" || rc=$?
+if [ "$rc" -ne 0 ]; then ok; else bad "#385: host-only URL should exit non-zero, not report healthy"; fi
+assert_contains "#385: hub names it malformed" "malformed" "$out"
+rc=0; out="$(cd "$d" && "$SPARK" doctor 2>&1)" || rc=$?
+if [ "$rc" -ne 0 ]; then ok; else bad "#385: doctor should fail on a host-only URL"; fi
+assert_contains "#385: doctor flags it, not healthy" "✗ memory hub" "$out"
+out="$(cd "$d" && "$SPARK" brief 2>&1)" || true
+assert_contains "#385: brief marks it malformed, not healthy" "malformed" "$out"
 
 # --- tier provenance: an operator declaration resolves, and project wins
 d="$WORK/tiers"; make_repo "$d"

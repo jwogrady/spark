@@ -1781,15 +1781,156 @@ PY
 # ---------------------------------------------------------------------------
 
 # hub_locator_valid <value> — true when the value names a repository in a
-# provider-neutral way: "owner/repo" shorthand, a URL (scheme://…), or an
-# scp-style git address (user@host:path). The literal "none" — the explicit
-# standalone declaration — is a state, not a locator; callers handle it.
+# provider-neutral way: "owner/repo" shorthand, a URL (scheme://host/path,
+# non-empty scheme/host/path — a query string or fragment never counts as
+# path content), or an scp-style git address (user@host:path, all three
+# segments non-empty). The literal "none" — the explicit standalone
+# declaration — is a state, not a locator; callers handle it.
+#
+# #385 went through three rounds before landing here, each closing a real
+# bypass review found in the last:
+#   1. A glob alone can't express "this segment holds no slash" — `?`/`*`
+#      match "/" too, so slash-COUNTING patterns (?*://?*/?*) still let stray
+#      slashes or an all-slash remainder stand in for a non-empty host/path.
+#   2. A stricter path check still allowed an all-slash *remainder*
+#      (https://host//) because "one more character" was never required to
+#      be a NON-slash character.
+#   3. Gating the URL/scp forms with a separate glob existence check
+#      (?*://*, ?*@*:*) and then extracting with `${1#*://}` /  `${1#*@}`
+#      let the two disagree: the glob is satisfied by ANY occurrence of the
+#      delimiter, while `#` extraction anchors to the FIRST — so garbage
+#      before a real delimiter (://a://b, @a@host:path) passed the gate
+#      while extraction silently re-parsed from the wrong anchor.
+#
+# The fix for (3) removes the separate gate entirely: extract unconditionally
+# and prove the delimiter was real by comparing before/after (parameter-
+# expansion prefix removal is a no-op when the pattern never matches, so an
+# unchanged string is the only reliable "not present at all" signal — a glob
+# existence check can be satisfied by a LATER occurrence while extraction
+# anchors to the first). The scheme/user segment is validated with a
+# longest-match removal from the END (%%) so a leading, empty segment before
+# a repeated delimiter (the ://a://b / @a@host:path shapes) is caught
+# instead of silently absorbed. Rounds 4-7 closed narrower instances of the
+# same "something reports non-empty without naming anything real" shape:
+# a hybrid string straddling two forms, userinfo/port punctuation standing
+# in for a hostname, a second embedded "@" defeating a first-occurrence
+# split one level deeper, and an IPv6 bracket's naive colon-split.
+#
+# The URL and scp branches below deliberately still hand-roll the same
+# extract-then-prove idiom side by side rather than sharing a helper —
+# review flagged the duplication (a future third form could miss the same
+# hardening), noted here rather than risking a further edit to a function
+# that took seven review rounds to close; revisit if a third locator form
+# is ever added.
+#
+# Round 9 also surfaced adversarial shapes deliberately left unfixed — this
+# validates a project fact set from a trusted CLI flag (an operator
+# configuring their own memory hub), not hostile network input, and these
+# require deliberately crafted multi-delimiter strings no accidental typo
+# produces: stray characters between a bracket's "]" and the next real
+# delimiter are silently dropped rather than rejected; a scheme/user segment
+# can carry "?"/"#"/":" that nothing downstream treats as structurally
+# significant; and a second "://" appearing after an already-valid scheme
+# can misparse the host. Fixing the last one fully requires resolving it
+# against the opposite failure mode also found in the same round — a
+# legitimate scp path that happens to contain the substring "://"
+# (git@host:backup://old-repo) must not be rejected as a hybrid — which
+# needs a real look-ahead before committing to a URL/scp interpretation,
+# not another patch to whichever branch runs first.
 hub_locator_valid() {
+  local rest scheme host prebracket hostname path pathonly afterat user scphost scppath
   case "$1" in
     ''|*[[:space:]]*) return 1 ;;   # empty or whitespace never names a repo
     *[\"\\]*) return 1 ;;           # quotes/backslashes name no repo and would corrupt the flat-JSON write
-    ?*://?*) return 0 ;;            # URL: scheme and host/path both present
-    ?*@?*:?*) return 0 ;;           # scp-style git address
+  esac
+
+  rest="${1#*://}"
+  if [ "$rest" != "$1" ]; then                # a real "://" exists somewhere
+    scheme="${1%%://*}"                       # longest match: the earliest "://" wins, so
+    case "$scheme" in ''|*/*|*@*) return 1 ;; esac   # empty, or a hybrid straddling shorthand/scp (owner/x://…)
+    host="${rest%%[/?#]*}"                     # up to the first "/", "?", or "#" in rest — may still
+                                                # carry userinfo@ and :port, neither of which is a hostname
+    case "$host" in
+      *\[*)
+        # A "[" appears somewhere. Real IPv6 literals never contain "@", so
+        # detect the bracket BEFORE stripping userinfo — otherwise an "@"
+        # placed inside the brackets is mistaken for the real userinfo
+        # delimiter, corrupting the bracket structure before it's ever
+        # inspected (e.g. host="[fo@o]" -> a last-"@" strip first yields
+        # "o]", which no longer even looks bracketed).
+        prebracket="${host%%\[*}"
+        hostname="${host#"$prebracket"}"       # "[" onward
+        case "$prebracket" in
+          ''|*@) ;;                            # no userinfo, or userinfo ending in the real "@"
+          *) return 1 ;;                       # garbage between the start and "[" that isn't userinfo
+        esac
+        case "$hostname" in
+          \[*\]*)
+            # bracketed IPv6 literal (RFC 3986) — its own colons are address
+            # content, not a port separator, so stripping at the first ":"
+            # would mangle a real address into a truncated-but-still-non-empty
+            # string (e.g. "[::1]:8080" -> "["). Validate the bracket CONTENT
+            # instead, against the same reserved-character set the plain
+            # (non-bracket) host below is protected by construction (it can
+            # never hold one, since "host" already stops at the first "/",
+            # "?", or "#").
+            hostname="${hostname#\[}"
+            hostname="${hostname%%]*}"
+            case "$hostname" in ''|*[/@?#\[]*) return 1 ;; esac
+            ;;
+          *) return 1 ;;                       # "[" opened but never closed -> not a real host
+        esac
+        ;;
+      *)
+        hostname="${host##*@}"                 # longest match: strips through the LAST "@" (URL authority
+                                                # syntax — userinfo is everything up to the last "@"; a
+                                                # shortest-match first-"@" split left a second embedded "@"
+                                                # producing a non-empty leftover for a genuinely empty host)
+        hostname="${hostname%%:*}"             # not bracketed: drop a trailing :port
+        ;;
+    esac
+    [ -n "$hostname" ] || return 1             # scheme://, scheme:///path, scheme://:8080/, scheme://[]/path -> no real host
+    path="${rest#"$host"}"                     # literal removal (quoted expansion): the rest after the host
+    pathonly="${path%%[?#]*}"                  # drop a query string / fragment before judging real path content
+    case "$pathonly" in
+      /*[!/]*) return 0 ;;                     # "/" plus at least one non-slash character
+      *) return 1 ;;                           # no path, all-slash, or only a query/fragment — names nothing
+    esac
+  fi
+
+  afterat="${1#*@}"
+  if [ "$afterat" != "$1" ]; then              # a real "@" exists somewhere
+    user="${1%%@*}"                            # longest match: same leading-empty-segment protection
+    case "$user" in ''|*/*) return 1 ;; esac   # empty, or a hybrid straddling shorthand (owner/repo@host:path)
+    case "$afterat" in
+      \[*\]*)
+        # bracketed IPv6 host (git@[::1]:path) — same reasoning as the URL
+        # branch: its colons are address content, not the host:path
+        # separator, so a naive first-":" split lands mid-address.
+        scphost="${afterat#\[}"
+        scphost="${scphost%%]*}"
+        case "$scphost" in ''|*[/@?#]*) return 1 ;; esac   # empty, or holds a "/", "@", "?", or "#"
+        scppath="${afterat#*]}"                # everything after the closing "]"
+        case "$scppath" in
+          :*) scppath="${scppath#:}" ;;        # the mandatory host:path separator, dropped
+          *) return 1 ;;                       # no ":" right after "]" -> not host:path at all
+        esac
+        ;;
+      \[*) return 1 ;;                         # "[" opened but never closed -> not a real host
+      *)
+        scphost="${afterat%%:*}"
+        case "$scphost" in ''|*[/@?#]*) return 1 ;; esac  # empty, or holds a "/", "@", "?", or "#"
+        scppath="${afterat#"$scphost"}"
+        scppath="${scppath#:}"                 # drop the separating ":" itself
+        ;;
+    esac
+    case "$scppath" in
+      *[!/]*) return 0 ;;                      # holds a non-slash character (leading "/" is optional here)
+      *) return 1 ;;                           # empty or all-slash — names nothing
+    esac
+  fi
+
+  case "$1" in
     */*/*) return 1 ;;              # shorthand has exactly one separator
     ?*/?*) return 0 ;;              # owner/repo
     *) return 1 ;;
