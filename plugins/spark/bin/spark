@@ -1810,7 +1810,18 @@ PY
 # anchors to the first). The scheme/user segment is validated with a
 # longest-match removal from the END (%%) so a leading, empty segment before
 # a repeated delimiter (the ://a://b / @a@host:path shapes) is caught
-# instead of silently absorbed.
+# instead of silently absorbed. Rounds 4-7 closed narrower instances of the
+# same "something reports non-empty without naming anything real" shape:
+# a hybrid string straddling two forms, userinfo/port punctuation standing
+# in for a hostname, a second embedded "@" defeating a first-occurrence
+# split one level deeper, and an IPv6 bracket's naive colon-split.
+#
+# The URL and scp branches below deliberately still hand-roll the same
+# extract-then-prove idiom side by side rather than sharing a helper —
+# review flagged the duplication (a future third form could miss the same
+# hardening), noted here rather than risking a further edit to a function
+# that took seven review rounds to close; revisit if a third locator form
+# is ever added.
 hub_locator_valid() {
   local rest scheme host hostname path pathonly afterat user scphost scppath
   case "$1" in
