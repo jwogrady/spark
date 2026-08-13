@@ -1822,6 +1822,21 @@ PY
 # hardening), noted here rather than risking a further edit to a function
 # that took seven review rounds to close; revisit if a third locator form
 # is ever added.
+#
+# Round 9 also surfaced adversarial shapes deliberately left unfixed — this
+# validates a project fact set from a trusted CLI flag (an operator
+# configuring their own memory hub), not hostile network input, and these
+# require deliberately crafted multi-delimiter strings no accidental typo
+# produces: stray characters between a bracket's "]" and the next real
+# delimiter are silently dropped rather than rejected; a scheme/user segment
+# can carry "?"/"#"/":" that nothing downstream treats as structurally
+# significant; and a second "://" appearing after an already-valid scheme
+# can misparse the host. Fixing the last one fully requires resolving it
+# against the opposite failure mode also found in the same round — a
+# legitimate scp path that happens to contain the substring "://"
+# (git@host:backup://old-repo) must not be rejected as a hybrid — which
+# needs a real look-ahead before committing to a URL/scp interpretation,
+# not another patch to whichever branch runs first.
 hub_locator_valid() {
   local rest scheme host prebracket hostname path pathonly afterat user scphost scppath
   case "$1" in
