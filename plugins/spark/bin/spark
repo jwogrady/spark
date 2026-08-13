@@ -1823,7 +1823,7 @@ PY
 # that took seven review rounds to close; revisit if a third locator form
 # is ever added.
 hub_locator_valid() {
-  local rest scheme host hostname path pathonly afterat user scphost scppath
+  local rest scheme host prebracket hostname path pathonly afterat user scphost scppath
   case "$1" in
     ''|*[[:space:]]*) return 1 ;;   # empty or whitespace never names a repo
     *[\"\\]*) return 1 ;;           # quotes/backslashes name no repo and would corrupt the flat-JSON write
@@ -1835,21 +1835,44 @@ hub_locator_valid() {
     case "$scheme" in ''|*/*|*@*) return 1 ;; esac   # empty, or a hybrid straddling shorthand/scp (owner/x://…)
     host="${rest%%[/?#]*}"                     # up to the first "/", "?", or "#" in rest — may still
                                                 # carry userinfo@ and :port, neither of which is a hostname
-    hostname="${host##*@}"                     # longest match: strips through the LAST "@" (URL authority
+    case "$host" in
+      *\[*)
+        # A "[" appears somewhere. Real IPv6 literals never contain "@", so
+        # detect the bracket BEFORE stripping userinfo — otherwise an "@"
+        # placed inside the brackets is mistaken for the real userinfo
+        # delimiter, corrupting the bracket structure before it's ever
+        # inspected (e.g. host="[fo@o]" -> a last-"@" strip first yields
+        # "o]", which no longer even looks bracketed).
+        prebracket="${host%%\[*}"
+        hostname="${host#"$prebracket"}"       # "[" onward
+        case "$prebracket" in
+          ''|*@) ;;                            # no userinfo, or userinfo ending in the real "@"
+          *) return 1 ;;                       # garbage between the start and "[" that isn't userinfo
+        esac
+        case "$hostname" in
+          \[*\]*)
+            # bracketed IPv6 literal (RFC 3986) — its own colons are address
+            # content, not a port separator, so stripping at the first ":"
+            # would mangle a real address into a truncated-but-still-non-empty
+            # string (e.g. "[::1]:8080" -> "["). Validate the bracket CONTENT
+            # instead, against the same reserved-character set the plain
+            # (non-bracket) host below is protected by construction (it can
+            # never hold one, since "host" already stops at the first "/",
+            # "?", or "#").
+            hostname="${hostname#\[}"
+            hostname="${hostname%%]*}"
+            case "$hostname" in ''|*[/@?#\[]*) return 1 ;; esac
+            ;;
+          *) return 1 ;;                       # "[" opened but never closed -> not a real host
+        esac
+        ;;
+      *)
+        hostname="${host##*@}"                 # longest match: strips through the LAST "@" (URL authority
                                                 # syntax — userinfo is everything up to the last "@"; a
                                                 # shortest-match first-"@" split left a second embedded "@"
                                                 # producing a non-empty leftover for a genuinely empty host)
-    case "$hostname" in
-      \[*\]*)
-        # bracketed IPv6 literal (RFC 3986) — its own colons are address
-        # content, not a port separator, so stripping at the first ":" would
-        # mangle a real address into a truncated-but-still-non-empty string
-        # (e.g. "[::1]:8080" -> "["). Validate the bracket CONTENT instead.
-        hostname="${hostname#\[}"
-        hostname="${hostname%%]*}"
+        hostname="${hostname%%:*}"             # not bracketed: drop a trailing :port
         ;;
-      \[*) return 1 ;;                         # "[" opened but never closed -> not a real host
-      *) hostname="${hostname%%:*}" ;;         # not bracketed: drop a trailing :port
     esac
     [ -n "$hostname" ] || return 1             # scheme://, scheme:///path, scheme://:8080/, scheme://[]/path -> no real host
     path="${rest#"$host"}"                     # literal removal (quoted expansion): the rest after the host
@@ -1871,9 +1894,12 @@ hub_locator_valid() {
         # separator, so a naive first-":" split lands mid-address.
         scphost="${afterat#\[}"
         scphost="${scphost%%]*}"
-        [ -n "$scphost" ] || return 1          # "[]" -> empty
+        case "$scphost" in ''|*[/@?#]*) return 1 ;; esac   # empty, or holds a "/", "@", "?", or "#"
         scppath="${afterat#*]}"                # everything after the closing "]"
-        scppath="${scppath#:}"                 # drop the separating ":" if present
+        case "$scppath" in
+          :*) scppath="${scppath#:}" ;;        # the mandatory host:path separator, dropped
+          *) return 1 ;;                       # no ":" right after "]" -> not host:path at all
+        esac
         ;;
       \[*) return 1 ;;                         # "[" opened but never closed -> not a real host
       *)

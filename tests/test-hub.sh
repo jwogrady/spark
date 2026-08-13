@@ -56,6 +56,7 @@ BAD_HUB_LOCATORS=(
   "https://[]:8080/repo" "https://[]/repo" "https://user@[]:8080/repo"
   "user@[]:path" "user@[::1]:"
   "https://[192.168.1.1/repo" "https://[::1/path" "https://[/repo" "https://[::/repo" "https://[:8080/repo"
+  "git@[::1]repo" "git@[fo/o]:path" "git@[fo@o]:path" "https://[fo@o]/team/memory" "https://[@]/path"
   "://a://b" "@a@host:path" "user@@:path"
   "https://github.com?a=1/2" "https://host/?x=y"
   "owner/repo@host:path" "not/a/scheme://host/path" "user@ho#st:path"
