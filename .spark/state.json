@@ -1,5 +1,5 @@
 {
-  "next_action": "ship docs/373-release-gate-reconciliation, then close #373 with the reconciliation summary",
+  "next_action": "ship fix/385-hub-locator-validation as the PR closing #385",
   "blockers": "",
   "updated": "2026-08-12"
 }
