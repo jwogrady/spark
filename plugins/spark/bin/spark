@@ -1782,17 +1782,32 @@ PY
 
 # hub_locator_valid <value> — true when the value names a repository in a
 # provider-neutral way: "owner/repo" shorthand, a URL (scheme://host/path,
-# both host and path non-empty — scheme://host alone or scheme:///path with
-# an empty host names no repository), or an scp-style git address
+# both host and path non-empty), or an scp-style git address
 # (user@host:path, all three segments non-empty). The literal "none" — the
 # explicit standalone declaration — is a state, not a locator; callers
-# handle it. (#385: the URL branch previously accepted any scheme://X shape
-# regardless of whether X held a real host and path.)
+# handle it.
+#
+# #385/review: a glob check alone cannot express "the host segment holds no
+# slash" — case-pattern `?` and `*` both match `/`, so `?*://?*/?*` still let
+# stray slashes (https:////repo) or an all-slash remainder stand in for a
+# non-empty "host". The URL branch below extracts the actual host substring
+# with parameter expansion (up to the first "/" after the scheme) and checks
+# ITS length directly, instead of inferring emptiness from slash counts.
 hub_locator_valid() {
+  local rest host path
   case "$1" in
     ''|*[[:space:]]*) return 1 ;;   # empty or whitespace never names a repo
     *[\"\\]*) return 1 ;;           # quotes/backslashes name no repo and would corrupt the flat-JSON write
-    ?*://?*/?*) return 0 ;;         # URL: scheme, non-empty host, and non-empty path all present
+    ?*://*)
+      rest="${1#*://}"             # everything after the scheme
+      host="${rest%%/*}"           # up to (not including) the first "/" in rest
+      [ -n "$host" ] || return 1   # scheme://, scheme:///path -> empty host
+      path="${rest#"$host"}"       # literal removal (quoted expansion): the rest after the host
+      case "$path" in
+        /?*) return 0 ;;           # "/" plus at least one more character
+        *) return 1 ;;             # scheme://host (no path) or scheme://host/ (empty path)
+      esac
+      ;;
     ?*@?*:?*) return 0 ;;           # scp-style git address
     */*/*) return 1 ;;              # shorthand has exactly one separator
     ?*/?*) return 0 ;;              # owner/repo
