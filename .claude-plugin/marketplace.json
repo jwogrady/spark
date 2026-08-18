@@ -4,7 +4,7 @@
     "name": "jwogrady"
   },
   "metadata": {
-    "description": "Spark — a focused core that turns Claude Code and GitHub into a software delivery system (ideate, plan, codify, validate, ship), plus companion plugins for auditing, service connectivity, and public docs."
+    "description": "Spark — a focused core that turns Codex or Claude Code and GitHub into a software delivery system (ideate, plan, codify, validate, ship), plus companion plugins for auditing, service connectivity, and public docs."
   },
   "plugins": [
     {

@@ -1,0 +1,27 @@
+{
+  "name": "spark-docs",
+  "version": "0.3.1",
+  "description": "Evidence-grounded public documentation and positioning for AI-assisted projects, written through focused author personas.",
+  "author": {
+    "name": "jwogrady",
+    "url": "https://github.com/jwogrady"
+  },
+  "homepage": "https://github.com/jwogrady/spark",
+  "repository": "https://github.com/jwogrady/spark",
+  "license": "MIT",
+  "keywords": ["documentation", "readme", "positioning", "launch"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Spark Docs",
+    "shortDescription": "Evidence-grounded public docs and positioning",
+    "longDescription": "Create README improvements, philosophy and positioning documents, visuals, and launch copy without publishing claims that lack verified ground truth.",
+    "developerName": "jwogrady",
+    "category": "Developer Tools",
+    "capabilities": ["Read", "Write"],
+    "websiteURL": "https://github.com/jwogrady/spark",
+    "defaultPrompt": [
+      "Improve this project's README from verified facts.",
+      "Create honest launch copy for this project."
+    ]
+  }
+}

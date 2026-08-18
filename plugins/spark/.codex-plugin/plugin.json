@@ -1,0 +1,28 @@
+{
+  "name": "spark",
+  "version": "0.19.1",
+  "description": "A portable project-inception and software-delivery system for AI-assisted development. Carries one opinionated lifecycle into every project: ideate, plan, codify, validate, ship.",
+  "author": {
+    "name": "jwogrady",
+    "url": "https://github.com/jwogrady"
+  },
+  "homepage": "https://github.com/jwogrady/spark",
+  "repository": "https://github.com/jwogrady/spark",
+  "license": "MIT",
+  "keywords": ["software-delivery", "github", "planning", "validation"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Spark",
+    "shortDescription": "A disciplined, traceable software-delivery loop",
+    "longDescription": "Turn Codex and GitHub into a software-delivery system with project inception, planning, focused implementation, validation, durable state, and guarded shipping.",
+    "developerName": "jwogrady",
+    "category": "Developer Tools",
+    "capabilities": ["Read", "Write", "Shell"],
+    "websiteURL": "https://github.com/jwogrady/spark",
+    "defaultPrompt": [
+      "Onboard this repository with Spark.",
+      "Use Spark to plan this feature.",
+      "Resume the current Spark delivery state."
+    ]
+  }
+}

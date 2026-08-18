@@ -1,0 +1,27 @@
+{
+  "name": "spark-audit",
+  "version": "0.2.2",
+  "description": "Whole-project assessment and evidence-backed cleanup for AI-assisted projects, with destructive work kept behind a human approval gate.",
+  "author": {
+    "name": "jwogrady",
+    "url": "https://github.com/jwogrady"
+  },
+  "homepage": "https://github.com/jwogrady/spark",
+  "repository": "https://github.com/jwogrady/spark",
+  "license": "MIT",
+  "keywords": ["audit", "cleanup", "maintenance"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Spark Audit",
+    "shortDescription": "Evidence-backed project assessment and cleanup",
+    "longDescription": "Assess a whole project across six health dimensions, then remove only proven-dead code, false documentation, and stale branches after explicit human approval.",
+    "developerName": "jwogrady",
+    "category": "Developer Tools",
+    "capabilities": ["Read", "Write", "Shell"],
+    "websiteURL": "https://github.com/jwogrady/spark",
+    "defaultPrompt": [
+      "Audit this project and cite the evidence.",
+      "Find proven-safe cleanup opportunities."
+    ]
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "name": "spark-connect",
+  "version": "0.2.2",
+  "description": "Service connectivity and secrets bootstrap for AI-assisted projects, including 1Password storage, smoke tests, and secure plaintext cleanup.",
+  "author": {
+    "name": "jwogrady",
+    "url": "https://github.com/jwogrady"
+  },
+  "homepage": "https://github.com/jwogrady/spark",
+  "repository": "https://github.com/jwogrady/spark",
+  "license": "MIT",
+  "keywords": ["secrets", "1password", "services", "credentials"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Spark Connect",
+    "shortDescription": "Safe service and secrets bootstrap",
+    "longDescription": "Capture provider credentials, store them in 1Password, verify connections with smoke tests, and securely remove plaintext files.",
+    "developerName": "jwogrady",
+    "category": "Developer Tools",
+    "capabilities": ["Read", "Write", "Shell"],
+    "websiteURL": "https://github.com/jwogrady/spark",
+    "defaultPrompt": [
+      "Connect this project to a service safely.",
+      "Store and verify these provider credentials."
+    ]
+  }
+}

@@ -40,7 +40,7 @@ check_desc() {
 check_desc ideate    'problem'                          'frame|framing'            'plan'                 'codify'
 check_desc plan      'issue'                             'milestone'                'ideate'               'codify'
 check_desc codify    'implement'                         'issue'                    'branch'               'validate'   'ship'
-check_desc validate  'review'                            '/code-review|/security-review' '\baudit\b'
+check_desc validate  'review'                            '\bcode\b'                '\bsecurity\b'          '\baudit\b'
 check_desc ship      'commit'                            'pull request|\bPR\b'      'codify'               'validate'
 # Repository-setup pair — must be told apart from each other and from the runtime.
 check_desc onboard   'repo|repository'                   'first|arm'                'bootstrap'

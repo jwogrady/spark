@@ -24,10 +24,11 @@ personas** — each a **real subagent** under
   every claim against ground truth, and files verified gaps as
   `proposed`-labeled GitHub issues for the human to triage.
 
-**This skill is their orchestrator:** because a subagent can't spawn another
-subagent, the main loop does every dispatch and enforces every barrier, while
-the agents coordinate only through shared notes in `.docit-notes/` (gitignored
-scratch). The phase-by-phase orchestration is in
+**This skill is their orchestrator:** the main loop does every dispatch and
+enforces every barrier consistently across hosts, while the agents coordinate
+only through shared notes in `.docit-notes/` (gitignored scratch). If named
+plugin agents are unavailable, use native subagents with the shipped briefs, or
+run the roles sequentially in the main session. The full protocol is in
 [`references/collaboration-protocol.md`](references/collaboration-protocol.md).
 
 ## The one rule

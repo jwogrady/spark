@@ -371,7 +371,8 @@ EOF
 }
 
 cmd_version() {
-  local manifest="$SPARK_ROOT/.claude-plugin/plugin.json" v=""
+  local manifest="$SPARK_ROOT/.codex-plugin/plugin.json" v=""
+  [ -f "$manifest" ] || manifest="$SPARK_ROOT/.claude-plugin/plugin.json"
   [ -f "$manifest" ] || { red "plugin manifest not found: $manifest"; return 1; }
   if command -v jq >/dev/null 2>&1; then
     v="$(jq -r '.version // empty' "$manifest" 2>/dev/null || true)"
@@ -395,7 +396,7 @@ cmd_version() {
 #   - SKILL_MD_MAX_LINES: a SKILL.md is a router, not a manual — depth belongs
 #     in references/ progressive disclosure, loaded only when needed.
 #   - SKILL_DESC_MAX_CHARS: the description is the always-loaded selection cost
-#     (Claude reads every one to choose a skill); it is also the plugin-spec cap.
+#     (the host reads every one to choose a skill); it is also the spec cap.
 SKILL_MD_MAX_LINES=100
 SKILL_DESC_MAX_CHARS=1024
 
@@ -440,7 +441,7 @@ LATENCY_BRIEF_MS="${LATENCY_BRIEF_MS:-600}"
 LATENCY_DOCTOR_MS="${LATENCY_DOCTOR_MS:-6000}"
 
 # Lint one SKILL.md's frontmatter and size. The description is the only thing
-# Claude sees when choosing a skill, so its quality is checked here — and both
+# the host sees when choosing a skill, so its quality is checked here — and both
 # doctor and new-skill call this, so scaffold-time and audit-time verdicts
 # agree. Sets lint_errors/lint_warnings; findings print as "  ✗|! <label>: …".
 lint_skill_md() {
@@ -719,6 +720,15 @@ cmd_doctor() {
   else
     red "✗ .claude-plugin/plugin.json is missing"; errors=$((errors+1))
   fi
+  if [ -f "$SPARK_ROOT/.codex-plugin/plugin.json" ]; then
+    if check_json "$SPARK_ROOT/.codex-plugin/plugin.json"; then
+      green "✓ .codex-plugin/plugin.json is valid JSON"
+    else
+      red "✗ .codex-plugin/plugin.json is not valid JSON"; errors=$((errors+1))
+    fi
+  else
+    red "✗ .codex-plugin/plugin.json is missing"; errors=$((errors+1))
+  fi
 
   # Marketplace catalog — lives at the marketplace repo root. With the plugin in
   # plugins/<name>/ that is two levels up; fall back to the plugin dir for a
@@ -897,6 +907,12 @@ cmd_doctor() {
       fi
       if ! check_json "$sib/.claude-plugin/plugin.json"; then
         red "  ✗ $sibname: plugin.json is not valid JSON"; errors=$((errors+1)); continue
+      fi
+      if [ ! -f "$sib/.codex-plugin/plugin.json" ]; then
+        red "  ✗ $sibname: missing .codex-plugin/plugin.json"; errors=$((errors+1)); continue
+      fi
+      if ! check_json "$sib/.codex-plugin/plugin.json"; then
+        red "  ✗ $sibname: Codex plugin.json is not valid JSON"; errors=$((errors+1)); continue
       fi
       # Companions are not standalone: their skills hand to the core's
       # plan/validate/ship and call the spark CLI, so each manifest must

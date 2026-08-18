@@ -1,6 +1,6 @@
 ---
 name: validate
-description: Review and harden one change — run the built-in /code-review and /security-review on the branch diff, triage findings, and fix until acceptance criteria hold. Use to harden a single change/branch/PR or resolve review findings after `codify`. For a whole-codebase audit rather than one diff, use `audit`.
+description: Review and harden one change — use the host's code, security, and runtime verification capabilities on the branch diff, triage findings, and fix until acceptance criteria hold. Use to harden a single change/branch/PR or resolve review findings after `codify`. For a whole-codebase audit rather than one diff, use `audit`.
 ---
 
 # validate — Stage 4 of the Spark lifecycle
@@ -8,17 +8,19 @@ description: Review and harden one change — run the built-in /code-review and 
 `Ideate → Plan → Codify → Validate → Ship`
 
 Validate closes the gap between "it compiles" and "it's correct and safe." Spark
-does **not** ship its own reviewer — it orchestrates Claude Code's built-in
-ones, then drives the fixes.
+does **not** ship its own reviewer — it orchestrates the host's review and
+verification capabilities, then drives the fixes.
 
 ## Do this
 
-1. **Review with the built-ins** (don't reinvent them):
-   - `/code-review` — correctness, reuse, simplification, efficiency.
-   - `/security-review` — vulnerabilities, when the change touches auth, input
-     handling, secrets, or network surface.
-   - The `verify` skill — actually run the app/tests and observe behavior, not
-     just read the diff.
+1. **Review with the host's native capabilities** (don't reinvent them):
+   - Run its code-review workflow on the branch diff for correctness, reuse,
+     simplification, and efficiency.
+   - Run its security-review workflow when the change touches auth, input
+     handling, secrets, or network surface. In Codex, use an available security
+     review skill or plugin; otherwise perform a focused security pass directly.
+   - Use its verification workflow to run the app/tests and observe behavior,
+     not just read the diff.
 2. **Triage findings.** Sort into: must-fix (breaks a criterion or is a real
    bug), should-fix (quality), and out-of-scope (file as a new issue, don't fix
    here).

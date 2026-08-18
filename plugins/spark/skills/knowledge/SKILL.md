@@ -7,7 +7,7 @@ description: Turn messy notes, findings, and decisions into clean, durable inter
 
 `knowledge` captures what a team knows so it stays reusable for humans and AI
 agents. It takes raw input — notes, transcripts, architecture decisions, repo
-findings, Claude Code session summaries — and files it as clean, durable,
+findings, AI coding-session summaries — and files it as clean, durable,
 searchable docs. It is a cross-cutting tool, not a lifecycle stage: it runs
 whenever [`codify`](../codify/SKILL.md), [`validate`](../validate/SKILL.md), or
 [`ship`](../ship/SKILL.md) turn up a decision, system, or process worth keeping,
@@ -33,6 +33,9 @@ Three real subagents under [`agents/knowledge/`](../../agents/knowledge/)
   [`references/templates.md`](references/templates.md).
 - **02 Librarian-Editor** — the lead: placement, dedup, cross-links, glossary
   upkeep, then final one-voice synthesis and filing.
+
+If named plugin agents are unavailable, use native subagents with these shipped
+briefs, or run the roles sequentially in the main session.
 
 ## Do this
 

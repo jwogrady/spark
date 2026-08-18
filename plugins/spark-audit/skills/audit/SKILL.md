@@ -1,6 +1,6 @@
 ---
 name: audit
-description: Audit a whole project directly in-session with a small dispatched crew, in one of two modes — assess produces an evidence-cited health report across documentation, architecture, code quality, testing/reliability, security/config, and product readiness; purge removes what is proven dead or false (stale code, untrue docs, stale branches, unused dependencies) behind a human approval gate. Use when preparing for a release or external review, assessing overall project health, or purging dead code, doc drift, and stale branches. Not for a single diff or PR — use the native /code-review and /security-review, or `validate` to orchestrate them on one branch.
+description: Audit a whole project directly in-session with a small dispatched crew, in one of two modes — assess produces an evidence-cited health report across documentation, architecture, code quality, testing/reliability, security/config, and product readiness; purge removes what is proven dead or false (stale code, untrue docs, stale branches, unused dependencies) behind a human approval gate. Use when preparing for a release or external review, assessing overall project health, or purging dead code, doc drift, and stale branches. Not for a single diff or PR — use the host's native review capabilities, or `validate` to orchestrate them on one branch.
 ---
 
 # audit — whole-project assessment and purge
@@ -21,6 +21,9 @@ Two modes:
 
 If the user's intent is ambiguous, ask which mode they want. "How healthy is
 this?" is assess; "get rid of what's dead/false" is purge.
+
+If named plugin agents are unavailable, use native subagents with the shipped
+role briefs, or run those roles sequentially in the main session.
 
 ## Do this
 

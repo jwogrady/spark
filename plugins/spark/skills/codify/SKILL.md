@@ -72,8 +72,9 @@ lane (Codify, stage 3).
   question now — delaying loses the context. Route a "yes" to
   [`knowledge`](../knowledge/SKILL.md); routine implementation needs no
   ceremony and is the common case.
-- Follow the project's `CLAUDE.md` standards (types, docstrings, formatter,
-  linter) — run them before handing off. `CONVENTIONS.md` and
+- Follow the project's agent contract (`AGENTS.md`, plus any host-specific
+  pointer or override) for types, docstrings, formatting, and linting — run
+  them before handing off. `CONVENTIONS.md` and
   `ENGINEERING-STANDARDS.md` at the repo root hold the project's branching,
   commit, and stack/quality contract — follow them too.
 - Don't write documentation — that's `docit` (outward) or `knowledge` (internal).

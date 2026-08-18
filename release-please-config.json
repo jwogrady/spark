@@ -40,6 +40,11 @@
           "type": "json",
           "path": "plugins/spark/.claude-plugin/plugin.json",
           "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "plugins/spark/.codex-plugin/plugin.json",
+          "jsonpath": "$.version"
         }
       ]
     },
@@ -50,6 +55,11 @@
         {
           "type": "json",
           "path": ".claude-plugin/plugin.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": ".codex-plugin/plugin.json",
           "jsonpath": "$.version"
         }
       ],
@@ -63,6 +73,11 @@
           "type": "json",
           "path": ".claude-plugin/plugin.json",
           "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": ".codex-plugin/plugin.json",
+          "jsonpath": "$.version"
         }
       ],
       "prerelease": true
@@ -74,6 +89,11 @@
         {
           "type": "json",
           "path": ".claude-plugin/plugin.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": ".codex-plugin/plugin.json",
           "jsonpath": "$.version"
         }
       ],

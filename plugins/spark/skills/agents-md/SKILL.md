@@ -1,6 +1,6 @@
 ---
 name: agents-md
-description: Create, maintain, and audit a repo's AI-agent contract — one canonical AGENTS.md body plus a CLAUDE.md pointer stub that imports it. Use to write, update, audit, or drift-check AGENTS.md or CLAUDE.md, or to collapse a dual-body pair into the single-body model. Defers net-new repo scanning to native /init. Not for prose docs — use `docit` (public) or `knowledge` (internal).
+description: Create, maintain, and audit a repo's AI-agent contract — one canonical AGENTS.md body plus host-specific pointers or overrides. Use to write, update, audit, or drift-check AGENTS.md or CLAUDE.md, or to collapse a dual-body pair into the single-body model. Uses native repo discovery when available. Not for prose docs — use `docit` (public) or `knowledge` (internal).
 ---
 
 # agents-md — the agent behavioral-contract skill
@@ -17,13 +17,14 @@ One body means the two files **cannot drift** — the dual-body model this skill
 previously maintained required editing every rule twice, and the two paid a
 truth-pass tax on every change. This skill owns both files.
 
-## Division with native `/init`
+## Division with native repo discovery
 
-Claude Code's native `/init` already *creates* a first `CLAUDE.md` by scanning a
-repo. **Do not reimplement that.** This skill's jobs are the ones `/init` does
-not do:
+Use the host's native repo-discovery workflow when one exists. Claude Code's
+`/init` creates a first `CLAUDE.md`; Codex reads `AGENTS.md` directly and can
+inspect the repository when authoring it. **Do not duplicate native discovery.**
+This skill owns the contract work discovery does not:
 
-- **Author `AGENTS.md`** — the canonical body has no native generator. When
+- **Author `AGENTS.md`** — the canonical cross-host body. When
   `/init` produced a full `CLAUDE.md`, move its body into `AGENTS.md` and leave
   the `@AGENTS.md` stub behind.
 - **Maintain & audit** the contract — patch missing sections, refresh stale
@@ -74,6 +75,6 @@ review for human approval. Ask which is wanted if unspecified.
 
 ## Non-goals
 
-- Does **not** reimplement `/init`'s repo scan — it defers to it for discovery.
+- Does **not** reimplement the host's repo scan — it defers to native discovery.
 - Does **not** run as an automated CLI command, or modify any file unless invoked.
 - Does **not** define project-specific commands — those come from reading the repo.

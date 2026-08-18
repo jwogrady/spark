@@ -5,10 +5,11 @@
   <img src="assets/logo/spark-lockup.svg" alt="Spark — a prompt chevron igniting a four-point spark" width="360">
 </picture>
 
-**Turn your Claude and GitHub subscriptions into a software delivery system.**
+**Turn your AI coding assistant and GitHub into a software delivery system.**
 
 [![Release](https://img.shields.io/github/v/release/jwogrady/spark?color=F97316&label=release)](https://github.com/jwogrady/spark/releases)
 [![Validate](https://github.com/jwogrady/spark/actions/workflows/validate.yml/badge.svg)](https://github.com/jwogrady/spark/actions/workflows/validate.yml)
+[![Codex](https://img.shields.io/badge/Codex-plugin-10A37F)](https://developers.openai.com/codex/plugins)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-plugin-d97757)](https://docs.anthropic.com/en/docs/claude-code)
 [![License](https://img.shields.io/badge/license-MIT-0F172A)](LICENSE)
 
@@ -23,12 +24,12 @@
 
 ---
 
-You are one developer with a Claude subscription, a GitHub subscription, and
-more ideas than hours. Claude can write and review code. GitHub can organize,
-preserve, and ship it. But neither gives you a way to turn an idea into a
-maintainable release. **Spark does.**
+You are one developer with an AI coding assistant, a GitHub subscription, and
+more ideas than hours. Codex or Claude Code can write and review code. GitHub
+can organize, preserve, and ship it. But neither gives you a way to turn an
+idea into a maintainable release. **Spark does.**
 
-Spark is the project-engineering system built specifically for Claude Code and
+Spark is the project-engineering system built for Codex, Claude Code, and
 GitHub. It loads your engineering standards, version-control conventions, and
 workflow preferences into every project; lets you override them when a
 repository needs different rules; and guides work through one traceable
@@ -41,12 +42,13 @@ tools already on the desk.
 
 ## The force multiplier
 
-Claude is capable. GitHub is durable. Spark makes them operate as one system.
+The coding assistant is capable. GitHub is durable. Spark makes them operate as
+one system.
 
 | Without Spark | With Spark |
 | --- | --- |
 | Re-explain your preferences in every project | Load your standards automatically |
-| Start each Claude session by reconstructing context | Begin with a project brief and resumable state |
+| Start each coding session by reconstructing context | Begin with a project brief and resumable state |
 | Let implementation choices disappear into chat history | Record decisions as durable project artifacts |
 | Ask for a plan and receive a document-shaped wish list | Produce GitHub issues with scope and acceptance criteria |
 | Trust conventions to memory | Enforce branch, commit, and push rules with hooks |
@@ -54,8 +56,8 @@ Claude is capable. GitHub is durable. Spark makes them operate as one system.
 | Treat review as an optional final prompt | Validate against criteria before shipping |
 | Maintain release plumbing by hand | Scaffold CI, documentation, and Release Please |
 
-Spark does not replace Claude Code or GitHub. It supplies the project
-engineering that lets both deliver more value.
+Spark does not replace Codex, Claude Code, or GitHub. It supplies the project
+engineering that lets them deliver more value.
 
 ## One lifecycle, carried everywhere
 
@@ -144,26 +146,35 @@ path that can reach the repository:
 
 | Door | Fires when | Enforces |
 | --- | --- | --- |
-| `PreToolUse` guard | Claude runs a git command | Blocks force-pushes and pushes whose destination is trunk — through leading git options, full refspecs, and compound commands |
+| `PreToolUse` guard | The coding assistant runs a git command | Blocks force-pushes and pushes whose destination is trunk — through leading git options, full refspecs, and compound commands |
 | Git hooks | You (or anyone) commits directly | Rejects commits on trunk, invalid conventional commits, and AI attribution |
 | GitHub ruleset | Anything reaches the remote — API calls, other clones, hookless clients | The same trunk policy server-side: PRs required, merges gated on the repo's required CI checks, force-push and deletion blocked. Spark ships the policy and reports drift (`spark doctor --requirements`); applying it stays a human act |
 | `spark doctor` | Locally and in CI | Plugin structure, scripts, documentation links, manifests, enforcement lockstep |
 | Behavioral tests | Every pull request **to this repository** | Spark's own CI exercises the CLI flows and the local enforcement doors against throwaway repos — this is how Spark tests itself, not a suite added to your project (`preferences --apply` scaffolds *your* stack's validation instead) |
 
-Claude can move quickly because Spark keeps the work inside boundaries you can
-trust. The table above is a summary; the doctrine behind it — why three doors,
-and why the remote one is never applied for you — lives in
+Your coding assistant can move quickly because Spark keeps the work inside
+boundaries you can trust. The table above is a summary; the doctrine behind it —
+why three doors, and why the remote one is never applied for you — lives in
 [enforcement-model.md](plugins/spark/docs/explanation/enforcement-model.md).
 
 ## Start shipping
 
-**Before you begin:** you need a Git repository, Claude Code, and an
+**Before you begin:** you need a Git repository, Codex or Claude Code, and an
 authenticated GitHub CLI (`gh`) — `onboard` and the lifecycle create issues and
 pull requests through it. Run `spark doctor --requirements` any time to check
 your machine against the [supported-environment matrix](plugins/spark/docs/reference/compatibility.md),
 which also lists what degrades gracefully when an optional tool is absent.
 
-**1. Install Spark in Claude Code**
+**1. Install Spark**
+
+In Codex CLI, add the marketplace, then open `/plugins` and install Spark:
+
+```text
+codex plugin marketplace add jwogrady/spark
+/plugins
+```
+
+In Claude Code:
 
 ```text
 /plugin marketplace add jwogrady/spark
@@ -176,12 +187,11 @@ The guided first run is one command — it orients on the repo, helps you choose
 setup profile, seeds hooks + permissions + the standards docs, and ends with a
 brief of what was created, kept, and still open:
 
-```text
-/spark:onboard
-```
+Invoke `spark:onboard` from the host's skill picker: `$spark:onboard` in Codex,
+or `/spark:onboard` in Claude Code.
 
 It stops at each human decision (an ambiguous repo, the profile choice, the
-LICENSE) rather than guessing. Prefer the raw verbs? `/spark:onboard` just
+LICENSE) rather than guessing. Prefer the raw verbs? `spark:onboard` just
 sequences them, and each stands alone:
 
 ```bash
@@ -194,8 +204,10 @@ want to apply or inspect each step separately.
 
 **3. Run the lifecycle**
 
+Choose the five skills in order (with Codex's `$` or Claude Code's `/` prefix):
+
 ```text
-/spark:ideate → /spark:plan → /spark:codify → /spark:validate → /spark:ship
+spark:ideate → spark:plan → spark:codify → spark:validate → spark:ship
 ```
 
 The full environment contract — required versus optional tools, and what
@@ -210,10 +222,10 @@ install a companion only when you need its job.
 
 | Plugin | Job | Entry point | Install |
 | --- | --- | --- | --- |
-| **spark** | The shipping loop: the five lifecycle skills plus `onboard`, `bootstrap`, `knowledge`, `agents-md`, the CLI, and the enforcement doors (both local ones, plus the trunk-ruleset policy for the third) | `/spark:<skill>` | `/plugin install spark` |
-| **spark-audit** | Whole-project assessment and evidence-backed cleanup | `/spark-audit:audit` | `/plugin install spark-audit` |
-| **spark-connect** | Service connectivity and secrets via 1Password, including plaintext shredding | `/spark-connect:connect` | `/plugin install spark-connect` |
-| **spark-docs** | Public docs and positioning through author personas | `/spark-docs:docit` | `/plugin install spark-docs` |
+| **spark** | The shipping loop: the five lifecycle skills plus `onboard`, `bootstrap`, `knowledge`, `agents-md`, the CLI, and the enforcement doors (both local ones, plus the trunk-ruleset policy for the third) | `spark:<skill>` | Plugin browser or `/plugin install spark` |
+| **spark-audit** | Whole-project assessment and evidence-backed cleanup | `spark-audit:audit` | Plugin browser or `/plugin install spark-audit` |
+| **spark-connect** | Service connectivity and secrets via 1Password, including plaintext shredding | `spark-connect:connect` | Plugin browser or `/plugin install spark-connect` |
+| **spark-docs** | Public docs and positioning through author personas | `spark-docs:docit` | Plugin browser or `/plugin install spark-docs` |
 
 Each plugin versions independently and ships its own documentation and
 changelog. The core's nine skills in one line:
@@ -224,15 +236,15 @@ changelog. The core's nine skills in one line:
 | **Setup** | `onboard`, `bootstrap` | Guide a repo's first run start to finish; scaffold a new project's runtime and wire it into the lifecycle |
 | **Supporting** | `knowledge`, `agents-md` | Preserve internal knowledge; maintain `CLAUDE.md` and `AGENTS.md` |
 
-Spark reuses Claude Code's native capabilities — including code review,
-security review, and verification — then adds sequencing, persistence, GitHub
-structure, and enforcement. You keep Claude's expanding toolset without
-rebuilding your workflow whenever a new tool arrives.
+Spark reuses the host's native capabilities — including code review, security
+review, and verification — then adds sequencing, persistence, GitHub structure,
+and enforcement. You keep the host's expanding toolset without rebuilding your
+workflow whenever a new tool arrives.
 
 ## Built for the solo developer
 
 Spark deliberately avoids becoming another project-management SaaS product. It
-lives where you already work: Claude Code, Git, and GitHub. There is no extra
+lives where you already work: Codex or Claude Code, Git, and GitHub. There is no extra
 dashboard to maintain, no additional seat to buy, and no parallel source of
 truth.
 

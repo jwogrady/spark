@@ -19,9 +19,9 @@ the `plan` skill can decompose.
    check for a predecessor repo, a prototype, captured data, or an abandoned
    branch. Record what exists, what's reusable, and how it relates to this
    effort. For a rewrite, this is the highest-leverage question you can ask.
-3. **Pressure-test it.** Invoke the **`grill-me`** skill (Claude-native) to
-   interview the user down the decision tree. Resolve the load-bearing unknowns
-   before writing anything.
+3. **Pressure-test it.** Use the host's interactive interview capability (the
+   `grill-me` skill when available), or interview the user directly when it is
+   not. Resolve the load-bearing unknowns before writing anything.
 4. **Write the problem statement.** Keep it to one screen:
    - **Problem** — what hurts today, for whom.
    - **Outcome** — what "solved" looks like, in observable terms.
