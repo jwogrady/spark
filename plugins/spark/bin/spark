@@ -56,6 +56,7 @@ state|cmd_state|Show or write the work state (.spark/state.json); --set key=valu
 footprint|cmd_footprint|Measure Spark'\''s context footprint per surface (--json); --timing gates hot-path latency
 orient|cmd_orient|Classify this repo as new, existing, or ambiguous before setup; --set records the decision
 hub|cmd_hub|Report the memory hub this project declares and where the value came from; --set records it (or none)
+labels|cmd_labels|Compare this repo'\''s GitHub labels against the declared issue taxonomy; --apply creates the missing ones
 help|usage|Show this help'
 
 usage() {
@@ -339,6 +340,15 @@ EOF
     yellow "  ! .github/workflows/validate.yml — no CI template for stack '$stack'; write one for this stack"
     attention=$((attention+1))
   fi
+
+  # The issue taxonomy is declared in CONVENTIONS.md but lives on GitHub, which
+  # this offline, create-only pass cannot reach. Saying nothing is what left
+  # every onboarded repo declaring a taxonomy that did not exist (#396), so
+  # name the gap and the verb that closes it. Not an attention item: setup
+  # cannot know whether the labels are already there.
+  echo "  · issue labels — declared here, provisioned on GitHub:"
+  echo "      spark labels            preview what is missing"
+  echo "      spark labels --apply    create the missing categories"
 
   echo
   echo "Standard: $created created, $kept kept, $attention need attention."
@@ -1016,19 +1026,34 @@ cmd_doctor() {
   fi
 
   # Issue metadata governance (#192): category labels are governed by
-  # issue.taxonomy (preferences/defaults.json). Every issue form must carry one
-  # taxonomy category and must not use the deprecated `enhancement` alias. Like
-  # enforcement parity, this is a Spark-repo self-check (both surfaces present).
-  local tmpl_dir="$repo_root/.github/ISSUE_TEMPLATE"
-  local taxo_file="$SPARK_ROOT/preferences/defaults.json"
-  if [ -n "$repo_root" ] && [ -d "$tmpl_dir" ] && [ -f "$taxo_file" ]; then
+  # issue.taxonomy. Every issue form must carry one taxonomy category and must
+  # not use the deprecated `enhancement` alias.
+  #
+  # This is PROJECT-scoped (#396). It was written against the marketplace root,
+  # which is non-empty only inside a Spark checkout, and gated on a directory
+  # `spark setup` never creates — so in every repo Spark onboards it silently
+  # no-opped, and that silence was indistinguishable from a clean pass. Resolve
+  # the taxonomy through the normal tiers and inspect the repo the operator is
+  # actually standing in.
+  local proj_root
+  proj_root="$(git_root)"
+  [ -n "$proj_root" ] || proj_root="$repo_root"
+  local tmpl_dir="$proj_root/.github/ISSUE_TEMPLATE"
+  if [ -n "$proj_root" ]; then
     echo
     echo "Issue metadata governance:"
     local taxo
-    taxo="$(grep -oE '"issue\.taxonomy"[[:space:]]*:[[:space:]]*"[^"]*"' "$taxo_file" \
-      | sed -E 's/.*:[[:space:]]*"([^"]*)"/\1/' || true)"
+    taxo="$(resolve_issue_taxonomy "$proj_root")"
     if [ -z "$taxo" ]; then
-      yellow "  ! could not read issue.taxonomy from preferences/defaults.json — skipping label parity"; warnings=$((warnings+1))
+      yellow "  ! could not resolve issue.taxonomy — skipping label parity"; warnings=$((warnings+1))
+    elif [ ! -d "$tmpl_dir" ]; then
+      # Gating the whole block on this directory made its absence
+      # indistinguishable from a clean pass — and `spark setup` never creates
+      # it, so the check silently no-opped in exactly the repos it was written
+      # for (#396). Report the state instead of skipping it.
+      echo "  - no .github/ISSUE_TEMPLATE/ — no issue forms to check for taxonomy parity"
+      echo "    Declared categories: $taxo"
+      echo "    Labels live on GitHub; reconcile them with: spark labels"
     else
       local tmpl base labels_line found_cat bad_alias tok
       for tmpl in "$tmpl_dir"/*.yml; do
@@ -1712,6 +1737,166 @@ classify_repo() {
   printf 'spark\t%s\n' "$spark"
   printf 'classification\t%s\n' "$classification"
   printf 'confidence\t%s\n' "$confidence"
+}
+
+# resolve_issue_taxonomy — the declared work categories, resolved the same way
+# every other standard is: the preference first, then the machine-backed marker
+# the standards doc carries. The fallback matters because CONVENTIONS.md is the
+# copy that travels with the repo — a collaborator without Spark installed can
+# still read the taxonomy the project actually declares, and prose and labels
+# cannot drift apart (#396).
+resolve_issue_taxonomy() {
+  local root="$1" taxo=""
+  taxo="$(pref_get issue.taxonomy || true)"
+  if [ -z "$taxo" ] && [ -f "$root/CONVENTIONS.md" ]; then
+    taxo="$(sed -n 's/.*spark:pref issue\.taxonomy=\(.*\) -->.*/\1/p' "$root/CONVENTIONS.md" \
+      | head -n1)"
+  fi
+  printf '%s' "$taxo"
+}
+
+# taxonomy_label_color <category> — a stable colour per shipped category, with
+# a neutral grey for anything an operator adds. An unknown category must never
+# break the verb: extending issue.taxonomy is a supported act.
+taxonomy_label_color() {
+  case "$1" in
+    feature)        printf '%s' '0e8a16' ;;
+    bug)            printf '%s' 'd73a4a' ;;
+    documentation)  printf '%s' '0075ca' ;;
+    chore)          printf '%s' 'fef2c0' ;;
+    tech-debt)      printf '%s' 'd4c5f9' ;;
+    research)       printf '%s' '1d76db' ;;
+    infrastructure) printf '%s' 'c2e0c6' ;;
+    *)              printf '%s' 'ededed' ;;
+  esac
+}
+
+taxonomy_label_desc() {
+  case "$1" in
+    feature)        printf '%s' 'New capability or user-visible behaviour' ;;
+    bug)            printf '%s' 'Something behaves other than as documented' ;;
+    documentation)  printf '%s' 'Docs, references, and explanatory prose' ;;
+    chore)          printf '%s' 'Maintenance with no behaviour change' ;;
+    tech-debt)      printf '%s' 'Deliberate cleanup of a known compromise' ;;
+    research)       printf '%s' 'Investigation whose output is a decision' ;;
+    infrastructure) printf '%s' 'CI, tooling, and delivery plumbing' ;;
+    *)              printf '%s' 'Work category declared by issue.taxonomy' ;;
+  esac
+}
+
+# spark labels [--apply] [--prune-deprecated] — reconcile the declared issue
+# taxonomy with the labels that actually exist on the remote (#396).
+#
+# Spark declared a seven-category taxonomy, wrote it into every onboarded
+# repo's CONVENTIONS.md, and built governance doctrine on it — but nothing
+# ever created a label, so a fresh repo declared a taxonomy that did not
+# exist. `spark setup` cannot close that: labels live on GitHub, and setup is
+# an offline, create-only, zero-dependency act. So this is its own verb, and
+# it follows the enforcement model exactly — it reports by default and writes
+# only when the operator says --apply.
+#
+# Create-only, like every other Spark artifact: an existing label is the
+# project's own decision and is never recoloured or re-described. Theme labels
+# the taxonomy does not name are not touched at all.
+cmd_labels() {
+  local usage_line="usage: spark labels [--apply] [--prune-deprecated]"
+  local apply=0 prune=0
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --apply) apply=1 ;;
+      --prune-deprecated) prune=1 ;;
+      -h|--help) echo "$usage_line"; return 0 ;;
+      *) red "unknown option: $1"; echo "$usage_line"; return 1 ;;
+    esac
+    shift
+  done
+
+  local root
+  root="$(git_root)"
+  if [ -z "$root" ]; then
+    red "not inside a git repo — nothing to reconcile"
+    return 1
+  fi
+
+  local taxo
+  taxo="$(resolve_issue_taxonomy "$root")"
+  if [ -z "$taxo" ]; then
+    red "could not resolve issue.taxonomy from preferences or CONVENTIONS.md"
+    return 1
+  fi
+
+  echo "Spark labels — $root"
+  echo
+  echo "Declared taxonomy: $taxo"
+  echo
+
+  if ! command -v gh >/dev/null 2>&1 || ! gh auth status >/dev/null 2>&1; then
+    yellow "  ! needs an authenticated gh — not assessed"
+    yellow "    Labels live on GitHub, so this cannot be answered offline. Install and"
+    yellow "    authenticate gh, then re-run: spark labels"
+    return 0
+  fi
+
+  local existing
+  if ! existing="$(gh label list --limit 200 --json name --jq '.[].name' 2>/dev/null)"; then
+    yellow "  ! GitHub unreachable or labels unreadable — not assessed, never assumed healthy"
+    return 0
+  fi
+
+  local cat missing=0 created=0 color desc
+  # Unquoted on purpose: the value is a space-separated token list by schema.
+  for cat in $taxo; do
+    if printf '%s\n' "$existing" | grep -Fxq "$cat"; then
+      echo "  = $cat (exists — kept)"
+      continue
+    fi
+    missing=$((missing + 1))
+    if [ "$apply" -eq 1 ]; then
+      color="$(taxonomy_label_color "$cat")"
+      desc="$(taxonomy_label_desc "$cat")"
+      if gh label create "$cat" --color "$color" --description "$desc" >/dev/null 2>&1; then
+        green "  + $cat (created)"
+        created=$((created + 1))
+      else
+        red "  ✗ $cat — could not be created"
+      fi
+    else
+      yellow "  + $cat (missing)"
+    fi
+  done
+
+  # `enhancement` is GitHub's default label and the deprecated alias for
+  # `feature`. Removing it is destructive and needs proof it carries nothing.
+  local deprecated_present=0
+  printf '%s\n' "$existing" | grep -Fxq "enhancement" && deprecated_present=1
+  if [ "$deprecated_present" -eq 1 ]; then
+    local in_use="?"
+    in_use="$(gh issue list --state all --label enhancement --limit 1 --json number --jq 'length' 2>/dev/null || echo '?')"
+    if [ "$prune" -eq 1 ] && [ "$apply" -eq 1 ] && [ "$in_use" = "0" ]; then
+      if gh label delete enhancement --yes >/dev/null 2>&1; then
+        green "  - enhancement (deprecated alias, carried no issues — deleted)"
+      else
+        red "  ✗ enhancement — could not be deleted"
+      fi
+    elif [ "$prune" -eq 1 ] && [ "$in_use" != "0" ]; then
+      red "  ! enhancement — deprecated alias for 'feature', but issues still carry it."
+      red "    Relabel them first; Spark will not silently drop an issue's category."
+    else
+      yellow "  ! enhancement — deprecated alias for 'feature' (issues carrying it: $in_use)"
+      yellow "    Remove it deliberately with: spark labels --apply --prune-deprecated"
+    fi
+  fi
+
+  echo
+  if [ "$apply" -eq 1 ]; then
+    echo "Labels: $created created, $((${missing} - ${created})) unresolved."
+  elif [ "$missing" -eq 0 ]; then
+    green "Every declared category exists on the remote."
+  else
+    echo "$missing of the declared categories do not exist yet. This is a preview —"
+    echo "nothing was written. Create them with: spark labels --apply"
+  fi
+  return 0
 }
 
 # spark orient [--set new|existing] — the orientation preflight (issue #183,

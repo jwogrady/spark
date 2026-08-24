@@ -151,6 +151,37 @@ the standalone decision explicitly. `setup` and onboarding preserve an
 existing declaration but never choose one — declaring a hub is always the
 human's call.
 
+## `spark labels [--apply] [--prune-deprecated]`
+
+Reconciles the declared issue taxonomy with the labels that actually exist on
+the remote. Spark declares a seven-category taxonomy (`issue.taxonomy`), writes
+it into every onboarded repo's `CONVENTIONS.md`, and builds
+[metadata governance](metadata-governance.md) on top of it — but labels live on
+GitHub, and `setup` is an offline, create-only pass, so provisioning them is
+this verb's job rather than setup's.
+
+The taxonomy resolves through the normal tiers, falling back to the
+`<!-- spark:pref issue.taxonomy=… -->` marker in `CONVENTIONS.md` so a
+collaborator without Spark installed still reads the categories the project
+declares — prose and labels cannot drift apart.
+
+**Reports by default; writes only with `--apply`** — the same shape as every
+other remote-touching capability. Each declared category is reported as
+`= exists, kept` or `+ missing`, and creation is **create-only**: an existing
+label is the project's own decision and is never recoloured or re-described.
+Theme labels the taxonomy does not name (`good first issue`, `help wanted`, …)
+are never touched. A category with no shipped colour gets neutral grey, so
+extending `issue.taxonomy` is always safe.
+
+`enhancement` — GitHub's default label and the deprecated alias for `feature` —
+is reported with the number of issues still carrying it. Deleting it is
+destructive, so it requires both `--apply` and `--prune-deprecated`, **and**
+proof that no issue in any state carries it; otherwise the verb refuses and
+says to relabel first. Spark will not silently drop an issue's category.
+
+Without an authenticated `gh`, or when GitHub is unreachable, the verb reports
+**not assessed** and exits 0 — never "healthy" by assumption.
+
 ## `spark profiles`
 
 Lists the shipped setup profiles — small, flat-JSON sets of project facts

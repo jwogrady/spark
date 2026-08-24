@@ -35,8 +35,16 @@ feature  bug  documentation  chore  tech-debt  research  infrastructure
 Every issue carries exactly one category. `spark doctor` mechanically checks
 that each issue form in `.github/ISSUE_TEMPLATE/` uses a taxonomy category and
 never the deprecated `enhancement` alias, so the forms and the taxonomy cannot
-drift. Theme labels (area, priority `P0`–`P3`) may accompany a category but
+drift; where a repo has no issue forms, doctor says so rather than passing
+silently. Theme labels (area, priority `P0`–`P3`) may accompany a category but
 never replace it.
+
+Declaring the taxonomy is not the same as provisioning it. Labels live on
+GitHub, and `spark setup` is an offline, create-only pass, so
+[`spark labels`](cli.md) is the verb that reconciles the two: it reports the
+missing categories by default and creates them with `--apply`, create-only,
+leaving theme labels untouched. Run it once per repo after setup, or the
+taxonomy this document governs will not exist on the remote it governs.
 
 ## The `backlog` disposition label
 
