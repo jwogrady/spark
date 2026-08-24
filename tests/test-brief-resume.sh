@@ -192,4 +192,68 @@ rc=0; out="$(cd "$repo6" && "$SPARK" brief --short 2>&1)" || rc=$?
 assert_rc "short brief with a stale classification exits 0" 0 "$rc"
 assert_contains "short brief warns about stale orientation" "stale" "$out"
 
+# --- #399: arming a repo is not drift. Onboarding a new project necessarily
+# makes it look like an existing one — the standards docs, the two workflows,
+# the release config and the .spark/ store are precisely the signals the
+# classifier reads as "existing" — so comparing the live verdict against the
+# recorded fact fired on every healthy repo, seconds after setup wrote the
+# files that triggered it. A warning that is always wrong trains operators to
+# ignore it, which is the expensive failure.
+#
+# The fixture holds nothing but Spark's own output: a repo on a feature branch
+# (setup installs the pre-commit hook that blocks trunk commits) carrying only
+# a README, then armed.
+arm_repo() {
+  local dir="$1"
+  mkdir -p "$dir"
+  git -C "$dir" init -q
+  git -C "$dir" symbolic-ref HEAD refs/heads/work
+  printf '# app\n' > "$dir/README.md"
+  ( cd "$dir" && "$SPARK" setup ) >/dev/null 2>&1
+  ( cd "$dir" && "$SPARK" orient --set new ) >/dev/null 2>&1
+  ( cd "$dir" && git add -A && git commit -qm "chore: arm the repo with spark setup" ) >/dev/null 2>&1
+}
+
+repo7="$WORK/armed-new"; arm_repo "$repo7"
+rc=0; out="$(cd "$repo7" && "$SPARK" brief 2>&1)" || rc=$?
+assert_rc "brief on a freshly armed repo exits 0" 0 "$rc"
+case "$out" in
+  *stale*) bad "#399: brief warns stale immediately after setup armed the repo" ;;
+  *) ok ;;
+esac
+rc=0; out="$(cd "$repo7" && "$SPARK" brief --short 2>&1)" || rc=$?
+case "$out" in
+  *stale*) bad "#399: short brief warns stale immediately after setup armed the repo" ;;
+  *) ok ;;
+esac
+# flag-only still holds: nothing was rewritten to make the warning go away
+assert_contains "#399: the recorded fact is untouched" '"project.classification": "new"' \
+  "$(cat "$repo7/.spark/preferences.json")"
+
+# The warning must still fire the day the fact genuinely is stale: a codebase
+# Spark did not create appearing under a "new" classification.
+printf '{"name":"app"}\n' > "$repo7/package.json"
+mkdir -p "$repo7/src"; printf 'console.log(1)\n' > "$repo7/src/index.js"
+( cd "$repo7" && git add -A && git commit -qm "feat: add the application" ) >/dev/null 2>&1
+out="$(cd "$repo7" && "$SPARK" brief 2>&1)" || true
+assert_contains "#399: real source growth is still flagged stale" "stale" "$out"
+out="$(cd "$repo7" && "$SPARK" brief --short 2>&1)" || true
+assert_contains "#399: short brief still flags real source growth" "stale" "$out"
+
+# A CI workflow the operator wrote is drift; the two the standard seeds are not.
+repo8="$WORK/armed-wf"; arm_repo "$repo8"
+out="$(cd "$repo8" && "$SPARK" brief 2>&1)" || true
+case "$out" in *stale*) bad "#399: seeded workflows read as drift" ;; *) ok ;; esac
+printf 'name: deploy\non: [push]\n' > "$repo8/.github/workflows/deploy.yml"
+out="$(cd "$repo8" && "$SPARK" brief 2>&1)" || true
+assert_contains "#399: an operator-authored workflow is drift" "stale" "$out"
+
+# A docs/ tree the operator wrote is drift too.
+repo9="$WORK/armed-docs"; arm_repo "$repo9"
+out="$(cd "$repo9" && "$SPARK" brief 2>&1)" || true
+case "$out" in *stale*) bad "#399: a freshly armed repo reads as drift" ;; *) ok ;; esac
+mkdir -p "$repo9/docs"; printf '# guide\n' > "$repo9/docs/guide.md"
+out="$(cd "$repo9" && "$SPARK" brief 2>&1)" || true
+assert_contains "#399: an operator-authored docs tree is drift" "stale" "$out"
+
 finish
