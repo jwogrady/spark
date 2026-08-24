@@ -196,3 +196,22 @@ When in doubt, ask.
 Credit belongs to the author only. In any author/credit/metadata field, use the
 literal string `jwogrady`. Never credit an AI system (Claude, Anthropic, Copilot,
 ChatGPT, etc.) in any commit message, PR, file header, comment, doc, or manifest.
+
+## Naming
+
+The organization name is written **`Status26`** — one word, capital S, no
+space and no hyphen. In LICENSE files, copyright notices, and filings the legal
+form is `Status26, Inc.`; everywhere else the bare `Status26` is correct.
+
+Never write it spaced or hyphenated. The spaced form gets inferred from the
+`status26.com` domain at exactly the moment someone has to name a copyright
+holder, which is the moment it becomes hard to undo. Genuine identifiers are
+not variants and are left alone: `status26.com`, email addresses, and any
+handle or package that is legitimately lowercase.
+
+This is a repository-level fact, not a Spark one. **Never hard-code it into a
+shipped plugin** — `tests/lib.sh` fails any plugin that names a constellation
+(`cosmos`/`status26`), because Spark ships a reusable discipline, not Status26
+architecture. A downstream project that needs an org name records it as a
+committed project fact, the same as every other preference.
+`tests/test-naming.sh` enforces the spelling here.
