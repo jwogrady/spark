@@ -57,7 +57,10 @@ lane (Codify, stage 3).
 
 ## Guardrails
 
-- One issue per branch, one concern per branch.
+- One issue per branch, one concern per branch. **A sub-issue is an issue** —
+  it gets its own branch and its own PR. A parent issue is a container: it
+  has no branch of its own and closes when its children close
+  ([sdlc-doctrine](../../docs/explanation/sdlc-doctrine.md)).
 - Never guess a stack mid-implementation. If the approach isn't recorded as
   ADRs, the plan isn't Codify-ready — stop and resolve it in `plan`.
 - No commented-out code. No debug prints in library code.

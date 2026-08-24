@@ -36,6 +36,26 @@ the when/why*, not a competing reviewer.
 issue per branch, one concern per PR. Scope creep becomes a new issue, never a
 silent addition.
 
+**A sub-issue is an issue.** Hierarchy is a relation between issues, not a
+different unit, so every rung above applies to a sub-issue unchanged: it gets
+its own branch, its own focused commits, and its own PR. `plan` creates
+sub-issue hierarchies and `metadata-governance` makes them the canonical shape
+of a milestone, so operators reach this question by following the lifecycle as
+designed — the answer is that nothing special happens.
+
+**A parent issue is a container, not a unit of work.** An issue with children
+has no branch and no PR of its own; it closes when its children close. This
+generalizes what [metadata-governance](../reference/metadata-governance.md)
+already says of the release-readiness issue. If a parent carries work that no
+child covers, that work becomes another child — it does not become a quiet
+commit on a parent branch.
+
+**The over-splitting test.** The doctrine's loud failure mode is scope
+collapse, so it is worth naming the opposite one: if a candidate sub-issue
+cannot carry its own acceptance criteria and justify its own PR, it is an
+acceptance criterion on the parent, not a sub-issue. Splitting until every leaf
+is a checklist item buys ceremony, not traceability.
+
 ## Delivery
 
 Canonical delivery is GitHub Flow at the issue level:
