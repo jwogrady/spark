@@ -1823,22 +1823,21 @@ PY
 # that took seven review rounds to close; revisit if a third locator form
 # is ever added.
 #
-# Round 9 also surfaced adversarial shapes deliberately left unfixed — this
-# validates a project fact set from a trusted CLI flag (an operator
-# configuring their own memory hub), not hostile network input, and these
-# require deliberately crafted multi-delimiter strings no accidental typo
-# produces: stray characters between a bracket's "]" and the next real
-# delimiter are silently dropped rather than rejected; a scheme/user segment
-# can carry "?"/"#"/":" that nothing downstream treats as structurally
-# significant; and a second "://" appearing after an already-valid scheme
-# can misparse the host. Fixing the last one fully requires resolving it
+# Round 9 recorded three shapes as deliberately left unfixed; #393 closed the
+# first two, because a malformed hub pointer that every diagnostic surface
+# reports healthy fails late, in whatever workflow first tries to dial it.
+# The scheme is now held to the RFC 3986 grammar rather than merely being
+# non-empty, and a bracketed host's authority must end at "]" or at an
+# optional ":port" instead of having its remainder discarded. What remains
+# open is the third: a second "://" appearing after an already-valid scheme
+# can misparse the host. Fixing that one fully requires resolving it
 # against the opposite failure mode also found in the same round — a
 # legitimate scp path that happens to contain the substring "://"
 # (git@host:backup://old-repo) must not be rejected as a hybrid — which
 # needs a real look-ahead before committing to a URL/scp interpretation,
 # not another patch to whichever branch runs first.
 hub_locator_valid() {
-  local rest scheme host prebracket hostname path pathonly afterat user scphost scppath
+  local rest scheme schemetail host prebracket hostname bracketrest path pathonly afterat user scphost scppath
   case "$1" in
     ''|*[[:space:]]*) return 1 ;;   # empty or whitespace never names a repo
     *[\"\\]*) return 1 ;;           # quotes/backslashes name no repo and would corrupt the flat-JSON write
@@ -1848,6 +1847,12 @@ hub_locator_valid() {
   if [ "$rest" != "$1" ]; then                # a real "://" exists somewhere
     scheme="${1%%://*}"                       # longest match: the earliest "://" wins, so
     case "$scheme" in ''|*/*|*@*) return 1 ;; esac   # empty, or a hybrid straddling shorthand/scp (owner/x://…)
+    # RFC 3986 scheme grammar: ALPHA *( ALPHA / DIGIT / "+" / "-" / "." ).
+    # Non-empty was never enough — "?://host/repo" and "https#://host/repo"
+    # both carry a non-empty scheme string that no resolver can dial (#393).
+    case "$scheme" in [![:alpha:]]*) return 1 ;; esac
+    schemetail="${scheme#?}"
+    case "$schemetail" in *[![:alnum:]+.-]*) return 1 ;; esac
     host="${rest%%[/?#]*}"                     # up to the first "/", "?", or "#" in rest — may still
                                                 # carry userinfo@ and :port, neither of which is a hostname
     case "$host" in
@@ -1874,9 +1879,19 @@ hub_locator_valid() {
             # (non-bracket) host below is protected by construction (it can
             # never hold one, since "host" already stops at the first "/",
             # "?", or "#").
+            bracketrest="${hostname#*]}"           # everything after the closing "]"
             hostname="${hostname#\[}"
             hostname="${hostname%%]*}"
             case "$hostname" in ''|*[/@?#\[]*) return 1 ;; esac
+            # RFC 3986 allows exactly one thing between "]" and the path: an
+            # optional ":port". Discarding the remainder let illegal authority
+            # text ride along unseen ("[::1]junk/team/repo" parsed as a clean
+            # "[::1]" host with a "/team/repo" path) — #393.
+            case "$bracketrest" in
+              '') ;;                               # host ends at the bracket
+              :*) case "${bracketrest#:}" in *[![:digit:]]*) return 1 ;; esac ;;
+              *) return 1 ;;                       # anything else is not authority syntax
+            esac
             ;;
           *) return 1 ;;                       # "[" opened but never closed -> not a real host
         esac
