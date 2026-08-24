@@ -151,7 +151,9 @@ path that can reach the repository:
 | Behavioral tests | Every pull request **to this repository** | Spark's own CI exercises the CLI flows and the local enforcement doors against throwaway repos — this is how Spark tests itself, not a suite added to your project (`preferences --apply` scaffolds *your* stack's validation instead) |
 
 Claude can move quickly because Spark keeps the work inside boundaries you can
-trust.
+trust. The table above is a summary; the doctrine behind it — why three doors,
+and why the remote one is never applied for you — lives in
+[enforcement-model.md](plugins/spark/docs/explanation/enforcement-model.md).
 
 ## Start shipping
 
