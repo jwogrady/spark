@@ -44,6 +44,51 @@ d="$WORK/vendored"; mkdir -p "$d/node_modules/pkg" "$d/dist"
 printf 'x\n' > "$d/node_modules/pkg/index.js"; printf 'y\n' > "$d/dist/bundle.js"
 v="$(verdict "$d")"; [ "$v" = "new" ] && ok || bad "#242 vendored-only: want new (pruned), got '$v'"
 
+# confidence <dir> — the classifier's confidence word for a fixture.
+confidence() {
+  ( cd "$1" && "$SPARK" orient 2>/dev/null ) \
+    | awk '$1=="classification"{gsub(/[()]/,"",$3); print $3}'
+}
+
+# --- #398: a README is present in virtually every repository — GitHub writes
+# one at `repo create` — so it establishes nothing. A greenfield repo whose
+# only tracked file is a README must not read as a high-confidence "existing"
+# project, because that verdict instructs onboard to skip profile selection
+# and the operator then has to override it by hand.
+d="$WORK/readme-only"; mkdir -p "$d"; git -C "$d" init -q
+echo "# proj" > "$d/README.md"
+( cd "$d" && git add . && git commit -qm "chore: initial commit" ) >/dev/null 2>&1
+v="$(verdict "$d")"; [ "$v" = "ambiguous" ] && ok || bad "#398 lone README: want ambiguous, got '$v'"
+out="$(cd "$d" && "$SPARK" orient 2>&1)"
+assert_contains "#398 evidence says the README was not counted" "not counted" "$out"
+assert_contains "#398 evidence publishes the source-file count" "source" "$out"
+[ ! -e "$d/.spark" ] && ok || bad "#398 orient wrote state (must stay read-only)"
+
+# The same repo plus the boilerplate a repo is *created* with is still not a
+# project — LICENSE and .gitignore establish no more than the README does.
+d="$WORK/boilerplate"; mkdir -p "$d"; git -C "$d" init -q
+echo "# proj" > "$d/README.md"; echo "MIT" > "$d/LICENSE"; echo "*.log" > "$d/.gitignore"
+( cd "$d" && git add . && git commit -qm "chore: initial commit" ) >/dev/null 2>&1
+v="$(verdict "$d")"; [ "$v" = "ambiguous" ] && ok || bad "#398 boilerplate-only: want ambiguous, got '$v'"
+
+# One real source file is content, so the verdict becomes existing — but with
+# no manifest, CI, docs tree, or contract it is thin, and must say so.
+d="$WORK/thin-src"; mkdir -p "$d"; git -C "$d" init -q
+echo "# proj" > "$d/README.md"; echo "echo hi" > "$d/run.sh"
+( cd "$d" && git add . && git commit -qm "chore: initial commit" ) >/dev/null 2>&1
+v="$(verdict "$d")"; [ "$v" = "existing" ] && ok || bad "#398 thin source: want existing, got '$v'"
+c="$(confidence "$d")"; [ "$c" = "medium" ] && ok || bad "#398 thin source: want medium confidence, got '$c'"
+
+# A deliberate docs/ tree is somebody's act, unlike a README, so it still
+# counts as a content signal.
+d="$WORK/docs-tree"; mkdir -p "$d/docs"; git -C "$d" init -q
+echo "# proj" > "$d/README.md"; echo "# guide" > "$d/docs/guide.md"
+( cd "$d" && git add . && git commit -qm "chore: initial commit" ) >/dev/null 2>&1
+v="$(verdict "$d")"; [ "$v" = "existing" ] && ok || bad "#398 docs tree: want existing, got '$v'"
+
+# A genuinely established project is unaffected: full evidence still reads high.
+c="$(confidence "$WORK/mature")"; [ "$c" = "high" ] && ok || bad "#398 mature repo: want high confidence, got '$c'"
+
 # --- the report names its evidence and confidence (acceptance criteria)
 out="$(cd "$WORK/mature" && "$SPARK" orient 2>&1)"
 assert_contains "report shows evidence" "Evidence" "$out"
