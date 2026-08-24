@@ -292,6 +292,14 @@ fail the run. The exit is non-zero outside a git repo (no project to carry
 into) and on a mechanical failure — an artifact that could not be written or
 a template missing from the plugin.
 
+Among the artifacts it carries in is a **`.gitattributes`** normalizing text
+to LF, marking common binary types, and pinning shebang scripts to LF and
+Windows scripts to CRLF. A repo without one has no opinion about line endings,
+so the first third-party source carried in — a template, a vendored library,
+anything authored on Windows — makes every `git add` emit a CRLF warning per
+file and bury the output that mattered. It is create-only like everything
+else: a repo that already has one has made its decision.
+
 The machine source carries *what to apply*; the *why* stays in the prose
 standard, [engineering-preferences.md](engineering-preferences.md).
 
