@@ -5,6 +5,11 @@ description: Guide a repository's first run as one narrative — orient, choose 
 
 # onboard — the guided first run
 
+> **onboard or bootstrap?** One question: **is there a runtime to scaffold?**
+> No runtime yet → [`bootstrap`](../bootstrap/SKILL.md) first; it scaffolds one
+> and ends by calling `spark setup`. Runtime already present → `onboard`.
+> `spark orient` prints the answer under **Next**.
+
 Own the *narrative* of a repository's first run. Each motion is a create-only
 CLI verb; you supply the sequencing and stop at every human decision rather
 than defaulting through it. Every step is idempotent — rerunning resumes or
@@ -26,6 +31,11 @@ before the classification fact and setup never refuses over it.
   (choosing a stack profile is a new-project act) and go to SEED — setup only
   adds what is missing and keeps everything else.
 - **`new`** → proceed to PROFILE.
+
+Read orient's **Next** line before continuing: it names the recommended verb
+from the manifest evidence. If it says `bootstrap`, this repo has no runtime —
+scaffold first and come back, rather than arming it now and running `setup`
+twice.
 
 ### 2. PROFILE — choose the standard (new projects)
 Show the shipped options with `spark profiles` and let the operator pick — do
@@ -74,11 +84,14 @@ of where the repo landed.
   safe (ADR-0021).
 - **Stop at every human decision** — ambiguous verdict, profile choice, each `!`
   placeholder. Do not default through a judgment call.
-- Starting a brand-new runtime from nothing? Run [`bootstrap`](../bootstrap/SKILL.md)
-  first; it scaffolds the stack and ends by calling `spark setup`.
+- **Defer recording the verdict to SEED** (`spark orient --set …` after
+  `spark setup`), so a chosen profile lands first. `bootstrap` follows the same
+  order — there is one orient protocol, not two.
 
 ## Fits the lifecycle
 
-`onboard` is the front door: it leaves the repo armed, classified, and briefed,
-ready for `Ideate → Plan → Codify → Validate → Ship`. See
+`onboard` is the front door **for a repo that already has a runtime**; where
+there is none, `bootstrap` is the front door and ends by running this one's
+seed step. Either way the repo lands armed, classified, and briefed, ready for
+`Ideate → Plan → Codify → Validate → Ship`. See
 [../../docs/reference/cli.md](../../docs/reference/cli.md) for the verbs it drives.

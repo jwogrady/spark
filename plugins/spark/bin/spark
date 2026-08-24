@@ -1748,10 +1748,11 @@ cmd_orient() {
     return
   fi
 
-  local ev cls conf k v
+  local ev cls conf manifests_ev k v
   ev="$(classify_repo "$root")"
   cls="$(printf '%s\n' "$ev" | awk -F'\t' '$1=="classification"{print $2}')"
   conf="$(printf '%s\n' "$ev" | awk -F'\t' '$1=="confidence"{print $2}')"
+  manifests_ev="$(printf '%s\n' "$ev" | awk -F'\t' '$1=="manifests"{print $2}')"
 
   echo "Spark orient — $root"
   echo
@@ -1796,6 +1797,35 @@ EOF
     echo
     echo "  Record this as a project fact once confirmed: spark orient --set $cls"
   fi
+
+  # Name the next verb (#400). `onboard` and `bootstrap` both read as the front
+  # door and both end by calling `spark setup`, so an operator choosing between
+  # them had to infer the distinction from a guardrail inside whichever skill
+  # they had already chosen. The question that separates them — is there a
+  # runtime to scaffold? — is answered by evidence orient already holds and
+  # already prints, so orient answers it here rather than leaving it to be
+  # discovered an hour later.
+  echo
+  echo "Next"
+  case "$cls" in
+    existing)
+      echo "  /spark:onboard — arm this repo as it stands. Its runtime and its"
+      echo "  decisions are already here, so there is nothing to scaffold;"
+      echo "  onboard adopts them create-only."
+      ;;
+    *)
+      [ "$cls" = "ambiguous" ] && echo "  Once a human names the verdict:"
+      if [ -z "$manifests_ev" ]; then
+        echo "  /spark:bootstrap — no manifest or lockfile, so no runtime exists yet."
+        echo "  bootstrap scaffolds one and ends by carrying the standard in with"
+        echo "  'spark setup'. Running onboard first only means running setup twice."
+      else
+        echo "  /spark:onboard — a runtime is already here ($manifests_ev), so there is"
+        echo "  nothing to scaffold. onboard arms the repo and records the verdict."
+      fi
+      ;;
+  esac
+  echo "  The question that decides it: is there a runtime to scaffold?"
   return 0
 }
 

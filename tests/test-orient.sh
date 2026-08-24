@@ -89,6 +89,46 @@ v="$(verdict "$d")"; [ "$v" = "existing" ] && ok || bad "#398 docs tree: want ex
 # A genuinely established project is unaffected: full evidence still reads high.
 c="$(confidence "$WORK/mature")"; [ "$c" = "high" ] && ok || bad "#398 mature repo: want high confidence, got '$c'"
 
+# --- #400: onboard and bootstrap both read as the front door and both end by
+# calling `spark setup`, so the operator had to infer which one they were on
+# from a guardrail inside whichever skill they had already chosen. orient
+# already holds the evidence that answers it — is there a runtime to
+# scaffold? — so it names the verb.
+out="$(cd "$WORK/readme-only" && "$SPARK" orient 2>&1)"
+assert_contains "#400 report has a Next section" "Next" "$out"
+assert_contains "#400 no runtime routes to bootstrap" "/spark:bootstrap" "$out"
+assert_contains "#400 names the deciding question" "runtime to scaffold" "$out"
+case "$out" in
+  *"/spark:onboard"*) bad "#400: a runtime-less repo must not be routed to onboard" ;;
+  *) ok ;;
+esac
+
+# A repo that already carries a manifest has nothing to scaffold.
+d="$WORK/has-runtime"; mkdir -p "$d"; git -C "$d" init -q
+echo "# proj" > "$d/README.md"; echo '{"name":"app"}' > "$d/package.json"
+( cd "$d" && git add . && git commit -qm "chore: initial commit" ) >/dev/null 2>&1
+out="$(cd "$d" && "$SPARK" orient 2>&1)"
+assert_contains "#400 an existing runtime routes to onboard" "/spark:onboard" "$out"
+case "$out" in
+  *"/spark:bootstrap"*) bad "#400: a repo with a manifest must not be routed to bootstrap" ;;
+  *) ok ;;
+esac
+
+# An established project is adopted, never scaffolded over.
+out="$(cd "$WORK/mature" && "$SPARK" orient 2>&1)"
+assert_contains "#400 an existing project routes to onboard" "/spark:onboard" "$out"
+case "$out" in
+  *"/spark:bootstrap"*) bad "#400: an existing project must not be routed to bootstrap" ;;
+  *) ok ;;
+esac
+
+# Routing must not leak past the ambiguous stop-and-ask rule.
+out="$(cd "$WORK/readme-only" && "$SPARK" orient 2>&1)"
+assert_contains "#400 ambiguous routing is conditional" "Once a human names the verdict" "$out"
+
+# Naming the next verb is still inspect-only.
+[ ! -e "$WORK/has-runtime/.spark" ] && ok || bad "#400 orient wrote state (must stay read-only)"
+
 # --- the report names its evidence and confidence (acceptance criteria)
 out="$(cd "$WORK/mature" && "$SPARK" orient 2>&1)"
 assert_contains "report shows evidence" "Evidence" "$out"
