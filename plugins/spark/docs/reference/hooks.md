@@ -19,7 +19,7 @@ Defined in `hooks/hooks.json`, fires on Claude Code's `PreToolUse` event for the
 | Blocks | Condition | Allows instead |
 |---|---|---|
 | Force-push | `--force`, `-f` (also inside short-option bundles like `-fu`), or a `+refspec` | `--force-with-lease` |
-| Push to trunk | any push whose refspec *destination* resolves to `master`/`main` — bare names, `HEAD:main`, `feat:master`, `refs/heads/…` forms, and deletes (`:main`) | Push a feature branch |
+| Push to trunk | any push whose refspec *destination* resolves to `master`/`main` — bare names, `HEAD:main`, `feat:master`, `refs/heads/…` forms, and deletes (`:main`) — **except when the push's remote is a wiki** (see below) | Push a feature branch |
 | Hand-cut release | `git tag <name>` (creation forms, including `-a`/`-s`/`-m`), `gh release create`, a push refspec targeting `refs/tags/…` (create, update, or delete), `git push --tags`/`--follow-tags`, or `git update-ref refs/tags/…` — **only when Release Please is configured** (`release-please-config.json` or a `release-please` workflow at the repo root). Non-creating local tag forms (`git tag`, `-l`, `-v`, `-d`) and non-creating `gh release` subcommands stay allowed | Merge the Release Please release PR — that human merge is the release act. Repos without the marker keep the ship skill's manual fallback |
 
 The guard tokenizes the command rather than substring-matching, so it sees
@@ -27,6 +27,17 @@ through leading git options (`git -C <path> push`, `-c k=v`, `--git-dir …`),
 compound commands (`… && git push …`), and full refspecs. Push options that
 take a value (`-o`, `--push-option`, `--repo`, `--receive-pack`, `--exec`)
 are skipped so their arguments are not misread as refspecs.
+
+One destination is exempt from the trunk rule: a **GitHub wiki** repository
+(`<owner>/<repo>.wiki.git`). A wiki has exactly one branch, renders only from
+`master`, and has no pull request mechanism, so "push a feature branch and open
+a PR" is not a remedy that can be performed there — the rule could only ever be
+bypassed. The guard recognizes a wiki either from a literal URL or by resolving
+a named remote (`git remote get-url`, in the `-C` repository when one is given).
+The exemption is keyed on the push's **remote** — git's first positional after
+`push` — and on nothing else, so a wiki-looking string elsewhere in the command
+line cannot relax a trunk push. Force-push and the release rules are unaffected
+on a wiki.
 
 The enforcement boundary, precisely: the guard analyzes the command *text*.
 It cannot know the current branch, so a bare `git push` (no refspec) while

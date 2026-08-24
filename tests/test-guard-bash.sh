@@ -126,5 +126,41 @@ mkdir -p "$wf_repo/.github/workflows"
 deny_in  "$wf_repo" "tag create with RP workflow only"   "git tag v1.0.0"
 deny_in  "$wf_repo" "gh release create with RP workflow" "gh release create v1.0.0"
 
+# --- #397: GitHub wiki repositories render only from `master`, have one
+# branch, and have no pull request mechanism, so the trunk block's remedy
+# cannot be performed. A push whose *remote* is a wiki is allowed; every
+# other protection stays exactly where it was.
+wiki_repo="$(mktemp -d)"
+trap 'rm -rf "$rp_repo" "$plain_repo" "$wf_repo" "$wiki_repo"' EXIT
+git -C "$wiki_repo" init -q
+git -C "$wiki_repo" remote add origin "https://github.com/jwogrady/spark.wiki.git"
+git -C "$wiki_repo" remote add upstream "https://github.com/jwogrady/spark.git"
+
+# The reported case: publishing a wiki from a repo armed by spark setup.
+allow_in "$wiki_repo" "wiki named remote, master"        "git push origin master"
+allow_in "$wiki_repo" "wiki named remote, main"          "git push origin main"
+allow_in "$wiki_repo" "wiki named remote, refspec"       "git push origin HEAD:refs/heads/master"
+allow_in "$wiki_repo" "wiki named remote, -u"            "git push -u origin master"
+# A literal wiki URL needs no repository to resolve against.
+allow "wiki URL literal"                                 "git push https://github.com/jwogrady/spark.wiki.git master"
+allow "wiki URL, scp-style"                              "git push git@github.com:jwogrady/spark.wiki.git master"
+allow "wiki URL with -C"                                 "git -C /some/path push https://github.com/o/r.wiki.git master"
+
+# The relaxation is keyed on the remote alone. A non-wiki remote in the same
+# repository is still blocked, so resolution is per-remote, not per-repo.
+deny_in  "$wiki_repo" "non-wiki remote still blocked"    "git push upstream master"
+# A wiki-looking string anywhere other than the remote must never relax the
+# rule — this is the bypass the pre-scan exists to prevent.
+deny  "wiki string in push-option"                       "git push --push-option=x.wiki.git origin master"
+deny  "wiki string as extra refspec"                     "git push origin master x.wiki.git"
+deny  "wiki string as receive-pack value"                "git push --receive-pack=/x.wiki.git origin master"
+deny  "wiki URL as a later refspec"                      "git push origin master https://h/o/r.wiki.git"
+deny_in "$wiki_repo" "wiki remote does not relax force"  "git push --force origin master"
+# A branch merely *named* like a wiki was never protected and still is not —
+# the classifier reads the remote, not the ref.
+allow "branch named like a wiki"                         "git push origin master.wiki.git"
+# A remote that resolves to a non-wiki URL relaxes nothing.
+deny  "non-wiki origin in this repo"                     "git push origin master"
+
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
