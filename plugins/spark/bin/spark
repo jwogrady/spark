@@ -306,6 +306,15 @@ EOF
     esac
   done
 
+  # Line-ending policy (#401). A repo with no .gitattributes has no opinion
+  # about line endings, so the first carried-in third-party source — a
+  # template, a vendored library, anything authored on Windows — makes every
+  # `git add` emit one CRLF warning per file and bury whatever output the
+  # operator actually ran the command for. It is exactly what the standard
+  # already provisions: small, uncontroversial, wanted by every repo, nobody
+  # remembers it, and painful to retrofit once mixed endings are in history.
+  place_template ".gitattributes" "gitattributes"
+
   # Project-local prose standards (issue #182, ADR-0020): two repo-root docs
   # that make the working contract visible and editable. Create-only like every
   # other artifact — an existing doc is the project's own and is kept, never
@@ -734,6 +743,7 @@ cmd_doctor() {
   fi
   local tmpl tmpl_ok=1
   for tmpl in release-please-config.json release-please-manifest.json release-please.yml \
+              gitattributes \
               ci/validate-python-uv.yml ci/validate-typescript-bun.yml; do
     [ -f "$SPARK_ROOT/preferences/templates/$tmpl" ] \
       || { red "✗ preferences/templates/$tmpl is missing"; errors=$((errors+1)); tmpl_ok=0; }

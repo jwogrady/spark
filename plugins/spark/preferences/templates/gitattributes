@@ -1,0 +1,48 @@
+# Line-ending and binary policy for this repository.
+#
+# Without this file a repo has no opinion about line endings, so the first
+# time third-party source is carried in — a template, a vendored library,
+# anything authored on Windows — every `git add` emits one CRLF warning per
+# file and buries the output that mattered.
+#
+# Normalize text to LF in the repository. Working-copy endings are still the
+# contributor's choice via core.autocrlf; this only fixes what gets committed.
+* text=auto eol=lf
+
+# Files that must never be normalized. Marking them binary also suppresses
+# useless diffs and merge attempts.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.webp  binary
+*.avif  binary
+*.pdf   binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.otf   binary
+*.eot   binary
+*.zip   binary
+*.gz    binary
+*.mp4   binary
+*.mov   binary
+
+# Scripts are executed by their shebang; CRLF breaks them outright.
+*.sh    text eol=lf
+*.bash  text eol=lf
+
+# Windows-native scripts need CRLF to run.
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+
+# Lockfiles are generated; keep them out of diffs and merge conflicts.
+bun.lock        -diff
+package-lock.json -diff
+pnpm-lock.yaml  -diff
+yarn.lock       -diff
+uv.lock         -diff
+poetry.lock     -diff
+Cargo.lock      -diff
+go.sum          -diff
