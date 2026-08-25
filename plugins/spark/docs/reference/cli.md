@@ -80,8 +80,18 @@ it may scaffold, run `setup`, or generate conventions. Bare, it runs an
 the current directory) and prints three things: the **evidence** (git presence,
 commit count, tracked-file count, source-file count, manifests/lockfiles,
 `.github/workflows`, docs, `CLAUDE.md`/`AGENTS.md`, `.spark/`), the **verdict**
-with a confidence word, and a **routing recommendation**. It writes nothing —
-orientation must precede any file creation.
+with a confidence word, a **routing recommendation**, and the **next verb** to
+run. It writes nothing — orientation must precede any file creation.
+
+The **Next** section answers the one question that separates Spark's two front
+doors: *is there a runtime to scaffold?* Both `/spark:onboard` and
+`/spark:bootstrap` end by calling `spark setup`, so choosing wrong costs a
+second `setup` run and a repo history that matches neither documented path.
+orient already holds the deciding evidence — the manifest line — so it names
+the verb: no manifest or lockfile → `bootstrap` (scaffold, then it carries the
+standard in); a manifest already present, or an `existing` verdict → `onboard`
+(arm the repo as it stands). On an `ambiguous` verdict the recommendation is
+stated conditionally, behind the stop-and-ask rule.
 
 Two pieces of evidence are deliberately weighted below the rest. A **README**
 is present in virtually every repository — GitHub writes one at `repo create` —

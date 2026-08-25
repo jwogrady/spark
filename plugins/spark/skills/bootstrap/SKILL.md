@@ -5,6 +5,11 @@ description: Scaffold a new project's runtime — choose frontend/backend and fr
 
 # bootstrap — runtime scaffold
 
+> **bootstrap or onboard?** One question: **is there a runtime to scaffold?**
+> No runtime yet → `bootstrap`; it scaffolds one and ends by calling
+> `spark setup`. Runtime already present → [`onboard`](../onboard/SKILL.md).
+> `spark orient` prints the answer under **Next**.
+
 `bootstrap` stands up a project's runtime by running the stack's **official
 scaffolder** with the right flags — it does not hand-roll a directory tree. A
 scaffold is an implementation artifact: it **materializes a design already
@@ -22,11 +27,13 @@ Concrete per-framework commands and quality-gate defaults live in
 ## Do this
 
 1. **Orient first, then decide the shape.** Before scaffolding anything, run
-   `spark orient`. bootstrap is the *new-project* path: proceed only on a `new`
-   verdict, or on an `ambiguous` one a human explicitly resolves and records
-   with `spark orient --set new`. An `existing` verdict means **stop** —
-   discover the repo's conventions instead of scaffolding over them. Then
-   decide the shape — frontend, backend, or both. If a problem statement from
+   `spark orient` and read its **Next** line. bootstrap is the *no-runtime yet*
+   path: proceed only on a `new` verdict, or on an `ambiguous` one a human
+   explicitly resolves. An `existing` verdict means **stop** — discover the
+   repo's conventions instead of scaffolding over them. Confirm the verdict
+   now but *record* it (`spark orient --set …`) after `spark setup` runs in
+   step 6, the same order [`onboard`](../onboard/SKILL.md) uses — one orient
+   protocol, not two. Then decide the shape — frontend, backend, or both. If a problem statement from
    [`ideate`](../ideate/SKILL.md) exists, infer from it; otherwise ask.
 2. **Pick a framework** for each side (the only real config choice). The
    resolved standard names the default stack — `spark preferences` shows it
