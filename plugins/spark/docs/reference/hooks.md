@@ -131,9 +131,9 @@ The `conservative` preset does not rely on the guard at all: nothing
 push-capable is pre-approved, and every mutating command falls back to Claude
 Code's per-command permission prompt.
 
-What each tier grants, and how a tier is selected, is the `apply-permissions`
-section of [cli.md](cli.md)'s to state — this page covers only why the
-`delivery` allow is safe.
+What each tier grants, and how a tier is selected, belongs to the
+`apply-permissions` section of [cli.md](cli.md); this page covers only why the
+broad `delivery` allow is safe.
 
 ## See also
 
