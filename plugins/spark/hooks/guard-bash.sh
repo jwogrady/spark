@@ -102,6 +102,33 @@ is_tag_dst() {
   esac
 }
 
+# A GitHub wiki repository (<owner>/<repo>.wiki.git) renders only from
+# `master`, has exactly one branch, and has no pull request mechanism at all
+# (#397). The trunk block's remedy — "open a feature branch and a PR" — can
+# therefore never be performed there, so the rule could only ever be
+# bypassed. Recognise the destination instead: a wiki URL given literally,
+# or a named remote that resolves to one.
+is_wiki_url() {
+  case "$1" in
+    *.wiki.git|*.wiki.git/|*.wiki|*.wiki/) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+is_wiki_remote() {
+  local r="$1" url=""
+  is_wiki_url "$r" && return 0
+  # Anything already shaped like a URL or path is not a remote *name*, so it
+  # is judged on its own text alone and never resolved.
+  case "$r" in */*|*:*) return 1 ;; esac
+  if [ -n "$gitc" ]; then
+    url="$(git -C "$gitc" remote get-url -- "$r" 2>/dev/null)" || return 1
+  else
+    url="$(git remote get-url -- "$r" 2>/dev/null)" || return 1
+  fi
+  is_wiki_url "$url"
+}
+
 i=0
 while [ "$i" -lt "$n" ]; do
   t="${tokens[$i]}"
@@ -136,9 +163,13 @@ while [ "$i" -lt "$n" ]; do
   # Skip git's global options to find the subcommand. Options that take a
   # separate argument consume two tokens.
   j=$((i + 1))
+  gitc=""
   while [ "$j" -lt "$n" ]; do
     case "${tokens[$j]}" in
-      -C|-c|--git-dir|--work-tree|--namespace|--exec-path|--super-prefix)
+      # -C names the repository the rest of the invocation acts on, so it is
+      # captured (not merely skipped) to resolve a named remote below.
+      -C) gitc="${tokens[$((j + 1))]:-}"; j=$((j + 2)) ;;
+      -c|--git-dir|--work-tree|--namespace|--exec-path|--super-prefix)
         j=$((j + 2)) ;;
       -*) j=$((j + 1)) ;;
       *) break ;;
@@ -195,6 +226,22 @@ while [ "$i" -lt "$n" ]; do
 
   if [ "${tokens[$j]}" != "push" ]; then i=$((i + 1)); continue; fi
 
+  # Decide up front whether this push is aimed at a wiki, classifying by the
+  # push's *remote* — git's first positional after `push` — and nothing else.
+  # Consulting only that one token is what keeps the relaxation un-smuggleable:
+  # a wiki-looking string anywhere else in the command line is never consulted,
+  # so it cannot turn a trunk push into an allowed one.
+  wiki=0
+  p=$((j + 1))
+  while [ "$p" -lt "$n" ] && [ "${tokens[$p]##*/}" != "git" ]; do
+    case "${tokens[$p]}" in
+      -o|--push-option|--repo|--receive-pack|--exec) p=$((p + 2)); continue ;;
+      -*|+*) p=$((p + 1)); continue ;;
+    esac
+    is_wiki_remote "${tokens[$p]}" && wiki=1
+    break
+  done
+
   # Walk this push invocation's arguments (up to the next `git` token).
   force=0 lease=0
   k=$((j + 1))
@@ -219,7 +266,7 @@ while [ "$i" -lt "$n" ]; do
         # A leading + on a refspec is a per-refspec force push (a
         # --force-with-lease elsewhere in the command still tempers it).
         force=1
-        if is_protected_dst "$a"; then
+        if [ "$wiki" -eq 0 ] && is_protected_dst "$a"; then
           block "pushing to master/main is blocked. Open a feature branch and a PR instead (see the ship skill)."
         fi
         if is_tag_dst "$a" && release_please_configured; then
@@ -228,7 +275,7 @@ while [ "$i" -lt "$n" ]; do
       *)
         # Remote or refspec: block if the destination is a protected branch.
         # (A remote literally named master/main over-blocks — acceptable.)
-        if is_protected_dst "$a"; then
+        if [ "$wiki" -eq 0 ] && is_protected_dst "$a"; then
           block "pushing to master/main is blocked. Open a feature branch and a PR instead (see the ship skill)."
         fi
         if is_tag_dst "$a" && release_please_configured; then
