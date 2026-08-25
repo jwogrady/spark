@@ -61,6 +61,18 @@ BAD_HUB_LOCATORS=(
   "https://github.com?a=1/2" "https://host/?x=y"
   "owner/repo@host:path" "not/a/scheme://host/path" "user@ho#st:path"
   "https://:8080/repo" "https://:/repo" "https://@:8080/repo" "scheme://@/repo" "https://user@/path"
+  # --- #393: a URL-shaped value whose scheme or authority is not merely
+  # non-empty but ungrammatical. #385 checked that each segment held SOME
+  # text; these hold text no resolver can dial. A scheme must start with a
+  # letter and continue in letters/digits/"+"/"-"/"." (RFC 3986), so
+  # "?://" has no scheme at all and "https#://" opens a fragment before the
+  # "://" ever arrives. A bracketed IPv6 host must end at "]" or at an
+  # optional ":port" — stray authority text after the bracket used to be
+  # discarded, so "[::1]junk" was accepted as a clean "[::1]".
+  "https://[::1]junk/team/repo" "?://host/team/repo" "https#://host/team/repo"
+  "https://[::1]:80junk/team/repo" "https://[::1]junk:8080/team/repo"
+  "1https://host/team/repo" "ht?tp://host/team/repo"
+  "https://[::1]@host/team/repo"
 )
 for loc in "${BAD_HUB_LOCATORS[@]}"; do
   rc=0; ( cd "$d" && "$SPARK" hub --set "$loc" ) >/dev/null 2>&1 || rc=$?
@@ -134,6 +146,31 @@ if [ "$rc" -ne 0 ]; then ok; else bad "#385: doctor should fail on a host-only U
 assert_contains "#385: doctor flags it, not healthy" "✗ memory hub" "$out"
 out="$(cd "$d" && "$SPARK" brief 2>&1)" || true
 assert_contains "#385: brief marks it malformed, not healthy" "malformed" "$out"
+
+# --- #393 reproduction: a committed value whose scheme or bracketed
+# authority is ungrammatical must be reported malformed by hub, doctor, and
+# brief — not persisted as project truth and called healthy.
+for badurl in "https://[::1]junk/team/repo" "?://host/team/repo" "https#://host/team/repo"; do
+  d="$WORK/bad393"; rm -rf "$d"; make_repo "$d"
+  mkdir -p "$d/.spark"
+  printf '{"project.memory-hub":"%s"}\n' "$badurl" > "$d/.spark/preferences.json"
+  rc=0; out="$(cd "$d" && "$SPARK" hub 2>&1)" || rc=$?
+  if [ "$rc" -ne 0 ]; then ok; else bad "#393: '$badurl' should exit non-zero, not report healthy"; fi
+  assert_contains "#393: hub names '$badurl' malformed" "malformed" "$out"
+  rc=0; out="$(cd "$d" && "$SPARK" doctor 2>&1)" || rc=$?
+  if [ "$rc" -ne 0 ]; then ok; else bad "#393: doctor should fail on '$badurl'"; fi
+  assert_contains "#393: doctor flags '$badurl'" "✗ memory hub" "$out"
+  out="$(cd "$d" && "$SPARK" brief 2>&1)" || true
+  assert_contains "#393: brief marks '$badurl' malformed" "malformed" "$out"
+done
+
+# --- #393 must not narrow the accepted set: the grammatical scheme and
+# bracketed-authority forms #385 established still resolve.
+d="$WORK/good393"; make_repo "$d"
+for loc in "https://[::1]:8443/team/memory" "https://[2001:db8::1]/team/memory" "https://user@[::1]:8443/team/memory" "git+ssh://host/team/memory" "x-forge.v2://host/team/memory" "https://[::1]/team/memory"; do
+  rc=0; ( cd "$d" && "$SPARK" hub --set "$loc" ) >/dev/null 2>&1 || rc=$?
+  assert_rc "#393: grammatical locator still accepted: $loc" 0 "$rc"
+done
 
 # --- tier provenance: an operator declaration resolves, and project wins
 d="$WORK/tiers"; make_repo "$d"
