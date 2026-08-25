@@ -14,6 +14,22 @@
 > explicitly labeled `(developer-only)` with a full GitHub URL into this repo's
 > dev-only `docs/` tree (never shipped, read only if you're working in this repo).
 
+### ADR-NNNN (Architecture Decision Record)
+
+A dated record of one architectural decision — the context, the choice, and
+what was rejected. Spark's docs and skills cite them (`ADR-0022`, `ADR-0027`)
+to mark a rule as a *recorded decision* rather than a preference, so the
+reasoning behind it can be traced rather than re-argued.
+
+**ADRs are developer-only and do not ship with the plugin.** They live in this
+repository's dev-only `docs/adr/` tree:
+https://github.com/jwogrady/spark/tree/master/docs/adr — read one when you
+want the reasoning; you never need one to use the rule the shipped doc states.
+A citation is provenance, not a prerequisite.
+
+Always written `ADR-NNNN`, four digits, referenced by number rather than
+retitled inline.
+
 ### the three layers (Operator / Project / Session)
 
 Every artifact Spark reads or writes belongs to exactly one layer. **Operator**
