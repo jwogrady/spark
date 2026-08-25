@@ -9,6 +9,20 @@ Keep a Changelog format. Do not hand-edit released sections.
 
 ---
 
+## [0.19.0](https://github.com/jwogrady/spark/compare/v0.18.2...v0.19.0) (2026-08-25)
+
+
+### Features
+
+* hold the shipped/development tier boundary in doctor ([6f011eb](https://github.com/jwogrady/spark/commit/6f011eb022208da50f13ee7ca289991bc758d1b4))
+
+
+### Documentation
+
+* add the pre-merge staleness gate for release PRs ([afd2bef](https://github.com/jwogrady/spark/commit/afd2beffc3950fb70893892e5c38a726f247bab6))
+* document footprint's --root flag ([8db3c97](https://github.com/jwogrady/spark/commit/8db3c97e7d40ccdff5ce34933e8ac9c009562b71))
+* say where ADRs live, so shipped citations resolve ([60a4066](https://github.com/jwogrady/spark/commit/60a40660549ed57c12fecfb07201ad939b39fd2e))
+
 ## [0.18.2](https://github.com/jwogrady/spark/compare/v0.18.1...v0.18.2) (2026-08-25)
 
 
