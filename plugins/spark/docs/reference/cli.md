@@ -78,18 +78,27 @@ The orientation preflight (ADR-0022): Spark's first onboarding decision, before
 it may scaffold, run `setup`, or generate conventions. Bare, it runs an
 **inspect-only** classifier over the repo (the git root when inside one, else
 the current directory) and prints three things: the **evidence** (git presence,
-commit count, tracked-file count, manifests/lockfiles, `.github/workflows`,
-docs, `CLAUDE.md`/`AGENTS.md`, `.spark/`), the **verdict** with a confidence
-word, and a **routing recommendation**. It writes nothing — orientation must
-precede any file creation.
+commit count, tracked-file count, source-file count, manifests/lockfiles,
+`.github/workflows`, docs, `CLAUDE.md`/`AGENTS.md`, `.spark/`), the **verdict**
+with a confidence word, and a **routing recommendation**. It writes nothing —
+orientation must precede any file creation.
+
+Two pieces of evidence are deliberately weighted below the rest. A **README**
+is present in virtually every repository — GitHub writes one at `repo create` —
+so it is reported but never counted as a content signal; a `docs/` tree, which
+somebody had to make, is counted. And the **source** count is the tracked files
+that are not pure repository metadata (`README`, `LICENSE`, `CHANGELOG`,
+`CONTRIBUTING`, `.gitignore`, and the like), so repository boilerplate cannot
+stand in for a codebase. A repo whose commits contain nothing but that
+boilerplate is a repository, not yet a project, and lands in `ambiguous`.
 
 The verdict is one of three bands:
 
 | Band | Meaning | Routing |
 | --- | --- | --- |
 | `new` | No git repo, or a repo with zero commits and none of the artifacts a real project carries | Safe to scaffold — `/spark:bootstrap`, then `spark setup` |
-| `existing` | Real commit history plus tracked source or a project artifact | The repo's decisions are authoritative — discover first, never scaffold; adoption stays create-only |
-| `ambiguous` | Sparse or conflicting signals (content but no version control, or staged content with no commits) | Do not infer authorization — ask a human, then record with `--set` |
+| `existing` | Real commit history plus tracked source or a project artifact (a bare README is neither) | The repo's decisions are authoritative — discover first, never scaffold; adoption stays create-only |
+| `ambiguous` | Sparse or conflicting signals (content but no version control, staged content with no commits, or commits holding only repository boilerplate) | Do not infer authorization — ask a human, then record with `--set` |
 
 `--set new|existing` records the human's decision as a create-only project
 fact — `project.classification` and `project.classified` (ISO date) — in

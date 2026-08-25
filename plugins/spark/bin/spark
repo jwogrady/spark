@@ -1521,7 +1521,9 @@ cmd_brief() {
 # The three bands are LOCKED (ADR-0022):
 #   new       — no git repo, or a git repo with zero commits and none of the
 #               artifacts a real project carries (source, manifest, lockfile,
-#               CI, docs, CLAUDE.md/AGENTS.md, .spark).
+#               CI, a docs/ tree, CLAUDE.md/AGENTS.md, .spark). A bare README
+#               is not one of these: it is present in virtually every
+#               repository and establishes nothing (#398).
 #   existing  — real commit history plus tracked source or a project artifact;
 #               the repo's decisions are authoritative and must be preserved.
 #   ambiguous — sparse or conflicting signals (source present but no version
@@ -1546,8 +1548,17 @@ classify_repo() {
 
   local workflows="absent"
   [ -d "$dir/.github/workflows" ] && workflows="present"
-  local docs="absent"
-  { [ -d "$dir/docs" ] || [ -e "$dir/README.md" ] || [ -e "$dir/README" ]; } && docs="present"
+  # A README is the one file that exists in virtually every repository —
+  # GitHub writes one at `repo create` — so it is close to zero evidence that
+  # a project is established (#398). Report it, but keep it out of the
+  # content signal; a `docs/` tree is somebody's deliberate act and counts.
+  local docs_dir=0 readme=0 docs="absent"
+  [ -d "$dir/docs" ] && docs_dir=1
+  { [ -e "$dir/README.md" ] || [ -e "$dir/README" ]; } && readme=1
+  if [ "$docs_dir" -eq 1 ] && [ "$readme" -eq 1 ]; then docs="docs/ + README"
+  elif [ "$docs_dir" -eq 1 ]; then docs="docs/"
+  elif [ "$readme" -eq 1 ]; then docs="README only (not counted)"
+  fi
   local contracts=""
   [ -e "$dir/CLAUDE.md" ] && contracts="CLAUDE.md"
   [ -e "$dir/AGENTS.md" ] && contracts="${contracts:+$contracts }AGENTS.md"
@@ -1559,7 +1570,7 @@ classify_repo() {
   local content=0
   [ -n "$manifests" ] && content=1
   [ "$workflows" = "present" ] && content=1
-  [ "$docs" = "present" ] && content=1
+  [ "$docs_dir" -eq 1 ] && content=1
   [ -n "$contracts" ] && content=1
   [ "$spark" = "present" ] && content=1
 
@@ -1568,6 +1579,20 @@ classify_repo() {
   # dropped-in codebase reads as conflicting. Search at any depth (source often
   # lives under src/…), but prune dependency/build/cache/VCS trees so vendored
   # or generated contents alone never establish a project (#242).
+  # `tracked` counts every file under version control, including the boilerplate
+  # a repository is created with. Deciding "this project has real content" on
+  # that count alone let a lone README stand in for a codebase (#398), so count
+  # the tracked files that are not pure repository metadata instead.
+  local source_files=0
+  if [ "$git_present" -eq 1 ]; then
+    source_files="$(git -C "$dir" ls-files 2>/dev/null | awk '
+      { n = $0; sub(/^.*\//, "", n) }
+      n ~ /^(README|LICENSE|LICENCE|COPYING|NOTICE|CHANGELOG|CONTRIBUTING|CODE_OF_CONDUCT|AUTHORS)(\..+)?$/ { next }
+      n == ".gitignore" || n == ".gitattributes" || n == ".editorconfig" { next }
+      { c++ }
+      END { print c + 0 }')"
+  fi
+
   local wt_files=0
   if [ "$git_present" -eq 0 ]; then
     wt_files="$(find "$dir" \
@@ -1593,12 +1618,16 @@ classify_repo() {
       classification="ambiguous"; confidence="low"
     fi
   else
-    if [ "$tracked" -gt 0 ] && [ "$content" -eq 1 ]; then
+    if [ "$source_files" -gt 0 ] && [ "$content" -eq 1 ]; then
       classification="existing"; confidence="high"
-    elif [ "$tracked" -gt 0 ] || [ "$content" -eq 1 ]; then
+    elif [ "$source_files" -gt 0 ] || [ "$content" -eq 1 ]; then
       # History plus some content, but thin — real, not clearly established.
       classification="existing"; confidence="medium"
     else
+      # Commits exist, but everything tracked is repository boilerplate. That
+      # is a repository, not yet a project: too thin to call established and
+      # too committed to call new, so Spark asks rather than instructing a
+      # skip the operator then has to override by hand (#398).
       classification="ambiguous"; confidence="low"
     fi
   fi
@@ -1606,6 +1635,7 @@ classify_repo() {
   printf 'git\t%s\n' "$([ "$git_present" -eq 1 ] && echo present || echo absent)"
   printf 'commits\t%s\n' "$commits"
   printf 'tracked\t%s\n' "$tracked"
+  printf 'source\t%s\n' "$source_files"
   printf 'manifests\t%s\n' "$manifests"
   printf 'workflows\t%s\n' "$workflows"
   printf 'docs\t%s\n' "$docs"
