@@ -1848,7 +1848,10 @@ cmd_labels() {
   fi
 
   local existing
-  if ! existing="$(gh label list --limit 200 --json name --jq '.[].name' 2>/dev/null)"; then
+  # --paginate walks every page: a silent truncation would report an existing
+  # category as "+ missing", and under --apply the follow-up create fails on
+  # the duplicate and prints a false "could not be created" error.
+  if ! existing="$(gh api --paginate 'repos/{owner}/{repo}/labels' --jq '.[].name' 2>/dev/null)"; then
     yellow "  ! GitHub unreachable or labels unreadable — not assessed, never assumed healthy"
     return 0
   fi
@@ -1880,9 +1883,26 @@ cmd_labels() {
   local deprecated_present=0
   printf '%s\n' "$existing" | grep -Fxq "enhancement" && deprecated_present=1
   if [ "$deprecated_present" -eq 1 ]; then
-    local in_use="?"
-    in_use="$(gh issue list --state all --label enhancement --limit 1 --json number --jq 'length' 2>/dev/null || echo '?')"
-    if [ "$prune" -eq 1 ] && [ "$apply" -eq 1 ] && [ "$in_use" = "0" ]; then
+    # Count what actually carries the label. `gh issue list --limit 1` can only
+    # ever answer 0 or 1, so it reported "1" for a repo where fifty issues
+    # carry it, contradicting cli.md's promise of "the number of issues".
+    # `search/issues` counts issues AND pull requests in one call — a PR
+    # carrying the label is invisible to `gh issue list`, yet `gh label delete`
+    # strips it from those PRs too, so the gate must see them.
+    local in_use="?" repo_nwo=""
+    repo_nwo="$(gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null || true)"
+    if [ -n "$repo_nwo" ]; then
+      in_use="$(gh api -X GET search/issues \
+        -f q="repo:$repo_nwo label:enhancement" --jq '.total_count' 2>/dev/null || echo '?')"
+    fi
+    case "$in_use" in ''|*[!0-9]*) in_use="?" ;; esac
+    if [ "$in_use" = "?" ]; then
+      # The one function whose stated discipline is "not assessed, never
+      # assumed healthy" must not assert either direction from a failed probe.
+      yellow "  ! enhancement — deprecated alias for 'feature'; whether any issue"
+      yellow "    still carries it could not be assessed, so it is left alone."
+      yellow "    Re-run when GitHub is reachable: spark labels"
+    elif [ "$prune" -eq 1 ] && [ "$apply" -eq 1 ] && [ "$in_use" = "0" ]; then
       if gh label delete enhancement --yes >/dev/null 2>&1; then
         green "  - enhancement (deprecated alias, carried no issues — deleted)"
       else
