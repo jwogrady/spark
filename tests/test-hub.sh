@@ -73,6 +73,14 @@ BAD_HUB_LOCATORS=(
   "https://[::1]:80junk/team/repo" "https://[::1]junk:8080/team/repo"
   "1https://host/team/repo" "ht?tp://host/team/repo"
   "https://[::1]@host/team/repo"
+  # --- code review of the #393 sweep: the scheme half was held to a grammar,
+  # the scp *userinfo* half was not. A ":" there is the dangerous one — git's
+  # scp parser splits at the FIRST colon, so "us:er@host:path" resolves to
+  # host "us" with path "er@host:path", a different destination than the
+  # string appears to name. Passwords are not scp syntax, so a colon in
+  # userinfo is never legitimate; "?" and "#" are reserved and meaningless.
+  "us:er@host:path" "us#er@host:path" "u?ser@host:path"
+  "a:b:c@host:path" "user:@host:path" ":user@host:path"
 )
 for loc in "${BAD_HUB_LOCATORS[@]}"; do
   rc=0; ( cd "$d" && "$SPARK" hub --set "$loc" ) >/dev/null 2>&1 || rc=$?
@@ -167,7 +175,7 @@ done
 # --- #393 must not narrow the accepted set: the grammatical scheme and
 # bracketed-authority forms #385 established still resolve.
 d="$WORK/good393"; make_repo "$d"
-for loc in "https://[::1]:8443/team/memory" "https://[2001:db8::1]/team/memory" "https://user@[::1]:8443/team/memory" "git+ssh://host/team/memory" "x-forge.v2://host/team/memory" "https://[::1]/team/memory"; do
+for loc in "https://[::1]:8443/team/memory" "https://[2001:db8::1]/team/memory" "https://user@[::1]:8443/team/memory" "git+ssh://host/team/memory" "x-forge.v2://host/team/memory" "https://[::1]/team/memory" "git@forge.internal:team/memory.git" "deploy-bot@host:team/repo" "git@[::1]:team/memory.git"; do
   rc=0; ( cd "$d" && "$SPARK" hub --set "$loc" ) >/dev/null 2>&1 || rc=$?
   assert_rc "#393: grammatical locator still accepted: $loc" 0 "$rc"
 done

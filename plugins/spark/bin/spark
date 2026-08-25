@@ -2147,13 +2147,16 @@ PY
 # that took seven review rounds to close; revisit if a third locator form
 # is ever added.
 #
-# Round 9 recorded three shapes as deliberately left unfixed; #393 closed the
-# first two, because a malformed hub pointer that every diagnostic surface
-# reports healthy fails late, in whatever workflow first tries to dial it.
-# The scheme is now held to the RFC 3986 grammar rather than merely being
-# non-empty, and a bracketed host's authority must end at "]" or at an
-# optional ":port" instead of having its remainder discarded. What remains
-# open is the third: a second "://" appearing after an already-valid scheme
+# Round 9 recorded three shapes as deliberately left unfixed, because a
+# malformed hub pointer that every diagnostic surface reports healthy fails
+# late, in whatever workflow first tries to dial it. Two are now closed: the
+# scheme is held to the RFC 3986 grammar rather than merely being non-empty,
+# a bracketed host's authority must end at "]" or at an optional ":port"
+# instead of having its remainder discarded (#393), and reserved punctuation
+# is rejected in BOTH halves of round-9's "scheme/user segment" item — #393
+# fixed only the scheme half, and the userinfo half stayed open until a
+# review of that sweep caught it. What remains open is the third: a second
+# "://" appearing after an already-valid scheme
 # can misparse the host. Fixing that one fully requires resolving it
 # against the opposite failure mode also found in the same round — a
 # legitimate scp path that happens to contain the substring "://"
@@ -2240,7 +2243,14 @@ hub_locator_valid() {
   afterat="${1#*@}"
   if [ "$afterat" != "$1" ]; then              # a real "@" exists somewhere
     user="${1%%@*}"                            # longest match: same leading-empty-segment protection
-    case "$user" in ''|*/*) return 1 ;; esac   # empty, or a hybrid straddling shorthand (owner/repo@host:path)
+    # Empty, a hybrid straddling shorthand (owner/repo@host:path), or reserved
+    # punctuation. A ":" here is the dangerous one: git's scp-syntax parser
+    # splits at the FIRST colon, so "us:er@host:path" resolves to host "us"
+    # with path "er@host:path" — a different destination than the string
+    # appears to name, reported healthy by every diagnostic surface. Passwords
+    # are not part of scp syntax, so a colon in userinfo is never legitimate
+    # here. "?" and "#" are reserved and meaningless in an scp address.
+    case "$user" in ''|*/*|*[:?#]*) return 1 ;; esac
     case "$afterat" in
       \[*\]*)
         # bracketed IPv6 host (git@[::1]:path) — same reasoning as the URL
