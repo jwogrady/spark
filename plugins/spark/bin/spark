@@ -1248,6 +1248,28 @@ cmd_doctor() {
       red "  ✗ progressive disclosure broken:"; printf '%s\n' "$ref_out"; errors=$((errors+1))
     fi
 
+    # Tier boundary (#402-adjacent): what ships vs what stays in the repo.
+    echo
+    echo "Tier boundary (shipped vs development-only):"
+    local tier_out tier_rc=0
+    tier_out="$(check_tier_boundary "$mroot")" || tier_rc=1
+    local tier_hard tier_refs
+    tier_hard="$(printf '%s\n' "$tier_out" | sed -n '/^ISSUEREFS$/q;p')"
+    tier_refs="$(printf '%s\n' "$tier_out" | sed -n '/^ISSUEREFS$/,$p' | sed '1d')"
+    if [ "$tier_rc" -ne 0 ]; then
+      printf '%s\n' "$tier_hard"; errors=$((errors+1))
+    else
+      green "  ✓ no development-only material under plugins/"
+    fi
+    if [ -n "$(printf '%s' "$tier_refs" | tr -d '[:space:]')" ]; then
+      yellow "  ! shipped surfaces cite this repo's issue numbers, which a downstream reader cannot resolve:"
+      printf '%s\n' "$tier_refs"
+      yellow "    Rephrase to name the behaviour, or move the provenance to the repo-root docs/."
+      warnings=$((warnings+1))
+    else
+      green "  ✓ no unresolvable issue references in shipped surfaces"
+    fi
+
   fi
 
   echo
@@ -3057,6 +3079,55 @@ fp_cache_stability() {
 # It does not detect paraphrased inlining; large inlining is bounded separately by
 # the #209 SKILL.md line budget. Echoes one finding per offender; returns 1 if
 # any. Factored out for offline testing.
+# check_tier_boundary <marketplace-root> — hold the line between what ships and
+# what stays in the repo.
+#
+# Spark keeps four tiers: code (plugins/*/), shipped documentation
+# (plugins/*/docs/), development prose and provenance (the repo-root docs/ —
+# ADRs, release records, governance, research), and project management (GitHub
+# plus .spark/state.json). The separation was structural only: repo-root docs/
+# sits outside plugins/, so it cannot ship. Nothing stopped the reverse — a
+# dated decision record filed under plugins/ would ship silently, and a reader
+# who installed the plugin would receive this repo's internal history.
+#
+# Two findings, deliberately different in weight:
+#   error — a dev-only *kind* living under plugins/. Those directory names are
+#           the repo-root docs/ subdirectories that are development-only.
+#   warn  — a bare "#NNN" issue reference in a shipped surface. It resolves to
+#           Spark's own tracker, so a downstream reader cannot follow it. ADR
+#           references are deliberately NOT flagged: they read as shared
+#           vocabulary, and the shipped glossary explains where ADRs live.
+check_tier_boundary() {
+  local mroot="$1" d name findings="" issue_files="" f n
+  for d in "$mroot"/plugins/*/; do
+    [ -d "$d" ] || continue
+    for name in adr releases governance research alpha; do
+      # -type d under any depth: a shipped tree must not carry these kinds.
+      while IFS= read -r hit; do
+        [ -n "$hit" ] || continue
+        findings="${findings}  ✗ ${hit#"$mroot"/} — a development-only kind; it belongs in the repo-root docs/
+"
+      done <<EOF
+$(find "$d" -type d -name "$name" 2>/dev/null)
+EOF
+    done
+  done
+
+  # Shipped surfaces a downstream install actually receives.
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    n="$(grep -oE '#[0-9]{3,}' "$f" 2>/dev/null | wc -l | tr -d ' ')"
+    [ "$n" -gt 0 ] && issue_files="${issue_files}    ${f#"$mroot"/} ($n)
+"
+  done <<EOF
+$(find "$mroot"/plugins/*/docs "$mroot"/plugins/*/skills -name '*.md' 2>/dev/null | sort)
+EOF
+
+  [ -n "$findings" ] && printf '%s' "$findings"
+  [ -n "$issue_files" ] && printf 'ISSUEREFS\n%s' "$issue_files"
+  [ -z "$findings" ]
+}
+
 check_reference_laziness() {
   local root="$1" s refdir ref base rc=0
   # Only clearly-EAGER phrasings — "read all/every references", "read the
