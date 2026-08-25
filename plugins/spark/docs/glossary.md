@@ -68,21 +68,16 @@ conflict. See
 
 ### three-doors enforcement model
 
-Spark enforces the same git-hygiene rules through three independent doors,
-because a git operation can reach the repository by three paths and each door
-sees only one of them. **Door 1 — the PreToolUse guard**
-(`hooks/guard-bash.sh`) covers the Claude-driven path. **Door 2 — the git
-hooks** (`commit-msg`, `pre-commit`, installed via `spark install-git-hooks`)
-cover the human-driven local path. **Door 3 — the GitHub ruleset**
-(`settings/github-ruleset-trunk.json`: PRs required, merges gated on the
-repo's required CI checks, force-push and deletion blocked; applied only by
-an explicit human act, and `spark doctor --requirements` inspects and
-reports drift against the policy's own check contexts) covers everything
-that reaches the remote without running local tooling — API calls, other
-clones, hookless clients. Same intent at every door. Prefer "three doors" over
-"layers" / "gates". See
-[explanation/enforcement-model.md](explanation/enforcement-model.md) for the
-why and [reference/hooks.md](reference/hooks.md) for the per-rule mechanics.
+The name for Spark's enforcement design: the same git-hygiene rules held at
+three independent doors, one per path a git operation can take — **Door 1**,
+the PreToolUse guard (Claude-driven); **Door 2**, the git hooks (human-driven,
+local); **Door 3**, the GitHub ruleset (everything that reaches the remote
+without running local tooling). Same intent at every door.
+
+Always "three doors" — never "layers" or "gates". Number the doors in that
+order. The doctrine itself is stated once in
+[explanation/enforcement-model.md](explanation/enforcement-model.md); per-rule
+mechanics are in [reference/hooks.md](reference/hooks.md).
 
 ### Ideate → Plan → Codify → Validate → Ship
 

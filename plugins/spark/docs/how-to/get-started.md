@@ -187,13 +187,12 @@ the [tutorial](../tutorials/build-your-first-project.md) or go straight to
 `spark setup` fronts three verbs you can also run on their own:
 
 - `spark install-git-hooks` — just the git hooks.
-- `spark apply-permissions` — just the permission baseline. If the project has
-  no `.claude/settings.json`, the baseline is copied in as-is; if one exists,
-  missing rules are appended to `permissions.allow` only after you confirm
-  (`--yes` skips the prompt) — nothing already in the file is changed or
-  removed. Merging needs `jq` or `python3`; without either, the command prints
-  the baseline's path so you can merge by hand. To carry the allowlist across
-  every project, merge the same file into `~/.claude/settings.json` instead.
+- `spark apply-permissions` — just the permission baseline. Existing rules are
+  never changed or removed, so re-running is a no-op once every rule is
+  present. To carry the allowlist across every project, merge the same
+  baseline into `~/.claude/settings.json` instead. The merge behaviour, the
+  two trust tiers, and how a tier resolves are in the `apply-permissions`
+  section of [cli.md](../reference/cli.md).
 - `spark preferences --apply` — just the resolved standard.
 
 The default `delivery` baseline is deliberately narrow: read-only git

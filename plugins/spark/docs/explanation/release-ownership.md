@@ -21,12 +21,18 @@ the branch's commit series already exists — ADR-0027.)
 | Cutting the annotated tag | Opening the focused PR |
 | Creating the GitHub Release | Everything that ends at "PR is open" |
 
-The authority for this boundary is
-[`skills/ship/SKILL.md`](../../skills/ship/SKILL.md)'s "Releases: defer to
-Release Please" section (with the milestone-completion motion in
-[`skills/ship/references/release-please.md`](../../skills/ship/references/release-please.md))
-and the ADRs below; this doc exists so the same boundary holds everywhere
-else it's mentioned.
+**This page is the boundary's one full statement.** Everywhere else states it
+in the shape that surface needs and points here: `ship` carries the
+operational rule it must apply
+([`skills/ship/SKILL.md`](../../skills/ship/SKILL.md)), the
+milestone-completion motion lives in
+[`skills/ship/references/release-please.md`](../../skills/ship/references/release-please.md),
+and the seeded `ENGINEERING-STANDARDS.md` carries the one-line posture a
+downstream repo needs. The version *policy* the table's first row executes is
+likewise stated once, in [`sdlc-doctrine.md`](sdlc-doctrine.md)'s
+"Versioning" section. Keeping one body and
+several pointers is the whole point — these statements drifted apart once
+already, which is what #364 was filed for.
 
 The rule is conditional: it applies wherever a `release-please-config.json`
 (or a `release-please` workflow) exists. A repo without one keeps `ship`'s

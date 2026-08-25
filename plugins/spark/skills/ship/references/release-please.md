@@ -49,15 +49,12 @@ the PR's branch. If the recreated PR proposes a wrong version, the input is
 wrong (missing `Release-As`, a mis-typed commit) — fix the input, not the
 artifact.
 
-## Ownership recap
+## Ownership
 
-| Act | Owner |
-|---|---|
-| Declaring the intended version | the milestone (structure: title + `Release-As`) |
-| Version files, CHANGELOG, tag, GitHub Release | Release Please |
-| Merging the release PR (the release act) | the human |
-| Everything ship does | commit series → push → PR, nothing more |
+The full ownership boundary — what Release Please owns, what `ship` owns, and
+why the human merge is the release act — is stated once in
+[release-ownership.md](../../../docs/explanation/release-ownership.md).
 
-Hand-editing `CHANGELOG.md` or version files in a Release Please repo violates
-the ownership boundary — doctor flags a hand-curated `[Unreleased]` section for
-the same reason.
+The consequence to hold on to while running the motion above: hand-editing
+`CHANGELOG.md` or a version file in a Release Please repo violates that
+boundary, which is why doctor flags a hand-curated `[Unreleased]` section.

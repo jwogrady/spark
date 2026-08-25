@@ -134,25 +134,20 @@ Two flows run through Spark:
 
 ## The three-doors enforcement model
 
-Spark enforces the same git-hygiene rules through **three independent doors**,
-because a git operation can reach the repository by three paths and each door
-sees only one of them:
+The doctrine — why three doors, what each one covers, and why the remote one
+is never applied automatically — is stated once, in
+[`plugins/spark/docs/explanation/enforcement-model.md`](../../plugins/spark/docs/explanation/enforcement-model.md).
+Per-rule mechanics are in
+[`plugins/spark/docs/reference/hooks.md`](../../plugins/spark/docs/reference/hooks.md).
 
-- **Claude-driven door** — the `PreToolUse` guard (`plugins/spark/hooks/hooks.json`
-  → `plugins/spark/hooks/guard-bash.sh`) inspects each `Bash` git command before
-  it runs.
-- **Human-driven door** — the `commit-msg` and `pre-commit` git hooks (installed
-  by `spark setup` or `spark install-git-hooks`) catch git run directly in a
-  shell, where the plugin hook never fires.
-- **Remote door** — a GitHub ruleset on the trunk (policy shipped as
-  `plugins/spark/settings/github-ruleset-trunk.json`: PRs required, merges
-  gated on required CI checks, force-push and deletion blocked; this repo's
-  own contract lives in `.github/spark-trunk-ruleset.json` with its `doctor`
-  and `tests` contexts) backstops every path that never runs local tooling:
-  API calls, other clones, hookless clients. Spark only inspects and reports
-  drift (`spark doctor --requirements` verifies the policy's own check
-  contexts against the effective rules); applying or changing remote policy
-  is always an explicit human act.
+What belongs here is only the part that is specific to *this* repository —
+where each door lives on disk:
+
+| Door | Implementation in this repo |
+|---|---|
+| Claude-driven | `plugins/spark/hooks/hooks.json` → `plugins/spark/hooks/guard-bash.sh` |
+| Human-driven, local | `plugins/spark/scripts/hooks/{commit-msg,pre-commit}`, installed by `spark setup` / `spark install-git-hooks` |
+| Remote | Shipped policy `plugins/spark/settings/github-ruleset-trunk.json`; this repo's own contract is `.github/spark-trunk-ruleset.json`, carrying its `doctor` and `tests` check contexts |
 
 Every door enforces the same intent — blocks force-push and trunk pushes/commits;
 allows `--force-with-lease` locally. The per-rule detail (what each blocks, exit codes,
