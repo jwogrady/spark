@@ -73,6 +73,12 @@ or the issue body) — the label answers "decided?", the reason answers "why?".
 
 ## The release-readiness convention
 
+The scope rules for sub-issues and parents are doctrine, stated once in
+[sdlc-doctrine](../explanation/sdlc-doctrine.md): a sub-issue is an issue (its
+own branch, its own PR) and a parent is a container (no branch, closes when its
+children close). The release-readiness issue below is the canonical instance of
+that parent rule, not an exception to it.
+
 Each milestone has one **release-readiness issue** that doubles as the milestone
 epic:
 

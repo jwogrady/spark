@@ -27,7 +27,11 @@ is documented in the Spark reference `project-standards.md`.
 
 - Branch model `{{branch.model}}`: short-lived feature branches off the trunk;
   never commit to the trunk directly. <!-- spark:pref branch.model={{branch.model}} -->
-- One issue per branch. Name branches by type, with the issue number when
+- One issue per branch — and a **sub-issue is an issue**, so it gets its own
+  branch and its own pull request. An issue with children is a container: no
+  branch of its own, closed when its children close. If a candidate sub-issue
+  cannot justify its own PR, it is an acceptance criterion on the parent.
+- Name branches by type, with the issue number when
   practical: `feat/42-password-reset`, `fix/…`, `docs/…`, `chore/…`.
 - When issue B depends on issue A, start B only from a base that already
   contains A's merged result — merge A's PR first, then branch from the fresh
