@@ -9,6 +9,21 @@ Keep a Changelog format. Do not hand-edit released sections.
 
 ---
 
+## [0.18.2](https://github.com/jwogrady/spark/compare/v0.18.1...v0.18.2) (2026-08-25)
+
+
+### Bug Fixes
+
+* condition the PR-title rule on the repo's merge strategy ([eee833b](https://github.com/jwogrady/spark/commit/eee833b2eb8ed3899d5acd839446d48ac79c4de4))
+* make the labels verb's enhancement probe truthful and complete ([cacfeb7](https://github.com/jwogrady/spark/commit/cacfeb7cd7ea6b213cf5f3c04059265865c5a0d4))
+* reject reserved punctuation in an scp locator's userinfo ([#393](https://github.com/jwogrady/spark/issues/393) follow-up) ([d7baf10](https://github.com/jwogrady/spark/commit/d7baf10a9058ea2f82d6235724447c36c0888b20))
+* resolve a remote name instead of believing it names a wiki ([742070d](https://github.com/jwogrady/spark/commit/742070dae1fc5d8ecb84674e5b27179a761a6de2))
+
+
+### Documentation
+
+* repair the garbled preset-tier pointer in hooks.md ([57e39e8](https://github.com/jwogrady/spark/commit/57e39e820c835876eed2bff415ccecfb264469af))
+
 ## [0.18.1](https://github.com/jwogrady/spark/compare/v0.18.0...v0.18.1) (2026-08-25)
 
 
