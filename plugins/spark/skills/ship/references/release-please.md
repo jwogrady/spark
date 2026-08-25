@@ -49,6 +49,40 @@ the PR's branch. If the recreated PR proposes a wrong version, the input is
 wrong (missing `Release-As`, a mis-typed commit) — fix the input, not the
 artifact.
 
+### Detect it before merging, not after
+
+A release PR carries the notes in **two** places, and they can disagree: the
+PR **body** (which becomes the GitHub Release body) and the PR **diff** (the
+`CHANGELOG.md` change). Release Please regenerates the changelog on every
+relevant push but can leave the body behind. Compare them:
+
+```bash
+body=$(gh pr view <N> --json body --jq .body | grep -c '^\*')
+diff=$(gh pr diff <N> | grep -c '^+\*')
+[ "$body" = "$diff" ] || echo "STALE — close the PR and let it recreate"
+```
+
+Unequal counts mean the body is stale. **Close the PR**; do not merge it and
+do not hand-edit it. Merging a stale one publishes a GitHub Release whose body
+is missing entries while `CHANGELOG.md` has them — the artifact most readers
+see is then the wrong one.
+
+### Read the release-notes check by its finding, not its colour
+
+The advisory `release-notes` status distinguishes two findings, and they carry
+opposite weight:
+
+| Finding | Meaning | Action |
+|---|---|---|
+| **omission** | a changelog-visible commit's subject is absent from the notes | **Blocks.** The notes misrepresent what shipped. Close and recreate. |
+| **duplicate bullet** | one logical change rendered twice | Known and accepted here (see `docs/reference/release-merge-convention.md`). Ship it. |
+
+The word "notes" in that check's message means the **PR body**, not the
+changelog — `release-notes-check.sh --notes` expects the body. Feeding it the
+diff instead produces a false pass, because the diff is exactly the half that
+was *not* stale. A failing status is never disproved by re-running the check
+with different inputs; read what the finding names first.
+
 ## The PR title depends on how PRs land
 
 Release Please reads a commit's subject **and** its body, so whichever of

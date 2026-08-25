@@ -1,5 +1,5 @@
 {
   "next_action": "plan #402 (Spark skill refinery + Rise marketplace export) — the only open issue; needs /spark:plan and its own milestone",
-  "blockers": "repo setting still pending from #372: Settings → Pull Requests → merge commit default message = 'Default message', not 'Pull request title' — until then every merge doubles its release-note entry",
-  "updated": "2026-08-24"
+  "blockers": "",
+  "updated": "2026-08-25"
 }

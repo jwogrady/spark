@@ -170,6 +170,36 @@ duplicates (collapsing differently-worded entries would risk false positives
 on genuinely distinct changes that happen to read similarly), so they reach
 the changelog as extra, not-technically-duplicate bullets.
 
+## v0.18.2: an omission, and the one release body corrected
+
+v0.18.2 shipped with its GitHub Release body listing **four of five** changes
+while `CHANGELOG.md` carried all five. This is a different defect from the
+duplication above, and it was handled differently.
+
+Cause: the release PR's **body** was stale relative to its **diff**. Release
+Please had regenerated `CHANGELOG.md` after the last fix merged but had not
+rewritten the PR body, which is what becomes the Release body — the documented
+[stale release-PR trap](../../plugins/spark/skills/ship/references/release-please.md).
+The `release-notes` advisory check reported it correctly as an
+`omission`. It was overridden: the message's phrase "absent from the notes"
+was misread as referring to the changelog, and the check was then "disproved"
+by re-running it with the PR *diff* as `--notes` — the half that was not
+stale — which produced a false pass. Four rapid merges had also raced two
+duplicate release PRs into existence, and the stale one was the one merged.
+
+Remediation, decided deliberately: **the Release body was synced from
+`CHANGELOG.md`'s `0.18.2` section**, verified beforehand as a one-line diff
+and afterwards as content-identical. This departs from the never-hand-edit
+rule above, on the reasoning that an omission is not cosmetic — it understates
+what shipped, and the Release page is what most readers see. The edit copied
+the canonical section verbatim rather than composing anything, so it reduces
+the divergence between two artifacts instead of creating a third opinion.
+
+The distinction now stands as policy: **a duplicate bullet ships** (cosmetic,
+overstates a count), **an omission does not** (misrepresents the release).
+Detection before merging, and how to read the check's findings, are in the
+ship reference linked above.
+
 ## Related docs
 
 - [`plugins/spark/docs/explanation/release-ownership.md`](../../plugins/spark/docs/explanation/release-ownership.md) — the shipped ownership model this doc extends for one repo-operations fact.
