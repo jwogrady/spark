@@ -162,5 +162,16 @@ allow "branch named like a wiki"                         "git push origin master
 # A remote that resolves to a non-wiki URL relaxes nothing.
 deny  "non-wiki origin in this repo"                     "git push origin master"
 
+# A remote NAME that merely looks like a wiki must not be believed: the name is
+# resolved to a URL, never trusted as one. Testing the name first was an
+# under-block — `git push evil.wiki master` reached the trunk repo unblocked —
+# and this hook's contract is that ambiguity can over-block, never bypass.
+git -C "$wiki_repo" remote add evil.wiki "https://github.com/jwogrady/spark.git"
+git -C "$wiki_repo" remote add evil.wiki.git "https://github.com/jwogrady/spark.git"
+deny_in "$wiki_repo" "remote NAMED *.wiki is resolved"   "git push evil.wiki master"
+deny_in "$wiki_repo" "remote NAMED *.wiki.git resolved"  "git push evil.wiki.git master"
+# The genuine wiki remote in the same repo is unaffected by that resolution.
+allow_in "$wiki_repo" "real wiki remote still exempt"    "git push origin master"
+
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

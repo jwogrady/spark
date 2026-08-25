@@ -117,10 +117,17 @@ is_wiki_url() {
 
 is_wiki_remote() {
   local r="$1" url=""
-  is_wiki_url "$r" && return 0
-  # Anything already shaped like a URL or path is not a remote *name*, so it
-  # is judged on its own text alone and never resolved.
-  case "$r" in */*|*:*) return 1 ;; esac
+  # Judge a value on its own text ONLY when it actually looks like a URL or a
+  # path. A bare remote *name* is never trusted to describe its destination:
+  # testing the name first let `git push evil.wiki master` through, because
+  # the name matched "*.wiki" and the URL was never resolved — a remote named
+  # after a wiki but pointing at the trunk repo relaxed the trunk block. That
+  # is an under-block, which this hook's tokenizer contract forbids ("can only
+  # cause an over-block, never a bypass"), so the name always gets resolved.
+  case "$r" in
+    */*|*:*) is_wiki_url "$r" && return 0
+             return 1 ;;
+  esac
   if [ -n "$gitc" ]; then
     url="$(git -C "$gitc" remote get-url -- "$r" 2>/dev/null)" || return 1
   else

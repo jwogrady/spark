@@ -32,11 +32,13 @@ One destination is exempt from the trunk rule: a **GitHub wiki** repository
 (`<owner>/<repo>.wiki.git`). A wiki has exactly one branch, renders only from
 `master`, and has no pull request mechanism, so "push a feature branch and open
 a PR" is not a remedy that can be performed there — the rule could only ever be
-bypassed. The guard recognizes a wiki either from a literal URL or by resolving
-a named remote (`git remote get-url`, in the `-C` repository when one is given).
-The exemption is keyed on the push's **remote** — git's first positional after
-`push` — and on nothing else, so a wiki-looking string elsewhere in the command
-line cannot relax a trunk push. Force-push and the release rules are unaffected
+bypassed. The guard recognizes a wiki from a literal URL or path; a bare remote
+**name** is always resolved (`git remote get-url`, in the `-C` repository when
+one is given) rather than believed, so a remote merely *named* `x.wiki` while
+pointing at the trunk repo does not relax anything. The exemption is keyed on
+the push's **remote** — git's first positional after `push` — and on nothing
+else, so a wiki-looking string elsewhere in the command line cannot relax a
+trunk push. Force-push and the release rules are unaffected
 on a wiki.
 
 The enforcement boundary, precisely: the guard analyzes the command *text*.
@@ -129,9 +131,9 @@ The `conservative` preset does not rely on the guard at all: nothing
 push-capable is pre-approved, and every mutating command falls back to Claude
 Code's per-command permission prompt.
 
-What each tier grants, and how a tier is selected, is the `apply-permissions`
-section of [cli.md](cli.md)'s to state — this page covers only why the
-`delivery` allow is safe.
+What each tier grants, and how a tier is selected, belongs to the
+`apply-permissions` section of [cli.md](cli.md); this page covers only why the
+broad `delivery` allow is safe.
 
 ## See also
 
