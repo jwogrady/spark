@@ -402,16 +402,30 @@ SKILL_DESC_MAX_CHARS=1024
 # Total context-footprint budgets (#292; advisory since #361) — the aggregate
 # view the per-file budgets above cannot catch: a dozen small additions grow
 # the whole without tripping any one file. Doctor WARNS over these lines; the
-# hard per-file budgets above still gate. Re-based above the v0.17 measurement
-# (marketplace ≈137.2 KB, largest plugin ≈93.2 KB) after the provenance-
-# promotion milestone deliberately grew the lazy references/ layer — the
-# memory-hub fact and verb docs (#375) and the knowledge skill's hub-promotion
-# lane (#376, ADR-0028) — while the always-loaded surfaces stayed inside their
-# per-file budgets. Bytes (FOOTPRINT_CPT converts to tokens); env-overridable
-# so tests can force the over-budget path. Assessed only in the Spark
-# marketplace repo.
-FOOTPRINT_MARKETPLACE_MAX_BYTES="${FOOTPRINT_MARKETPLACE_MAX_BYTES:-141000}"
-FOOTPRINT_PLUGIN_MAX_BYTES="${FOOTPRINT_PLUGIN_MAX_BYTES:-97000}"
+# hard per-file budgets above still gate. Bytes (FOOTPRINT_CPT converts to
+# tokens); env-overridable so tests can force the over-budget path. Assessed
+# only in the Spark marketplace repo.
+#
+# Re-based twice, each time above a measured reality and each time for lazy
+# references/ growth rather than always-loaded growth:
+#
+#   v0.17 (marketplace ≈137.2 KB, largest plugin ≈93.2 KB) — the provenance-
+#     promotion milestone grew the lazy references/ layer: the memory-hub fact
+#     and verb docs (#375) and the knowledge skill's hub-promotion lane
+#     (#376, ADR-0028).
+#   v0.18 (marketplace ≈142.3 KB, largest plugin ≈98.3 KB) — the release-notes
+#     work grew ship/references/: the merge-strategy-conditional PR-title rule
+#     and the pre-merge staleness gate, which exist because getting either
+#     wrong silently omits a change from the changelog (#372). Doctor's
+#     "Reference laziness" check confirms nothing eager-loads these, so the
+#     real per-session cost is far below what this aggregate counts — it
+#     charges every reference file as though always loaded, deliberately, as
+#     the conservative bound.
+#
+# Both re-bases keep roughly the prior headroom (~4% plugin, ~3% marketplace)
+# so the ratchet still catches unexamined drift rather than merely trailing it.
+FOOTPRINT_MARKETPLACE_MAX_BYTES="${FOOTPRINT_MARKETPLACE_MAX_BYTES:-146000}"
+FOOTPRINT_PLUGIN_MAX_BYTES="${FOOTPRINT_PLUGIN_MAX_BYTES:-102000}"
 
 # Latency budgets (#213) — generous wall-clock ceilings for the three hot paths,
 # in milliseconds: the guard hook (every Bash call), the SessionStart brief
