@@ -372,7 +372,7 @@ The file is created on first write; a write migrates a legacy-schema file to
 the current key set. This is the mechanical writer the lifecycle skills call
 at each stage's close-out. Exits 1 outside a git repo.
 
-## `spark footprint [--json] [--timing]`
+## `spark footprint [--json] [--timing] [--root <marketplace-dir>]`
 
 Measures Spark's context footprint — the bytes each always-loaded surface
 (marketplace catalog, skill descriptions, hook output) costs a session — and
@@ -382,6 +382,16 @@ guard, `brief --short`) against their budgets and exits non-zero when one is
 exceeded. Doctor itself runs no timing — the aggregate context-footprint
 total it reports is advisory (warn-only), and this gate is the only latency
 enforcement.
+
+`--root <dir>` measures a different checkout instead of the installed one,
+treating its argument as a marketplace root and measuring every `<dir>/plugins/*/`
+it finds (falling back to `<dir>` itself when there are none). It exits
+non-zero if the directory does not exist. With no `--root`, the installed
+marketplace is measured — or the core plugin alone when Spark is installed
+standalone. The flag exists so the budget ratchet can be exercised against a
+fixture layout of known sizes, which is how `tests/test-footprint.sh` and
+`tests/test-footprint-budget.sh` use it; it is not needed for ordinary
+reporting.
 
 ## `spark version`
 
