@@ -46,18 +46,65 @@ through `codify`/`validate` are *for*. Squashing would remove exactly the
 history the branch was built to preserve.
 
 The fix is therefore to stop the merge commit's own message from containing a
-second conventional-shaped line: change this repository's **GitHub Settings →
-General → Pull Requests → "Allow merge commits" → default commit message**
-from **"Pull request title"** to **"Default message"** (blank/generic body).
-That is a repository setting Spark's own guardrails do not let an agent change
-unattended (`AGENTS.md`: "never change repository settings... applying policy
-is the human's"), so it is recorded here as the pending human action rather
-than applied.
+second conventional-shaped line. That means a **classic subject with a blank
+body**, and reaching it is less obvious than it looks.
 
-**Status: pending.** Until the setting changes, the new duplicate-detection
-check is what stands between a doubled entry and a published release — it
-will fail the advisory check and require reconciliation before a human
-approves the release PR, rather than letting the pattern repeat silently.
+### Correction: the UI cannot express the fix
+
+An earlier revision of this doc said to change **GitHub Settings → General →
+Pull Requests → "Allow merge commits" → default commit message** from
+**"Pull request title"** to **"Default message"**. That is backwards. It was
+repeated verbatim while releasing v0.18.0 and only caught by reading the live
+settings, which are, and have been:
+
+```
+$ gh api repos/jwogrady/spark --jq '{merge_commit_title,merge_commit_message}'
+{"merge_commit_title":"MERGE_MESSAGE","merge_commit_message":"PR_TITLE"}
+```
+
+That pair **is** "Default message" — the repository was already on the option
+this doc recommended switching to, because GitHub's classic merge commit has
+always been a `Merge pull request #N from branch` subject with the PR title as
+its body. The recommended change was therefore a no-op, and the body carrying
+a conventional subject is exactly the cause.
+
+The dropdown offers three options and **none of them fix this**:
+
+| UI option | Subject (`merge_commit_title`) | Body (`merge_commit_message`) | Duplicates? |
+|---|---|---|---|
+| **Default message** | `MERGE_MESSAGE` — `Merge pull request #N…` | `PR_TITLE` | **Yes** — the body is a second conventional commit |
+| Pull request title | `PR_TITLE` | `BLANK` | **Yes** — now the *subject* is the conventional commit |
+| Pull request title and description | `PR_TITLE` | `PR_BODY` | **Yes** — subject, plus a body that may carry footers |
+
+The state that actually fixes it — classic subject, blank body — is not one of
+the three, so it cannot be set from the settings page. It has to go through the
+REST API:
+
+```
+gh api -X PATCH repos/jwogrady/spark \
+  -f merge_commit_title=MERGE_MESSAGE \
+  -f merge_commit_message=BLANK
+```
+
+The resulting merge commit is `Merge pull request #N from branch` with nothing
+after it. Release Please does not classify it as releasable, so each logical
+change appears exactly once.
+
+This is still a repository setting, which Spark's own guardrails do not let an
+agent change unattended (`AGENTS.md`: "never change repository settings…
+applying policy is the human's"), so it stays recorded here as the pending
+human action rather than applied.
+
+**Status: pending.** Until the setting changes, the duplicate-detection check
+is what stands between a doubled entry and a published release — it will fail
+the advisory check and require reconciliation before a human approves the
+release PR, rather than letting the pattern repeat silently. It did exactly
+that on the v0.18.0 release PR (#392), which shipped with every entry doubled;
+see the note below.
+
+Changing the setting only affects **future** merges. A merge commit's message
+is immutable once written, so no setting change can retroactively clean a
+release whose commits are already on the trunk.
 
 ## Live confirmation against the actual v0.17.0 release PR
 
@@ -83,9 +130,10 @@ entries would risk false positives on genuinely distinct changes that happen
 to read similarly), so this pattern reaches the published changelog as extra,
 not-technically-duplicate entries. It has the same root cause as the exact
 case above and the same pending fix; closing it further would mean either the
-GitHub setting change (this doc's recommendation) or discipline going
-forward: write the branch's lead commit subject and the PR title to match,
-so the merge commit's body restates rather than adds.
+API-only setting change (see the correction above — the settings-page dropdown
+cannot express it) or discipline going forward: write the branch's lead commit
+subject and the PR title to match, so the merge commit's body restates rather
+than adds.
 
 ## Historical notes: not corrected
 
@@ -111,6 +159,20 @@ regenerates it, which further work on this milestone guarantees will happen
 at least once more. The `release-notes` advisory check surfaces the known
 duplicate to whoever merges the release PR; that visibility, not a clean
 render, is what the check is for.
+
+v0.18.0 is the largest instance so far, and is likewise left uncorrected. The
+#403-#414 sweep put ten one-commit branches on the trunk through true merge
+commits, so every entry in the `0.18.0` section appears exactly twice — once
+for the branch commit, once for its merge commit's body. The `release-notes`
+check failed on PR #392 as designed, the duplication was surfaced to the human
+merging it, and the release shipped on that informed decision. The same two
+reasons as above apply: the generated section is Release Please's to write, and
+the commits producing it are immutable.
+
+The lesson worth carrying: a one-commit branch merged with a merge commit
+produces an *exact* duplicate pair, which is the most visible form of this bug.
+Until the API-level setting change lands, expect the check to fail on any
+release built that way.
 
 ## Related docs
 
