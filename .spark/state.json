@@ -1,5 +1,5 @@
 {
-  "next_action": "ship fix/385-hub-locator-validation as the PR closing #385",
-  "blockers": "",
-  "updated": "2026-08-12"
+  "next_action": "review and merge the #403–#412 stack in order, then merge the Release Please PR to cut the release",
+  "blockers": "none — the stack is green and awaiting human review; the release act is John's merge, deliberately not taken",
+  "updated": "2026-08-24"
 }
