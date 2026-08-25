@@ -9,6 +9,17 @@ Keep a Changelog format. Do not hand-edit released sections.
 
 ---
 
+## [0.18.1](https://github.com/jwogrady/spark/compare/v0.18.0...v0.18.1) (2026-08-25)
+
+
+### Documentation
+
+* adopt plain PR titles as the fix for doubled release notes ([d749f2e](https://github.com/jwogrady/spark/commit/d749f2ea8edae76f25e49ea5d50407342d69a7e1))
+* correct the merge-commit setting fix, which the UI cannot express ([fe9c303](https://github.com/jwogrady/spark/commit/fe9c3031d04fdfaf1d75c105bb8a529269063c9b))
+* correct the merge-commit setting fix, which the UI cannot express ([ea37148](https://github.com/jwogrady/spark/commit/ea37148951196d73feb7f9ca03744a15babaf59b))
+* record that no merge-commit setting fixes the note duplication ([7d0c201](https://github.com/jwogrady/spark/commit/7d0c201ff9727cb9e4e516ad5012474354001c4f))
+* record that no merge-commit setting fixes the note duplication ([77d61bd](https://github.com/jwogrady/spark/commit/77d61bd23e26fb2d7a32f0a4555b3902939e4421))
+
 ## [0.18.0](https://github.com/jwogrady/spark/compare/v0.17.0...v0.18.0) (2026-08-25)
 
 

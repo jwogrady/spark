@@ -1,5 +1,5 @@
 {
-  ".": "0.18.0",
+  ".": "0.18.1",
   "plugins/spark-audit": "0.2.2",
   "plugins/spark-connect": "0.2.2",
   "plugins/spark-docs": "0.3.1"
