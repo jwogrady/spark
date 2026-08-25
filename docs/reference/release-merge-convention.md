@@ -20,6 +20,15 @@ A conventional-shaped PR title puts the same change in the release notes
 twice. A plain one does not. Everything below is why, and why nothing else
 works.
 
+**This rule is specific to merge commits, which is how this repository lands
+PRs.** It inverts under squash-merging: `squash_merge_commit_title:
+COMMIT_OR_PR_TITLE` makes the PR title the *trunk subject* on any multi-commit
+branch, so a plain title there means Release Please finds nothing releasable
+and the change is silently omitted from the changelog with no version bump —
+a worse failure than duplication. The shipped `ship` skill states the
+conditional form for both strategies; see
+[`skills/ship/references/release-please.md`](../../plugins/spark/skills/ship/references/release-please.md).
+
 ## The mechanism
 
 Release Please reads a commit's **subject and its body**. This repository's
