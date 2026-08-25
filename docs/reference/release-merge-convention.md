@@ -76,35 +76,91 @@ The dropdown offers three options and **none of them fix this**:
 | Pull request title | `PR_TITLE` | `BLANK` | **Yes** — now the *subject* is the conventional commit |
 | Pull request title and description | `PR_TITLE` | `PR_BODY` | **Yes** — subject, plus a body that may carry footers |
 
-The state that actually fixes it — classic subject, blank body — is not one of
-the three, so it cannot be set from the settings page. It has to go through the
-REST API:
+### Correction, second pass: there is no valid setting that fixes it
+
+The revision above proposed reaching a classic subject with a blank body
+(`MERGE_MESSAGE` + `BLANK`) through the REST API, since the settings page
+offers only three combinations. **GitHub rejects that combination.** Tried
+directly:
 
 ```
-gh api -X PATCH repos/jwogrady/spark \
-  -f merge_commit_title=MERGE_MESSAGE \
-  -f merge_commit_message=BLANK
+$ gh api -X PATCH repos/jwogrady/spark \
+    -f merge_commit_title=MERGE_MESSAGE -f merge_commit_message=BLANK
+{
+  "message": "Validation Failed",
+  "errors": [{
+    "message": "Sorry, invalid setting combination. The following are valid
+      combinations for the merge commit title and message: PR_TITLE and
+      PR_BODY, PR_TITLE and BLANK, MERGE_MESSAGE and PR_TITLE.
+      (invalid_merge_commit_setting_combo)",
+    "code": "invalid"
+  }],
+  "status": "422"
+}
 ```
 
-The resulting merge commit is `Merge pull request #N from branch` with nothing
-after it. Release Please does not classify it as releasable, so each logical
-change appears exactly once.
+So the three UI options are not a subset of what the API allows — they are
+**exactly** what the API allows. There is no fourth state to reach.
 
-This is still a repository setting, which Spark's own guardrails do not let an
-agent change unattended (`AGENTS.md`: "never change repository settings…
-applying policy is the human's"), so it stays recorded here as the pending
-human action rather than applied.
+That settles the question the two previous revisions kept getting wrong. Walk
+all three permitted combinations against a conventional PR title:
 
-**Status: pending.** Until the setting changes, the duplicate-detection check
-is what stands between a doubled entry and a published release — it will fail
-the advisory check and require reconciliation before a human approves the
-release PR, rather than letting the pattern repeat silently. It did exactly
-that on the v0.18.0 release PR (#392), which shipped with every entry doubled;
-see the note below.
+| `merge_commit_title` | `merge_commit_message` | Merge commit contains | Duplicates? |
+|---|---|---|---|
+| `MERGE_MESSAGE` (current) | `PR_TITLE` | conventional line in the **body** | **Yes** |
+| `PR_TITLE` | `BLANK` | conventional line in the **subject** | **Yes** |
+| `PR_TITLE` | `PR_BODY` | conventional **subject** + a body that may carry footers | **Yes** |
 
-Changing the setting only affects **future** merges. A merge commit's message
-is immutable once written, so no setting change can retroactively clean a
-release whose commits are already on the trunk.
+Every one duplicates, because Release Please reads both a commit's subject and
+its body. Verified against this repo's own history:
+
+```
+$ git log -1 --format='%s' 5d7d4b7
+Merge pull request #403 from jwogrady/fix/393-hub-locator-grammar
+$ git log -1 --format='%b' 5d7d4b7
+fix: validate the whole hub locator scheme and authority (#393)
+```
+
+`5d7d4b7` carries a non-conventional *subject*, and Release Please still gave
+it its own `0.18.0` changelog entry — from the body alone.
+
+**The controlling variable is therefore not the setting. It is whether the PR
+title is conventional-shaped.** No repository setting can help, because all
+three permitted combinations put the PR title somewhere Release Please looks.
+
+Nothing currently requires a conventional PR title: `ship/SKILL.md` does not
+specify one, no workflow lints it, and the `commit-msg` hook governs commits,
+not pull requests. The convention arose only because a PR is conventionally
+titled from its lead commit's subject. That makes it changeable — but changing
+it is a convention decision, not a bug fix, and it is recorded below as open
+rather than decided here.
+
+### Status: open, and not a setting change
+
+The duplicate-detection check is what stands between a doubled entry and a
+published release — it fails the advisory check and requires reconciliation
+before a human approves the release PR, rather than letting the pattern repeat
+silently. It did exactly that on the v0.18.0 release PR (#392), which shipped
+with every entry doubled.
+
+The options that remain are all conventions, not settings:
+
+1. **Non-conventional PR titles.** Keep merge commits and the current setting;
+   title PRs without a conventional prefix (`Harden hub locator validation
+   (#393)`). The merge commit body stops parsing as a commit and the duplicate
+   disappears. Costs nothing structurally; relies on discipline, since nothing
+   enforces PR titles.
+2. **Squash-merge.** One conventional commit per PR, no duplication at all.
+   Rejected earlier for flattening the focused commit series — though note it
+   is *lossless* for a single-commit branch, which is what most of the
+   #403-#414 sweep consisted of. A split rule (squash single-commit branches,
+   merge-commit multi-commit ones) would be a narrower version of this.
+3. **Accept it.** The duplication overstates the change count; it does not
+   misrepresent what shipped. The check keeps it visible at release time.
+
+Whichever is chosen affects **future** merges only. A merge commit's message is
+immutable once written, so nothing can retroactively clean a release whose
+commits are already on the trunk.
 
 ## Live confirmation against the actual v0.17.0 release PR
 
@@ -129,11 +185,12 @@ correctly does not flag these as duplicates (collapsing differently-worded
 entries would risk false positives on genuinely distinct changes that happen
 to read similarly), so this pattern reaches the published changelog as extra,
 not-technically-duplicate entries. It has the same root cause as the exact
-case above and the same pending fix; closing it further would mean either the
-API-only setting change (see the correction above — the settings-page dropdown
-cannot express it) or discipline going forward: write the branch's lead commit
-subject and the PR title to match, so the merge commit's body restates rather
-than adds.
+case above, and no setting closes either one (see the second correction above).
+Note that the discipline an earlier revision suggested here — writing the
+branch's lead commit subject and the PR title to *match* — makes this strictly
+worse, not better: matching texts produce an **exact** duplicate pair rather
+than two differently-worded entries. Only a non-conventional PR title, or
+squashing, removes the second entry.
 
 ## Historical notes: not corrected
 
