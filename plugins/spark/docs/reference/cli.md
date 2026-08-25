@@ -281,7 +281,13 @@ reported as such with a pointer to the first-run flow rather than a guess.
 Because the classification is a durable fact that can go stale, the brief
 re-runs the inspect-only classifier and flags a repo recorded `new` that has
 since grown real sources (now classifying `existing`) for re-orientation — a
-flag only, never a silent rewrite. **Locate** — the lifecycle position,
+flag only, never a silent rewrite. The live verdict alone does not trigger it:
+arming a repo is what makes it look provisioned, so the flag also requires
+content Spark did not create — a dependency manifest, a `docs/` tree, a CI
+workflow that is not one of the two the standard seeds, or a tracked file that
+is neither repository metadata nor a seeded artifact. Being armed is the
+expected outcome of onboarding, not drift, and a warning that fires on every
+healthy repo cannot do its job on the day the fact genuinely is stale. **Locate** — the lifecycle position,
 always derived from repo shape with positional evidence first (open PR →
 Validate/Ship, working branch → Codify, then problem-statement presence on
 the trunk), never read from a recorded stage; the recorded

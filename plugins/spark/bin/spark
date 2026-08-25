@@ -1415,11 +1415,18 @@ cmd_brief() {
   local recorded_cls recorded_date live_cls='' stale=0
   recorded_cls="$(pref_get project.classification || true)"
   recorded_date="$(pref_get project.classified || true)"
-  if [ -n "$recorded_cls" ]; then
+  if [ "$recorded_cls" = "new" ]; then
     live_cls="$(classify_repo "$root" | awk -F'\t' '$1=="classification"{print $2}')"
     # Only new→existing is drift worth surfacing: sources appeared under a fact
     # that promised none. A repo does not shrink back to "new" by growth.
-    [ "$recorded_cls" = "new" ] && [ "$live_cls" = "existing" ] && stale=1
+    #
+    # The live verdict alone is not enough to say so. Arming a repo is what
+    # makes it look provisioned, so the verdict flips the moment `spark setup`
+    # runs — which is why this also demands content Spark did not create
+    # (#399). Being armed is the expected outcome of onboarding, not drift.
+    if [ "$live_cls" = "existing" ] && classification_drifted "$root"; then
+      stale=1
+    fi
   fi
 
   # Project-local prose standards (#182): report which of the two seeded docs
@@ -1529,6 +1536,72 @@ cmd_brief() {
 #   ambiguous — sparse or conflicting signals (source present but no version
 #               control, or staged content with no commits). Spark stops and
 #               asks; it never infers authorization from thin evidence.
+# repo_manifest_names — the dependency manifests and lockfiles that mark a
+# dependency-managed project: a conservative, stack-spanning set. Presence is
+# the signal, not completeness. Shared by the classifier and the drift check
+# below so the two can never disagree about what a manifest is. Spark seeds
+# none of these, which is what makes any of them evidence of a real codebase.
+repo_manifest_names() {
+  printf '%s' "package.json pyproject.toml setup.py setup.cfg requirements.txt Cargo.toml go.mod pom.xml build.gradle build.gradle.kts Gemfile composer.json Makefile CMakeLists.txt bun.lock package-lock.json yarn.lock pnpm-lock.yaml uv.lock poetry.lock Cargo.lock go.sum Gemfile.lock"
+}
+
+# tracked_content_count <dir> [skip_seeded] — the number of tracked files that
+# represent the project's *own* content.
+#
+# Repository metadata is always excluded. README, LICENSE, CHANGELOG,
+# CONTRIBUTING, .gitignore and friends are what a repository is *created*
+# with, so counting them lets boilerplate stand in for a codebase (#398).
+#
+# With skip_seeded=1 the artifacts `spark setup` materialises are excluded
+# too. That is what makes "has this repo outgrown its recorded classification?"
+# answerable without Spark's own output supplying the answer (#399).
+tracked_content_count() {
+  { git -C "$1" ls-files 2>/dev/null || true; } | awk -v skip_seeded="${2:-0}" '
+    { path = $0; base = path; sub(/^.*\//, "", base) }
+    base ~ /^(README|LICENSE|LICENCE|COPYING|NOTICE|CHANGELOG|CONTRIBUTING|CODE_OF_CONDUCT|AUTHORS)(\..+)?$/ { next }
+    base == ".gitignore" || base == ".gitattributes" || base == ".editorconfig" { next }
+    skip_seeded == 1 && (path ~ /^\.spark\// || path ~ /^\.claude\//) { next }
+    skip_seeded == 1 && (path == "CONVENTIONS.md" || path == "ENGINEERING-STANDARDS.md" \
+      || path == "ROADMAP.md" || path == "CLAUDE.md" || path == "AGENTS.md") { next }
+    skip_seeded == 1 && (path == "release-please-config.json" \
+      || path == ".release-please-manifest.json") { next }
+    skip_seeded == 1 && (path == ".github/workflows/release-please.yml" \
+      || path == ".github/workflows/validate.yml") { next }
+    { c++ }
+    END { print c + 0 }'
+}
+
+# classification_drifted <root> — true when a repo recorded "new" has grown
+# content Spark did not put there.
+#
+# Onboarding a new project necessarily makes it look like an existing one —
+# ten standards docs, two workflows, a release config and a .spark/ store are
+# precisely the signals the classifier reads as "existing". Comparing the live
+# verdict against the recorded fact therefore fired on every healthy repo,
+# forever, seconds after setup wrote the files that triggered it (#399). A
+# warning trained to be ignored cannot do its job on the day the fact is
+# genuinely stale, so the question asked here is narrower and answerable:
+# has a *codebase* appeared? A dependency manifest, a docs/ tree, a CI
+# workflow that is not one of the two the standard seeds, or a tracked file
+# that is neither repository metadata nor a seeded artifact.
+classification_drifted() {
+  local dir="$1" m f
+  # Unquoted on purpose: the value is a space-separated token list by schema.
+  for m in $(repo_manifest_names); do
+    [ -e "$dir/$m" ] && return 0
+  done
+  [ -d "$dir/docs" ] && return 0
+  if [ -d "$dir/.github/workflows" ]; then
+    for f in "$dir"/.github/workflows/*; do
+      [ -e "$f" ] || continue
+      case "${f##*/}" in release-please.yml|validate.yml) continue ;; esac
+      return 0
+    done
+  fi
+  [ "$(tracked_content_count "$dir" 1)" -gt 0 ] && return 0
+  return 1
+}
+
 classify_repo() {
   local dir="${1:-.}"
   local git_present=0 commits=0 tracked=0
@@ -1540,7 +1613,8 @@ classify_repo() {
 
   # Manifests and lockfiles that mark a dependency-managed project — a
   # conservative, stack-spanning set. Presence is the signal, not completeness.
-  local manifest_names="package.json pyproject.toml setup.py setup.cfg requirements.txt Cargo.toml go.mod pom.xml build.gradle build.gradle.kts Gemfile composer.json Makefile CMakeLists.txt bun.lock package-lock.json yarn.lock pnpm-lock.yaml uv.lock poetry.lock Cargo.lock go.sum Gemfile.lock"
+  local manifest_names
+  manifest_names="$(repo_manifest_names)"
   local manifests="" m
   for m in $manifest_names; do
     [ -e "$dir/$m" ] && manifests="${manifests:+$manifests }$m"
@@ -1585,12 +1659,7 @@ classify_repo() {
   # the tracked files that are not pure repository metadata instead.
   local source_files=0
   if [ "$git_present" -eq 1 ]; then
-    source_files="$(git -C "$dir" ls-files 2>/dev/null | awk '
-      { n = $0; sub(/^.*\//, "", n) }
-      n ~ /^(README|LICENSE|LICENCE|COPYING|NOTICE|CHANGELOG|CONTRIBUTING|CODE_OF_CONDUCT|AUTHORS)(\..+)?$/ { next }
-      n == ".gitignore" || n == ".gitattributes" || n == ".editorconfig" { next }
-      { c++ }
-      END { print c + 0 }')"
+    source_files="$(tracked_content_count "$dir" 0)"
   fi
 
   local wt_files=0
