@@ -36,9 +36,9 @@ identically.
    ```bash
    git push -u origin <branch>
    ```
-5. **Open the PR** into the default branch. **Title it plainly, not as a
-   conventional commit** — a merge commit carries the PR title, so a `feat:`
-   title doubles that change in Release Please's notes. Body should cover:
+5. **Open the PR** into the default branch. **Title it to match how PRs land
+   here** — plainly for merge commits, conventionally for squash merges; the
+   wrong one doubles or drops the entry ([release-please.md](references/release-please.md)). Body should cover:
    - **What** changed and **why** (link the issue: `Closes #12`).
    - How it was verified (tests run, app exercised) — use the evidence classes
      from [`validate`](../validate/SKILL.md) where the distinction matters.

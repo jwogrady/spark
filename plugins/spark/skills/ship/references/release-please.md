@@ -49,6 +49,44 @@ the PR's branch. If the recreated PR proposes a wrong version, the input is
 wrong (missing `Release-As`, a mis-typed commit) — fix the input, not the
 artifact.
 
+## The PR title depends on how PRs land
+
+Release Please reads a commit's subject **and** its body, so whichever of
+those the PR title ends up in, it is parsed as a commit. Which one that is
+depends on the repo's merge strategy — and the right title is the opposite in
+each case.
+
+**Merge commits** (`merge_commit_message: PR_TITLE`, GitHub's default) put the
+PR title in the merge commit's **body**. The branch commit already carries the
+real conventional message, so a conventional PR title lands the same change in
+the notes **twice**:
+
+```
+Merge pull request #403 from jwogrady/fix/393-hub-locator   ← subject
+
+fix: validate the whole hub locator scheme and authority    ← body, counted again
+```
+
+→ **Title plainly** (`Harden hub locator validation (#393)`). The body then
+parses as nothing and the change appears once.
+
+**Squash merges** collapse the branch into one commit, and
+`squash_merge_commit_title: COMMIT_OR_PR_TITLE` (GitHub's default) uses the
+**PR title as the trunk subject** whenever the branch had more than one
+commit. That subject is now the *only* conventional message on the trunk, so a
+plain title means Release Please classifies nothing releasable: the change is
+**silently omitted from the changelog and does not bump the version** — a
+worse failure than duplication, because nothing looks wrong.
+
+→ **Title conventionally** (`fix: harden hub locator validation`).
+
+Neither case is a repository setting you can fix; both defaults are valid and
+the API permits no combination that avoids the problem (see this repo's
+`docs/reference/release-merge-convention.md` for the refusal). Check which
+strategy the repo uses before titling — `gh api repos/{owner}/{repo} --jq
+'{allow_merge_commit,allow_squash_merge}'` — and when both are allowed, title
+for the one the project actually uses.
+
 ## Ownership
 
 The full ownership boundary — what Release Please owns, what `ship` owns, and
