@@ -32,7 +32,7 @@ downstream repo needs. The version *policy* the table's first row executes is
 likewise stated once, in [`sdlc-doctrine.md`](sdlc-doctrine.md)'s
 "Versioning" section. Keeping one body and
 several pointers is the whole point — these statements drifted apart once
-already, which is what #364 was filed for.
+already, which is the drift this one-body rule exists to prevent.
 
 The rule is conditional: it applies wherever a `release-please-config.json`
 (or a `release-please` workflow) exists. A repo without one keeps `ship`'s
@@ -55,10 +55,10 @@ what changed in the *product* (features, fixes, and the docs users read), not
 how it was built; `docs` is visible because documentation is part of the
 product, process churn is not. The consequence that still bites: a user-facing
 change merged under a hidden type — a feature that lands as `chore:` — never
-appears in the notes (#232). The release-docs checklist's completeness step
+appears in the notes. The release-docs checklist's completeness step
 guards that at pre-approval, backed by `.github/scripts/release-notes-check.sh`.
 The one type table, the `changelog-sections` config, its visible subset, and
-this paragraph must stay in lockstep — `spark doctor` enforces it (#270).
+this paragraph must stay in lockstep — `spark doctor` enforces it.
 
 ## How the model plays out in this repo
 
@@ -84,7 +84,7 @@ itself, atomically, when it computes the next version range — so the tag
 always exists at anchoring time. (An earlier design used
 `skip-github-release: true`, but that also suppressed Release Please's own
 tagging, forcing a post-hoc tag step that raced the version computation and
-orphaned duplicate release PRs — #248, ADR-0016's 2026-07-21 addendum.)
+orphaned duplicate release PRs — see ADR-0016's 2026-07-21 addendum.)
 
 ## The mechanical backstop
 
@@ -113,7 +113,7 @@ where the boundary stops (it reads command text, not branch state).
 
 Neither surface verifies Release Please's config content or resulting
 artifacts beyond presence. Closing that gap is part of the planned
-milestone-gate readiness signal (developer-only: issue #194), which is meant
+milestone-gate readiness signal (developer-only), which is meant
 to assemble exactly that evidence before a human approves a release.
 
 ## Token governance
@@ -138,14 +138,14 @@ identity decision are recorded developer-only in
 - Whether `spark doctor --requirements` already satisfies "verify Release
   Please's config and artifacts rather than recreate them," or needs new
   checking logic beyond presence and the guard's block-on-mutation rule.
-- The ADR audit (issue #180) is the ADR-visible record of this boundary and
+- The ADR audit is the ADR-visible record of this boundary and
   any superseded decisions; this doc cross-references it, not substitutes.
 - The token-identity decision above, this repo's standing release blocker.
 - Whether this repository's merge-commit settings duplicate a changelog
   entry per PR (a repo-operations fact, not a shipped-model gap): recorded
   developer-only in
   <https://github.com/jwogrady/spark/blob/master/docs/reference/release-merge-convention.md>
-  (issue #372). The shipped mechanical backstop is the duplicate-bullet
+  The shipped mechanical backstop is the duplicate-bullet
   detection in `release-notes-check.sh`; the setting change itself is a
   pending human action outside what an agent may apply.
 

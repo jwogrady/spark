@@ -50,7 +50,7 @@ refuses to overwrite them — surface that and let the human reconcile.
 Run `spark setup` (add `--profile <name>` if PROFILE chose one). One run
 composes the three arming steps: git hooks, the permission baseline, and the
 resolved standard — including the two repo-root docs `CONVENTIONS.md` and
-`ENGINEERING-STANDARDS.md` (#182). Relay its report **verbatim**:
+`ENGINEERING-STANDARDS.md`. Relay its report **verbatim**:
 
 - `+ created` — a new artifact.
 - `= exists, kept` — a project decision, preserved untouched.

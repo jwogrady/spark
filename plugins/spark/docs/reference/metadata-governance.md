@@ -104,7 +104,7 @@ the milestone titled `vX.Y …` and posts a `milestone-gate` commit status:
 The gate is a **verification surface only**. It never merges the PR, creates a
 tag, or publishes a Release — its workflow is granted no write access to
 repository contents, so it cannot even in principle. The human merge remains
-the release act (ADR-0009, #185); Release Please owns the mechanics. Reopening a
+the release act (ADR-0009); Release Please owns the mechanics. Reopening a
 milestone issue withdraws the ready state. The decision logic is offline-tested
 via fixtures (`tests/test-milestone-gate.sh`). Its **ready (green)** path needs
 validation to actually run on the Release Please PR, which is why release-please
@@ -136,5 +136,4 @@ decided — is mechanized by `plan/scripts/roadmap-check.sh`.
 A live GitHub **Project board** (Status/Priority/Target/Size/Risk fields with
 add/status/archive automation) is the intended home for the priority/effort/risk
 facts above. Until it exists, priority lives on `P0`–`P3` labels and status on
-the milestone/issue state. Standing up the board is tracked as a follow-up
-(#223).
+the milestone/issue state. Standing up the board is tracked as a follow-up.

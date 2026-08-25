@@ -96,12 +96,12 @@ real conventional message, so a conventional PR title lands the same change in
 the notes **twice**:
 
 ```
-Merge pull request #403 from jwogrady/fix/393-hub-locator   ← subject
+Merge pull request #N from jwogrady/fix/hub-locator        ← subject
 
 fix: validate the whole hub locator scheme and authority    ← body, counted again
 ```
 
-→ **Title plainly** (`Harden hub locator validation (#393)`). The body then
+→ **Title plainly** (`Harden hub locator validation`). The body then
 parses as nothing and the change appears once.
 
 **Squash merges** collapse the branch into one commit, and
