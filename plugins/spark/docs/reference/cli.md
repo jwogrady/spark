@@ -11,6 +11,13 @@ Validates the whole marketplace and reports health. Checks:
 
 - `.claude-plugin/plugin.json` and `marketplace.json` are valid JSON
 - `hooks/hooks.json` is valid JSON and `guard-bash.sh` is executable
+- the **tier boundary** holds: no development-only material (ADRs, release
+  records, governance, research) under `plugins/`, which would ship this
+  repository's internal history to anyone who installs the plugin. It also
+  warns when a shipped surface cites this repo's issue numbers (`#NNN`), which
+  a downstream reader cannot resolve; ADR references are deliberately not
+  flagged, since they read as shared vocabulary and the shipped glossary says
+  where ADRs live
 - `preferences/defaults.json` is valid JSON and the templates carry the full
   standard set
 - every directory under `skills/` has a `SKILL.md` with `name:` and
