@@ -75,7 +75,7 @@ opposite weight:
 | Finding | Meaning | Action |
 |---|---|---|
 | **omission** | a changelog-visible commit's subject is absent from the notes | **Blocks.** The notes misrepresent what shipped. Close and recreate. |
-| **duplicate bullet** | one logical change rendered twice | Known and accepted here (see `docs/reference/release-merge-convention.md`). Ship it. |
+| **duplicate bullet** | one logical change rendered twice | Known and accepted here (see `docs/ops/release-merge-convention.md`). Ship it. |
 
 The word "notes" in that check's message means the **PR body**, not the
 changelog — `release-notes-check.sh --notes` expects the body. Feeding it the
@@ -116,7 +116,7 @@ worse failure than duplication, because nothing looks wrong.
 
 Neither case is a repository setting you can fix; both defaults are valid and
 the API permits no combination that avoids the problem (see this repo's
-`docs/reference/release-merge-convention.md` for the refusal). Check which
+`docs/ops/release-merge-convention.md` for the refusal). Check which
 strategy the repo uses before titling — `gh api repos/{owner}/{repo} --jq
 '{allow_merge_commit,allow_squash_merge}'` — and when both are allowed, title
 for the one the project actually uses.

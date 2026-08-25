@@ -66,6 +66,6 @@ CLI, and agent crews, versioned in one place. The narrative reasoning is in
 ## Related Docs
 
 - [../explanation/why-a-plugin.md](../../plugins/spark/docs/explanation/additive.md)
-- [../reference/plugin-manifest.md](../reference/plugin-manifest.md)
+- [../ops/plugin-manifest.md](../ops/plugin-manifest.md)
 - [0002-additive-to-anthropic-spec.md](0002-additive-to-anthropic-spec.md)
 - [../architecture/spark-internals.md](../architecture/spark-internals.md)

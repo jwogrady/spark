@@ -85,4 +85,4 @@ history reviewable.
 
 - [0013-the-plugin-ships-only-carry-surfaces.md](0013-the-plugin-ships-only-carry-surfaces.md) — the portfolio decision this homes
 - [0001-plugin-not-framework.md](0001-plugin-not-framework.md) — the marketplace mechanism this reuses
-- `docs/reference/plugin-manifest.md` — the packaging layout
+- `docs/ops/plugin-manifest.md` — the packaging layout
