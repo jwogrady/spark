@@ -77,6 +77,46 @@ assert_contains "doctor names the missing issue forms rather than skipping" \
   "no .github/ISSUE_TEMPLATE/" "$out"
 assert_contains "doctor points at the verb that provisions labels" "spark labels" "$out"
 
+# --- code review of #396: a failed count probe must not be asserted as fact.
+# This is the one verb whose stated discipline is "not assessed, never assumed
+# healthy", and the `enhancement` gate was reporting "issues still carry it"
+# from a probe that had errored. A gh that authenticates and lists labels but
+# fails every counting call is the shape of a reachable-but-degraded API.
+shim2="$WORK/ghshim"; mkdir -p "$shim2"
+cat > "$shim2/gh" <<'GHSHIM'
+#!/usr/bin/env bash
+case "$1 $2" in
+  "auth status") exit 0 ;;
+  "repo view") echo "o/r"; exit 0 ;;
+esac
+for a in "$@"; do
+  case "$a" in
+    */labels) printf 'feature\nbug\ndocumentation\nchore\ntech-debt\nresearch\ninfrastructure\nenhancement\n'; exit 0 ;;
+    search/issues) exit 1 ;;
+  esac
+done
+exit 1
+GHSHIM
+chmod +x "$shim2/gh"
+for tool in bash sh git grep sed cat cp mv rm mkdir mktemp basename dirname tr find sort head tail date env uname readlink awk cut wc ls chmod touch printf python3; do
+  src="$(command -v "$tool" 2>/dev/null || true)"
+  [ -n "$src" ] && ln -sf "$src" "$shim2/$tool"
+done
+d="$WORK/degraded"; make_repo "$d"
+out="$(cd "$d" && env PATH="$shim2" "$SPARK" labels 2>&1)" || true
+assert_contains "#396: a failed count is reported as not assessed" "could not be assessed" "$out"
+case "$out" in
+  *"issues still carry it"*) bad "#396: asserted issues carry the label from a failed probe" ;;
+  *) ok ;;
+esac
+# Never infer "unused" either: --prune-deprecated must not delete on a failed probe.
+out="$(cd "$d" && env PATH="$shim2" "$SPARK" labels --apply --prune-deprecated 2>&1)" || true
+case "$out" in
+  *"deleted"*) bad "#396: deleted the deprecated label without establishing it was unused" ;;
+  *) ok ;;
+esac
+assert_contains "#396: still reports not assessed under --prune-deprecated" "could not be assessed" "$out"
+
 # --- setup names the GitHub-side half of the standard instead of declaring a
 # taxonomy it never provisions and never mentions
 d="$WORK/setupmsg"; make_repo "$d"

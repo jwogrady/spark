@@ -174,13 +174,19 @@ are never touched. A category with no shipped colour gets neutral grey, so
 extending `issue.taxonomy` is always safe.
 
 `enhancement` — GitHub's default label and the deprecated alias for `feature` —
-is reported with the number of issues still carrying it. Deleting it is
+is reported with the number of issues **and pull requests** still carrying it
+(a labelled PR is invisible to an issue-only query, yet `gh label delete`
+strips the label from it too, so the gate has to see it). Deleting it is
 destructive, so it requires both `--apply` and `--prune-deprecated`, **and**
-proof that no issue in any state carries it; otherwise the verb refuses and
-says to relabel first. Spark will not silently drop an issue's category.
+proof that nothing in any state carries it; otherwise the verb refuses and
+says to relabel first. Spark will not silently drop an issue's category. If
+that count cannot be obtained, the verb says so and leaves the label alone —
+it never infers "unused" from a failed probe.
 
 Without an authenticated `gh`, or when GitHub is unreachable, the verb reports
-**not assessed** and exits 0 — never "healthy" by assumption.
+**not assessed** and exits 0 — never "healthy" by assumption. The label
+listing is paginated, so a repository with more than one page of labels cannot
+have an existing category misreported as missing.
 
 ## `spark profiles`
 
