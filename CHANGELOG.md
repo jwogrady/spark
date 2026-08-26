@@ -9,6 +9,15 @@ Keep a Changelog format. Do not hand-edit released sections.
 
 ---
 
+## [0.19.1](https://github.com/jwogrady/spark/compare/v0.19.0...v0.19.1) (2026-08-26)
+
+
+### Documentation
+
+* name behaviours instead of citing this repo's issue numbers ([26a2d94](https://github.com/jwogrady/spark/commit/26a2d949306a47411cc669d0c45d5c03e8c690c1))
+* record the four-tier artifact separation as ADR-0029 ([96d9aa4](https://github.com/jwogrady/spark/commit/96d9aa4318728513401da907f3c5a4d5bdecaa0d))
+* rename the dev-side docs/reference to docs/ops ([66f9f73](https://github.com/jwogrady/spark/commit/66f9f73d9a6e31997ce3b2fa760424367ca08e9e))
+
 ## [0.19.0](https://github.com/jwogrady/spark/compare/v0.18.2...v0.19.0) (2026-08-25)
 
 
