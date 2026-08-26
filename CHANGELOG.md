@@ -7,154 +7,18 @@ from the Conventional Commits on `master` — its sections (Features, Bug Fixes,
 Documentation) follow the Conventional Commits changelog format, not the
 Keep a Changelog format. Do not hand-edit released sections.
 
-> **Withdrawn releases, 2026-08-26.** The `0.17.0`, `0.18.0`, `0.18.1`, `0.18.2`,
-> `0.19.0`, and `0.19.1` sections below record changes that **were** published
-> between 2026-08-13 and 2026-08-26 and whose GitHub Releases and tags were then
-> **deleted**. Those versions are no longer published, so their `compare/` links do
-> not resolve. The withdrawals had two different causes: `0.17.0` had a milestone,
-> a release-readiness gate, a roadmap entry and a plan, and was published on a gate
-> closed with unmet criteria, while the `0.18.x` and `0.19.x` publications had no
-> milestone, gate or roadmap entry at all.
+> **Withdrawn releases, 2026-08-26.** Six versions — `0.17.0`, `0.18.0`, `0.18.1`,
+> `0.18.2`, `0.19.0`, and `0.19.1` — were published between 2026-08-13 and
+> 2026-08-26 and then withdrawn: their GitHub Releases and tags were deleted, and
+> `v0.16.2` is again the published baseline. Their generated sections have been
+> removed from this file.
 >
-> **The changes themselves were never reverted.** Every commit remains on
-> `master`; `master` history was preserved. The sections are kept as the record of
-> what merged, and are republished cumulatively as `v0.19.0` — the first core
-> release after `v0.16.2`, which is again the published baseline. The
-> reconstructed milestones are v0.17 (#14) and v0.18 (#15), both
-> `Complete (no release)`, and v0.19 (#16), which carries the catch-up release.
->
-> See `docs/releases/v0.19.md` for the full record.
+> **No change was reverted.** Every commit remains in `master`'s history, and the
+> durable attribution lives in the reconstructed milestones — v0.17 (#14) and v0.18
+> (#15), both `Complete (no release)`, and v0.19 (#16), which carries the cumulative
+> catch-up release — and in their records under `docs/releases/`.
 
 ---
-
-## [0.19.1](https://github.com/jwogrady/spark/compare/v0.19.0...v0.19.1) (2026-08-26)
-
-
-### Documentation
-
-* name behaviours instead of citing this repo's issue numbers ([26a2d94](https://github.com/jwogrady/spark/commit/26a2d949306a47411cc669d0c45d5c03e8c690c1))
-* record the four-tier artifact separation as ADR-0029 ([96d9aa4](https://github.com/jwogrady/spark/commit/96d9aa4318728513401da907f3c5a4d5bdecaa0d))
-* rename the dev-side docs/reference to docs/ops ([66f9f73](https://github.com/jwogrady/spark/commit/66f9f73d9a6e31997ce3b2fa760424367ca08e9e))
-
-## [0.19.0](https://github.com/jwogrady/spark/compare/v0.18.2...v0.19.0) (2026-08-25)
-
-
-### Features
-
-* hold the shipped/development tier boundary in doctor ([6f011eb](https://github.com/jwogrady/spark/commit/6f011eb022208da50f13ee7ca289991bc758d1b4))
-
-
-### Documentation
-
-* add the pre-merge staleness gate for release PRs ([afd2bef](https://github.com/jwogrady/spark/commit/afd2beffc3950fb70893892e5c38a726f247bab6))
-* document footprint's --root flag ([8db3c97](https://github.com/jwogrady/spark/commit/8db3c97e7d40ccdff5ce34933e8ac9c009562b71))
-* say where ADRs live, so shipped citations resolve ([60a4066](https://github.com/jwogrady/spark/commit/60a40660549ed57c12fecfb07201ad939b39fd2e))
-
-## [0.18.2](https://github.com/jwogrady/spark/compare/v0.18.1...v0.18.2) (2026-08-25)
-
-
-### Bug Fixes
-
-* condition the PR-title rule on the repo's merge strategy ([eee833b](https://github.com/jwogrady/spark/commit/eee833b2eb8ed3899d5acd839446d48ac79c4de4))
-* make the labels verb's enhancement probe truthful and complete ([cacfeb7](https://github.com/jwogrady/spark/commit/cacfeb7cd7ea6b213cf5f3c04059265865c5a0d4))
-* reject reserved punctuation in an scp locator's userinfo ([#393](https://github.com/jwogrady/spark/issues/393) follow-up) ([d7baf10](https://github.com/jwogrady/spark/commit/d7baf10a9058ea2f82d6235724447c36c0888b20))
-* resolve a remote name instead of believing it names a wiki ([742070d](https://github.com/jwogrady/spark/commit/742070dae1fc5d8ecb84674e5b27179a761a6de2))
-
-
-### Documentation
-
-* repair the garbled preset-tier pointer in hooks.md ([57e39e8](https://github.com/jwogrady/spark/commit/57e39e820c835876eed2bff415ccecfb264469af))
-
-## [0.18.1](https://github.com/jwogrady/spark/compare/v0.18.0...v0.18.1) (2026-08-25)
-
-
-### Documentation
-
-* adopt plain PR titles as the fix for doubled release notes ([d749f2e](https://github.com/jwogrady/spark/commit/d749f2ea8edae76f25e49ea5d50407342d69a7e1))
-* correct the merge-commit setting fix, which the UI cannot express ([fe9c303](https://github.com/jwogrady/spark/commit/fe9c3031d04fdfaf1d75c105bb8a529269063c9b))
-* correct the merge-commit setting fix, which the UI cannot express ([ea37148](https://github.com/jwogrady/spark/commit/ea37148951196d73feb7f9ca03744a15babaf59b))
-* record that no merge-commit setting fixes the note duplication ([7d0c201](https://github.com/jwogrady/spark/commit/7d0c201ff9727cb9e4e516ad5012474354001c4f))
-* record that no merge-commit setting fixes the note duplication ([77d61bd](https://github.com/jwogrady/spark/commit/77d61bd23e26fb2d7a32f0a4555b3902939e4421))
-
-## [0.18.0](https://github.com/jwogrady/spark/compare/v0.17.0...v0.18.0) (2026-08-25)
-
-
-### Features
-
-* add spark labels to provision the declared issue taxonomy ([#396](https://github.com/jwogrady/spark/issues/396)) ([b69e831](https://github.com/jwogrady/spark/commit/b69e8313428a3784b702d45e0e5f88f7589af784))
-* add spark labels to provision the declared issue taxonomy ([#396](https://github.com/jwogrady/spark/issues/396)) ([a165860](https://github.com/jwogrady/spark/commit/a165860d64e6e81a19b5feba731e9a33c4e49ddb))
-* have orient name the next verb, disambiguating the two front doors ([#400](https://github.com/jwogrady/spark/issues/400)) ([cca2c42](https://github.com/jwogrady/spark/commit/cca2c42a1b17793608dfb6c24bfb5aa9f3b1e2f0))
-* have orient name the next verb, disambiguating the two front doors ([#400](https://github.com/jwogrady/spark/issues/400)) ([b8eaa37](https://github.com/jwogrady/spark/commit/b8eaa37fd9f3f068dc57cc464a6b2d201c77913b))
-* ship .gitattributes with the engineering standard ([#401](https://github.com/jwogrady/spark/issues/401)) ([3d63a3e](https://github.com/jwogrady/spark/commit/3d63a3e7570a63a0cadc61fe764af3038cb2be10))
-* ship .gitattributes with the engineering standard ([#401](https://github.com/jwogrady/spark/issues/401)) ([7bb2465](https://github.com/jwogrady/spark/commit/7bb246582acf989817cbfba583ffd688d931098f))
-
-
-### Bug Fixes
-
-* apply the same host/path extraction to scp-style locators ([#385](https://github.com/jwogrady/spark/issues/385)) ([f677df4](https://github.com/jwogrady/spark/commit/f677df4c6e0ebda9872bad3c35aac4cda5fffb83))
-* close the hub-locator empty/degenerate-value validation gaps ([ad95a98](https://github.com/jwogrady/spark/commit/ad95a987abc3ff66d74931e0ef25d8a4b393f600))
-* exempt wiki remotes from the trunk push block ([#397](https://github.com/jwogrady/spark/issues/397)) ([60b6797](https://github.com/jwogrady/spark/commit/60b6797807d3312c413267e6c6524f2bb9dd2e86))
-* exempt wiki remotes from the trunk push block ([#397](https://github.com/jwogrady/spark/issues/397)) ([7a61ca3](https://github.com/jwogrady/spark/commit/7a61ca336c11b316d0666e12446e6b3bfeb9e499))
-* extend bracket-aware host parsing to the scp branch too ([#385](https://github.com/jwogrady/spark/issues/385)) ([bc4e0ca](https://github.com/jwogrady/spark/commit/bc4e0ca9b9e42d165a63d47c43608601846079f7))
-* extract the host substring instead of counting slashes ([#385](https://github.com/jwogrady/spark/issues/385)) ([9d6ea2e](https://github.com/jwogrady/spark/commit/9d6ea2e8a92fc7d768b20c4da71095ad201e7350))
-* reject all-slash paths, not just empty ones ([#385](https://github.com/jwogrady/spark/issues/385)) ([170a704](https://github.com/jwogrady/spark/commit/170a7042604768adc8f17fc82fe85b720b46c6ce))
-* reject host-only and hostless URL locators in spark hub ([#385](https://github.com/jwogrady/spark/issues/385)) ([b9e96b6](https://github.com/jwogrady/spark/commit/b9e96b64c8e5432620ef1bd59d9091096fea38ab))
-* reject hybrid strings straddling two locator forms ([#385](https://github.com/jwogrady/spark/issues/385)) ([7b4806e](https://github.com/jwogrady/spark/commit/7b4806ee322f89f167f91a1c625eae856909ba42))
-* reject userinfo/port punctuation standing in for a hostname ([#385](https://github.com/jwogrady/spark/issues/385)) ([9d1dc2e](https://github.com/jwogrady/spark/commit/9d1dc2eca1dacdc1552e05da300a26e4d9e1fea9))
-* remove the existence gate that let delimiters repeat ([#385](https://github.com/jwogrady/spark/issues/385)) ([e9e889b](https://github.com/jwogrady/spark/commit/e9e889b2520142a07fabfaeb4a9ed993eb4c2eb5))
-* reserve bracket content and require scp's ':' separator ([#385](https://github.com/jwogrady/spark/issues/385)) ([2441a0d](https://github.com/jwogrady/spark/commit/2441a0d121d3139dd1b0b4d94f3ca4adb2458530))
-* split userinfo on the last '@', not the first ([#385](https://github.com/jwogrady/spark/issues/385)) ([c68f85d](https://github.com/jwogrady/spark/commit/c68f85d76b504ab33013b41b9dd1b0fc9821bd67))
-* stop a bare README establishing an existing project ([#398](https://github.com/jwogrady/spark/issues/398)) ([f017566](https://github.com/jwogrady/spark/commit/f01756609d1fc7b6ef400ccad8ce3bbf9b4314c2))
-* stop a bare README establishing an existing project ([#398](https://github.com/jwogrady/spark/issues/398)) ([91961ba](https://github.com/jwogrady/spark/commit/91961ba159099cfd9ec7ee248a32ac78df5484f7))
-* stop brief calling a freshly armed repo stale ([#399](https://github.com/jwogrady/spark/issues/399)) ([8e5f512](https://github.com/jwogrady/spark/commit/8e5f512a1cf821d408ae29d373f62002f188b289))
-* stop brief calling a freshly armed repo stale ([#399](https://github.com/jwogrady/spark/issues/399)) ([963cff4](https://github.com/jwogrady/spark/commit/963cff4e2d33aef72c9e979021cbc8fa06bb2708))
-* validate IPv6 bracket content, not just its presence ([#385](https://github.com/jwogrady/spark/issues/385)) ([1d01b44](https://github.com/jwogrady/spark/commit/1d01b445041bf08d82c54f222384955db5357522))
-* validate the whole hub locator scheme and authority ([#393](https://github.com/jwogrady/spark/issues/393)) ([5d7d4b7](https://github.com/jwogrady/spark/commit/5d7d4b7844c3e49609dfc9d24f266daf2573685e))
-* validate the whole hub locator scheme and authority ([#393](https://github.com/jwogrady/spark/issues/393)) ([9ddfeb4](https://github.com/jwogrady/spark/commit/9ddfeb4aa37616c3e245ca1fc470ed5f917778de))
-
-
-### Documentation
-
-* add the sub-issue rung to the scope ladder ([#395](https://github.com/jwogrady/spark/issues/395)) ([e7ec78d](https://github.com/jwogrady/spark/commit/e7ec78d5a265149ec06e741fd852697b06116e81))
-* add the sub-issue rung to the scope ladder ([#395](https://github.com/jwogrady/spark/issues/395)) ([d1f70a0](https://github.com/jwogrady/spark/commit/d1f70a015a3d61493e72bc6b57fe26016fb01ab2))
-* collapse duplicated doctrine bodies to one authority each ([#364](https://github.com/jwogrady/spark/issues/364)) ([2ec555c](https://github.com/jwogrady/spark/commit/2ec555caa031c537815a8ace700e88e5cbff66fe))
-* collapse duplicated doctrine bodies to one authority each ([#364](https://github.com/jwogrady/spark/issues/364)) ([46b94c4](https://github.com/jwogrady/spark/commit/46b94c429c788e67906dfcf067d48563ef510cfc))
-* record the Cosmos dogfood record as filed ([4ef04cf](https://github.com/jwogrady/spark/commit/4ef04cfdb757911f460627cf10d4992c07cdec17))
-* record the Cosmos dogfood record as filed, not prepared ([#373](https://github.com/jwogrady/spark/issues/373)) ([3c47a89](https://github.com/jwogrady/spark/commit/3c47a89128185cf7e16df434382b4282215ee855))
-* record the idiom-duplication finding as acknowledged ([#385](https://github.com/jwogrady/spark/issues/385)) ([fa87fdf](https://github.com/jwogrady/spark/commit/fa87fdf38e4f584f0b15e0f506106e0a9ac931e6))
-* record the round-9 findings deliberately left unfixed ([#385](https://github.com/jwogrady/spark/issues/385)) ([d9e4619](https://github.com/jwogrady/spark/commit/d9e4619b0851fd248c4c4317b5d517c68baea4b1))
-* settle Status26 as the canonical organization name ([#394](https://github.com/jwogrady/spark/issues/394)) ([726e52f](https://github.com/jwogrady/spark/commit/726e52f34880368d48ec71aceeda92fdfb2aa411))
-* settle Status26 as the canonical organization name ([#394](https://github.com/jwogrady/spark/issues/394)) ([5979d42](https://github.com/jwogrady/spark/commit/5979d428d8a0e56cfb1e4999a833fd1ffb5fc82d))
-
-## [0.17.0](https://github.com/jwogrady/spark/compare/v0.16.2...v0.17.0) (2026-08-12)
-
-
-### Features
-
-* let a spoke declare its memory hub with spark hub ([#375](https://github.com/jwogrady/spark/issues/375)) ([5ede6a7](https://github.com/jwogrady/spark/commit/5ede6a7f068e81d19cc881cc4a8a0f8c4f3bb600))
-* promote durable cross-project learning through knowledge ([#376](https://github.com/jwogrady/spark/issues/376)) ([a11032a](https://github.com/jwogrady/spark/commit/a11032a66cf09fd316f8d99537a80a4f92a5591d))
-* surface promotion at natural lifecycle boundaries ([#377](https://github.com/jwogrady/spark/issues/377)) ([1a5c9ab](https://github.com/jwogrady/spark/commit/1a5c9abe009af81de0108c202503d0937d3cf24c))
-
-
-### Bug Fixes
-
-* close the review gaps in locator validation and brief truthfulness ([7f32ea5](https://github.com/jwogrady/spark/commit/7f32ea5a6dadd642c79b1a7ae9f8a15c393220d6)), closes [#375](https://github.com/jwogrady/spark/issues/375)
-* correct the duplicate check's scope handling and message accuracy ([6bc60a5](https://github.com/jwogrady/spark/commit/6bc60a5ef2cc45f5f784fcbe136ac6081d671dfb)), closes [#372](https://github.com/jwogrady/spark/issues/372)
-* correct two ADR-0028 misquotes and dedupe the guard suites ([4451293](https://github.com/jwogrady/spark/commit/4451293be930d94fec1c8617cd13e53a50f62fef)), closes [#377](https://github.com/jwogrady/spark/issues/377)
-* detect duplicate release-note bullets per change ([#372](https://github.com/jwogrady/spark/issues/372)) ([89822b8](https://github.com/jwogrady/spark/commit/89822b829f171333037b68ced889958b3af4a1a5))
-* harden the release-plan truth guard against the review findings ([740efb5](https://github.com/jwogrady/spark/commit/740efb517dc4be53f295c1a67a40e389fdbe5a65)), closes [#380](https://github.com/jwogrady/spark/issues/380)
-* make the promotion contract guard discriminating under reflow ([cfb2f59](https://github.com/jwogrady/spark/commit/cfb2f59bfab414bdba702cfa9a6105a1abf139d5)), closes [#376](https://github.com/jwogrady/spark/issues/376)
-* reject quote and backslash characters in hub locators ([c1fcfe0](https://github.com/jwogrady/spark/commit/c1fcfe006a1c67f2750aaa735cb317444101da83)), closes [#375](https://github.com/jwogrady/spark/issues/375)
-* report hub edge states truthfully instead of dying or misnaming ([81b673a](https://github.com/jwogrady/spark/commit/81b673a7b8a9089b4c85205810111d46672e2d34)), closes [#375](https://github.com/jwogrady/spark/issues/375)
-
-
-### Documentation
-
-* document the memory-hub project fact and spark hub verb ([458e0aa](https://github.com/jwogrady/spark/commit/458e0aad8c83c0801982e0faa1ff71b77ab6df8f)), closes [#375](https://github.com/jwogrady/spark/issues/375)
-* mark ADR-0028's open questions resolved by shipped work ([#373](https://github.com/jwogrady/spark/issues/373)) ([33009bc](https://github.com/jwogrady/spark/commit/33009bc3be62da61d8b19a74512d781100949cec))
-* reconcile the v0.17 plan against closed-issue reality ([#373](https://github.com/jwogrady/spark/issues/373)) ([769b54c](https://github.com/jwogrady/spark/commit/769b54c0472bc9ad4eac853911945a9239d48df6))
-* reconcile the v0.17 release record with milestone reality ([#380](https://github.com/jwogrady/spark/issues/380)) ([4656c7e](https://github.com/jwogrady/spark/commit/4656c7e40e71a35fdabfe80cf6bc00f003b2f7ed))
-* record the merge-commit duplication mechanism and its fix ([#372](https://github.com/jwogrady/spark/issues/372)) ([465c734](https://github.com/jwogrady/spark/commit/465c7341439eefeb79061355a29815d61f8a0f7f))
 
 ## [0.16.2](https://github.com/jwogrady/spark/compare/v0.16.1...v0.16.2) (2026-08-12)
 
