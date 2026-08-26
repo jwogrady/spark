@@ -9,8 +9,19 @@ The program, its evidence gates, and the Alpha → Beta → v1.0.0 promotion pat
 are the [Alpha program](docs/alpha/alpha-program.md) — a stable v1.0.0 is
 **not** authorized just because the proving releases shipped.
 
+> **Release-planning reconciliation, 2026-08-26.** Earlier `v0.17.0`–`v0.19.1`
+> publications were withdrawn. They did not fail the same way: v0.17 had a
+> milestone, a release-readiness gate, a roadmap entry and a plan, and was
+> published anyway on a gate closed with unmet criteria; v0.18 and v0.19 had no
+> milestone, no gate and no roadmap entry at all. Their GitHub Releases and tags
+> were deleted and `v0.16.2` is again the published baseline. **No commit was removed and no pull request was unmerged** — the
+> implementation stayed on `master` and was replanned into the milestones below,
+> where v0.17 and v0.18 are recorded as `Complete (no release)` and the
+> cumulative implementation is published once, as `v0.19.0`.
+
 Each entry carries one **Status** backed by evidence — `Planned`,
-`In progress`, `Shipped (vX.Y.Z)`, `Deferred`, or `Backlog`. The vocabulary and
+`In progress`, `Merged (awaiting release)`, `Shipped (vX.Y.Z)`,
+`Complete (no release)`, `Deferred`, or `Backlog`. The vocabulary and
 its evidence rules are defined in
 [the release-docs checklist](plugins/spark/docs/reference/release-docs-checklist.md#roadmap-status-vocabulary);
 an item becomes `Shipped` only once its release exists. **Planning-wave names
@@ -280,13 +291,29 @@ field proved got enforced mechanically; what it disproved got deleted.
 
 ## v0.17 — Provenance promotion
 
-**Status:** In progress
+**Status:** Complete (no release) — outcome complete on `master`; no version
+cut, deliberately. `v0.17.0` was published 2026-08-13 and **withdrawn**
+2026-08-26. The implementation is first published inside the cumulative
+`v0.19.0`.
 
 A Spark-managed spoke stays lean while durable cross-project learning is
 deliberately promoted — with GitHub evidence and human judgment — into one
 designated memory-hub repository. GitHub milestone #14 is the version
 authority; issue #373 is the release gate. Architecture: ADR-0028; plan:
 `docs/releases/v0.17-plan.md`.
+
+The reconstructed boundary is wider than the withdrawn tag. #389 proved the
+original gate closed while three of its own criteria were unmet, and the work
+that satisfies them — the Cosmos durable record (PR #390) and the hub-locator
+validation fixes for #385 and #393 (PRs #391, #403, #420) — merged *after*
+`v0.17.0` was cut. Those items are part of v0.17's scope, not the next
+release's.
+
+No `v0.17.0` will be cut: `master` already carries the cumulative implementation
+through the reconstructed v0.19 outcome, so a fresh `v0.17.0` from current `HEAD`
+would place v0.18/v0.19 implementation inside a tag named `v0.17.0`. Remaining
+gate work is this roadmap pass (#448) and the `Complete (no release)` disposition
+record (#451).
 
 - **Architecture** (#374): the memory-hub/spoke model extends ADR-0008
   without a fourth global layer.
@@ -303,6 +330,196 @@ authority; issue #373 is the release gate. Architecture: ADR-0028; plan:
 - **Release-record truth** (#380): the shipped v0.17 plan names the existing
   milestone instead of a stale creation limitation, guarded by a
   documentation-truth check.
+
+---
+
+## v0.18 — Truthful first run and provisioned governance
+
+**Status:** Complete (no release) — outcome complete on `master`; no version
+cut, deliberately. `v0.18.0`–`v0.18.2` were published 2026-08-25/26 and
+**withdrawn** 2026-08-26. The implementation is first published inside the
+cumulative `v0.19.0`.
+
+A newly armed repository's first run tells the truth about itself, and the
+governance Spark declares is actually provisioned on the remote. GitHub
+milestone #15 is the version authority; issue #444 is the release gate.
+
+The withdrawn v0.18.x train was three publications of one outcome, so the
+reconstruction collapses them into a single milestone. No `v0.18.0` will be cut;
+the `Complete (no release)` disposition record is #452.
+
+- **Taxonomy provisioning** (#396): `setup` declared an issue taxonomy it never
+  created; `spark labels` reconciles the declaration with the remote.
+- **Orientation truth** (#398, #399, #400): `orient` stops reporting
+  "existing (high confidence)" for greenfield repos, `brief` stops calling a
+  freshly armed repo stale, and the `onboard`/`bootstrap` front doors stop
+  both claiming to be the entry point.
+- **Enforcement accuracy** (#397): the guard stops blocking legitimate wiki
+  pushes with a remedy that could not be followed.
+- **Carry-in completeness** (#401): `setup` ships a `.gitattributes`.
+- **One authority per doctrine** (#364, #394, #395): duplicated doctrine bodies
+  collapse to one authority each, "Status26" is canonicalized, and the scope
+  ladder gains its sub-issue rung.
+
+---
+
+## v0.19 — Four-tier artifact separation
+
+**Status:** Merged (awaiting release) — **the cumulative catch-up release, and
+the first core tag after `v0.16.2`.** The earlier `v0.19.0`/`v0.19.1` were
+published 2026-08-25/26 and **withdrawn** 2026-08-26.
+
+Spark's artifacts separate into four tiers, the shipped/development boundary is
+mechanically held by `doctor`, and the release-record convention tells one
+truth. GitHub milestone #16 is the version authority; issue #445 is the release
+gate. Architecture: ADR-0029.
+
+ADR-0029 is the architecture and the `doctor` tier-boundary check is its
+enforcement, so the two withdrawn publications are one outcome. **No issue was
+ever filed for any of this work** — it merged as direct PRs, a departure from
+Spark's one-issue-per-branch doctrine that #442 owns as a conformance finding.
+
+`v0.19.0` publishes, in one tag, the cumulative implemented state on `master`
+through the reconstructed v0.17, v0.18, and v0.19 outcomes. Its generated
+changelog spans every commit since `v0.16.2`; the release record (#450)
+attributes the v0.17 and v0.18 blocks to their own milestones so the tag does not
+read as though that work originated here. Version-state reconciliation (#446) is
+a true prerequisite of publication, recorded as a native blocked-by edge on gate
+#445.
+
+- **The separation** (ADR-0029, PR #434) with `doctor` holding the
+  shipped/development boundary (PR #428), the dev-side `docs/reference`
+  renamed to `docs/ops` (PR #431), shipped surfaces naming behaviours instead
+  of this repo's issue numbers (PR #432), and ADR citations that resolve
+  (PR #429).
+- **Release-record integrity** (PRs #415, #417, #418, #421, #425): plain PR
+  titles as the fix for doubled release notes, the record that no merge-commit
+  setting can express that fix, and the pre-merge staleness gate for release
+  PRs.
+- **Footprint governance** (PRs #426, #427): budgets re-based above the v0.18
+  measurement, and `footprint --root` documented.
+
+---
+
+## v0.20 — Self-host Spark
+
+**Status:** Planned
+
+Spark itself becomes a conforming Spark-managed repository and gains the
+deterministic orchestration required to dogfood `zd-dns` safely. GitHub
+milestone #17 is the version authority; issue #443 is the release gate.
+
+Nothing here is implemented. Phase A must finish before the orchestration slice
+starts.
+
+- **Phase A — Spark conforms to Spark:** the repository conformance audit
+  (#442) and the pre-dogfood IS-state documentation baseline (#441).
+- **Phase B — dogfood-capable orchestration:** native GitHub blocked-by as the
+  one dependency authority (#438), deterministic next-work selection (#436),
+  and category/approval-aware routing (#437). The shipped reference that still
+  calls blocked-by a delivery-order mechanism is corrected in #447.
+
+Preferred delivery order is `#442 → #441 → #438 → #436 → #437 → #443`. Phase A
+gating Phase B **is** a native dependency graph — both #441 and #442 state in
+their own bodies that the orchestration work cannot begin until they are
+satisfied, so each of #438/#436/#437 carries a native `blocked-by` edge from
+both. The rest of that order is preference only; blocked-by stays reserved for
+true prerequisites.
+
+---
+
+## v0.21 — Governance as schema
+
+**Status:** Planned
+
+One machine-readable governance contract that can be inspected, diffed,
+provisioned, validated, and used to compile approved plans into GitHub state —
+replacing the mix of prose and individual commands that lets an agent hold the
+doctrine correctly and still recreate labels, priorities, and metadata rules
+inconsistently. GitHub milestone #18 is the version authority; issue #478 is the
+release gate.
+
+Nothing here is implemented. This release generalizes primitives that already
+exist rather than building beside them.
+
+- The versioned canonical schema, resolved through the existing preference tiers
+  (#470), and deterministic governance `inspect`/`diff`/`apply`/`validate`
+  against it (#471).
+- The plan compiler (#472) — evolving today's `issue-manifest.sh` to add
+  milestone creation, existing-issue update, schema-validated taxonomy, cycle
+  detection, diff-against-live, and verify.
+- Lifecycle integration into `doctor`, `plan`, new-repo provisioning, and work
+  selection (#473).
+- `docs-impact` as a schema-defined label family with a deterministic
+  evidence validator (#483), so no change can have silent documentation impact.
+
+v0.21–v0.24 were separated from the v0.20 milestone on 2026-08-26, when it had
+accumulated 22 open issues across six unrelated outcomes.
+
+---
+
+## v0.22 — Truth-first onboarding
+
+**Status:** Planned
+
+An existing repository is understood read-only, reconciled through approval, and
+only then given a coherent course. Today `onboard` is an *arming* flow, which is
+right for a clean repo and wrong for one carrying years of history, stale
+branches, contradictory docs, and abandoned release state. GitHub milestone #19
+is the version authority; issue #479 is the release gate.
+
+Nothing here is implemented.
+
+- A read-only truth pass before Spark writes anything, then approval-gated
+  governance provisioning for existing repositories (#467).
+- Audit findings turned into a KEEP / REWRITE-COLLAPSE / DROP-ARCHIVE /
+  DECISION-REQUIRED reconciliation slate (#468).
+- A coherent course derived from reconciled truth rather than session memory
+  (#469).
+
+---
+
+## v0.23 — State and provenance separation
+
+**Status:** Planned
+
+Repository code and docs own current state and durable meaning; Git and GitHub
+own change-over-time provenance; Spark detects leakage between them and proves
+current-state documentation is truthful before a release goes green. GitHub
+milestone #20 is the version authority; issue #480 is the release gate.
+
+Nothing here is implemented.
+
+- The state-versus-provenance ownership contract, refining ADR-0008/ADR-0028
+  (#474), then removing duplicated historical chronology from state documents
+  (#475).
+- `audit` detecting provenance leakage as a first-class finding (#476), and the
+  terminology split reserving `provenance` for change history (#477).
+- `docs-truth` as a **required** release-readiness check (#484) — structural
+  checks composed from what `doctor` already proves, one explicit compatibility
+  classification per shipped CLI verb, and a bounded semantic verdict recorded in
+  GitHub evidence and bound to the reviewed HEAD.
+
+---
+
+## v0.24 — Thin agent skills
+
+**Status:** Planned
+
+Skills become thin orchestration surfaces over deterministic Spark primitives
+instead of carrying duplicated policy and mechanics. Each has a sound reasoning
+core that has accumulated mechanically decidable work in its hot path — context
+cost paid on every invocation, and a second place for policy to drift. GitHub
+milestone #21 is the version authority; issue #481 is the release gate.
+
+Nothing here is implemented, and the whole milestone is `P2`: it matters before
+v1 but blocks nothing.
+
+- Thin `plan` to reasoning (#459) and separate `ship` delivery from release
+  governance doctrine (#460).
+- Simplify `knowledge` orchestration (#461) and tighten `ideate`'s boundaries
+  (#463).
+- Make `bootstrap` policy-driven instead of hard-coding Bun and uv (#462).
 
 ---
 
