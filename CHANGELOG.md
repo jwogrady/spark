@@ -10,8 +10,11 @@ Keep a Changelog format. Do not hand-edit released sections.
 > **Withdrawn releases, 2026-08-26.** The `0.17.0`, `0.18.0`, `0.18.1`, `0.18.2`,
 > `0.19.0`, and `0.19.1` sections below record changes that **were** published
 > between 2026-08-13 and 2026-08-26 and whose GitHub Releases and tags were then
-> **deleted**, because publishing had outrun the release-planning structure. Those
-> versions are no longer published, so their `compare/` links do not resolve.
+> **deleted**. Those versions are no longer published, so their `compare/` links do
+> not resolve. The withdrawals had two different causes: `0.17.0` had a milestone,
+> a release-readiness gate, a roadmap entry and a plan, and was published on a gate
+> closed with unmet criteria, while the `0.18.x` and `0.19.x` publications had no
+> milestone, gate or roadmap entry at all.
 >
 > **The changes themselves were never reverted.** Every commit remains on
 > `master`; `master` history was preserved. The sections are kept as the record of
