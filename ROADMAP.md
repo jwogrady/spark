@@ -428,6 +428,101 @@ true prerequisites.
 
 ---
 
+## v0.21 — Governance as schema
+
+**Status:** Planned
+
+One machine-readable governance contract that can be inspected, diffed,
+provisioned, validated, and used to compile approved plans into GitHub state —
+replacing the mix of prose and individual commands that lets an agent hold the
+doctrine correctly and still recreate labels, priorities, and metadata rules
+inconsistently. GitHub milestone #18 is the version authority; issue #478 is the
+release gate.
+
+Nothing here is implemented. This release generalizes primitives that already
+exist rather than building beside them.
+
+- The versioned canonical schema, resolved through the existing preference tiers
+  (#470), and deterministic governance `inspect`/`diff`/`apply`/`validate`
+  against it (#471).
+- The plan compiler (#472) — evolving today's `issue-manifest.sh` to add
+  milestone creation, existing-issue update, schema-validated taxonomy, cycle
+  detection, diff-against-live, and verify.
+- Lifecycle integration into `doctor`, `plan`, new-repo provisioning, and work
+  selection (#473).
+- `docs-impact` as a schema-defined label family with a deterministic
+  evidence validator (#483), so no change can have silent documentation impact.
+
+v0.21–v0.24 were separated from the v0.20 milestone on 2026-08-26, when it had
+accumulated 22 open issues across six unrelated outcomes.
+
+---
+
+## v0.22 — Truth-first onboarding
+
+**Status:** Planned
+
+An existing repository is understood read-only, reconciled through approval, and
+only then given a coherent course. Today `onboard` is an *arming* flow, which is
+right for a clean repo and wrong for one carrying years of history, stale
+branches, contradictory docs, and abandoned release state. GitHub milestone #19
+is the version authority; issue #479 is the release gate.
+
+Nothing here is implemented.
+
+- A read-only truth pass before Spark writes anything, then approval-gated
+  governance provisioning for existing repositories (#467).
+- Audit findings turned into a KEEP / REWRITE-COLLAPSE / DROP-ARCHIVE /
+  DECISION-REQUIRED reconciliation slate (#468).
+- A coherent course derived from reconciled truth rather than session memory
+  (#469).
+
+---
+
+## v0.23 — State and provenance separation
+
+**Status:** Planned
+
+Repository code and docs own current state and durable meaning; Git and GitHub
+own change-over-time provenance; Spark detects leakage between them and proves
+current-state documentation is truthful before a release goes green. GitHub
+milestone #20 is the version authority; issue #480 is the release gate.
+
+Nothing here is implemented.
+
+- The state-versus-provenance ownership contract, refining ADR-0008/ADR-0028
+  (#474), then removing duplicated historical chronology from state documents
+  (#475).
+- `audit` detecting provenance leakage as a first-class finding (#476), and the
+  terminology split reserving `provenance` for change history (#477).
+- `docs-truth` as a **required** release-readiness check (#484) — structural
+  checks composed from what `doctor` already proves, one explicit compatibility
+  classification per shipped CLI verb, and a bounded semantic verdict recorded in
+  GitHub evidence and bound to the reviewed HEAD.
+
+---
+
+## v0.24 — Thin agent skills
+
+**Status:** Planned
+
+Skills become thin orchestration surfaces over deterministic Spark primitives
+instead of carrying duplicated policy and mechanics. Each has a sound reasoning
+core that has accumulated mechanically decidable work in its hot path — context
+cost paid on every invocation, and a second place for policy to drift. GitHub
+milestone #21 is the version authority; issue #481 is the release gate.
+
+Nothing here is implemented, and the whole milestone is `P2`: it matters before
+v1 but blocks nothing.
+
+- Thin `plan` to reasoning (#459) and separate `ship` delivery from release
+  governance doctrine (#460).
+- Simplify `knowledge` orchestration (#461) and tighten `ideate`'s boundaries
+  (#463).
+- Make `bootstrap` policy-driven instead of hard-coding Bun and uv (#462).
+
+---
+
 ## Later — Project inception
 
 Project inception — `/plugin install spark` plus the `bootstrap` skill —
