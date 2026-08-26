@@ -49,7 +49,7 @@ reasoning steps inside Plan, not new verbs.
 5. **Give every feature a release decision.** Check roadmap completeness
    first (`bash scripts/roadmap-check.sh` from this skill's directory) and
    release-record truth (`bash scripts/release-plan-check.sh` — a plan names
-   its milestone and never carries a tooling-limitation claim, #380), then
+   its milestone and never carries a tooling-limitation claim), then
    record one disposition per feature: a named milestone, **Backlog** with the
    written reason, or **Blocked** naming the exact missing decision — rules in
    [references/release-assignment.md](references/release-assignment.md). The

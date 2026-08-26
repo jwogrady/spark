@@ -11,7 +11,7 @@
 
 ## The destination is resolved, never guessed
 
-`spark hub` is the only source of the destination (issue #375):
+`spark hub` is the only source of the destination:
 
 | `spark hub` reports | Promotion meaning |
 |---|---|

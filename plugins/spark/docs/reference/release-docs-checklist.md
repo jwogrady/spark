@@ -23,12 +23,13 @@ record* around that machinery — it never recreates release management.
       mechanizes this: feed it the range's commits (type, subject, PR labels) and
       the generated notes, and it flags any visible commit missing from the notes
       and any commit merged under a hidden type whose PR is labeled `feature`.
-      Offline-tested by `tests/test-release-notes-check.sh`; #232 is the failure
-      it prevents. Both halves now run automatically as an advisory on the
+      Offline-tested by `tests/test-release-notes-check.sh`. The failure it
+      prevents: a user-facing change merged under a hidden type never
+      reaching the notes. Both halves now run automatically as an advisory on the
       Release Please PR (`.github/scripts/release-notes-runner.sh`, wired into
       the milestone-gate workflow): the **omission** half per component against
       its own tag range and notes section, and the **mislabel** half using
-      per-commit PR labels fetched from the API (#291) — with any commit whose
+      per-commit PR labels fetched from the API — with any commit whose
       labels could not be retrieved reported as unassessed rather than passed.
       This checkbox is now a review of that advisory's output, not a manual
       re-derivation.
@@ -54,7 +55,7 @@ because they are judgment calls against surfaces that live outside this
 repository. Do not expect a script to cover them; none does — the scripted
 half that once accompanied this census (the Platform Compatibility Review
 gate, originally mandated by the now-archived constitution's Article VII) was
-retired by the #361 governance deletion test, so this manual census is the
+retired by the governance deletion test, so this manual census is the
 whole of the practice.
 
 - [ ] **Deletion-Test census against the *current* platform surfaces.** For
@@ -78,7 +79,7 @@ which requires the `doctor` and `tests` CI checks green on the Release
 Please PR head before reporting ready. It is not re-checked by hand here.
 Checking that experiment-gated ADR statuses still match their experiments'
 verdicts is part of the same manual census — the scripted advisory that once
-prompted it was retired by the governance deletion test (#361).
+prompted it was retired by the governance deletion test.
 
 Record the outcome of the manual checks in the release approval (a PR
 comment is enough): what was censused, what was retired or kept, and why.
