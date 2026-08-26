@@ -1,5 +1,5 @@
 {
-  "next_action": "plan #402 (Spark skill refinery + Rise marketplace export) — the only open issue; needs /spark:plan and its own milestone",
-  "blockers": "",
-  "updated": "2026-08-25"
+  "next_action": "prepare the v0.19.0 catch-up release: land #446 (version state), then the release records #450/#451/#452 and cleanup #453/#454, then certify gates #373, #444, #445",
+  "blockers": "#445 is blocked by #446; v0.19.0 must not be cut until every cleanup PR is merged and the three gates certify",
+  "updated": "2026-08-26"
 }
