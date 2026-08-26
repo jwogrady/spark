@@ -39,6 +39,8 @@ How the layers fit together, and the dated record of why Spark is built this way
 - [adr/0025-capability-evaluation-framework.md](adr/0025-capability-evaluation-framework.md) — the Capability Evaluation Framework as the capability entry test (gate machinery retired 2026-08-11 by the #361 deletion test; the five questions remain the recorded method)
 - [adr/0026-evidence-declaration-and-release-gate.md](adr/0026-evidence-declaration-and-release-gate.md) — capability-to-evidence declaration (its Platform Compatibility Review enforcement retired 2026-08-11; the milestone gate and release-notes verification still gate release truth)
 - [adr/0027-delivery-model.md](adr/0027-delivery-model.md) — **Accepted (v0.16)**: delivery is issue PRs to trunk with the dependency-order and one-writer invariants; a temporary integration branch is the exception/recovery technique, never a develop branch
+- [adr/0028-cross-project-memory-hubs.md](adr/0028-cross-project-memory-hubs.md) — **Accepted**: a declared memory hub carries durable meaning shared across related repositories, above one spoke and below operator-global knowledge; promotion is explicit and human-approved
+- [adr/0029-four-tier-artifact-separation.md](adr/0029-four-tier-artifact-separation.md) — **Accepted**: every artifact is code, shipped documentation, prose/provenance, or project management; repo-root `docs/` cannot ship structurally and `spark doctor` errors on development-only kinds under `plugins/`
 - [adr/0000-template.md](adr/0000-template.md) — the ADR template
 
 ## Packaging reference
