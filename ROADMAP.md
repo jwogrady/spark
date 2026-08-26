@@ -15,7 +15,8 @@ are the [Alpha program](docs/alpha/alpha-program.md) — a stable v1.0.0 is
 > GitHub Releases and tags were deleted and `v0.16.2` is again the published
 > baseline. **No commit was removed and no pull request was unmerged** — the
 > implementation stayed on `master` and was replanned into the milestones below,
-> where it is recorded as `Merged (awaiting release)`.
+> where v0.17 and v0.18 are recorded as `Complete (no release)` and the
+> cumulative implementation is published once, as `v0.19.0`.
 
 Each entry carries one **Status** backed by evidence — `Planned`,
 `In progress`, `Merged (awaiting release)`, `Shipped (vX.Y.Z)`,
@@ -289,8 +290,10 @@ field proved got enforced mechanically; what it disproved got deleted.
 
 ## v0.17 — Provenance promotion
 
-**Status:** Merged (awaiting release) — implementation merged on `master`;
-`v0.17.0` was published 2026-08-13 and **withdrawn** 2026-08-26.
+**Status:** Complete (no release) — outcome complete on `master`; no version
+cut, deliberately. `v0.17.0` was published 2026-08-13 and **withdrawn**
+2026-08-26. The implementation is first published inside the cumulative
+`v0.19.0`.
 
 A Spark-managed spoke stays lean while durable cross-project learning is
 deliberately promoted — with GitHub evidence and human judgment — into one
@@ -303,8 +306,13 @@ original gate closed while three of its own criteria were unmet, and the work
 that satisfies them — the Cosmos durable record (PR #390) and the hub-locator
 validation fixes for #385 and #393 (PRs #391, #403, #420) — merged *after*
 `v0.17.0` was cut. Those items are part of v0.17's scope, not the next
-release's. Release-state reconciliation (#446) and this roadmap pass (#448)
-are the remaining gate work.
+release's.
+
+No `v0.17.0` will be cut: `master` already carries the cumulative implementation
+through the reconstructed v0.19 outcome, so a fresh `v0.17.0` from current `HEAD`
+would place v0.18/v0.19 implementation inside a tag named `v0.17.0`. Remaining
+gate work is this roadmap pass (#448) and the `Complete (no release)` disposition
+record (#451).
 
 - **Architecture** (#374): the memory-hub/spoke model extends ADR-0008
   without a fourth global layer.
@@ -326,15 +334,18 @@ are the remaining gate work.
 
 ## v0.18 — Truthful first run and provisioned governance
 
-**Status:** Merged (awaiting release) — implementation merged on `master`;
-`v0.18.0`–`v0.18.2` were published 2026-08-25/26 and **withdrawn** 2026-08-26.
+**Status:** Complete (no release) — outcome complete on `master`; no version
+cut, deliberately. `v0.18.0`–`v0.18.2` were published 2026-08-25/26 and
+**withdrawn** 2026-08-26. The implementation is first published inside the
+cumulative `v0.19.0`.
 
 A newly armed repository's first run tells the truth about itself, and the
 governance Spark declares is actually provisioned on the remote. GitHub
 milestone #15 is the version authority; issue #444 is the release gate.
 
 The withdrawn v0.18.x train was three publications of one outcome, so the
-reconstruction collapses them into a single planned minor.
+reconstruction collapses them into a single milestone. No `v0.18.0` will be cut;
+the `Complete (no release)` disposition record is #452.
 
 - **Taxonomy provisioning** (#396): `setup` declared an issue taxonomy it never
   created; `spark labels` reconciles the declaration with the remote.
@@ -353,8 +364,9 @@ reconstruction collapses them into a single planned minor.
 
 ## v0.19 — Four-tier artifact separation
 
-**Status:** Merged (awaiting release) — implementation merged on `master`;
-`v0.19.0`/`v0.19.1` were published 2026-08-25/26 and **withdrawn** 2026-08-26.
+**Status:** Merged (awaiting release) — **the cumulative catch-up release, and
+the first core tag after `v0.16.2`.** The earlier `v0.19.0`/`v0.19.1` were
+published 2026-08-25/26 and **withdrawn** 2026-08-26.
 
 Spark's artifacts separate into four tiers, the shipped/development boundary is
 mechanically held by `doctor`, and the release-record convention tells one
@@ -365,6 +377,14 @@ ADR-0029 is the architecture and the `doctor` tier-boundary check is its
 enforcement, so the two withdrawn publications are one outcome. **No issue was
 ever filed for any of this work** — it merged as direct PRs, a departure from
 Spark's one-issue-per-branch doctrine that #442 owns as a conformance finding.
+
+`v0.19.0` publishes, in one tag, the cumulative implemented state on `master`
+through the reconstructed v0.17, v0.18, and v0.19 outcomes. Its generated
+changelog spans every commit since `v0.16.2`; the release record (#450)
+attributes the v0.17 and v0.18 blocks to their own milestones so the tag does not
+read as though that work originated here. Version-state reconciliation (#446) is
+a true prerequisite of publication, recorded as a native blocked-by edge on gate
+#445.
 
 - **The separation** (ADR-0029, PR #434) with `doctor` holding the
   shipped/development boundary (PR #428), the dev-side `docs/reference`
