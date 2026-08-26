@@ -419,8 +419,11 @@ starts.
   and category/approval-aware routing (#437). The shipped reference that still
   calls blocked-by a delivery-order mechanism is corrected in #447.
 
-Preferred delivery order is `#442 → #441 → #438 → #436 → #437 → #443`. That
-order is **not** a native dependency graph; blocked-by edges stay reserved for
+Preferred delivery order is `#442 → #441 → #438 → #436 → #437 → #443`. Phase A
+gating Phase B **is** a native dependency graph — both #441 and #442 state in
+their own bodies that the orchestration work cannot begin until they are
+satisfied, so each of #438/#436/#437 carries a native `blocked-by` edge from
+both. The rest of that order is preference only; blocked-by stays reserved for
 true prerequisites.
 
 ---
