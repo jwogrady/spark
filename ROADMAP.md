@@ -10,10 +10,11 @@ are the [Alpha program](docs/alpha/alpha-program.md) — a stable v1.0.0 is
 **not** authorized just because the proving releases shipped.
 
 > **Release-planning reconciliation, 2026-08-26.** Earlier `v0.17.0`–`v0.19.1`
-> publications were withdrawn: publishing had outrun planning, so those releases
-> had no milestone, no release-readiness gate, and no roadmap entry. Their
-> GitHub Releases and tags were deleted and `v0.16.2` is again the published
-> baseline. **No commit was removed and no pull request was unmerged** — the
+> publications were withdrawn. They did not fail the same way: v0.17 had a
+> milestone, a release-readiness gate, a roadmap entry and a plan, and was
+> published anyway on a gate closed with unmet criteria; v0.18 and v0.19 had no
+> milestone, no gate and no roadmap entry at all. Their GitHub Releases and tags
+> were deleted and `v0.16.2` is again the published baseline. **No commit was removed and no pull request was unmerged** — the
 > implementation stayed on `master` and was replanned into the milestones below,
 > where v0.17 and v0.18 are recorded as `Complete (no release)` and the
 > cumulative implementation is published once, as `v0.19.0`.
