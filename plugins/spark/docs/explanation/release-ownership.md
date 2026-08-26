@@ -130,7 +130,7 @@ detects that mechanically).
 
 For this repository the current state, the evidence, and the pending
 identity decision are recorded developer-only in
-<https://github.com/jwogrady/spark/blob/master/docs/reference/release-token-governance.md>
+<https://github.com/jwogrady/spark/blob/master/docs/ops/release-token-governance.md>
 — they are repo-operations facts, not part of the shipped model.
 
 ## Open questions
@@ -144,7 +144,7 @@ identity decision are recorded developer-only in
 - Whether this repository's merge-commit settings duplicate a changelog
   entry per PR (a repo-operations fact, not a shipped-model gap): recorded
   developer-only in
-  <https://github.com/jwogrady/spark/blob/master/docs/reference/release-merge-convention.md>
+  <https://github.com/jwogrady/spark/blob/master/docs/ops/release-merge-convention.md>
   The shipped mechanical backstop is the duplicate-bullet
   detection in `release-notes-check.sh`; the setting change itself is a
   pending human action outside what an agent may apply.

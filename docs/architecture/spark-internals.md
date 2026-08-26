@@ -77,8 +77,8 @@ The core plugin is layered:
 
 | Layer | Lives in | Job | Reference |
 |---|---|---|---|
-| Marketplace catalog | `.claude-plugin/marketplace.json` (repo root) | Make the repo git-installable; lists the core + the three companions | [../reference/plugin-manifest.md](../reference/plugin-manifest.md) |
-| Plugin manifests | `plugins/<name>/.claude-plugin/plugin.json` | Name and version each plugin (author `jwogrady`, MIT); companions version independently of the core | [../reference/plugin-manifest.md](../reference/plugin-manifest.md) |
+| Marketplace catalog | `.claude-plugin/marketplace.json` (repo root) | Make the repo git-installable; lists the core + the three companions | [../ops/plugin-manifest.md](../ops/plugin-manifest.md) |
+| Plugin manifests | `plugins/<name>/.claude-plugin/plugin.json` | Name and version each plugin (author `jwogrady`, MIT); companions version independently of the core | [../ops/plugin-manifest.md](../ops/plugin-manifest.md) |
 | Skills | `plugins/spark/skills/<name>/SKILL.md` | The nine core skills — lifecycle, setup, supporting — exposed as `/spark:<name>` | [reference/skills.md](../../plugins/spark/docs/reference/skills.md) |
 | Agent crew | `plugins/spark/agents/knowledge/*.md` | The knowledge crew (3 roles) the `knowledge` skill dispatches; companions carry their own crews | — |
 | PreToolUse hook | `plugins/spark/hooks/hooks.json`, `plugins/spark/hooks/guard-bash.sh` | Enforce git hygiene on the **Claude-driven** path | [reference/hooks.md](../../plugins/spark/docs/reference/hooks.md) |

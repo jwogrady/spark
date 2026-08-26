@@ -8,7 +8,7 @@
 # so a candidate topology can be compared to the recorded single-agent baseline
 # on the SAME inputs. It is not a pass/fail unit suite; it lives outside tests/
 # on purpose and is not run by tests/run.sh. See BASELINE.md and, for the reusable
-# contract every suite shares, docs/reference/evaluation.md.
+# contract every suite shares, docs/ops/evaluation.md.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"

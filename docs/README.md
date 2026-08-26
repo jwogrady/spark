@@ -46,7 +46,7 @@ How the layers fit together, and the dated record of why Spark is built this way
 Information about how the plugin is packaged and how it relates to Claude Code's
 built-ins — contributor concerns, not user concerns:
 
-- [reference/plugin-manifest.md](reference/plugin-manifest.md) — the plugin manifest and marketplace files
+- [ops/plugin-manifest.md](ops/plugin-manifest.md) — the plugin manifest and marketplace files
 
 The native-overlap audit (no core skill reimplements a Claude Code built-in)
 now lives in the shipped taxonomy:

@@ -12,7 +12,7 @@ Owner: jwogrady
 > Records how a capability declares its evaluation evidence and how the Platform
 > Compatibility Review enforces the `Evaluation → Release` seam. Builds on the
 > Evaluation surface ([ADR-0025](0025-capability-evaluation-framework.md),
-> [`../reference/evaluation.md`](../reference/evaluation.md)); does not amend it —
+> [`../ops/evaluation.md`](../ops/evaluation.md)); does not amend it —
 > the linkage and release-enforcement semantics are durable enough for their own
 > record.
 
@@ -146,6 +146,6 @@ done.
 ## Related Docs
 
 - [../product-constitution.md](../product-constitution.md) — Article VII (the gate) and Article VI (the seam)
-- [../reference/evaluation.md](../reference/evaluation.md) — the Evaluation surface and the index format
+- [../ops/evaluation.md](../ops/evaluation.md) — the Evaluation surface and the index format
 - [0025-capability-evaluation-framework.md](0025-capability-evaluation-framework.md) — the CEF and the surface this consumes
 - [0011-doctor-is-the-validation-gate.md](0011-doctor-is-the-validation-gate.md) and [0018-behavioral-tests-are-the-second-ci-gate.md](0018-behavioral-tests-are-the-second-ci-gate.md) — the two instruments the gate is distinct from
