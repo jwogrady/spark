@@ -7,6 +7,24 @@ from the Conventional Commits on `master` — its sections (Features, Bug Fixes,
 Documentation) follow the Conventional Commits changelog format, not the
 Keep a Changelog format. Do not hand-edit released sections.
 
+> **Withdrawn releases, 2026-08-26.** The `0.17.0`, `0.18.0`, `0.18.1`, `0.18.2`,
+> `0.19.0`, and `0.19.1` sections below record changes that **were** published
+> between 2026-08-13 and 2026-08-26 and whose GitHub Releases and tags were then
+> **deleted**. Those versions are no longer published, so their `compare/` links do
+> not resolve. The withdrawals had two different causes: `0.17.0` had a milestone,
+> a release-readiness gate, a roadmap entry and a plan, and was published on a gate
+> closed with unmet criteria, while the `0.18.x` and `0.19.x` publications had no
+> milestone, gate or roadmap entry at all.
+>
+> **The changes themselves were never reverted.** Every commit remains on
+> `master`; `master` history was preserved. The sections are kept as the record of
+> what merged, and are republished cumulatively as `v0.19.0` — the first core
+> release after `v0.16.2`, which is again the published baseline. The
+> reconstructed milestones are v0.17 (#14) and v0.18 (#15), both
+> `Complete (no release)`, and v0.19 (#16), which carries the catch-up release.
+>
+> See `docs/releases/v0.19.md` for the full record.
+
 ---
 
 ## [0.19.1](https://github.com/jwogrady/spark/compare/v0.19.0...v0.19.1) (2026-08-26)
