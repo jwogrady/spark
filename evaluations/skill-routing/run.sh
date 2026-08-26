@@ -7,7 +7,7 @@
 # Measures how the core skill descriptions route representative prompts, so a
 # description trim carries before/after routing evidence (#293/#313). n = 1,
 # model-judged — see fixtures/routing/task.md for the method and its limits,
-# and docs/reference/evaluation.md for the contract every suite shares.
+# and docs/ops/evaluation.md for the contract every suite shares.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"

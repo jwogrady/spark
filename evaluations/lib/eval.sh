@@ -6,7 +6,7 @@
 # nothing about any particular suite. A suite (e.g. evaluations/orchestration/)
 # supplies its POLICY as config, then calls eval_main. Policy stays in the suite
 # and the contract doc; mechanism stays here. The canonical contract is
-# docs/reference/evaluation.md.
+# docs/ops/evaluation.md.
 #
 # Zero runtime dependencies beyond Bash + awk (awk only for float math; bash has
 # no floats). No jq, no python, no network. Grading is graded
@@ -331,7 +331,7 @@ eval_help() {
   cat <<EOF
 
 Graded measurement over fixed fixtures — not a pass/fail suite. See the contract:
-docs/reference/evaluation.md. Zero deps beyond Bash + awk.
+docs/ops/evaluation.md. Zero deps beyond Bash + awk.
 
 The four metrics:
   correctness  answer-key items caught / total          (objective, findings.tsv)

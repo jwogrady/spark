@@ -45,12 +45,35 @@ plugins/spark/          # the core plugin (the shipping loop)
 plugins/spark-audit/    # companion: whole-project assessment + evidence-backed cleanup
 plugins/spark-connect/  # companion: services, credentials, 1Password, shred-env
 plugins/spark-docs/     # companion: public docs and positioning via author personas
-docs/                   # DEV docs (repo root, never shipped): ADRs, architecture, packaging
+docs/                   # DEV prose + provenance (repo root, NEVER shipped)
+├── adr/                # dated decision records
+├── ops/                # repo operations (release conventions, manifests, evaluation)
+├── architecture/       # the internals map
+├── releases/           # per-release records
+└── governance|research|alpha/
 tests/                  # behavioral tests for shipped scripts (run with tests/run.sh)
 .github/                # PR + issue templates (the plan skill uses these)
 AGENTS.md               # this file — the canonical agent contract
 CLAUDE.md               # imports this file for Claude Code
 ```
+
+## The Four Tiers
+
+Every artifact belongs to exactly one, and the boundary is mechanically checked
+by `spark doctor` (it errors on development-only kinds under `plugins/`):
+
+| Tier | Home | Ships? |
+|---|---|---|
+| Code | `plugins/*/` — `bin`, `hooks`, `scripts`, `settings`, `skills` | yes |
+| Shipped documentation | `plugins/*/docs/` (Diátaxis) | yes |
+| Prose + provenance | repo-root `docs/` — ADRs, ops, releases, research | **no** |
+| Project management | GitHub issues/milestones/PRs, `.spark/state.json` | n/a |
+
+Repo-root `docs/` sits outside `plugins/`, so it cannot ship. The reverse needs
+the check: a decision record filed under `plugins/` would ship this repo's
+internal history to anyone who installs the plugin. When a shipped doc must
+point at a development-only one, it uses a full GitHub URL labelled
+developer-only — a repo-relative path would not resolve after install.
 
 ## The Skills
 

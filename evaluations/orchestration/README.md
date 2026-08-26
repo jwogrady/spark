@@ -15,7 +15,7 @@ assertions.
 
 The reusable contract every suite shares — file formats, the four metrics,
 experiment governance, and the three-instrument boundary — is
-[`../../docs/reference/evaluation.md`](../../docs/reference/evaluation.md). This
+[`../../docs/ops/evaluation.md`](../../docs/ops/evaluation.md). This
 suite is its first consumer: `run.sh` is a thin wrapper that sets this suite's
 policy and delegates all mechanics to [`../lib/eval.sh`](../lib/eval.sh).
 
