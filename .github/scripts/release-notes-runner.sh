@@ -141,6 +141,108 @@ notes_body_breaking() { # <sha> -> "breaking" or empty
     | grep -qE '^[[:space:]]*BREAKING[ -]CHANGE(:| #)' && echo "breaking" || true
 }
 
+# ---------------------------------------------------------------------------
+# Carrier relationships (#447 repair).
+#
+# A logical change normally reaches the notes through its own commit. It cannot
+# when that commit falls outside the generator's reach — Release Please walks
+# commits newest-first and stops at the previous release SHA, so a commit dated
+# before that SHA is never read even though it is genuinely unreleased. The
+# repair is a second commit carrying the same subject into the window, and the
+# two commits are then ONE release-note change that must consume ONE bullet.
+#
+# The relationship is always DECLARED, never inferred. Chronology is not
+# evidence: two commits sharing a subject stay two independent changes needing
+# two bullets unless something explicitly says otherwise.
+#
+# Two declaration sites, in order of preference:
+#
+#   1. `Changelog-Carrier-For: <full-sha>` — a trailer on the carrier commit.
+#      The normal mechanism. It is immutable, travels with the commit, and is
+#      reviewed with the change that introduces it.
+#   2. .github/release-notes-carriers.tsv — a committed ledger of
+#      `carrier-sha<TAB>original-sha` rows. ONLY for a relationship discovered
+#      after the carrier was already merged, where the trailer would require
+#      rewriting immutable history.
+#
+# Anything malformed, unresolvable, mismatched, or ambiguous is NOT ASSESSED,
+# never a pass: an unprovable relationship must not silently excuse a missing
+# note.
+NOTES_CARRIER_LEDGER="${NOTES_CARRIER_LEDGER:-.github/release-notes-carriers.tsv}"
+
+# Subject comparison form: case-folded, whitespace-squeezed. Deliberately
+# weaker than the notes normalizer — this compares two COMMIT subjects to each
+# other, never a subject to a rendered bullet.
+notes_norm_subject() { # <subject> -> normalized
+  printf '%s' "$1" | tr '[:upper:]' '[:lower:]' \
+    | sed -E -e 's/[[:space:]]+/ /g' -e 's/^ //' -e 's/ $//'
+}
+
+# Parse the ledger into carrier<TAB>original rows. Pure: a file in, rows out.
+# rc 2 on ANY malformed row — a ledger we cannot read is a relationship we
+# cannot prove, and skipping the bad row would silently weaken the check.
+notes_carrier_ledger_rows() { # <file> -> rows
+  local f="${1:-}" line c o rest
+  [ -n "$f" ] && [ -f "$f" ] || return 0
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in ''|'#'*) continue ;; esac
+    IFS=$'\t' read -r c o rest <<< "$line"
+    if [ -n "${rest:-}" ] || [ -z "${c:-}" ] || [ -z "${o:-}" ]; then
+      echo "carrier ledger: malformed row '$line' (expected carrier<TAB>original)" >&2; return 2
+    fi
+    case "$c$o" in *[!0-9a-f]*) echo "carrier ledger: '$c $o' is not lowercase hex" >&2; return 2 ;; esac
+    if [ "${#c}" -ne 40 ] || [ "${#o}" -ne 40 ]; then
+      echo "carrier ledger: shas must be full 40 characters ('$c','$o')" >&2; return 2
+    fi
+    if [ "$c" = "$o" ]; then echo "carrier ledger: $c carries itself" >&2; return 2; fi
+    printf '%s\t%s\n' "$c" "$o"
+  done < "$f"
+}
+
+# Reject ambiguity: a carrier declared twice, or one original claimed by two
+# carriers. Either way the mapping is not a function and cannot be trusted.
+notes_carrier_check_unique() { # rows on stdin -> rows; rc 2 on conflict
+  local rows dup
+  rows="$(cat)"
+  [ -n "$rows" ] || return 0
+  dup="$(printf '%s\n' "$rows" | cut -f1 | sort | uniq -d | head -n1)"
+  if [ -n "$dup" ]; then echo "carrier: $dup is declared as a carrier more than once" >&2; return 2; fi
+  dup="$(printf '%s\n' "$rows" | cut -f2 | sort | uniq -d | head -n1)"
+  if [ -n "$dup" ]; then echo "carrier: $dup is claimed by more than one carrier" >&2; return 2; fi
+  printf '%s\n' "$rows"
+}
+
+# The trailer's raw value, unvalidated, so a malformed one can be reported
+# rather than silently missed.
+notes_carrier_trailer_raw() { # <sha> -> raw value or empty
+  git log -1 --format='%b' "$1" 2>/dev/null \
+    | sed -nE 's/^[[:space:]]*Changelog-Carrier-For:[[:space:]]*(.*[^[:space:]])[[:space:]]*$/\1/p' \
+    | head -n1
+}
+
+# Collect every declared pair relevant to this repository, from both sites.
+# Identical declarations from both sites are not a conflict.
+notes_carrier_pairs() { # <shas> -> carrier<TAB>original rows; rc 2 on bad metadata
+  local shas="$1" rows="" sha raw
+  rows="$(notes_carrier_ledger_rows "$NOTES_CARRIER_LEDGER")" || return 2
+  while IFS= read -r sha; do
+    [ -n "$sha" ] || continue
+    raw="$(notes_carrier_trailer_raw "$sha")"
+    [ -n "$raw" ] || continue
+    case "$raw" in *[!0-9a-f]*) echo "carrier trailer on $sha is not lowercase hex: '$raw'" >&2; return 2 ;; esac
+    if [ "${#raw}" -ne 40 ]; then
+      echo "carrier trailer on $sha must be a full 40-character sha: '$raw'" >&2; return 2
+    fi
+    if [ "$raw" = "$sha" ]; then echo "carrier trailer on $sha points at itself" >&2; return 2; fi
+    rows="${rows}${rows:+
+}${sha}	${raw}"
+  done <<EOF_SHAS
+$shas
+EOF_SHAS
+  [ -n "$rows" ] || return 0
+  printf '%s\n' "$rows" | awk 'NF' | sort -u | notes_carrier_check_unique
+}
+
 # Build one component's commits TSV (type, subject, labels, breaking) for the
 # check: every non-merge conventional commit in the component's tag range that
 # touches the component's paths. Label lookup is one gh call per commit —
@@ -155,7 +257,39 @@ notes_component_commits_tsv() { # <repo> <component> <range> -> TSV; rc 1 = rang
   # is byte-identical to a legitimately empty range and folded to a clean pass.
   shas="$(git log --no-merges --format='%H' "$range" -- "${paths[@]}" 2>/dev/null)" || return 1
   [ -n "$shas" ] || return 0
+
+  # Resolve declared carrier relationships before matching. A proven pair is
+  # ONE release-note change, so the original is dropped from the commit list
+  # and the carrier's entry stands for both — exactly one bullet is then
+  # required, and consume-once matching is untouched for everything else.
+  local pairs cs co nsc nso collapsed=""
+  pairs="$(notes_carrier_pairs "$shas")" || return 2
+  if [ -n "$pairs" ]; then
+    while IFS=$'\t' read -r cs co; do
+      [ -n "${cs:-}" ] || continue
+      # Both ends must exist at all, whichever release they belong to.
+      if ! git cat-file -e "${cs}^{commit}" 2>/dev/null; then
+        echo "carrier $cs does not resolve in this repository" >&2; return 2; fi
+      if ! git cat-file -e "${co}^{commit}" 2>/dev/null; then
+        echo "carrier $cs names $co, which does not resolve in this repository" >&2; return 2; fi
+      # A pair whose carrier is not in this component's release says nothing
+      # about it — a past repair, or another component's.
+      printf '%s\n' "$shas" | grep -qx -- "$cs" || continue
+      if ! printf '%s\n' "$shas" | grep -qx -- "$co"; then
+        echo "carrier $cs names $co, which is not in this release range" >&2; return 2; fi
+      nsc="$(notes_norm_subject "$(git log -1 --format='%s' "$cs")")"
+      nso="$(notes_norm_subject "$(git log -1 --format='%s' "$co")")"
+      if [ "$nsc" != "$nso" ]; then
+        echo "carrier $cs and original $co do not share a subject" >&2; return 2; fi
+      collapsed="${collapsed}${co}
+"
+    done <<EOF_PAIRS
+$pairs
+EOF_PAIRS
+  fi
+
   while IFS= read -r sha; do
+    if [ -n "$collapsed" ] && printf '%s\n' "$collapsed" | grep -qx -- "$sha"; then continue; fi
     # Sanitize: a hostile tab in a verbatim commit subject would inject TSV
     # columns (shifting the labels/breaking fields).
     subj="$(git log -1 --format='%s' "$sha" | tr '\t' ' ')" || return 1
@@ -176,7 +310,7 @@ notes_component_commits_tsv() { # <repo> <component> <range> -> TSV; rc 1 = rang
 # talks to GitHub itself — main owns the status/comment I/O — so the whole
 # verdict pipeline runs offline in the tests.
 notes_run_components() { # <repo> <head-sha> <workdir>
-  local repo="$1" head_sha="$2" work="$3" here comp notes_file last_tag range rc out detail dups
+  local repo="$1" head_sha="$2" work="$3" here comp notes_file last_tag range rc out detail dups tsv_rc
   here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   : > "$work/results.tsv"
   : > "$work/report.txt"
@@ -184,7 +318,18 @@ notes_run_components() { # <repo> <head-sha> <workdir>
     notes_file="$work/$comp.md"
     last_tag="$(notes_last_tag "$comp")"
     range="${last_tag:+$last_tag..}$head_sha"
-    if ! notes_component_commits_tsv "$repo" "$comp" "$range" > "$work/$comp.tsv"; then
+    tsv_rc=0
+    notes_component_commits_tsv "$repo" "$comp" "$range" \
+      > "$work/$comp.tsv" 2> "$work/$comp.err" || tsv_rc=$?
+    if [ "$tsv_rc" -eq 2 ]; then
+      # Declared carrier metadata that cannot be proven. NOT ASSESSED, never a
+      # pass: an unprovable relationship must not excuse a missing note.
+      detail="carrier metadata not verifiable — $(tr '\t|' ' /' < "$work/$comp.err" | head -n1 | head -c 160)"
+      printf '%s\tyes\t2\t%s\t0\n' "$comp" "$detail" >> "$work/results.tsv"
+      printf '== %s (%s) ==\nERROR: %s\n\n' "$comp" "$range" "$detail" >> "$work/report.txt"
+      continue
+    fi
+    if [ "$tsv_rc" -ne 0 ]; then
       # Range resolution failed (deleted/unfetched tag, bad ref). An empty TSV
       # is byte-identical to "nothing to release", so a git failure must be an
       # ERROR the fold refuses — never a clean pass (hostile-review F1).
