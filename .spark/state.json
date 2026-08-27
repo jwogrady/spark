@@ -1,5 +1,5 @@
 {
-  "next_action": "certify the v0.19.0 catch-up release: confirm Release Please proposes exactly one 0.19.0 section from the v0.16.2 boundary, close #446, then certify gates #373 (v0.17), #444 (v0.18) and #445 (v0.19) before a human merges the release PR",
-  "blockers": "v0.19.0 is unpublished; every v0.17/v0.18 leaf is closed and only their gates remain; #446 stays open until the version surfaces are proven reconciled end to end; PRs #464 (v0.20) and #440 (backlog, conflicted) stay frozen until the tag exists",
+  "next_action": "complete v0.20 Phase A: land the #442 conformance record, reconcile the #441 pre-v0.20 documentation baseline, and finish #487 so the release-notes signal separates a blocking omission from an accepted duplicate; then run Phase B (#438 dependency authority, #436 selection, #437 routing) and certify #443",
+  "blockers": "none blocking Phase A: v0.19.0 is published (tag v0.19.0 = 4823979, Latest, 2026-08-26) and #446/#373/#444/#445 are closed, so the freeze on PRs #464 and #440 has lifted; Phase B is gated on Phase A completing, per #443; #440/#439 stay out of v0.20 by decision",
   "updated": "2026-08-26"
 }
