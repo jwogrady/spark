@@ -406,8 +406,7 @@ a true prerequisite of publication, recorded as a native blocked-by edge on gate
 
 ## v0.20 — Self-host Spark
 
-**Status:** Merged (awaiting release) — every leaf of milestone #17 is closed
-and on `master`; the version has not been cut. Record:
+**Status:** Shipped — `v0.20.0` was published 2026-08-27 at `fd407c7`. Record:
 [`docs/releases/v0.20.md`](docs/releases/v0.20.md).
 
 Spark itself becomes a conforming Spark-managed repository and gains the
@@ -450,7 +449,9 @@ dogfood path.
 
 ## v0.21 — Governance as schema
 
-**Status:** Planned
+**Status:** Merged (awaiting release) — every leaf of milestone #18 is closed
+and on `master`; the version has not been cut. Record:
+[`docs/releases/v0.21.md`](docs/releases/v0.21.md).
 
 One machine-readable governance contract that can be inspected, diffed,
 provisioned, validated, and used to compile approved plans into GitHub state —
@@ -459,19 +460,24 @@ doctrine correctly and still recreate labels, priorities, and metadata rules
 inconsistently. GitHub milestone #18 is the version authority; issue #478 is the
 release gate.
 
-Nothing here is implemented. This release generalizes primitives that already
-exist rather than building beside them.
+This release generalized primitives that already existed rather than building
+beside them.
 
 - The versioned canonical schema, resolved through the existing preference tiers
   (#470), and deterministic governance `inspect`/`diff`/`apply`/`validate`
   against it (#471).
-- The plan compiler (#472) — evolving today's `issue-manifest.sh` to add
-  milestone creation, existing-issue update, schema-validated taxonomy, cycle
-  detection, diff-against-live, and verify.
-- Lifecycle integration into `doctor`, `plan`, new-repo provisioning, and work
-  selection (#473).
-- `docs-impact` as a schema-defined label family with a deterministic
-  evidence validator (#483), so no change can have silent documentation impact.
+- The plan compiler (#472) — `issue-manifest.sh` extended with milestone
+  creation, existing-issue update, schema-validated taxonomy, cycle detection,
+  diff-against-live, and verify, behind `spark plan`.
+- Lifecycle integration into `doctor`, work selection, `brief`/`resume`, and
+  new-repo provisioning (#473).
+- `docs-impact` as a schema-defined label family with a deterministic evidence
+  validator (#483), so no change can have silent documentation impact.
+
+The milestone is also the first held to its own `docs-impact` rule, with #470 as
+the sole bootstrap exception. Making that rule satisfiable required correcting
+the gate's preferred order so #483 landed before the #471 spine — recorded on
+#478, with the native dependency graph and every priority untouched.
 
 v0.21–v0.24 were separated from the v0.20 milestone on 2026-08-26, when it had
 accumulated 22 open issues across six unrelated outcomes.
