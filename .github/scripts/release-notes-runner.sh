@@ -13,9 +13,15 @@
 #
 # Advisory by design: the status is not a required check; the human merge is
 # the release act. But the status is honest (#280): `failure` when any
-# component check found a real finding, `error` (and a failed step) when a
-# check could not run correctly, `success` only when everything that was
-# assessed came back clean.
+# component check found a BLOCKING finding, `error` (and a failed step) when a
+# check could not run correctly, `success` when everything assessed came back
+# clean — or came back complete with duplicate-only findings, which the
+# description then discloses rather than hides (#487).
+#
+# That distinction is the whole point: before #487 a blocking omission and an
+# accepted historical duplicate both rendered as the same red `failure`, so
+# operators were instructed to ship past a red signal. A signal operators learn
+# to ignore cannot warn them later.
 #
 # The pure helpers below are factored out so the body parsing, subject
 # parsing, per-component commit collection, and verdict aggregation are
@@ -165,11 +171,12 @@ notes_component_commits_tsv() { # <repo> <component> <range> -> TSV; rc 1 = rang
 # Run the check for every component and record the evidence. Reads the
 # per-component notes files notes_split_body left in <workdir>; writes
 # <workdir>/results.tsv (component, assessed yes/no, check exit code, one-line
-# detail) and <workdir>/report.txt (full per-component check output). It never
+# detail, accepted-duplicate count) and <workdir>/report.txt (full
+# per-component check output). It never
 # talks to GitHub itself — main owns the status/comment I/O — so the whole
 # verdict pipeline runs offline in the tests.
 notes_run_components() { # <repo> <head-sha> <workdir>
-  local repo="$1" head_sha="$2" work="$3" here comp notes_file last_tag range rc out detail
+  local repo="$1" head_sha="$2" work="$3" here comp notes_file last_tag range rc out detail dups
   here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   : > "$work/results.tsv"
   : > "$work/report.txt"
@@ -181,7 +188,7 @@ notes_run_components() { # <repo> <head-sha> <workdir>
       # Range resolution failed (deleted/unfetched tag, bad ref). An empty TSV
       # is byte-identical to "nothing to release", so a git failure must be an
       # ERROR the fold refuses — never a clean pass (hostile-review F1).
-      printf '%s\tyes\t2\t%s\n' "$comp" "git range resolution failed ($range) — component not verifiable" >> "$work/results.tsv"
+      printf '%s\tyes\t2\t%s\t0\n' "$comp" "git range resolution failed ($range) — component not verifiable" >> "$work/results.tsv"
       printf '== %s (%s) ==\nERROR: git range resolution failed; nothing was verified\n\n' "$comp" "$range" >> "$work/report.txt"
       continue
     fi
@@ -195,10 +202,10 @@ notes_run_components() { # <repo> <head-sha> <workdir>
          ! out="$(bash "$here/release-notes-check.sh" --component "$comp" \
              --commits "$work/$comp.tsv" --notes /dev/null 2>&1)"; then
         detail="component has releasable commit(s) but NO notes section in the release PR body"
-        printf '%s\tyes\t1\t%s\n' "$comp" "$detail" >> "$work/results.tsv"
+        printf '%s\tyes\t1\t%s\t0\n' "$comp" "$detail" >> "$work/results.tsv"
         printf '== %s (%s) ==\n%s\n%s\n\n' "$comp" "$range" "$detail:" "$out" >> "$work/report.txt"
       else
-        printf '%s\tno\t-\t%s\n' "$comp" "no notes section and no releasable commits" >> "$work/results.tsv"
+        printf '%s\tno\t-\t%s\t0\n' "$comp" "no notes section and no releasable commits" >> "$work/results.tsv"
         printf '== %s ==\nnot assessed — no notes section for this component and no releasable commits in %s; nothing to verify\n\n' "$comp" "$range" >> "$work/report.txt"
       fi
       continue
@@ -209,20 +216,36 @@ notes_run_components() { # <repo> <head-sha> <workdir>
     # The detail lands in a TSV row and a markdown table cell: flatten tabs
     # and pipes so it cannot break either container.
     detail="$(printf '%s\n' "$out" | tail -n1 | tr '\t|' ' /' | head -c 200)"
-    printf '%s\tyes\t%s\t%s\n' "$comp" "$rc" "$detail" >> "$work/results.tsv"
+    # Count the duplicate findings only to DISCLOSE how many were accepted.
+    # The release consequence comes from $rc alone — never from this text — so
+    # a change to the finding wording can cost a number in a description but
+    # can never turn a blocking finding into a pass.
+    dups="$(printf '%s\n' "$out" | grep -c '^duplicate: ' || true)"
+    printf '%s\tyes\t%s\t%s\t%s\n' "$comp" "$rc" "$detail" "$dups" >> "$work/results.tsv"
     printf '== %s (%s) ==\n%s\n\n' "$comp" "$range" "$out" >> "$work/report.txt"
   done
 }
 
-# Fold the per-component exit codes into the one advisory commit-status state,
-# honesty rule: real findings → failure, any
-# check that could not run correctly (exit 2 or unexpected) → error (and main
-# fails the step), otherwise success. A not-assessed component is honest —
-# never an error, never a pass.
+# Fold the per-component exit codes into the one advisory commit-status state.
+# The fold reads the check's exit code as a RELEASE CONSEQUENCE, not as a
+# has-findings boolean (#487):
+#
+#   0 → success            no finding
+#   3 → success            duplicate-only; the notes are complete, so nothing
+#                          is misrepresented. Non-blocking, but the description
+#                          must DISCLOSE it — a silent pass would hide a real
+#                          finding, which is the same dishonesty in the other
+#                          direction.
+#   1 → failure            a blocking finding: the notes misrepresent what shipped
+#   other → error          the check could not run correctly (and main fails the step)
+#
+# The strongest consequence wins across components, so one blocking core
+# finding is never softened by clean companions. A not-assessed component is
+# honest — never an error, never a pass.
 notes_status_for_results() { # results.tsv on stdin -> success|failure|error
   awk -F'\t' '
     $2 == "yes" && $3 == 1 { found = 1 }
-    $2 == "yes" && $3 != 0 && $3 != 1 { err = 1 }
+    $2 == "yes" && $3 != 0 && $3 != 1 && $3 != 3 { err = 1 }
     END { print err ? "error" : found ? "failure" : "success" }'
 }
 
@@ -234,6 +257,7 @@ notes_render_table() { # results.tsv on stdin -> markdown table
     result = "error"
     if ($2 != "yes")  { result = "—" }
     else if ($3 == 0) { result = "pass" }
+    else if ($3 == 3) { result = "pass (" $5 " accepted duplicate(s))" }
     else if ($3 == 1) { result = "fail" }
     printf "| %s | %s | %s | %s |\n", $1, ($2 == "yes" ? "assessed" : "not-assessed"), result, $4
   }'
@@ -245,6 +269,7 @@ notes_status_desc() { # results.tsv on stdin -> "core: pass; spark-audit: …"
     r = "error"
     if ($2 != "yes")  { r = "not-assessed" }
     else if ($3 == 0) { r = "pass" }
+    else if ($3 == 3) { r = "pass with " $5 " accepted duplicates" }
     else if ($3 == 1) { r = "fail" }
     printf "%s%s: %s", (NR > 1 ? "; " : ""), $1, r
   }
