@@ -52,7 +52,11 @@ proj="$WORK/proj"; make_repo "$proj"
 mkdir -p "$proj/.spark"
 printf '{"issue.taxonomy":"alpha beta"}\n' > "$proj/.spark/preferences.json"
 out="$(cd "$proj" && env PATH="$shim" "$SPARK" doctor 2>&1)" || true
-assert_contains "a resolved override moves doctor's category set" "alpha beta" "$out"
+# Anchored to the line that reports the SET. A bare "alpha beta" needle also
+# matches the standards-boundary drift message, so it stayed green while the
+# category set had not moved at all.
+assert_contains "a resolved override moves doctor's category set" \
+  "Declared categories: alpha beta" "$out"
 
 # A project governance model that does not resolve makes every check below it
 # unassessable, and doctor must say so rather than passing.
@@ -107,8 +111,10 @@ printf 'version\t1\nmember\tpriority\tUrgent\tb60205\tMost urgent\n' \
 rm -f "$proj/.spark/governance.tsv"
 
 # ======================== brief surfaces readiness ==========================
-out="$(cd "$proj" && env PATH="$shim" "$SPARK" brief 2>&1)" || true
-assert_rc "brief still runs offline" 0 0
+rc=0; out="$(cd "$proj" && env PATH="$shim" "$SPARK" brief 2>&1)" || rc=$?
+# The real exit status, not a literal: `|| true` swallowed it and the assertion
+# could never fail.
+assert_rc "brief still runs offline" 0 "$rc"
 # With every surface satisfied there is nothing to warn about.
 case "$out" in
   *"governance surface(s) need a decision"*) bad "brief warned on a satisfied surface set" ;;
@@ -120,6 +126,36 @@ out="$(cd "$proj" && env PATH="$shim" "$SPARK" brief 2>&1)" || true
 assert_contains "brief surfaces an unresolvable model" \
   "the model does not resolve" "$out"
 rm -f "$proj/.spark/governance.tsv"
+
+# ======================== a missing surface is not "present" ================
+# A `+` row is MISSING. Counting only `!` let a provisionable surface fall
+# straight through to the green all-clear — the "a green result never means
+# not-looked-at" hazard, in the block written to eliminate it.
+rm -f "$proj/release-please-config.json"
+out="$(cd "$proj" && env PATH="$shim" "$SPARK" doctor 2>&1)" || true
+assert_contains "a missing provisionable surface is reported" \
+  "missing and provisionable" "$out"
+case "$out" in
+  *"every declared governance file surface is present"*)
+    bad "a missing surface must not read as present" ;;
+  *) ok ;;
+esac
+: > "$proj/release-please-config.json"
+
+# ======================== an extended taxonomy stays workable ==============
+# Categories come from the preference that owns them. Resolving them from the
+# model's members alone made every issue in a repo with a custom taxonomy read
+# as "category is required and none is declared" — and selection then refused
+# every issue, unfixably.
+assert_eq "a project category satisfies the requirement" "" \
+  "$(gov_issue_rows "$model" "$(printf '78\talpha,P1,docs-impact:none\tv1.0\n')" "alpha beta" \
+     | awk -F'\t' '$2 == "!"')"
+assert_contains "and a category it does NOT declare is reported" \
+  "category is required and none is declared" \
+  "$(gov_issue_rows "$model" "$(printf '79\tfeature,P1,docs-impact:none\tv1.0\n')" "alpha beta")"
+assert_contains "two project categories are still invalid" \
+  "exactly-one but 2 are set" \
+  "$(gov_issue_rows "$model" "$(printf '80\talpha,beta,docs-impact:none\tv1.0\n')" "alpha beta")"
 
 # ======================== reruns are idempotent =============================
 before="$(cd "$proj" && env PATH="$shim" "$SPARK" doctor 2>&1 | grep -c 'Governance readiness')"
@@ -137,10 +173,10 @@ assert_eq "neither doctor nor brief writes anything" "$snapshot" \
 ex="$WORK/existing"; fixture_mature_repo "$ex"
 out="$(cd "$ex" && env PATH="$shim" "$SPARK" orient 2>&1)" || true
 assert_contains "a mature repo still classifies as existing" "existing" "$out"
-case "$out" in
-  *"scaffold"*) : ;;   # the word may appear in guidance
-  *) : ;;
-esac
+# Both branches were no-ops with no ok/bad, so the block asserted nothing.
+# What actually matters is that orient stays inspect-only on an existing repo.
 assert_eq "orient wrote nothing" "" "$(cd "$ex" && git status --porcelain | grep '.spark' || true)"
+assert_eq "and recorded no classification" "" \
+  "$([ -f "$ex/.spark/preferences.json" ] && echo present || echo '')"
 
 finish
