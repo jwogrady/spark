@@ -2785,7 +2785,9 @@ cmd_docs_impact() {
 "
       done
       evidence="$(printf '%s\n' "$evidence" | awk 'NF' | LC_ALL=C sort -u)"
-      ev_desc="$(printf '%s' "$prs" | tr '\n' ' ' | sed 's/ *$//' | sed 's/^/PR(s) #/; s/ / #/g')"
+      # Built in one pass: chaining a second sed expression onto the first
+      # matched the space the first had just inserted, and rendered "##507".
+      ev_desc="PR(s) $(printf '%s\n' "$prs" | awk 'NF { printf "%s#%s", s, $1; s = " " }')"
       ;;
   esac
 
