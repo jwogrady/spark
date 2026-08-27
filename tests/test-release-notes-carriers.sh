@@ -152,6 +152,59 @@ notassessed "a malformed ledger row"                  "$carrier"
 notassessed "an original outside the release range"   "$(printf '%s\t%s' "$carrier" "$root")"
 notassessed "a pair whose subjects do not match"      "$(printf '%s\t%s' "$carrier" "$other")"
 
+# HOSTILE: two carrier trailers on ONE commit. The uniqueness tests above cover
+# the ledger's input path; this covers the trailer's, which they cannot reach.
+# Taking the first and dropping the second would silently pick a winner — the
+# exact ambiguity the contract says must be NOT ASSESSED.
+: > "$fix/.carriers.tsv"
+date +%s%N > "$fix/two.txt"; gitc add -A
+GIT_AUTHOR_DATE='2026-01-03T13:00:00' GIT_COMMITTER_DATE='2026-01-03T13:00:00' \
+  gitc commit -q -m "docs: two trailers
+
+Changelog-Carrier-For: $orig
+Changelog-Carrier-For: $other"
+head4="$(gitc rev-parse HEAD)"
+rc=0
+( cd "$fix" && NOTES_CARRIER_LEDGER=".carriers.tsv" \
+    notes_component_commits_tsv "o/r" "core" "v1.0.0..$head4" ) >/dev/null 2>&1 || rc=$?
+[ "$rc" -eq 2 ] && ok || bad "two carrier trailers on one commit must not be assessed (got $rc)"
+
+# ...and the message must name the multiplicity, not some downstream symptom.
+err="$( ( cd "$fix" && NOTES_CARRIER_LEDGER=".carriers.tsv" \
+    notes_component_commits_tsv "o/r" "core" "v1.0.0..$head4" ) 2>&1 >/dev/null || true )"
+case "$err" in
+  *"appears 2 times"*) ok ;;
+  *) bad "the two-trailer failure must say so ($err)" ;;
+esac
+
+# Two IDENTICAL trailers are still two declarations, not one — a commit that
+# says the same thing twice is still malformed metadata.
+: > "$fix/.carriers.tsv"
+date +%s%N > "$fix/dup.txt"; gitc add -A
+GIT_AUTHOR_DATE='2026-01-03T14:00:00' GIT_COMMITTER_DATE='2026-01-03T14:00:00' \
+  gitc commit -q -m "docs: duplicate trailers
+
+Changelog-Carrier-For: $orig
+Changelog-Carrier-For: $orig"
+head5="$(gitc rev-parse HEAD)"
+rc=0
+( cd "$fix" && NOTES_CARRIER_LEDGER=".carriers.tsv" \
+    notes_component_commits_tsv "o/r" "core" "v1.0.0..$head5" ) >/dev/null 2>&1 || rc=$?
+[ "$rc" -eq 2 ] && ok || bad "repeated identical trailers must not be assessed (got $rc)"
+
+# A key with no value is a declaration that cannot be honoured, not an absence.
+: > "$fix/.carriers.tsv"
+date +%s%N > "$fix/empty.txt"; gitc add -A
+GIT_AUTHOR_DATE='2026-01-03T15:00:00' GIT_COMMITTER_DATE='2026-01-03T15:00:00' \
+  gitc commit -q -m "docs: empty trailer
+
+Changelog-Carrier-For:"
+head6="$(gitc rev-parse HEAD)"
+rc=0
+( cd "$fix" && NOTES_CARRIER_LEDGER=".carriers.tsv" \
+    notes_component_commits_tsv "o/r" "core" "v1.0.0..$head6" ) >/dev/null 2>&1 || rc=$?
+[ "$rc" -eq 2 ] && ok || bad "an empty carrier trailer must not be assessed (got $rc)"
+
 # A malformed trailer is unprovable too — and must fail rather than be ignored.
 : > "$fix/.carriers.tsv"
 date +%s%N > "$fix/bad.txt"; gitc add -A
