@@ -4,7 +4,7 @@ This roadmap reflects current intent, not a commitment or timeline.
 Priorities may shift as the project evolves.
 
 **Current phase: Alpha (v0.x).** The engineering pipeline is proven and
-`v0.19.0` is the published baseline; the product itself is now being validated
+`v0.20.0` is the published baseline; the product itself is now being validated
 by real users.
 The program, its evidence gates, and the Alpha → Beta → v1.0.0 promotion path
 are the [Alpha program](docs/alpha/alpha-program.md) — a stable v1.0.0 is
