@@ -223,23 +223,81 @@ assert_rc "an absolute pathclass fails closed" 1 "$rc"
 assert_contains "and says why" "must be repo-relative" "$out"
 rm -f "$repo/.spark/governance.tsv"
 
-# Replacing the member set without updating the rules that reference it orphans
-# them. A resolved model whose exclusivity and path mappings point at members
-# that no longer exist must fail closed, not resolve.
+# Replacing the member set supersedes the lower tier's rules for the members it
+# dropped: they are pruned, not fatal. Narrowing is the whole reason member
+# sets replace rather than merge, so it must not brick the model.
 printf 'version\t1\nmember\tdocs-impact\tdi-other\t444444\tReplaces the whole set\n' \
   > "$repo/.spark/governance.tsv"
 rc=0; out="$("$SPARK" governance --tsv 2>&1)" || rc=$?
-assert_rc "orphaning the exclusive and pathclass rows fails closed" 1 "$rc"
-assert_contains "naming the orphaned exclusive rule" "is not a member of that family" "$out"
-assert_contains "and the orphaned path mapping" "is not a member of family docs-impact" "$out"
+assert_rc "a wholesale member replacement resolves" 0 "$rc"
+assert_eq "the shipped rules for dropped members are pruned" "" \
+  "$(printf '%s\n' "$out" | awk -F'\t' '$1=="pathclass" || $1=="exclusive"')"
+assert_contains "and the replacement member is what resolves" \
+  "$(printf 'member\tdocs-impact\tdi-other\t444444\t')" "$out"
 rm -f "$repo/.spark/governance.tsv"
 
-# A pathclass naming a member no family declares is not closed.
+# A pathclass naming a member no family declares is not closed — and because it
+# is declared ABOVE the tier that owns the member set, it is a typo rather than
+# something a narrowing superseded.
 printf 'version\t1\npathclass\tdocs-impact\tdocs-impact:invented\tcore\tx/\n' \
   > "$repo/.spark/governance.tsv"
 rc=0; out="$("$SPARK" governance --tsv 2>&1)" || rc=$?
 assert_rc "a pathclass for an undeclared member fails closed" 1 "$rc"
 assert_contains "naming the member" "docs-impact:invented" "$out"
+rm -f "$repo/.spark/governance.tsv"
+
+# ====== narrowing a family must stay possible (the documented escape) ======
+# Member sets replace rather than merge precisely so a tier can REMOVE a
+# member. But the shipped tier's pathclass and exclusive rows still name the
+# dropped members, and treating those as fatal made narrowing brick the model
+# with no way out — declaring a replacement rule for a member that no longer
+# exists is itself unclosed.
+mkdir -p "$repo/.spark"
+{ printf 'version\t1\n'
+  printf 'member\tdocs-impact\t%s\tc5def5\tNone\n' "$NONE"
+  printf 'member\tdocs-impact\t%s\t1d76db\tReference\n' "$REF"
+} > "$repo/.spark/governance.tsv"
+rc=0; out="$("$SPARK" governance --tsv 2>&1)" || rc=$?
+assert_rc "narrowing a family resolves" 0 "$rc"
+narrowed="$(printf '%s\n' "$out" | awk -F'\t' '$1=="member" && $2=="docs-impact"{printf "%s%s", s, $3; s=" "}')"
+assert_eq "the narrowed member set is what resolves" "$NONE $REF" "$narrowed"
+# The orphaned rules are DROPPED, not fatal, and the surviving ones are kept.
+orphans="$(printf '%s\n' "$out" | awk -F'\t' '$1=="pathclass" && $3!="'"$REF"'"{print}')"
+assert_eq "pathclass rows for dropped members are gone" "" "$orphans"
+assert_contains "the surviving class keeps its paths" \
+  "$(printf 'pathclass\tdocs-impact\t%s\tcore\tplugins/spark/docs/reference/' "$REF")" "$out"
+assert_contains "the exclusive rule survives with its member" \
+  "$(printf 'exclusive\tdocs-impact\t%s\t' "$NONE")" "$out"
+# And the verb is usable against the narrowed model rather than stuck.
+rc=0; "$SPARK" docs-impact --issue 1 --paths "$WORK/ev" >/dev/null 2>&1 || rc=$?
+assert_rc "the verb still runs against a narrowed model" 3 "$rc"
+rm -f "$repo/.spark/governance.tsv"
+
+# A genuine SAME-TIER typo must still fail closed — dropping superseded rules
+# must not become a general amnesty for rules that name nothing.
+{ printf 'version\t1\n'
+  printf 'family\tmine\tany\toptional\tMine\n'
+  printf 'member\tmine\tmine:a\t111111\tA\n'
+  printf 'pathclass\tmine\tmine:typo\tcore\tx/\n'
+} > "$repo/.spark/governance.tsv"
+rc=0; out="$("$SPARK" governance --tsv 2>&1)" || rc=$?
+assert_rc "a same-tier typo still fails closed" 1 "$rc"
+assert_contains "naming the typo" "mine:typo" "$out"
+rm -f "$repo/.spark/governance.tsv"
+
+# A family may declare at most one exclusive member: a consumer can act on only
+# one, so a second would validate and then be silently ignored, accepting a
+# combination the schema appears to forbid.
+{ printf 'version\t1\n'
+  printf 'family\tmine\tany\toptional\tMine\n'
+  printf 'member\tmine\tmine:a\t111111\tA\n'
+  printf 'member\tmine\tmine:b\t222222\tB\n'
+  printf 'exclusive\tmine\tmine:a\tA is exclusive\n'
+  printf 'exclusive\tmine\tmine:b\tB too\n'
+} > "$repo/.spark/governance.tsv"
+rc=0; out="$("$SPARK" governance --tsv 2>&1)" || rc=$?
+assert_rc "a second exclusive member is rejected" 1 "$rc"
+assert_contains "and says a family may declare at most one" "at most one" "$out"
 rm -f "$repo/.spark/governance.tsv"
 
 # ======================== not assessed, never PASS ======================
@@ -271,6 +329,21 @@ printf 'version\t1\nnonsense\tx\ty\n' > "$repo/.spark/governance.tsv"
 rc=0; out="$("$SPARK" docs-impact --issue 1 --paths "$WORK/ev" 2>&1)" || rc=$?
 assert_rc "an unresolvable model is not assessed" 3 "$rc"
 assert_contains "and names the finding" "unknown record type nonsense" "$out"
+rm -f "$repo/.spark/governance.tsv"
+
+# ====== --tsv carries records only ======================================
+# stdout is sold as stable records for CI and skills, so a coloured prose line
+# in the middle of it is a garbage row to whatever is parsing.
+mkdir -p "$repo/.spark"
+printf 'version\t1\nnonsense\tx\ty\n' > "$repo/.spark/governance.tsv"
+tsv_out="$("$SPARK" docs-impact --issue 1 --paths "$WORK/ev" --tsv 2>/dev/null)" || true
+case "$tsv_out" in
+  *$'\033'*) bad "--tsv stdout must carry no ANSI escapes" ;;
+  *) ok ;;
+esac
+bad_rows="$(printf '%s\n' "$tsv_out" | awk -F'\t' 'NF && $1 !~ /^(issue|declared|evidence|evidence-note|governed|verdict)$/ { print }')"
+assert_eq "--tsv emits only known record types" "" "$bad_rows"
+assert_contains "and still reports the verdict" "verdict	NOT ASSESSED" "$tsv_out"
 rm -f "$repo/.spark/governance.tsv"
 
 # ======================== read-only by construction =====================

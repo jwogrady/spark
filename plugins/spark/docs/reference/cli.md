@@ -160,8 +160,19 @@ human's call.
 
 ## `spark labels [--apply] [--prune-deprecated]`
 
-Reconciles the declared issue taxonomy with the labels that actually exist on
-the remote. Spark declares a seven-category taxonomy (`issue.taxonomy`), writes
+Reconciles **every governed label family** — the issue taxonomy plus the
+priority, theme, disposition, and `docs-impact` families the governance model
+declares — with the labels that actually exist on the remote.
+
+Reconciling only the taxonomy left a real gap: `docs-impact` ships as a
+*required* family, `plan` instructs the agent to declare a disposition, and the
+issue manifest hard-fails on a label the repo does not have — so a family
+nothing provisioned took the lifecycle down with it. The same omission had left
+`decision` and `human-approval` unprovisioned in repos where `spark next`
+routes on them.
+
+Category **names** still come from `issue.taxonomy`; every other family's
+members come from the governance model, which is their only authority. Spark declares a seven-category taxonomy (`issue.taxonomy`), writes
 it into every onboarded repo's `CONVENTIONS.md`, and builds
 [metadata governance](metadata-governance.md) on top of it — but labels live on
 GitHub, and `setup` is an offline, create-only pass, so provisioning them is
@@ -242,7 +253,16 @@ as governance authority.
 
 A later tier overrides a record by key. **A tier that declares any member of a
 family replaces that family's whole member set** — so an overlay can remove a
-member and not only add one, which a per-member merge could never express.
+member and not only add one, which a per-member merge could never express. The
+same applies to a class's governed paths.
+
+Removing a member leaves the lower tiers' rules about it — its exclusivity, its
+governed paths — pointing at nothing. Those rules are **pruned**, not treated as
+errors, or narrowing would make the model permanently unresolvable: declaring a
+replacement rule for a member that no longer exists is itself unclosed. Pruning
+applies only to a **strictly lower** tier. A rule declared at or above the tier
+that owns the member set is naming a member that tier can see does not exist,
+which is a typo, and still fails closed.
 Member blocks stay anchored where the base first declared them, and within a
 block the winning tier's own order holds: priority ordering is the member
 declaration order, stated as data rather than inferred from the label spelling.
@@ -340,7 +360,10 @@ below are **schema data** in the governance model — see
 | `docs-impact:companion` | a companion plugin's shipped documentation |
 
 Multiple non-`none` values are valid and expected. `none` is **exclusive** —
-combining it with any other value is invalid, not merely odd.
+combining it with any other value is invalid, not merely odd. A family may
+declare **at most one** exclusive member: a consumer can act on only one, so a
+second would validate and then be silently ignored, accepting a combination the
+schema appears to forbid.
 
 `CHANGELOG.md` files are deliberately **not** governed: Release Please
 generates them and hand-editing them is forbidden, so they can never be a
@@ -385,9 +408,24 @@ issue does not false-fail.
 
 | Mode | Evidence |
 | --- | --- |
-| default | every PR linked to the issue as a closer, aggregated |
-| `--branch` | the current branch's diff against the remote trunk — the pre-PR signal `validate` uses |
+| default | every **merged or open** PR linked to the issue as a closer, aggregated |
+| `--branch` | the branch's diff against the remote trunk, **unioned** with the issue's linked PRs — the pre-PR signal `validate` uses |
 | `--paths <file>` | repo-relative paths, one per line; deterministic and offline |
+
+A **closed-unmerged** PR is deliberately excluded: its paths never reached the
+trunk, so counting them would pass a declaration that nothing satisfies.
+
+`--branch` unions rather than judging the branch alone because the evidence set
+is **per issue, not per branch** — the documentation for an issue may already
+have merged in an earlier PR while this branch carries only code. When that
+lookup cannot be performed the verb says so, rather than reporting a FAIL the
+agent has no way to satisfy.
+
+Paths come from the **paginated** REST files endpoint, not `gh pr view --json
+files`, which stops at 100 files without saying so — a documentation change at
+position 140 of a 150-file PR was invisible and the verdict came back PASS.
+Renames contribute **both** paths: a doc moved out of a governed tree reports
+only its destination otherwise, so the tree it left would look untouched.
 
 Without `--issue`, the number comes from the branch name (`feat/483-slug`), the
 convention `codify` creates.
