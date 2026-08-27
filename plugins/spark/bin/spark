@@ -1120,18 +1120,17 @@ cmd_doctor() {
   if [ -n "$proj_root" ]; then
     echo
     echo "Issue metadata governance:"
-    local taxo gov_model_d="" gov_ok_d=1
+    local taxo gov_model_d="" gov_ok_d=1 gov_findings_d=""
+    # ONE source, not a preference here and a model there. The resolver
+    # reconciles the category family with the resolved `issue.taxonomy` — its
+    # documented owner — so reading either gives the same answer.
+    #
+    # Doctor must NOT prefer the model: doing so ignored a custom taxonomy
+    # while `spark governance` honoured it, so `governance apply` created the
+    # project's categories and doctor then reported the shipped seven missing
+    # forever. That is the disagreement this was meant to remove.
     taxo="$(resolve_issue_taxonomy "$proj_root")"
-    # The SAME resolved model the governance commands read (#473). Doctor used
-    # to reach for the taxonomy alone, which meant this check and
-    # `spark governance` could disagree about which categories exist.
-    gov_model_d="$(resolve_governance 2>/dev/null)" || gov_ok_d=0
-    if [ "$gov_ok_d" -eq 1 ]; then
-      local model_cats
-      model_cats="$(printf '%s\n' "$gov_model_d" \
-        | awk -F'\t' '$1 == "member" && $2 == "category" { printf "%s%s", s, $3; s = " " }')"
-      [ -n "$model_cats" ] && taxo="$model_cats"
-    fi
+    gov_findings_d="$(resolve_governance 2>&1 >/dev/null)" || gov_ok_d=0
     if [ -z "$taxo" ]; then
       yellow "  ! could not resolve issue.taxonomy — skipping label parity"; warnings=$((warnings+1))
     elif [ ! -d "$tmpl_dir" ]; then
@@ -1184,15 +1183,31 @@ cmd_doctor() {
     echo "Governance readiness:"
     if [ "$gov_ok_d" -eq 0 ]; then
       red "  ✗ the governance model could not be resolved — every check below is unassessable"
+      # Name the cause and the verb: discarding the findings left the operator
+      # with nothing actionable, unlike every other state in this block.
+      printf '%s\n' "$gov_findings_d" | while IFS= read -r gl; do
+        [ -n "$gl" ] && red "      ${gl#governance: }"
+      done
+      red "    Inspect it with: spark governance inspect"
       errors=$((errors+1))
     else
+      gov_model_d="$(resolve_governance 2>/dev/null)"
       green "  ✓ the resolved governance model is valid"
-      local gov_files gov_live_d gov_lrows nplus nsquig nbang
+      local gov_files gov_live_d gov_lrows nplus nsquig nbang nfplus
       gov_files="$(gov_file_rows "$gov_model_d" "$proj_root")"
       nbang="$(printf '%s\n' "$gov_files" | awk -F'\t' '$2 == "!" && NF' | wc -l | tr -d ' ')"
-      if [ "$nbang" -gt 0 ]; then
-        yellow "  ! $nbang governance file surface(s) need a human decision:"
-        printf '%s\n' "$gov_files" | awk -F'\t' '$2 == "!" && NF { print "      " $3 " — " $4 }'
+      # A `+` surface is MISSING. Counting only `!` let a missing
+      # spark-provisions file fall straight through to the green all-clear
+      # below — the "a green result never means not-looked-at" hazard, in the
+      # block written to eliminate it.
+      nfplus="$(printf '%s\n' "$gov_files" | awk -F'\t' '$2 == "+" && NF' | wc -l | tr -d ' ')"
+      if [ "$nbang" -gt 0 ] || [ "$nfplus" -gt 0 ]; then
+        [ "$nbang" -gt 0 ] && {
+          yellow "  ! $nbang governance file surface(s) need a human decision:"
+          printf '%s\n' "$gov_files" | awk -F'\t' '$2 == "!" && NF { print "      " $3 " — " $4 }'; }
+        [ "$nfplus" -gt 0 ] && {
+          yellow "  ! $nfplus governance file surface(s) are missing and provisionable:"
+          printf '%s\n' "$gov_files" | awk -F'\t' '$2 == "+" && NF { print "      " $3 " — " $4 }'; }
         warnings=$((warnings+1))
       else
         green "  ✓ every declared governance file surface is present"
@@ -1713,8 +1728,9 @@ cmd_brief() {
   # names the verb that owns it instead of guessing at it.
   local b_model="" b_bang
   if b_model="$(resolve_governance 2>/dev/null)"; then
+    # `!` AND `+`: a missing provisionable surface is not "present".
     b_bang="$(gov_file_rows "$b_model" "$root" 2>/dev/null \
-      | awk -F'\t' '$2 == "!" && NF' | wc -l | tr -d ' ')"
+      | awk -F'\t' '($2 == "!" || $2 == "+") && NF' | wc -l | tr -d ' ')"
     if [ "${b_bang:-0}" -gt 0 ]; then
       yellow "  governance         $b_bang surface(s) need a decision — spark governance diff"
     else
@@ -3164,14 +3180,20 @@ gov_label_rows() {
   ' </dev/null
 }
 
-# gov_issue_rows <model> <issues-tsv> — per-issue metadata invariants, driven
-# entirely by the schema's cardinality and requirement fields. Nothing about
+# gov_issue_rows <model> <issues-tsv> [category-names] — per-issue metadata
+# invariants, driven entirely by the schema's cardinality and requirement fields.
+#
+# The category NAME SET is passed in because `issue.taxonomy` owns it, exactly
+# as gov_label_rows takes it. Resolving categories from the model's members
+# alone meant a repo that extends the taxonomy had every issue reported as
+# "category is required and none is declared", and selection then refused every
+# issue with no way to fix it. Nothing about
 # `category` or `docs-impact` is special-cased here; a family added as data is
 # checked the same way.
 #
 # <issues-tsv>: "<number><TAB><comma-joined labels><TAB><milestone or empty>"
 gov_issue_rows() {
-  GOV_MODEL="$1" GOV_ISS="$2" awk '
+  GOV_MODEL="$1" GOV_ISS="$2" GOV_CATS="${3:-}" awk '
     BEGIN {
       FS = "\t"
       n = split(ENVIRON["GOV_MODEL"], ml, "\n")
@@ -3183,6 +3205,13 @@ gov_issue_rows() {
         }
         else if (f[1] == "member")    memof[f[3]] = f[2]
         else if (f[1] == "exclusive") excl[f[2]] = f[3]
+      }
+      # The passed-in category set overrides the model members for that one
+      # family: the preference owns those names.
+      nc = split(ENVIRON["GOV_CATS"], cats, " ")
+      if (nc > 0 && cats[1] != "") {
+        for (i in memof) if (memof[i] == "category") delete memof[i]
+        for (i = 1; i <= nc; i++) if (cats[i] != "") memof[cats[i]] = "category"
       }
       n = split(ENVIRON["GOV_ISS"], il, "\n")
       for (i = 1; i <= n; i++) {
@@ -3353,7 +3382,7 @@ gov_collect() {
             | [.number, ([.labels[].name] | join(",")), (.milestone.title // ""),
                (.issue_dependencies_summary.blocked_by // 0)] | @tsv' 2>/dev/null)"; then
     issue_rows="$(printf '%s\n' "$issues" | awk -F'\t' 'NF { print $1 "\t" $2 "\t" $3 }')"
-    gov_issue_rows "$model" "$issue_rows"
+    gov_issue_rows "$model" "$issue_rows" "$taxo"
   else
     printf 'metadata\t?\tall\tnot assessed: open issues could not be read — never assumed empty\n'
     printf 'dependency\t?\tall\tnot assessed: the dependency graph could not be read without the issue list\n'
@@ -4882,9 +4911,10 @@ cmd_resume() {
   local brief_model="" brief_files brief_bang
   if brief_model="$(resolve_governance 2>/dev/null)"; then
     brief_files="$(gov_file_rows "$brief_model" "$root" 2>/dev/null)" || brief_files=""
-    brief_bang="$(printf '%s\n' "$brief_files" | awk -F'\t' '$2 == "!" && NF' | wc -l | tr -d ' ')"
+    brief_bang="$(printf '%s\n' "$brief_files" \
+      | awk -F'\t' '($2 == "!" || $2 == "+") && NF' | wc -l | tr -d ' ')"
     if [ "$brief_bang" -gt 0 ]; then
-      yellow "    ! $brief_bang governance surface(s) need a decision — spark governance diff"
+      yellow "    ! $brief_bang governance surface(s) missing or needing a decision — spark governance diff"
     fi
   else
     yellow "    ! the governance model does not resolve — spark governance will not run"
@@ -5622,6 +5652,11 @@ next_select() {
   local pick pick_n pick_prio pick_order pick_title total
   pick="$(printf '%s' "$cand" | awk 'NF' | LC_ALL=C sort | head -n1)"
   pick_prio="$(printf '%s' "$pick" | cut -d'|' -f1)"
+  # Strip a leading numeric rank: it exists to make the sort correct, not to be
+  # read. "02:P1" displays as "P1"; a bare "P1" is left alone.
+  case "$pick_prio" in
+    [0-9][0-9]:*) pick_prio="${pick_prio#*:}" ;;
+  esac
   pick_order="$(printf '%s' "$pick" | cut -d'|' -f2)"
   pick_n="$(printf '%s' "$pick" | cut -d'|' -f3)"
   pick_title="$(printf '%s' "$pick" | cut -d'|' -f4-)"
@@ -5833,11 +5868,15 @@ EOF_ROWS
   while IFS=$'\t' read -r n labelcsv title; do
     [ -n "$n" ] || continue
     [ "$n" = "$gate" ] && continue
-    local cats=0 prios=0 prio="-" order blockers l t
+    local cats=0 prios=0 prio="-" order blockers l t prank=99
     for l in $(printf '%s' "$labelcsv" | tr ',' ' '); do
       for t in $taxo; do [ "$l" = "$t" ] && cats=$((cats+1)); done
+      # The rank is the member's position in the family's declaration order,
+      # which is what the schema calls the ordering semantics.
+      local pi=0
       for t in $prio_members; do
-        [ "$l" = "$t" ] && { prios=$((prios+1)); prio="$l"; }
+        pi=$((pi+1))
+        [ "$l" = "$t" ] && { prios=$((prios+1)); prio="$l"; prank="$pi"; }
       done
     done
     order="$(printf '%s\n' "$order_list" | grep -nx -- "$n" 2>/dev/null | cut -d: -f1)" || order=""
@@ -5848,7 +5887,7 @@ EOF_ROWS
     else
       blockers='?'
     fi
-    ev="${ev}issue	$n	$order	$cats	$prios	$prio	$blockers	$(printf '%s' "$title" | tr '\t' ' ')
+    ev="${ev}issue	$n	$order	$cats	$prios	$(printf '%02d:%s' "$prank" "$prio")	$blockers	$(printf '%s' "$title" | tr '\t' ' ')
 "
   done <<EOF_ROWS2
 $rows
@@ -5875,32 +5914,44 @@ EOF_ROWS2
 $rows
 EOF_ROWS3
 
-  echo
-  next_route "$sn" "$scat" "$sthemes" "$taxo"
-
-  # Selection is not a licence to start. An issue whose execution metadata is
-  # mechanically invalid — two categories, a required family undeclared — is
-  # not ready to be worked, and handing it to codify anyway would build on a
-  # contradiction. Refuse, name it, and leave the decision to the human: Spark
-  # must not pick which category was meant (#471's safety boundary, #473's
-  # integration).
-  if [ "$gov_ok_n" -eq 1 ] && [ -n "$sn" ]; then
-    local sel_row bad_meta
-    # Every issue in this sweep belongs to $ms by construction, so the milestone
-    # column is known without another call. Passed with -v rather than
-    # interpolated: a title carries spaces and punctuation.
-    sel_row="$(printf '%s\n' "$rows" \
-      | awk -F'\t' -v n="$sn" -v m="$ms" '$1 == n { print $1 "\t" $2 "\t" m; exit }')"
-    bad_meta="$(gov_issue_rows "$gov_model_n" "$sel_row" | awk -F'\t' '$2 == "!" && NF { print }')"
-    if [ -n "$bad_meta" ]; then
+  # Selection is not a licence to start, and readiness is checked BEFORE the
+  # route is printed: reading "route: codify → validate → ship" and then "not
+  # ready" invites acting on the first half.
+  #
+  # Exit 4, not 1. Exit 1 already means "no eligible issue — a known answer",
+  # and a caller has to be able to tell "everything is blocked" from "an issue
+  # was selected but its metadata contradicts itself".
+  if [ -n "$sn" ]; then
+    if [ "$gov_ok_n" -eq 0 ]; then
+      # Never skip this in silence. Doctor calls the same state an error; a
+      # clean-looking selection with no hint that governance was unassessable
+      # is the exact failure the check exists to prevent.
       echo
-      red "not ready: #$sn's execution metadata is mechanically invalid"
-      printf '%s\n' "$bad_meta" | awk -F'\t' 'NF { print "    ! " $4 }'
-      red "  Fix the metadata before starting. Spark reports the problem; which"
-      red "  category or disposition is meant is a human decision, never a default."
-      return 1
+      yellow "readiness NOT ASSESSED: the governance model does not resolve, so #$sn's"
+      yellow "  execution metadata could not be checked. Inspect it with:"
+      yellow "  spark governance inspect"
+    else
+      local sel_row bad_meta
+      # Every issue in this sweep belongs to $ms by construction, so the
+      # milestone column is known without another call. Passed with -v rather
+      # than interpolated: a title carries spaces and punctuation.
+      sel_row="$(printf '%s\n' "$rows" \
+        | awk -F'\t' -v n="$sn" -v m="$ms" '$1 == n { print $1 "\t" $2 "\t" m; exit }')"
+      bad_meta="$(gov_issue_rows "$gov_model_n" "$sel_row" "$taxo" \
+        | awk -F'\t' '$2 == "!" && NF { print }')"
+      if [ -n "$bad_meta" ]; then
+        echo
+        red "not ready: #$sn has mechanically invalid execution metadata"
+        printf '%s\n' "$bad_meta" | awk -F'\t' 'NF { print "    ! " $4 }'
+        red "  Fix the metadata before starting. Spark reports the problem; which"
+        red "  category or disposition is meant is a human decision, never a default."
+        return 4
+      fi
     fi
   fi
+
+  echo
+  next_route "$sn" "$scat" "$sthemes" "$taxo"
 }
 
 # Dispatch only when executed, not when sourced — sourcing (e.g. from behavioral
