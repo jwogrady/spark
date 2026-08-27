@@ -1,8 +1,24 @@
 # Problem statement — carry durable learning across project boundaries
 
-**Status:** Current planning problem for v0.17.0.
+**Status:** Historical — the v0.17 planning problem, written 2026-08-12.
 **Date:** 2026-08-12.
 **Owner:** jwogrady.
+
+> **Superseded as a statement of current planning, 2026-08-27 (#441).** This
+> document is retained as the framing that produced the provenance-promotion
+> work, and it is read here as history, not as present intent.
+>
+> What happened since: `v0.17.0` was published 2026-08-13 and **withdrawn**
+> 2026-08-26 along with the rest of the `v0.17`–`v0.19.1` line. **No commit was
+> removed and no pull request was unmerged** — the capability described below
+> survived on `master` and is publicly present in the reconstructed
+> **`v0.19.0`**, published 2026-08-26. The v0.17 milestone is recorded as
+> `Complete (no release)`.
+>
+> Current planning and release truth live in
+> [`ROADMAP.md`](../ROADMAP.md) and the v0.20 release gate (#443), never here.
+> What Spark *is* today is recorded in
+> [the pre-v0.20 IS-state baseline](governance/is-state-baseline-pre-v020.md).
 
 ## Problem
 
@@ -27,8 +43,10 @@ that recognizes that distinction and carries the learning to the right place.
 
 ## Outcome
 
-Spark v0.17.0 provides a generic, evidence-backed **provenance promotion** path for a
-spoke that belongs to a larger constellation of related projects.
+The v0.17 outcome, as framed at the time: Spark provides a generic,
+evidence-backed **provenance promotion** path for a spoke that belongs to a
+larger constellation of related projects. That capability shipped to the public
+in `v0.19.0`, not under a `v0.17.0` tag.
 
 The ownership model is:
 

@@ -125,6 +125,7 @@ plain PR titles (#415, #417, #418, #421); no merge-commit setting expresses it.
 | #441's own body cited ROADMAP showing v0.17 *In progress* | ROADMAP says `Complete (no release)` | **Already resolved** before this pass |
 | #442's body cited PR #435 as lacking an issue | #435 is closed | **Stale example**, recorded in the #442 audit |
 | `.spark/state.json` described the v0.19.0 release as pending | Live GitHub | **Corrected** under #442 via `spark state --set` |
+| `docs/problem-statement.md` read *"Current planning problem for v0.17.0"* and *"Spark v0.17.0 provides…"* | `v0.17.0` was withdrawn; the capability shipped in `v0.19.0` | **Corrected** — retained as the historical v0.17 framing with a supersession note; the document was **not** rewritten into a v0.20 problem statement |
 
 ## Surfaces audited
 
@@ -138,6 +139,13 @@ surviving occurrences outside `CHANGELOG.md` and `docs/releases/` are
 **historical by construction** — `since v0.16`, `pre-v0.16 schema`, and the
 footprint-budget lineage in `bin/spark`. None is a present-tense claim, so none
 was rewritten.
+
+The first pass of this sweep covered the repository entry points and
+`plugins/**` but not repo-root `docs/**`, and missed
+`docs/problem-statement.md` — a document whose own `Status:` line asserted a
+current planning target. The sweep was widened to every repo-root prose surface
+and re-run; a `Status:`/current-tense pattern is now part of it, so a stale
+header is caught by the same pass that catches a stale version string.
 
 ## Intentional gaps at this baseline
 
