@@ -8,9 +8,9 @@
 # one by its own accident of iteration order — `cmd_docs_impact` read the first
 # row, `gov_issue_rows` and `plan_schema_rows` the last. One rule, two answers.
 #
-# Every assertion here fails against that keying: verified by reverting the key
-# and watching 7 of these 14 turn red. A test that cannot fail against the bug
-# it describes is not evidence.
+# These are verified to DISCRIMINATE: reverting the key turns 9 of the 26 red.
+# A test that cannot fail against the bug it describes is not evidence, and this
+# milestone's recurring defect has been assertions that cannot fail.
 set -euo pipefail
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 
@@ -79,6 +79,41 @@ model="$(resolve_governance)"
 assert_eq "narrowing away the exclusive member drops its rule" 0 "$(excount "$model")"
 assert_contains "and the narrowed member survives" \
   "$(printf 'member\tdocs-impact\tdocs-impact:reference\t')" "$model"
+
+# ======================== keying by family did not over-collapse ===========
+# Two DIFFERENT families must keep two independent rules: the fix narrows the
+# key to the family, not to the record type.
+clean
+{ printf 'version\t1\n'
+  printf 'family\tmine\tany\toptional\tMine\n'
+  printf 'member\tmine\tmine:solo\t111111\tSolo\n'
+  printf 'exclusive\tmine\tmine:solo\tSolo is exclusive\n'
+} > .spark/governance.tsv
+model="$(resolve_governance)"
+assert_eq "two families keep two independent exclusive rules" 2 \
+  "$(printf '%s\n' "$model" | awk -F'\t' '$1 == "exclusive"' | grep -c . || true)"
+assert_contains "the shipped family keeps its own" \
+  "$(printf 'exclusive\tdocs-impact\tdocs-impact:none\t')" "$model"
+assert_contains "and the added family keeps its own" \
+  "$(printf 'exclusive\tmine\tmine:solo\t')" "$model"
+
+# An exclusive naming a family nobody declared is not closed.
+clean
+printf 'version\t1\nexclusive\tphantom\tphantom:x\tNope\n' > .spark/governance.tsv
+rc=0; out="$(resolve_governance 2>&1 >/dev/null)" || rc=$?
+assert_rc "an exclusive for an undeclared family fails closed" 1 "$rc"
+assert_contains "naming the family" "undeclared family phantom" "$out"
+
+# Pruning must not become an amnesty: a tier naming a member IT does not
+# declare is incoherent within itself, and still fails closed.
+clean
+{ printf 'version\t1\n'
+  printf 'member\tdocs-impact\tdocs-impact:reference\t1d76db\tOnly reference\n'
+  printf 'exclusive\tdocs-impact\tdocs-impact:none\tBut none is exclusive\n'
+} > .spark/governance.tsv
+rc=0; out="$(resolve_governance 2>&1 >/dev/null)" || rc=$?
+assert_rc "a tier naming its own nonexistent member fails closed" 1 "$rc"
+assert_contains "rather than being pruned" "not a member of that family" "$out"
 
 # ======================== every consumer, one rule =========================
 clean
