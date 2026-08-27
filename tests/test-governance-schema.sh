@@ -259,6 +259,31 @@ assert_rc "doctor fails on shipped drift" 1 "$rc"
 assert_contains "doctor names the drift" \
   "category family and the shipped issue.taxonomy disagree" "$out"
 
+# ============ an unresolvable model must not be written to a remote ============
+# The colours and descriptions spark labels --apply writes come from the model.
+# If the model cannot be resolved, creating labels from the fallback would push
+# a guess to the remote, so the verb refuses instead.
+printf 'version\t1\nnonsense\tx\ty\n' > "$repo/.spark/governance.tsv"
+rc=0; out="$("$SPARK" labels --apply 2>&1)" || rc=$?
+assert_contains "labels reports the unresolvable model" \
+  "the governance model could not be resolved" "$out"
+assert_contains "labels names the precise finding" "unknown record type nonsense" "$out"
+assert_contains "labels refuses to create from a guess" "Refusing to create labels" "$out"
+# The refusal is reported BEFORE the gh gate: the model is local truth, so an
+# unresolvable one is knowable with no network — which is what makes this
+# testable offline at all.
+assert_contains "the refusal precedes the not-assessed gh gate" "needs an authenticated gh" "$out"
+gov_pos="$(printf '%s\n' "$out" | grep -n 'could not be resolved' | cut -d: -f1)"
+gh_pos="$(printf '%s\n' "$out" | grep -n 'needs an authenticated gh' | cut -d: -f1)"
+if [ -n "$gov_pos" ] && [ -n "$gh_pos" ] && [ "$gov_pos" -lt "$gh_pos" ]; then ok; else
+  bad "the governance finding is reported before the gh gate"
+fi
+# Report-only says the same thing without the refusal language.
+rc=0; out="$("$SPARK" labels 2>&1)" || rc=$?
+assert_contains "report-only warns the colours are fallbacks" \
+  "are the fallbacks, not the declared ones" "$out"
+rm -f "$repo/.spark/governance.tsv"
+
 # ======================== read-only by construction ========================
 # The verb must not write anything: no network, no remote, no local mutation.
 git -C "$repo" checkout -q -- . 2>/dev/null || true

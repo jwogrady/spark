@@ -2194,6 +2194,35 @@ cmd_labels() {
   echo "Declared taxonomy: $taxo"
   echo
 
+  # The governance model owns each category's colour and description now, so
+  # resolve it ONCE for the whole reconciliation rather than per lookup. It is
+  # resolved before the gh check on purpose: the model is local truth, an
+  # unresolvable one is knowable with no network, and it changes what --apply
+  # would write.
+  #
+  # An unresolvable model must not silently change what reaches the remote.
+  # Without this, a malformed .spark/governance.tsv made every colour fall back
+  # to neutral grey and every description to the generic one, and --apply would
+  # have created labels from that guess — a remote mutation derived from an
+  # authority that could not be read. Report either way; refuse to write.
+  local gov_model gov_findings gov_ok=1
+  if ! gov_model="$(resolve_governance 2>&1)"; then
+    gov_ok=0; gov_findings="$gov_model"; gov_model=""
+    red "  ! the governance model could not be resolved:"
+    printf '%s\n' "$gov_findings" | while IFS= read -r gl; do
+      [ -n "$gl" ] && red "      ${gl#governance: }"
+    done
+    if [ "$apply" -eq 1 ]; then
+      red "    Refusing to create labels: their colours and descriptions come from"
+      red "    the governance model, and creating them from a fallback would write a"
+      red "    guess to the remote. Fix the model, then re-run: spark labels --apply"
+      apply=0
+    else
+      yellow "    Colours and descriptions below are the fallbacks, not the declared ones."
+    fi
+    echo
+  fi
+
   if ! command -v gh >/dev/null 2>&1 || ! gh auth status >/dev/null 2>&1; then
     yellow "  ! needs an authenticated gh — not assessed"
     yellow "    Labels live on GitHub, so this cannot be answered offline. Install and"
@@ -2210,11 +2239,7 @@ cmd_labels() {
     return 0
   fi
 
-  local cat missing=0 created=0 color desc gov_model
-  # Resolved once for the whole reconciliation rather than per category: the
-  # colours and descriptions come from the governance model now, and resolving
-  # it per lookup would validate three artifacts fourteen times over.
-  gov_model="$(resolve_governance 2>/dev/null || true)"
+  local cat missing=0 created=0 color desc
   # Unquoted on purpose: the value is a space-separated token list by schema.
   for cat in $taxo; do
     if printf '%s\n' "$existing" | grep -Fxq "$cat"; then
@@ -2276,7 +2301,10 @@ cmd_labels() {
   fi
 
   echo
-  if [ "$apply" -eq 1 ]; then
+  if [ "$gov_ok" -eq 0 ]; then
+    red "The governance model is unresolvable, so nothing was created. $missing of the"
+    red "declared categories do not exist on the remote."
+  elif [ "$apply" -eq 1 ]; then
     echo "Labels: $created created, $((${missing} - ${created})) unresolved."
   elif [ "$missing" -eq 0 ]; then
     green "Every declared category exists on the remote."
