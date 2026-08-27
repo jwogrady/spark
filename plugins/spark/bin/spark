@@ -1947,6 +1947,12 @@ governance_validate() {
       if (!fields(4, "exclusive")) next
       k = $2 SUBSEP $3
       if (k in exc) bad(sprintf("duplicate exclusive record %s/%s", $2, $3)); exc[k] = 1
+      # At most ONE per family. A consumer can only act on a single exclusive
+      # member, so a second would validate and then be silently ignored —
+      # accepting a combination the schema appears to forbid.
+      if ($2 in excfam && excfam[$2] != $3)
+        bad(sprintf("family %s already declares %s exclusive; a family may declare at most one", $2, excfam[$2]))
+      excfam[$2] = $3
       next
     }
     $1 == "pathclass" {
@@ -2717,8 +2723,13 @@ cmd_docs_impact() {
 
   local model
   if ! model="$(resolve_governance 2>&1)"; then
+    # Under --tsv the findings go to stderr: stdout is sold as stable records
+    # for CI and skills, and an ANSI-coloured prose line in the middle of it is
+    # a garbage row to whatever is parsing.
     printf '%s\n' "$model" | while IFS= read -r l; do
-      [ -n "$l" ] && red "  ${l#governance: }"
+      [ -n "$l" ] || continue
+      if [ "$tsv" -eq 1 ]; then printf '%s\n' "${l#governance: }" >&2
+      else red "  ${l#governance: }"; fi
     done
     di_report "$tsv" "NOT ASSESSED" "the governance model could not be resolved"
     return 3
