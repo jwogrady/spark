@@ -130,8 +130,8 @@ mkdir -p "$repo/.spark"
 {
   printf 'version\t1\n'
   printf 'member\tcategory\tfeature\t333333\tProject feature\n'
-  printf 'family\tdocs-impact\texactly-one\trequired\tA data-defined family\n'
-  printf 'member\tdocs-impact\tdocs-none\t444444\tNo documentation impact\n'
+  printf 'family\tproving-family\texactly-one\trequired\tA data-defined family\n'
+  printf 'member\tproving-family\tproving-member\t444444\tAdded as data, with no schema code\n'
 } > "$repo/.spark/governance.tsv"
 rc=0; out_pr="$(gov --tsv)" || rc=$?
 assert_rc "project tier resolves over operator" 0 "$rc"
@@ -142,9 +142,9 @@ assert_eq "the project member set replaces the operator one too" "" "$gone"
 
 # A new governed label family is DATA: declared in a tier, no schema code.
 assert_contains "a new family needs no schema code" \
-  "$(printf 'family\tdocs-impact\texactly-one\trequired\tA data-defined family\tproject')" "$out_pr"
+  "$(printf 'family\tproving-family\texactly-one\trequired\tA data-defined family\tproject')" "$out_pr"
 assert_contains "the new family's member resolves generically" \
-  "$(printf 'member\tdocs-impact\tdocs-none\t444444\t')" "$out_pr"
+  "$(printf 'member\tproving-family\tproving-member\t444444\t')" "$out_pr"
 
 rm -f "$repo/.spark/governance.tsv" "$opgov"
 
