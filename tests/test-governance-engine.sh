@@ -225,6 +225,22 @@ esac
 after="$(git -C "$repo" status --porcelain)"
 assert_eq "apply writes nothing when it cannot assess" "$before" "$after"
 
+# A DELIBERATE deferral is not an unknown. Emitting the trunk policy as `?`
+# meant apply — which refuses on an unread surface — could never act again, and
+# validate reported NOT ASSESSED forever. `>` says "assessed elsewhere".
+rc=0; out="$("$SPARK" governance inspect --tsv 2>&1)" || rc=$?
+assert_contains "the deferred surface uses its own status" \
+  "$(printf 'ruleset\t>\t')" "$out"
+assert_contains "and names the verb that owns it" "spark doctor --requirements" "$out"
+# apply must not be disabled by a surface it does not act on.
+rc=0; out="$("$SPARK" governance apply --yes 2>&1)" || rc=$?
+case "$out" in
+  *"nothing can be applied safely"*)
+    # Only legitimate when the LABEL surface itself is unread.
+    assert_contains "a refusal names the label surface" "label surface" "$out" ;;
+  *) ok ;;
+esac
+
 # Every surface appears in every report: a reader must be able to tell "no
 # cycles" from "never looked", which a missing row cannot express.
 rc=0; out="$("$SPARK" governance inspect --tsv 2>&1)" || rc=$?

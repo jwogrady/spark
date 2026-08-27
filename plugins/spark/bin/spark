@@ -3360,7 +3360,7 @@ gov_collect() {
     printf 'label\t?\tall\tnot assessed: labels live on GitHub and need an authenticated gh\n'
     printf 'metadata\t?\tall\tnot assessed: issue metadata lives on GitHub\n'
     printf 'dependency\t?\tall\tnot assessed: the dependency graph lives on GitHub\n'
-    printf 'ruleset\t?\ttrunk\tnot assessed: the remote policy needs an authenticated gh\n'
+    printf 'ruleset\t>\ttrunk\tdeferred: spark doctor --requirements judges the trunk policy\n'
     gov_file_rows "$model" "$root"
     return 0
   fi
@@ -3439,7 +3439,7 @@ EOF_ISS
   # request — reporting `=` from its mere existence would call an unprotected
   # trunk correct. `spark doctor` judges the policy properly against the
   # declared ruleset, so this surface defers to it by name.
-  printf 'ruleset\t?\ttrunk\tnot assessed here: spark doctor judges the trunk policy against the declared ruleset\n'
+  printf 'ruleset\t>\ttrunk\tdeferred: spark doctor --requirements judges the trunk policy against the declared ruleset\n'
 
   gov_file_rows "$model" "$root"
 }
@@ -3451,7 +3451,7 @@ gov_render() {
   printf '%s\n' "$rows" | awk -F'\t' '
     NF { c[$1 "\t" $2]++; sur[$1] = 1; if (!($1 in ord)) ord[$1] = ++n; oname[ord[$1]] = $1 }
     END {
-      printf "%-12s %s\n", "surface", "= correct  + missing  ~ drifted  ! judgment  - obsolete  ? not assessed"
+      printf "%-12s %s\n", "surface", "= ok  + missing  ~ drifted  ! judgment  - obsolete  > deferred  ? unread"
       for (i = 1; i <= n; i++) {
         s = oname[i]
         printf "%-12s", s
@@ -3460,6 +3460,7 @@ gov_render() {
         printf " ~%-4d", c[s "\t~"] + 0
         printf " !%-4d", c[s "\t!"] + 0
         printf " -%-4d", c[s "\t-"] + 0
+        printf " >%-4d", c[s "\t>"] + 0
         printf " ?%-4d", c[s "\t?"] + 0
         printf "\n"
       }
@@ -3563,10 +3564,13 @@ cmd_governance() {
       # Without this, an unauthenticated gh emptied `creates` and apply
       # announced that every surface matched a model it had not compared —
       # inverting the one invariant this whole capability rests on.
+      # Scoped to the surface apply ACTS on. Refusing on any unread surface
+      # anywhere disabled the verb outright once one surface was deliberately
+      # deferred elsewhere.
       local unread
-      unread="$(printf '%s\n' "$rows" | awk -F'\t' '$2 == "?" && NF { print }')"
+      unread="$(printf '%s\n' "$rows" | awk -F'\t' '$1 == "label" && $2 == "?" && NF { print }')"
       if [ -n "$unread" ]; then
-        yellow "  ! some surfaces could not be read, so nothing can be applied safely:"
+        yellow "  ! the label surface could not be read, so nothing can be applied safely:"
         printf '%s\n' "$unread" | awk -F'\t' 'NF { print "      ? " $1 ": " $4 }'
         echo
         yellow "NOT ASSESSED — no change was attempted."
