@@ -57,7 +57,7 @@ footprint|cmd_footprint|Measure Spark'\''s context footprint per surface (--json
 orient|cmd_orient|Classify this repo as new, existing, or ambiguous before setup; --set records the decision
 hub|cmd_hub|Report the memory hub this project declares and where the value came from; --set records it (or none)
 labels|cmd_labels|Compare this repo'\''s GitHub labels against the declared issue taxonomy; --apply creates the missing ones
-governance|cmd_governance|Render the resolved governance model: label families, structure, surfaces, enforcement (--tsv)
+governance|cmd_governance|Render the model, or inspect/diff/apply/validate repository governance against it
 docs-impact|cmd_docs_impact|Verify the declared documentation impact of an issue against its implementation evidence
 next|cmd_next|Select the next eligible milestone issue from live GitHub metadata
 help|usage|Show this help'
@@ -2207,6 +2207,16 @@ resolve_issue_taxonomy() {
 # homes, so the schema owns it and these stay thin lookups. A category the
 # model does not declare still resolves — extending issue.taxonomy is a
 # supported act — to the neutral grey and the generic description.
+# gov_fallback_desc <family> — the description used for a member the model does
+# not declare. Shared, because two writers disagreeing on it meant a label
+# created by one was immediately reported drifted by the other, forever.
+gov_fallback_desc() {
+  case "$1" in
+    category) printf '%s' 'Work category declared by issue.taxonomy' ;;
+    *)        printf '%s' "Governed by the $1 family" ;;
+  esac
+}
+
 taxonomy_label_color() { # <category> [pre-resolved model]
   local m="${2:-}" c
   [ -n "$m" ] || m="$(resolve_governance 2>/dev/null || true)"
@@ -2218,7 +2228,7 @@ taxonomy_label_desc() { # <category> [pre-resolved model]
   local m="${2:-}" d
   [ -n "$m" ] || m="$(resolve_governance 2>/dev/null || true)"
   d="$(governance_member_from "$m" category "$1" 5)"
-  printf '%s' "${d:-Work category declared by issue.taxonomy}"
+  printf '%s' "${d:-$(gov_fallback_desc category)}"
 }
 
 # spark labels [--apply] [--prune-deprecated] — reconcile the declared issue
@@ -2356,19 +2366,29 @@ cmd_labels() {
     return 0
   fi
 
-  local existing
   # --paginate walks every page: a silent truncation would report an existing
   # category as "+ missing", and under --apply the follow-up create fails on
   # the duplicate and prints a false "could not be created" error.
-  if ! existing="$(gh api --paginate 'repos/{owner}/{repo}/labels' --jq '.[].name' 2>/dev/null)"; then
+  local live existing rows
+  if ! live="$(gov_live_labels)" || [ -z "$live" ]; then
     yellow "  ! GitHub unreachable or labels unreadable — not assessed, never assumed healthy"
     return 0
   fi
+  existing="$(printf '%s\n' "$live" | awk -F'\t' 'NF { print $1 }')"
+  # This verb is a COMPATIBILITY WRAPPER (#471) over the label surface of the
+  # shared row generator: `spark governance` and this read the same rows, so
+  # membership cannot have two answers. Only the presentation differs, and it
+  # stays exactly as documented because people and tests already depend on it.
+  rows=""
+  [ "$gov_ok" -eq 1 ] && rows="$(gov_label_rows "$gov_model" "$live" "$taxo")"
 
-  local cat missing=0 created=0 color desc
+  local cat missing=0 created=0 color desc st
   # Unquoted on purpose: the value is a space-separated token list by schema.
   for cat in $taxo; do
-    if printf '%s\n' "$existing" | grep -Fxq "$cat"; then
+    st="$(printf '%s\n' "$rows" \
+      | awk -F'\t' -v n="$cat" '$1 == "label" && $3 == n { print $2; exit }')"
+    [ -n "$st" ] || st="$(printf '%s\n' "$existing" | grep -Fxq "$cat" && echo '=' || echo '+')"
+    if [ "$st" != "+" ]; then
       echo "  = $cat (exists — kept)"
       continue
     fi
@@ -2415,7 +2435,10 @@ cmd_labels() {
       echo "Family: $fam"
       while IFS= read -r label; do
         [ -n "$label" ] || continue
-        if printf '%s\n' "$existing" | grep -Fxq "$label"; then
+        st="$(printf '%s\n' "$rows" \
+          | awk -F'\t' -v n="$label" '$1 == "label" && $3 == n { print $2; exit }')"
+        [ -n "$st" ] || st="$(printf '%s\n' "$existing" | grep -Fxq "$label" && echo '=' || echo '+')"
+        if [ "$st" != "+" ]; then
           echo "  = $label (exists — kept)"
           continue
         fi
@@ -2424,7 +2447,7 @@ cmd_labels() {
           color="$(governance_member_from "$gov_model" "$fam" "$label" 4)"
           desc="$(governance_member_from "$gov_model" "$fam" "$label" 5)"
           if gh label create "$label" --color "${color:-ededed}" \
-               --description "${desc:-Governed by the $fam family}" >/dev/null 2>&1; then
+               --description "${desc:-$(gov_fallback_desc "$fam")}" >/dev/null 2>&1; then
             green "  + $label (created)"
             fcreated=$((fcreated + 1))
           else
@@ -2507,7 +2530,7 @@ EOF_MEMBERS
 #
 # The diff/apply/validate verbs against live GitHub are #471's; this is the
 # render they build on, not a second authority beside them.
-cmd_governance() {
+gov_cmd_render() {
   local usage_line="usage: spark governance [--tsv]"
   local tsv=0
   while [ "$#" -gt 0 ]; do
@@ -2963,6 +2986,538 @@ ${pr_files}"
   graded="$(di_grade "$declared" "$governed" "$exclusive_member")" || rc=$?
   di_report "$tsv" "${graded%%	*}" "${graded#*	}"
   return "$rc"
+}
+
+# ---------------------------------------------------------------------------
+# The governance engine (#471). inspect / diff / apply / validate over the
+# resolved model, with ONE row generator behind all four so a rule cannot end
+# up with two authorities. `spark labels` is an explicit compatibility wrapper
+# over the label surface of the same generator.
+#
+# Row format, stable and machine-readable:
+#   <surface> <TAB> <status> <TAB> <id> <TAB> <detail>
+#
+#   =  correct
+#   +  missing and safe to create
+#   ~  drifted and mechanically repairable
+#   !  requires human judgment — reported, NEVER guessed
+#   -  obsolete candidate, never automatically destructive
+#
+# The safety boundary is the whole point: Spark may report that #12 lacks a
+# priority; it must not choose P1. It may create the standard P1 label. It may
+# report two category labels; it must not pick which one is meant.
+# ---------------------------------------------------------------------------
+
+# gov_live_labels — name/colour/description for every label on the remote.
+# --paginate because a silent truncation would report an existing label as
+# missing, and an apply would then fail on the duplicate.
+gov_live_labels() {
+  gh api --paginate 'repos/{owner}/{repo}/labels' \
+    --jq '.[] | [.name, .color, (.description // "")] | @tsv' 2>/dev/null
+}
+
+# gov_label_rows <model> <live-tsv> <taxonomy> — the label surface.
+#
+# Category NAMES come from the taxonomy preference, which owns them; every
+# other family's names come from the model, its only authority. Presentation
+# (colour, description) always comes from the model.
+#
+# Colours compare case-insensitively: GitHub echoes them upper-case while the
+# schema declares them lower-case, and treating that as drift would report
+# every correct label as broken.
+gov_label_rows() {
+  GOV_MODEL="$1" GOV_LIVE="$2" GOV_TAXO="$3" awk '
+    BEGIN {
+      FS = "\t"
+      n = split(ENVIRON["GOV_MODEL"], ml, "\n")
+      for (i = 1; i <= n; i++) {
+        split(ml[i], f, "\t")
+        if (f[1] == "family") { if (!(f[2] in seenfam)) { seenfam[f[2]] = 1; famorder[++nf] = f[2] } }
+        else if (f[1] == "member") {
+          k = f[2] SUBSEP f[3]
+          memcol[k] = tolower(f[4]); memdesc[k] = f[5]
+          mems[f[2]] = mems[f[2]] (mems[f[2]] == "" ? "" : "\036") f[3]
+        }
+      }
+      n = split(ENVIRON["GOV_LIVE"], ll, "\n")
+      for (i = 1; i <= n; i++) {
+        split(ll[i], f, "\t")
+        if (f[1] == "") continue
+        live[f[1]] = 1; livecol[f[1]] = tolower(f[2]); livedesc[f[1]] = f[3]
+      }
+
+      for (fi = 1; fi <= nf; fi++) {
+        fam = famorder[fi]
+        if (fam == "category") {
+          nt = split(ENVIRON["GOV_TAXO"], tt, " ")
+          for (t = 1; t <= nt; t++) if (tt[t] != "") emit(fam, tt[t])
+        } else {
+          nm = split(mems[fam], mm, "\036")
+          for (m = 1; m <= nm; m++) if (mm[m] != "") emit(fam, mm[m])
+        }
+      }
+    }
+    function emit(fam, name,   k, want_c, want_d, d) {
+      k = fam SUBSEP name
+      want_c = (k in memcol) ? memcol[k] : "ededed"
+      want_d = (k in memdesc) ? memdesc[k] \
+               : (fam == "category" ? "Work category declared by issue.taxonomy" \
+                                    : ("Governed by the " fam " family"))
+      if (!(name in live)) {
+        printf "label\t+\t%s\t%s: missing; would be created #%s\n", name, fam, want_c
+        return
+      }
+      d = ""
+      if (livecol[name] != want_c) d = d sprintf("colour #%s, model declares #%s", livecol[name], want_c)
+      if (livedesc[name] != want_d)
+        d = d (d == "" ? "" : "; ") sprintf("description differs from the model")
+      if (d == "") printf "label\t=\t%s\t%s: matches the model\n", name, fam
+      else         printf "label\t~\t%s\t%s: %s\n", name, fam, d
+    }
+  ' </dev/null
+}
+
+# gov_issue_rows <model> <issues-tsv> — per-issue metadata invariants, driven
+# entirely by the schema's cardinality and requirement fields. Nothing about
+# `category` or `docs-impact` is special-cased here; a family added as data is
+# checked the same way.
+#
+# <issues-tsv>: "<number><TAB><comma-joined labels><TAB><milestone or empty>"
+gov_issue_rows() {
+  GOV_MODEL="$1" GOV_ISS="$2" awk '
+    BEGIN {
+      FS = "\t"
+      n = split(ENVIRON["GOV_MODEL"], ml, "\n")
+      for (i = 1; i <= n; i++) {
+        split(ml[i], f, "\t")
+        if (f[1] == "family") {
+          fam[f[2]] = 1; card[f[2]] = f[3]; req[f[2]] = f[4]
+          if (!(f[2] in seen)) { seen[f[2]] = 1; order[++nf] = f[2] }
+        }
+        else if (f[1] == "member")    memof[f[3]] = f[2]
+        else if (f[1] == "exclusive") excl[f[2]] = f[3]
+      }
+      n = split(ENVIRON["GOV_ISS"], il, "\n")
+      for (i = 1; i <= n; i++) {
+        split(il[i], f, "\t")
+        num = f[1]; if (num == "") continue
+        delete cnt
+        nl = split(f[2], lab, ",")
+        for (j = 1; j <= nl; j++) {
+          if (lab[j] == "") continue
+          if (lab[j] in memof) cnt[memof[lab[j]]] = cnt[memof[lab[j]]] " " lab[j]
+        }
+        # "Active execution issues" (#471): a required family is demanded of
+        # work that has a release decision. An issue still in the backlog has
+        # not been planned yet, and demanding a disposition before anyone has
+        # decided the work happens would report every idea as a defect. A
+        # CARDINALITY violation is reported either way — two categories is
+        # wrong whether or not the work is scheduled.
+        active = (f[3] != "")
+        buf = ""
+        for (fi = 1; fi <= nf; fi++) {
+          fm = order[fi]
+          v = (fm in cnt) ? cnt[fm] : ""
+          k = split(v, vv, " ")
+          # split() on a leading-space string yields an empty first element.
+          c = 0; for (x = 1; x <= k; x++) if (vv[x] != "") c++
+          if (c == 0) {
+            if (req[fm] == "required" && active)
+              buf = buf sprintf("metadata\t!\t#%s\t%s is required and none is declared\n", num, fm)
+          } else if (c > 1 && (card[fm] == "exactly-one" || card[fm] == "at-most-one")) {
+            buf = buf sprintf("metadata\t!\t#%s\t%s allows %s but %d are set:%s\n", num, fm, card[fm], c, v)
+          }
+          if ((fm in excl) && c > 1 && index(v, " " excl[fm]) > 0)
+            buf = buf sprintf("metadata\t!\t#%s\t%s is exclusive but is combined with another %s value\n", num, excl[fm], fm)
+        }
+        # Membership, not a substring: `needs-backlog` or `not-backlog` would
+        # otherwise satisfy "an explicit backlog decision" on an issue carrying
+        # no disposition member at all. Every other family test here goes
+        # through memof, and so does this one.
+        has_disp = 0
+        nl2 = split(f[2], lab2, ",")
+        for (j = 1; j <= nl2; j++)
+          if (lab2[j] != "" && (lab2[j] in memof) && memof[lab2[j]] == "disposition") has_disp = 1
+        if (f[3] == "" && !has_disp)
+          buf = buf sprintf("metadata\t!\t#%s\tno release disposition: neither a milestone nor a %s decision\n", num, "disposition")
+        if (buf == "") printf "metadata\t=\t#%s\tevery declared invariant holds\n", num
+        else printf "%s", buf
+      }
+    }
+  ' </dev/null
+}
+
+# gov_cycle_rows <edges-tsv> — cycle detection over the native blocked-by
+# graph. A cycle makes every issue in it permanently unstartable, and the
+# codify preflight would report each one blocked forever with no cause named.
+# Kahn's algorithm: whatever cannot be peeled off is in or behind a cycle.
+gov_cycle_rows() {
+  GOV_EDGES="$1" awk '
+    BEGIN {
+      FS = "\t"
+      n = split(ENVIRON["GOV_EDGES"], el, "\n")
+      for (i = 1; i <= n; i++) {
+        split(el[i], f, "\t")
+        if (f[1] == "" || f[2] == "") continue
+        # f[1] is blocked BY f[2]
+        indeg[f[1]]++; adj[f[2]] = adj[f[2]] " " f[1]
+        node[f[1]] = 1; node[f[2]] = 1
+      }
+      for (v in node) if (!(v in indeg)) indeg[v] = 0
+      changed = 1
+      while (changed) {
+        changed = 0
+        for (v in node) {
+          if (removed[v] || indeg[v] > 0) continue
+          removed[v] = 1; changed = 1
+          k = split(adj[v], aa, " ")
+          for (j = 1; j <= k; j++) if (aa[j] != "") indeg[aa[j]]--
+        }
+      }
+      stuck = ""
+      for (v in node) if (!removed[v]) stuck = stuck " #" v
+      if (stuck != "") {
+        # Sorted so the row is stable between runs.
+        m = split(stuck, ss, " "); asort_simple(ss, m)
+        out = ""
+        for (j = 1; j <= m; j++) if (ss[j] != "") out = out (out == "" ? "" : " ") ss[j]
+        printf "dependency\t!\ta cycle\tthese issues cannot be started in any order:%s%s\n", " ", out
+      }
+    }
+    # Numeric, not lexicographic: comparing "#10" against "#2" as strings
+    # printed a cycle as "#1 #10 #2", which reads as the wrong set.
+    function asort_simple(a, n,   i, j, t) {
+      for (i = 1; i <= n; i++) for (j = i + 1; j <= n; j++) {
+        if (a[j] == "") continue
+        if (a[i] == "" || (substr(a[i], 2) + 0) > (substr(a[j], 2) + 0)) { t = a[i]; a[i] = a[j]; a[j] = t }
+      }
+    }
+  ' </dev/null
+}
+
+# gov_file_rows <model> <repo-root> — the governance files the model declares.
+#
+# Rows sharing a KIND are alternatives: the kind is satisfied when any one of
+# its paths exists, and only reported missing when none does. GitHub accepts
+# several spellings for a pull request template, so one row per kind reported a
+# perfectly compliant repository as non-compliant.
+#
+# `spark-provisions` missing is a `+`; a surface the human owns is a `!`,
+# because Spark must not write it.
+gov_file_rows() {
+  local model="$1" root="$2" kind paths prov found p
+  for kind in $(printf '%s\n' "$model" \
+      | awk -F'\t' '$1 == "surface" && $3 != "github-labels" { print $2 }' | awk '!seen[$0]++'); do
+    paths="$(printf '%s\n' "$model" \
+      | awk -F'\t' -v k="$kind" '$1 == "surface" && $2 == k { print $3 }')"
+    prov="$(printf '%s\n' "$model" \
+      | awk -F'\t' -v k="$kind" '$1 == "surface" && $2 == k { print $4; exit }')"
+    found=""
+    while IFS= read -r p; do
+      [ -n "$p" ] || continue
+      [ -e "$root/$p" ] && { found="$p"; break; }
+    done <<EOF_PATHS
+$paths
+EOF_PATHS
+    if [ -n "$found" ]; then
+      printf 'file\t=\t%s\t%s: present\n' "$found" "$kind"
+    elif [ "$prov" = "spark-provisions" ]; then
+      printf 'file\t+\t%s\t%s: missing; Spark can provision it\n' \
+        "$(printf '%s' "$paths" | head -n1)" "$kind"
+    else
+      printf 'file\t!\t%s\t%s: none of its declared paths exists; %s\n' \
+        "$(printf '%s' "$paths" | head -n1)" "$kind" "$prov"
+    fi
+  done
+}
+
+# gov_collect <model> <root> — every row for every surface, in a stable order.
+# Read-only. A surface that could not be read emits a `?` row: "not assessed"
+# has to be visible, because the alternative is a clean-looking pass over state
+# nobody examined.
+gov_collect() {
+  local model="$1" root="$2" taxo live issues issue_rows n labelcsv ms blk_n
+  local edges=""
+  taxo="$(resolve_issue_taxonomy "$root")"
+
+  if ! command -v gh >/dev/null 2>&1 || ! gh auth status >/dev/null 2>&1; then
+    printf 'label\t?\tall\tnot assessed: labels live on GitHub and need an authenticated gh\n'
+    printf 'metadata\t?\tall\tnot assessed: issue metadata lives on GitHub\n'
+    printf 'dependency\t?\tall\tnot assessed: the dependency graph lives on GitHub\n'
+    printf 'ruleset\t?\ttrunk\tnot assessed: the remote policy needs an authenticated gh\n'
+    gov_file_rows "$model" "$root"
+    return 0
+  fi
+
+  if live="$(gov_live_labels)" && [ -n "$live" ]; then
+    gov_label_rows "$model" "$live" "$taxo"
+  else
+    printf 'label\t?\tall\tnot assessed: the label list could not be read — never assumed healthy\n'
+  fi
+
+  # ONE paginated call for the issue population. Paginated because a silent
+  # truncation would compute metadata and dependencies from an arbitrary subset
+  # and then report PASS for issues nobody fetched. The REST issues endpoint
+  # also carries issue_dependencies_summary, which says WHICH issues have a
+  # prerequisite — so the edge probe below runs only for those, instead of once
+  # per open issue whether or not it has one.
+  if issues="$(gh api --paginate 'repos/{owner}/{repo}/issues?state=open&per_page=100' \
+      --jq '.[] | select(.pull_request == null)
+            | [.number, ([.labels[].name] | join(",")), (.milestone.title // ""),
+               (.issue_dependencies_summary.blocked_by // 0)] | @tsv' 2>/dev/null)"; then
+    issue_rows="$(printf '%s\n' "$issues" | awk -F'\t' 'NF { print $1 "\t" $2 "\t" $3 }')"
+    gov_issue_rows "$model" "$issue_rows"
+  else
+    printf 'metadata\t?\tall\tnot assessed: open issues could not be read — never assumed empty\n'
+    printf 'dependency\t?\tall\tnot assessed: the dependency graph could not be read without the issue list\n'
+    issues=""
+  fi
+
+  # The dependency graph. A probe that fails must not read as "no prerequisite":
+  # that would let validate PASS on a repository containing a cycle, which is
+  # the one thing this surface exists to catch.
+  if [ -n "$issues" ]; then
+    local blk probe_failed=0 nwo=""
+    nwo="$(di_repo_nwo)" || nwo=""
+    while IFS=$'\t' read -r n labelcsv ms blk_n; do
+      [ -n "$n" ] || continue
+      case "$blk_n" in ''|0) continue ;; esac
+      # Blockers may live in ANOTHER repository, and a bare number cannot tell
+      # the two apart — an external #5 would fuse with a local #5 and fabricate
+      # a cycle that does not exist. Keep only same-repo edges.
+      # `gh api --jq` takes exactly one argument and no --arg, so the repo
+      # filter is applied here rather than inside the jq program.
+      if ! blk="$(gh api "repos/{owner}/{repo}/issues/$n/dependencies/blocked_by" \
+          --jq '.[] | select(.state == "open")
+                | "\(.number)\t\(.repository.full_name // "")"' 2>/dev/null)"; then
+        probe_failed=1
+        continue
+      fi
+      blk="$(printf '%s\n' "$blk" | awk -F'\t' -v me="$nwo" \
+        'NF && ($2 == "" || me == "" || $2 == me) { print $1 }')"
+      while IFS= read -r b; do
+        [ -n "$b" ] || continue
+        edges="${edges}${n}	${b}
+"
+      done <<EOF_BLK
+$blk
+EOF_BLK
+    done <<EOF_ISS
+$issues
+EOF_ISS
+    if [ "$probe_failed" -eq 1 ]; then
+      printf 'dependency\t?\tall\tnot assessed: at least one prerequisite probe failed — a failed probe is never "no prerequisite"\n'
+    elif [ -n "$edges" ]; then
+      local cyc
+      cyc="$(gov_cycle_rows "$edges")"
+      if [ -n "$cyc" ]; then printf '%s\n' "$cyc"
+      else printf 'dependency\t=\tgraph\tthe prerequisite graph is acyclic\n'
+      fi
+    else
+      printf 'dependency\t=\tgraph\tno open issue declares a prerequisite\n'
+    fi
+  fi
+
+  # The trunk policy is NOT claimed here. A non-empty ruleset list says nothing
+  # about whether the ruleset targets the trunk, is enabled, or requires a pull
+  # request — reporting `=` from its mere existence would call an unprotected
+  # trunk correct. `spark doctor` judges the policy properly against the
+  # declared ruleset, so this surface defers to it by name.
+  printf 'ruleset\t?\ttrunk\tnot assessed here: spark doctor judges the trunk policy against the declared ruleset\n'
+
+  gov_file_rows "$model" "$root"
+}
+
+# gov_render <rows> <what> — the human view. Grouped by surface, counts first,
+# because a governance report is read for its shape before its detail.
+gov_render() {
+  local rows="$1"
+  printf '%s\n' "$rows" | awk -F'\t' '
+    NF { c[$1 "\t" $2]++; sur[$1] = 1; if (!($1 in ord)) ord[$1] = ++n; oname[ord[$1]] = $1 }
+    END {
+      printf "%-12s %s\n", "surface", "= correct  + missing  ~ drifted  ! judgment  - obsolete  ? not assessed"
+      for (i = 1; i <= n; i++) {
+        s = oname[i]
+        printf "%-12s", s
+        printf " =%-4d", c[s "\t="] + 0
+        printf " +%-4d", c[s "\t+"] + 0
+        printf " ~%-4d", c[s "\t~"] + 0
+        printf " !%-4d", c[s "\t!"] + 0
+        printf " -%-4d", c[s "\t-"] + 0
+        printf " ?%-4d", c[s "\t?"] + 0
+        printf "\n"
+      }
+    }'
+  echo
+  # Everything that is not already correct, in full.
+  printf '%s\n' "$rows" | awk -F'\t' '$2 != "=" && NF { printf "  %s  %-34s %s\n", $2, $3, $4 }'
+}
+
+# spark governance [--tsv] | inspect | diff | apply | validate
+cmd_governance() {
+  local sub="" usage_line="usage: spark governance [--tsv] | inspect | diff [--tsv] | apply [--yes] [--repair-drift] | validate [--tsv]"
+  case "${1:-}" in
+    inspect|diff|apply|validate) sub="$1"; shift ;;
+    -h|--help)
+      echo "$usage_line"
+      echo
+      echo "  (bare)     render the resolved governance model; --tsv for records"
+      echo "  inspect    report repository state against the model (read-only)"
+      echo "  diff       report the proposed reconciliation (read-only)"
+      echo "  apply      create what is missing; --repair-drift also rewrites drift"
+      echo "  validate   fail closed on mechanically invalid required state"
+      return 0 ;;
+  esac
+  if [ -z "$sub" ]; then gov_cmd_render "$@"; return $?; fi
+
+  local tsv=0 yes=0 repair=0
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --tsv) tsv=1 ;;
+      --yes) yes=1 ;;
+      --repair-drift) repair=1 ;;
+      -h|--help) echo "$usage_line"; return 0 ;;
+      *) red "unknown option: $1"; echo "$usage_line"; return 1 ;;
+    esac
+    shift
+  done
+
+  local root model rows
+  root="$(git_root)"
+  if [ -z "$root" ]; then red "not inside a git repo"; return 1; fi
+  if ! model="$(resolve_governance)"; then
+    red "the governance model could not be resolved — see the findings above"
+    return 1
+  fi
+  rows="$(gov_collect "$model" "$root")"
+
+  case "$sub" in
+    inspect|diff)
+      # Read-only by construction: neither branch writes anything, local or
+      # remote. `inspect` reports state, `diff` reports the proposed
+      # reconciliation; they read the same rows, so they cannot disagree.
+      if [ "$tsv" -eq 1 ]; then printf '%s\n' "$rows"; return 0; fi
+      echo "Spark governance — $sub"
+      echo
+      gov_render "$rows"
+      if [ "$sub" = "diff" ]; then
+        echo
+        echo "Nothing was written. Create the missing LABELS with: spark governance apply"
+        echo "File surfaces are provisioned by 'spark setup'; a ! is never applied at"
+        echo "all — it needs a human decision, not a default."
+      fi
+      return 0 ;;
+    validate)
+      # Fails closed on mechanically invalid REQUIRED state only. What counts
+      # as required is the schema's own requirement field, not a list here.
+      local bad na
+      bad="$(printf '%s\n' "$rows" | awk -F'\t' '$2 == "!" && NF { print }')"
+      na="$(printf '%s\n' "$rows" | awk -F'\t' '$2 == "?" && NF { print }')"
+      if [ "$tsv" -eq 1 ]; then
+        printf '%s\n' "$rows"
+        printf 'verdict\t%s\n' \
+          "$([ -n "$bad" ] && echo FAIL || { [ -n "$na" ] && echo "NOT ASSESSED" || echo PASS; })"
+      else
+        echo "Spark governance — validate"
+        echo
+        gov_render "$rows"
+        echo
+        if [ -n "$bad" ]; then
+          red "FAIL — mechanically invalid governance state above (!)"
+          [ -z "$na" ] || yellow "     and some surfaces could not be read, so the picture is partial (?)"
+        elif [ -n "$na" ]; then
+          yellow "NOT ASSESSED — some surfaces could not be read; never assumed healthy"
+        else
+          green "PASS — every required governance invariant holds"
+        fi
+      fi
+      [ -z "$bad" ] || return 1
+      [ -z "$na" ] || return 3
+      return 0 ;;
+    apply)
+      # Create-only by default. `~` drift is a repair of something the project
+      # already chose, so it needs --repair-drift said out loud; `-` obsolete
+      # and `!` judgment are never applied at all.
+      local creates repairs st id detail fam color desc n=0 failed=0
+      creates="$(printf '%s\n' "$rows" | awk -F'\t' '$1 == "label" && $2 == "+" { print }')"
+      repairs="$(printf '%s\n' "$rows" | awk -F'\t' '$1 == "label" && $2 == "~" { print }')"
+      echo "Spark governance — apply"
+      echo
+      # A surface that was never read must never produce a green all-clear.
+      # Without this, an unauthenticated gh emptied `creates` and apply
+      # announced that every surface matched a model it had not compared —
+      # inverting the one invariant this whole capability rests on.
+      local unread
+      unread="$(printf '%s\n' "$rows" | awk -F'\t' '$2 == "?" && NF { print }')"
+      if [ -n "$unread" ]; then
+        yellow "  ! some surfaces could not be read, so nothing can be applied safely:"
+        printf '%s\n' "$unread" | awk -F'\t' 'NF { print "      ? " $1 ": " $4 }'
+        echo
+        yellow "NOT ASSESSED — no change was attempted."
+        return 3
+      fi
+      # Rows this verb does not act on are named, not skipped in silence: diff
+      # tells the operator to run apply, so apply owes them an account of
+      # anything it leaves behind.
+      local unhandled
+      unhandled="$(printf '%s\n' "$rows" | awk -F'\t' '$1 != "label" && ($2 == "+" || $2 == "~") && NF { print }')"
+      if [ -n "$unhandled" ]; then
+        yellow "  ! not handled by apply — these are provisioned by 'spark setup', not here:"
+        printf '%s\n' "$unhandled" | awk -F'\t' 'NF { print "      " $2 " " $3 "  " $4 }'
+        echo
+      fi
+      if [ -z "$creates" ] && { [ "$repair" -eq 0 ] || [ -z "$repairs" ]; }; then
+        green "Nothing to apply on the label surface: it already matches the model."
+        printf '%s\n' "$rows" | awk -F'\t' '$2 == "!" && NF { print "  ! " $3 "  " $4 }'
+        return 0
+      fi
+      if [ "$yes" -eq 0 ]; then
+        echo "Would create:"
+        printf '%s\n' "$creates" | awk -F'\t' 'NF { print "  + " $3 }'
+        if [ "$repair" -eq 1 ] && [ -n "$repairs" ]; then
+          echo "Would repair (an existing label is a project choice — this overwrites it):"
+          printf '%s\n' "$repairs" | awk -F'\t' 'NF { print "  ~ " $3 "  " $4 }'
+        fi
+        echo
+        echo "Nothing was written. Re-run with --yes to apply."
+        return 0
+      fi
+      while IFS=$'\t' read -r _ st id detail; do
+        [ -n "$id" ] || continue
+        fam="${detail%%:*}"
+        color="$(governance_member_from "$model" "$fam" "$id" 4)"
+        desc="$(governance_member_from "$model" "$fam" "$id" 5)"
+        if gh label create "$id" --color "${color:-ededed}" \
+             --description "${desc:-Governed by the $fam family}" >/dev/null 2>&1; then
+          green "  + $id (created)"; n=$((n + 1))
+        else
+          red "  ✗ $id — could not be created"; failed=$((failed + 1))
+        fi
+      done <<EOF_CREATE
+$creates
+EOF_CREATE
+      if [ "$repair" -eq 1 ]; then
+        while IFS=$'\t' read -r _ st id detail; do
+          [ -n "$id" ] || continue
+          fam="${detail%%:*}"
+          color="$(governance_member_from "$model" "$fam" "$id" 4)"
+          desc="$(governance_member_from "$model" "$fam" "$id" 5)"
+          if gh label edit "$id" --color "${color:-ededed}" \
+               --description "${desc:-$(gov_fallback_desc "$fam")}" >/dev/null 2>&1; then
+            green "  ~ $id (repaired to the model)"; n=$((n + 1))
+          else
+            red "  ✗ $id — could not be repaired"; failed=$((failed + 1))
+          fi
+        done <<EOF_REPAIR
+$repairs
+EOF_REPAIR
+      fi
+      echo
+      echo "Applied $n change(s), $failed failure(s)."
+      echo "Re-running apply now is a no-op: every create is guarded by what already exists."
+      [ "$failed" -eq 0 ] || return 1
+      return 0 ;;
+  esac
 }
 
 # spark orient [--set new|existing] — the orientation preflight (issue #183,
