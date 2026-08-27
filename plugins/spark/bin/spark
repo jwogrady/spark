@@ -2389,6 +2389,59 @@ cmd_labels() {
     fi
   done
 
+  # EVERY governed family, not only the categories.
+  #
+  # `docs-impact` ships as a REQUIRED family, `plan` instructs the agent to
+  # declare a disposition, and the issue manifest hard-fails on a label the
+  # repo does not have — so a family nothing provisions took the lifecycle down
+  # with it: `plan` aborts creating anything, and if the label is omitted
+  # instead, `validate`'s docs-impact check fails every issue forever with no
+  # verb able to fix it. Reconciling only the taxonomy left that gap. The same
+  # omission had already left `decision` and `human-approval` unprovisioned in
+  # this very repo while `spark next` routed on them.
+  #
+  # Category names still come from `issue.taxonomy` above — this reads each
+  # other family's members from the schema, which is their only authority.
+  # Create-only, like everything else: an existing label is the project's own
+  # decision and is never recoloured or re-described.
+  local fam fam_members fmissing=0 fcreated=0 label
+  if [ "$gov_ok" -eq 1 ]; then
+    for fam in $(printf '%s\n' "$gov_model" \
+        | awk -F'\t' '$1 == "family" && $2 != "category" { print $2 }'); do
+      fam_members="$(printf '%s\n' "$gov_model" \
+        | awk -F'\t' -v f="$fam" '$1 == "member" && $2 == f { print $3 }')"
+      [ -n "$fam_members" ] || continue
+      echo
+      echo "Family: $fam"
+      while IFS= read -r label; do
+        [ -n "$label" ] || continue
+        if printf '%s\n' "$existing" | grep -Fxq "$label"; then
+          echo "  = $label (exists — kept)"
+          continue
+        fi
+        fmissing=$((fmissing + 1))
+        if [ "$apply" -eq 1 ]; then
+          color="$(governance_member_from "$gov_model" "$fam" "$label" 4)"
+          desc="$(governance_member_from "$gov_model" "$fam" "$label" 5)"
+          if gh label create "$label" --color "${color:-ededed}" \
+               --description "${desc:-Governed by the $fam family}" >/dev/null 2>&1; then
+            green "  + $label (created)"
+            fcreated=$((fcreated + 1))
+          else
+            red "  ✗ $label — could not be created"
+          fi
+        else
+          yellow "  + $label (missing)"
+        fi
+      done <<EOF_MEMBERS
+$fam_members
+EOF_MEMBERS
+    done
+    missing=$((missing + fmissing))
+    created=$((created + fcreated))
+  fi
+
+  echo
   # `enhancement` is GitHub's default label and the deprecated alias for
   # `feature`. Removing it is destructive and needs proof it carries nothing.
   local deprecated_present=0
@@ -2431,13 +2484,13 @@ cmd_labels() {
   echo
   if [ "$gov_block_creates" -eq 1 ]; then
     red "The governance model is unusable, so no label was created. $missing of the"
-    red "declared categories do not exist on the remote."
+    red "declared labels do not exist on the remote."
   elif [ "$apply" -eq 1 ]; then
     echo "Labels: $created created, $((${missing} - ${created})) unresolved."
   elif [ "$missing" -eq 0 ]; then
-    green "Every declared category exists on the remote."
+    green "Every declared label exists on the remote."
   else
-    echo "$missing of the declared categories do not exist yet. This is a preview —"
+    echo "$missing of the declared labels do not exist yet. This is a preview —"
     echo "nothing was written. Create them with: spark labels --apply"
   fi
   return 0
