@@ -8,6 +8,7 @@ set -euo pipefail
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 
 sandbox_init
+. "$SPARK"   # load resolve_governance and the taxonomy seams (dispatch is source-guarded)
 
 repo="$WORK/repo"
 make_repo "$repo"
@@ -24,8 +25,7 @@ assert_eq() {
   if [ "$got" = "$want" ]; then ok; else bad "$desc — want '$want', got '$got'"; fi
 }
 
-# The resolver memoizes per process; every case here runs a fresh binary, so
-# the cache is never shared across fixtures.
+# Every case runs a fresh binary, so no fixture's model leaks into the next.
 
 # ======================== default resolution ========================
 rc=0; out="$(gov --tsv)" || rc=$?
@@ -218,27 +218,32 @@ rm -f "$repo/.spark/preferences.json"
 # ======================== the taxonomy seams read the schema ========================
 # taxonomy_label_color / taxonomy_label_desc must be lookups into the resolved
 # model, not a second copy of the values.
-( . "$SPARK"
-  cd "$repo"
-  assert_eq "taxonomy colour comes from the schema" "0e8a16" "$(taxonomy_label_color feature)"
-  assert_eq "taxonomy description comes from the schema" \
-    "Docs, references, and explanatory prose" "$(taxonomy_label_desc documentation)"
-  # Extending issue.taxonomy stays safe: an undeclared category still resolves.
-  assert_eq "an undeclared category gets neutral grey" "ededed" "$(taxonomy_label_color invented)"
-  assert_eq "an undeclared category gets the generic description" \
-    "Work category declared by issue.taxonomy" "$(taxonomy_label_desc invented)"
+assert_eq "taxonomy colour comes from the schema" "0e8a16" "$(taxonomy_label_color feature)"
+assert_eq "taxonomy description comes from the schema" \
+  "Docs, references, and explanatory prose" "$(taxonomy_label_desc documentation)"
+# Extending issue.taxonomy stays safe: an undeclared category still resolves.
+assert_eq "an undeclared category gets neutral grey" "ededed" "$(taxonomy_label_color invented)"
+assert_eq "an undeclared category gets the generic description" \
+  "Work category declared by issue.taxonomy" "$(taxonomy_label_desc invented)"
 
-  # And an operator override of the schema moves the colour with it.
-  mkdir -p "$(dirname "$(governance_operator_model)")"
-  { printf 'version\t1\n'
-    printf 'family\tcategory\texactly-one\trequired\tOps\n'
-    printf 'member\tcategory\tfeature\tabcdef\tOps feature\n'
-  } > "$(governance_operator_model)"
-  governance_cache_clear
-  assert_eq "an operator schema override moves the colour" "abcdef" "$(taxonomy_label_color feature)"
-  rm -f "$(governance_operator_model)"
-  governance_cache_clear
-)
+# And an operator override of the schema moves the colour with it.
+mkdir -p "$(dirname "$(governance_operator_model)")"
+{ printf 'version\t1\n'
+  printf 'family\tcategory\texactly-one\trequired\tOps\n'
+  printf 'member\tcategory\tfeature\tabcdef\tOps feature\n'
+} > "$(governance_operator_model)"
+assert_eq "an operator schema override moves the colour" "abcdef" "$(taxonomy_label_color feature)"
+
+# The lookups also accept a pre-resolved model, which is how cmd_labels pays for
+# resolution once instead of once per category. Same answer either way.
+m="$(resolve_governance)"
+assert_eq "a pre-resolved model gives the same colour" "abcdef" \
+  "$(taxonomy_label_color feature "$m")"
+assert_eq "a pre-resolved model gives the same description" "Ops feature" \
+  "$(taxonomy_label_desc feature "$m")"
+assert_eq "an undeclared category still falls back with a pre-resolved model" \
+  "ededed" "$(taxonomy_label_color invented "$m")"
+rm -f "$(governance_operator_model)"
 
 # ======================== shipped parity is enforced ========================
 # doctor holds the shipped model and the shipped issue.taxonomy in parity, so
