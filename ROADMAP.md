@@ -4,7 +4,7 @@ This roadmap reflects current intent, not a commitment or timeline.
 Priorities may shift as the project evolves.
 
 **Current phase: Alpha (v0.x).** The engineering pipeline is proven and
-`v0.19.0` is the published baseline; the product itself is now being validated
+`v0.20.0` is the published baseline; the product itself is now being validated
 by real users.
 The program, its evidence gates, and the Alpha → Beta → v1.0.0 promotion path
 are the [Alpha program](docs/alpha/alpha-program.md) — a stable v1.0.0 is
@@ -23,7 +23,7 @@ are the [Alpha program](docs/alpha/alpha-program.md) — a stable v1.0.0 is
 
 Each entry carries one **Status** backed by evidence — `Planned`,
 `In progress`, `Merged (awaiting release)`, `Shipped (vX.Y.Z)`,
-`Complete (no release)`, `Deferred`, or `Backlog`. The vocabulary and
+`Complete (no release)`, `Deferred`, `Backlog`, or `Blocked`. The vocabulary and
 its evidence rules are defined in
 [the release-docs checklist](plugins/spark/docs/reference/release-docs-checklist.md#roadmap-status-vocabulary);
 an item becomes `Shipped` only once its release exists. **Planning-wave names
@@ -449,9 +449,11 @@ dogfood path.
 
 ## v0.21 — Governance as schema
 
-**Status:** Merged (awaiting release) — every leaf of milestone #18 is closed
-and on `master`; the version has not been cut. Record:
-[`docs/releases/v0.21.md`](docs/releases/v0.21.md).
+**Status:** Blocked — certification was withdrawn after empirical review proved
+five gate criteria false; #470, #483, #472 and #473 were reopened, and
+release-blocking repairs are in progress. Most implementation is merged to
+`master`, but gate #478 remains open and Release Please PR #506 remains
+unmerged. Record: [`docs/releases/v0.21.md`](docs/releases/v0.21.md).
 
 One machine-readable governance contract that can be inspected, diffed,
 provisioned, validated, and used to compile approved plans into GitHub state —
@@ -472,7 +474,9 @@ beside them.
 - Lifecycle integration into `doctor`, work selection, `brief`/`resume`, and
   new-repo provisioning (#473).
 - `docs-impact` as a schema-defined label family with a deterministic evidence
-  validator (#483), so no change can have silent documentation impact.
+  validator (#483). The intent is that no change can have silent documentation
+  impact; #512 shows the validator does not yet hold that line when evidence
+  retrieval fails, which is one of the release blockers.
 
 The milestone is also the first held to its own `docs-impact` rule, with #470 as
 the sole bootstrap exception. Making that rule satisfiable required correcting

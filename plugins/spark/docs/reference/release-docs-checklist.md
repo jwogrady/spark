@@ -109,6 +109,14 @@ One status per roadmap item, backed by evidence:
 | **Complete (no release)** | Deliverables merged; the milestone intentionally cut no version | The merged artifacts and the decision record |
 | **Deferred** | Consciously postponed | The reason and, if known, the target |
 | **Backlog** | Unassigned to any release | Why it is not yet scheduled |
+| **Blocked** | Work merged or in flight, but the release cannot proceed — typically a withdrawn certification or a falsified gate criterion | The withdrawal or falsifying finding, and the issues reopened or admitted as blockers |
+
+`Blocked` exists because no other term can describe a release whose
+certification has been withdrawn. **Merged (awaiting release)** and **Shipped**
+overclaim; **In progress** reads as ordinary progress and hides that a gate was
+retracted; **Deferred** and **Backlog** say the work was chosen against, when it
+was chosen for and then found unsound. A status vocabulary that enforces
+truthfulness must not force an untruth.
 
 Never mark an item Shipped before the release exists, and never state a status
 without the evidence that backs it.

@@ -99,13 +99,19 @@ if [ -f "$roadmap" ]; then
 
   # Vocabulary: every section's Status must lead with a known term, or the
   # roadmap drifts into ad-hoc statuses no reader or tool can rely on.
+  #
+  # `Blocked` was added because the vocabulary could not express a release whose
+  # certification has been withdrawn. Every available term was a lie for that
+  # state: `Merged` and `Shipped` overclaim, `In progress` reads as ordinary
+  # progress, and `Deferred`/`Backlog` say the work was chosen against. A
+  # roadmap check meant to enforce truthfulness must not force an untruth.
   while IFS=$'\t' read -r ver status ref marker; do
     [ -n "$ver" ] || continue
     case "$status" in
-      Planned*|"In progress"*|Merged*|[Ss]hipped*|Complete*|Deferred*|Backlog*)
+      Planned*|"In progress"*|Merged*|[Ss]hipped*|Complete*|Deferred*|Backlog*|Blocked*)
         echo "ok: roadmap section \"$ver\" uses a vocabulary status" ;;
       *)
-        gap "roadmap section \"$ver\" Status \"${status:-unknown}\" is outside the vocabulary (Planned|In progress|Merged|Shipped|Complete|Deferred|Backlog)" ;;
+        gap "roadmap section \"$ver\" Status \"${status:-unknown}\" is outside the vocabulary (Planned|In progress|Merged|Shipped|Complete|Deferred|Backlog|Blocked)" ;;
     esac
   done <<< "$sections"
 
