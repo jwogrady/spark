@@ -26,13 +26,16 @@ sandbox_init
 . "$SPARK"
 
 # ---------------------------------------------------------------- fixture
-# A real repo with a real remote, because di_trunk resolves origin/HEAD and a
-# fabricated ref would test the fixture rather than the verb.
+# A repo with a real remote-tracking ref, because di_trunk resolves the trunk
+# from refs/remotes/origin/* and a branch diff against a fabricated ref would
+# test the fixture rather than the verb. The ref is written directly rather than
+# published: a suite that publishes to a trunk is a pattern the trunk guard
+# exists to stop, and it reads as one even when the remote is a throwaway bare
+# repo.
 origin="$WORK/origin.git"; git init -q --bare "$origin"
 repo="$WORK/r"; make_repo "$repo"
 git -C "$repo" remote add origin "$origin"
-git -C "$repo" push -q origin master
-git -C "$repo" remote set-head origin master
+git -C "$repo" update-ref refs/remotes/origin/master "$(git -C "$repo" rev-parse HEAD)"
 
 # The branch changes CODE only. On its own it satisfies `docs-impact:none`.
 git -C "$repo" checkout -q -b fix/77-code-only
@@ -153,6 +156,25 @@ d_out="$(cd "$repo" && env PATH="$shim" EV_LOOKUP=empty EV_PATH="$GOVERNED_PATH"
 assert_rc "and a genuine absence is still not assessed" 3 "$d_rc"
 assert_contains "with the message that fits it" \
   "no merged or open implementation PR" "$d_out"
+
+# ============ human mode reports it ONCE ===================================
+# Every assertion above reads --tsv. The human surface is a separate renderer,
+# and the first cut of this fix printed the finding twice there — once as a note
+# and once as the verdict — which reads as two problems. No --tsv assertion could
+# have caught that.
+h_rc=0
+h_out="$(cd "$repo" && env PATH="$shim" EV_LOOKUP=fail EV_PATH="$GOVERNED_PATH" \
+  "$SPARK" docs-impact --issue 77 --branch 2>&1)" || h_rc=$?
+assert_rc "human mode exits 3 on a failed lookup too" 3 "$h_rc"
+assert_eq "and states the finding exactly once" 1 \
+  "$(printf '%s\n' "$h_out" | grep -c 'linked-PR lookup for #77 failed' || true)"
+assert_contains "as NOT ASSESSED" "NOT ASSESSED" "$h_out"
+# The gradeable case still renders a full report in human mode.
+h_rc=0
+h_out="$(cd "$repo" && env PATH="$shim" EV_LOOKUP=empty EV_PATH="$GOVERNED_PATH" \
+  "$SPARK" docs-impact --issue 77 --branch 2>&1)" || h_rc=$?
+assert_rc "and exits 0 when the lookup answered none" 0 "$h_rc"
+assert_contains "showing the evidence it judged" "evidence" "$h_out"
 
 # ============ --tsv stays records-only =====================================
 # The new row must not break the contract that stdout is parseable: an

@@ -2895,8 +2895,9 @@ di_pr_paths() {
 # answer is not an answer that there is nothing there (#512).
 di_evidence_failed() {
   local tsv="$1" layer="$2" detail="$3"
-  if [ "$tsv" -eq 1 ]; then printf 'evidence-note\t%s\t%s\n' "$layer" "$detail"
-  else yellow "  ! $detail"; fi
+  # Only under --tsv. In human mode the verdict line below already carries this
+  # sentence, and printing it twice reads as two findings.
+  [ "$tsv" -eq 1 ] && printf 'evidence-note\t%s\t%s\n' "$layer" "$detail"
   di_report "$tsv" "NOT ASSESSED" "$detail"
 }
 
