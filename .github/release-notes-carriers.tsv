@@ -1,0 +1,31 @@
+# Carrier ledger — retroactive carrier relationships only.
+#
+# A carrier commit repeats an earlier commit's subject so that one logical
+# change reaches the generated release notes. The two commits are ONE
+# release-note change and must consume exactly ONE bullet.
+#
+# The NORMAL way to declare that is a trailer on the carrier commit:
+#
+#     Changelog-Carrier-For: <full-40-char-sha>
+#
+# It is immutable, travels with the commit, and is reviewed alongside it. Use
+# it for every carrier created from now on.
+#
+# This file exists only for a relationship discovered AFTER its carrier was
+# already merged, where the trailer would require rewriting immutable history.
+# It is not a general escape hatch: a row here is a repair, and every row needs
+# the same proof the trailer needs — both shas resolve, the original belongs to
+# the release being assessed, and the two subjects match.
+#
+# Format, one relationship per line:
+#     carrier-sha<TAB>original-sha
+#
+# 849c580  docs: reserve blocked-by for true prerequisites  (PR #502)
+#   carries
+# 2a88518  docs: reserve blocked-by for true prerequisites  (PR #464, issue #447)
+#
+# 2a88518 was committed 2026-08-26T16:19:45-05:00, on a branch opened before
+# the v0.19.0 cut and merged after it. It is not an ancestor of v0.19.0, so
+# v0.20.0 is its first release — but Release Please stops its walk at the
+# v0.19.0 commit (18:58:43) and never reaches it.
+849c5803f05b4ce68ab29360cc11be4fad9a49f0	2a885184419b9b5f0d334756ebaceb4e964fa263
