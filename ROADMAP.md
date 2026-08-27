@@ -23,7 +23,7 @@ are the [Alpha program](docs/alpha/alpha-program.md) — a stable v1.0.0 is
 
 Each entry carries one **Status** backed by evidence — `Planned`,
 `In progress`, `Merged (awaiting release)`, `Shipped (vX.Y.Z)`,
-`Complete (no release)`, `Deferred`, or `Backlog`. The vocabulary and
+`Complete (no release)`, `Deferred`, `Backlog`, or `Blocked`. The vocabulary and
 its evidence rules are defined in
 [the release-docs checklist](plugins/spark/docs/reference/release-docs-checklist.md#roadmap-status-vocabulary);
 an item becomes `Shipped` only once its release exists. **Planning-wave names
