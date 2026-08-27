@@ -38,9 +38,29 @@ Three options were real:
 
 **One authority per fact, and the split is explicit.** `issue.taxonomy` already owned the category *name set* across all three tiers and keeps owning it; the model owns each category's *colour, description, cardinality, and requirement* — the values formerly hard-coded in `bin/spark`. Because two shipped files now describe adjacent halves of one subject, `spark doctor` holds them in **parity**: if the shipped model's category family and the shipped `issue.taxonomy` disagree about which categories exist, that is an error. Parity is not a second authority; it is the mechanical proof that there is only one.
 
+**Parity is compared as a set, and it is needed at two levels.** Shipped-vs-shipped
+parity is a `spark doctor` error: if the shipped model's category family and the
+shipped `issue.taxonomy` name different categories, one of them is lying. It is a
+*set* comparison, because the question is which categories exist and member
+declaration order is meaningful elsewhere in the artifact — a string compare failed
+on a semantically neutral reordering and then printed two lines holding the same
+seven names, which reads as a tooling bug rather than a finding.
+
+Shipped parity is not sufficient, because the two authorities resolve
+independently through three tiers each. A *resolved* model can be perfectly valid
+and still contradict the resolved taxonomy — an operator model that replaces the
+category family with `feature` alone leaves six categories with no declared
+colour, and nothing about that fails to parse. The two readings of that gap are
+different facts and are told apart by which tier won the member set: if the shipped
+set won, a category it does not name was **added** to `issue.taxonomy`, which is the
+supported extension path and resolves to neutral grey; if an overlay tier replaced
+the set, two of the operator's own declarations **disagree**, and Spark reports the
+tier and the categories and refuses to write them. Create-only is what makes the
+refusal necessary rather than merely tidy: a guess written once is never corrected.
+
 **A family replacement is whole-set, not per-member.** A tier that declares any member of a family replaces that family's entire member set. A per-member merge can only add, never remove, and a governance overlay that cannot remove a member cannot express a real project decision.
 
-**Fail closed.** Any tier that is syntactically invalid, or a resolved model that is not closed (a member whose family nobody declared; a separation naming neither a declared family nor a declared structure aspect), is reported as one precise `<file>:<line>: <problem>` per finding, and resolution returns non-zero. An unreadable governance model never degrades to a partial one.
+**Fail closed.** Any tier that is syntactically invalid, or a resolved model that is not closed (a member whose family nobody declared; either side of a separation naming neither a declared family nor a declared structure aspect or surface — both sides are checked, because the one thing a separation asserts is that X is never derived from Y), is reported as one precise `<file>:<line>: <problem>` per finding, and resolution returns non-zero. An unreadable governance model never degrades to a partial one.
 
 **A new governed label family is data.** Adding a `family` record and its `member` records to any tier is enough; generic consumers pick it up with no schema code change.
 
