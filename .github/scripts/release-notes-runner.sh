@@ -214,21 +214,42 @@ notes_carrier_check_unique() { # rows on stdin -> rows; rc 2 on conflict
 
 # The trailer's raw value, unvalidated, so a malformed one can be reported
 # rather than silently missed.
-notes_carrier_trailer_raw() { # <sha> -> raw value or empty
+# How many carrier trailers the commit declares. Counted on the KEY, not on a
+# well-formed value, so `Changelog-Carrier-For:` with nothing after it counts as
+# a declaration — and then fails validation — rather than vanishing.
+notes_carrier_trailer_count() { # <sha> -> integer
   git log -1 --format='%b' "$1" 2>/dev/null \
-    | sed -nE 's/^[[:space:]]*Changelog-Carrier-For:[[:space:]]*(.*[^[:space:]])[[:space:]]*$/\1/p' \
-    | head -n1
+    | grep -cE '^[[:space:]]*Changelog-Carrier-For:' || true
+}
+
+# The declared value, unvalidated. Emits every occurrence: taking only the first
+# would let a second trailer disappear silently, which is exactly the ambiguity
+# the contract says must be NOT ASSESSED. The caller refuses anything but one.
+notes_carrier_trailer_raw() { # <sha> -> one raw value per declaration
+  git log -1 --format='%b' "$1" 2>/dev/null \
+    | sed -nE 's/^[[:space:]]*Changelog-Carrier-For:[[:space:]]*(.*)$/\1/p'
 }
 
 # Collect every declared pair relevant to this repository, from both sites.
 # Identical declarations from both sites are not a conflict.
 notes_carrier_pairs() { # <shas> -> carrier<TAB>original rows; rc 2 on bad metadata
-  local shas="$1" rows="" sha raw
+  local shas="$1" rows="" sha raw n
   rows="$(notes_carrier_ledger_rows "$NOTES_CARRIER_LEDGER")" || return 2
   while IFS= read -r sha; do
     [ -n "$sha" ] || continue
+    n="$(notes_carrier_trailer_count "$sha")"
+    if [ "${n:-0}" -eq 0 ]; then continue; fi
+    if [ "$n" -gt 1 ]; then
+      echo "carrier trailer on $sha appears $n times — one carrier cannot name multiple originals" >&2
+      return 2
+    fi
+    # Trim the SURROUNDING whitespace only. Stripping it everywhere would splice
+    # two half-shas into one valid-looking 40-character value, turning malformed
+    # metadata into a passing declaration — internal whitespace is malformed and
+    # the hex check below must still see it.
     raw="$(notes_carrier_trailer_raw "$sha")"
-    [ -n "$raw" ] || continue
+    raw="${raw#"${raw%%[![:space:]]*}"}"
+    raw="${raw%"${raw##*[![:space:]]}"}"
     case "$raw" in *[!0-9a-f]*) echo "carrier trailer on $sha is not lowercase hex: '$raw'" >&2; return 2 ;; esac
     if [ "${#raw}" -ne 40 ]; then
       echo "carrier trailer on $sha must be a full 40-character sha: '$raw'" >&2; return 2
