@@ -50,6 +50,7 @@ the dated record of Spark audited against the model it ships:
 
 - [governance/capability-evaluation.md](governance/capability-evaluation.md) — applying the five-question capability entry test
 - [governance/self-conformance-audit-v020.md](governance/self-conformance-audit-v020.md) — the #442 conformance matrix at master `4823979`, with every bounded exception argued
+- [governance/is-state-baseline-pre-v020.md](governance/is-state-baseline-pre-v020.md) — the #441 pre-dogfood IS-state baseline: what Spark is immediately before the v0.20 orchestration changes
 
 ## Packaging reference
 
