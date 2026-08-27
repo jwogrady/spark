@@ -481,9 +481,12 @@ Two consequences worth stating, because they are what make the rule trustworthy:
 
 - **Two exclusive members in the same tier fail closed.** That is incoherent
   rather than something to resolve, and it is rejected where it is written.
-- **Narrowing a member set prunes an obsolete rule.** If an overlay replaces the
-  family's members and the previously-exclusive member is no longer among them,
-  the lower tier's rule about it is dropped rather than left pointing at nothing.
+- **Narrowing a member set prunes an obsolete rule** — but only across tiers. If
+  an overlay replaces the family's members and a **lower** tier's exclusive
+  member is no longer among them, that lower rule is dropped rather than left
+  pointing at nothing. A tier that narrows the members *and* names a dropped
+  member in its **own** `exclusive` row is incoherent with itself and **fails
+  closed**: pruning is not an amnesty for a rule pointing at nothing.
 
 Before this was resolved per family, an override left the old and new rules both
 standing, and consumers reading in different orders enforced different members —

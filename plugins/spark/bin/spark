@@ -2774,6 +2774,19 @@ di_classify() {
     }'
 }
 
+# di_exclusive_violated <declared> <exclusive-member> — 0 when the declaration
+# breaks exclusivity. ONE implementation: di_grade and the pre-evidence check in
+# cmd_docs_impact both call it, so the CLI cannot enforce a different rule from
+# the grammar. Membership over the space-separated set, never a prefix match.
+di_exclusive_violated() {
+  local declared="$1" exclusive="$2"
+  [ -n "$exclusive" ] || return 1
+  case " $declared " in
+    *" $exclusive "*) [ "$declared" != "$exclusive" ] && return 0 ;;
+  esac
+  return 1
+}
+
 # di_grade <declared> <governed> <exclusive-member> — THE GRAMMAR, factored out
 # so it is drivable from fixtures without GitHub, the same way the remote
 # enforcement verdict is. Prints "<VERDICT><TAB><detail>"; returns 1 on FAIL,
@@ -2794,13 +2807,13 @@ di_grade() {
 
   # The exclusive member plus anything else is INVALID, not merely odd.
   if [ -n "$exclusive" ]; then
+    if di_exclusive_violated "$declared" "$exclusive"; then
+      printf 'FAIL\tINVALID: %s cannot be combined with another value (declared: %s)\n' \
+        "$exclusive" "$declared"
+      return 1
+    fi
     case " $declared " in
       *" $exclusive "*)
-        if [ "$declared" != "$exclusive" ]; then
-          printf 'FAIL\tINVALID: %s cannot be combined with another value (declared: %s)\n' \
-            "$exclusive" "$declared"
-          return 1
-        fi
         if [ -n "$governed" ]; then
           printf 'FAIL\tdeclared %s, but governed documentation changed: %s\n' "$exclusive" "$governed"
           return 1
@@ -2973,14 +2986,13 @@ cmd_docs_impact() {
     di_report "$tsv" "FAIL" "issue #$issue carries no $family disposition — silence is never 'none'"
     return 1
   fi
-  if [ -n "$exclusive_member" ]; then
-    case " $declared " in
-      *" $exclusive_member "*)
-        if [ "$declared" != "$exclusive_member" ]; then
-          di_report "$tsv" "FAIL" "INVALID: $exclusive_member cannot be combined with another $family value"
-          return 1
-        fi ;;
-    esac
+  # Same predicate as the grammar, so this early exit cannot diverge from it.
+  # It stays early only to avoid spending network calls reaching a verdict the
+  # declaration alone already determines.
+  if di_exclusive_violated "$declared" "$exclusive_member"; then
+    di_report "$tsv" "FAIL" \
+      "INVALID: $exclusive_member cannot be combined with another value (declared: $declared)"
+    return 1
   fi
 
   # --- the evidence set ----------------------------------------------------
@@ -3248,8 +3260,14 @@ gov_issue_rows() {
           } else if (c > 1 && (card[fm] == "exactly-one" || card[fm] == "at-most-one")) {
             buf = buf sprintf("metadata\t!\t#%s\t%s allows %s but %d are set:%s\n", num, fm, card[fm], c, v)
           }
-          if ((fm in excl) && c > 1 && index(v, " " excl[fm]) > 0)
-            buf = buf sprintf("metadata\t!\t#%s\t%s is exclusive but is combined with another %s value\n", num, excl[fm], fm)
+          if ((fm in excl) && c > 1) {
+            # Membership over the split elements, never a prefix match: the
+            # exclusive member must actually be one of the declared labels.
+            hasx = 0
+            for (x = 1; x <= k; x++) if (vv[x] == excl[fm]) hasx = 1
+            if (hasx)
+              buf = buf sprintf("metadata\t!\t#%s\t%s is exclusive but is combined with another %s value\n", num, excl[fm], fm)
+          }
         }
         # Membership, not a substring: `needs-backlog` or `not-backlog` would
         # otherwise satisfy "an explicit backlog decision" on an issue carrying
@@ -3708,8 +3726,14 @@ plan_schema_rows() {
         # cleanly and was then hard-FAILed as INVALID at validate time — the
         # precise drift between plan and enforcement this surface exists to
         # stop.
-        if ((fm in excl) && c > 1 && index(v, " " excl[fm]) > 0)
-          printf "plan\t!\t%s\t%s is exclusive but the plan combines it with another %s value\n", key, excl[fm], fm
+        if ((fm in excl) && c > 1) {
+          # Membership, not a prefix match — same rule, same reason as the
+          # per-issue check.
+          hasx = 0
+          for (y = 1; y <= k; y++) if (vv[y] == excl[fm]) hasx = 1
+          if (hasx)
+            printf "plan\t!\t%s\t%s is exclusive but the plan combines it with another %s value\n", key, excl[fm], fm
+        }
       }
       next
     }
