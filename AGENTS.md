@@ -111,10 +111,12 @@ issue PR → `master` (ADR-0027, and the delivery section of
 
 - One issue per branch; multiple focused Conventional Commits per branch.
 - **Ordering invariant:** if issue B depends on issue A, B's base must
-  verifiably contain A's merged result. Declare dependencies on the issue
-  (`Blocked by #N`); codify's preflight demands positive proof (merged
-  closing PR an ancestor of HEAD; HEAD exactly at the fresh trunk) and
-  blocks — or reports not-assessed — otherwise. Branch with an explicit
+  verifiably contain A's merged result. Record true prerequisites with
+  GitHub's native `blocked-by` relationship; codify's preflight treats that
+  native graph as the executable dependency authority. Prose may explain the
+  dependency but does not create one. The preflight demands positive proof
+  (merged closing PR an ancestor of HEAD; HEAD exactly at the fresh trunk) and
+  blocks — or reports not-assessed — otherwise. Branch from an explicit fresh
   `origin/<trunk>` start point.
 - **One writer per working tree:** concurrent mutation needs genuinely
   isolated worktrees; read-only analysis may run concurrently.

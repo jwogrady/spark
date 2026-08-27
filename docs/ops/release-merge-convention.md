@@ -215,6 +215,25 @@ The original commit stays exactly where it is; nothing is rewritten,
 force-pushed, or re-dated. The generated notes then state what shipped, which
 is the only property that matters.
 
+**That carrier must touch a file, and it must be path-scoped.** An *empty*
+carrier (`git commit --allow-empty`) is worse than the problem it solves.
+Release Please's manifest mode runs with `includeEmpty: true`: a commit with no
+files is assigned to **every configured package path**, because path filtering
+has nothing to filter on. At the `v0.20.0` cut an empty carrier broadcast one
+`docs:` entry into all three companions and falsely proposed `spark-audit`
+`0.2.3`, `spark-connect` `0.2.3`, and `spark-docs` `0.3.2` — three releases for
+components that had not changed, each carrying a changelog line about work they
+do not contain. Scope the carrier to a file the package owns and it cannot
+reach the others.
+
+**Retracting a merged commit's changelog entry** is possible without touching
+history. Release Please reads a `BEGIN_COMMIT_OVERRIDE` / `END_COMMIT_OVERRIDE`
+block in the *pull request body* and parses that instead of the merged commit
+message. The association is only unambiguous when the pull request contains
+exactly one commit. Putting a non-conventional line inside the block makes the
+parser yield no entry at all, which retracts the commit from every package's
+notes — the escape hatch for a carrier that went wrong.
+
 **Prevention:** a long-lived branch that spans a release cut carries this risk.
 Bringing the trunk into the branch does not help — that adds a *merge* commit
 whose date is current while the branch's own commits keep their original dates.
