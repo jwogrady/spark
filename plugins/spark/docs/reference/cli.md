@@ -391,10 +391,12 @@ code change.
 
 #### "Active execution issues"
 
-A **required** family is demanded of work that has a release decision — a
-milestone, or an explicit `backlog`. An issue nobody has scheduled has not been
-planned yet, and demanding its documentation disposition before anyone decided
-the work happens would report every idea as a defect.
+A **required** family is demanded of work with a **milestone**. `backlog` is a
+release decision, but it is the decision *not* to execute yet, so a deferred
+issue is not active execution work and is not held to it either. An issue
+nobody has scheduled has not been planned, and demanding its documentation
+disposition before anyone decided the work happens would report every idea as a
+defect.
 
 A **cardinality** violation is reported either way: two category labels is wrong
 whether or not the work is scheduled.

@@ -118,11 +118,24 @@ assert_contains "no release decision is reported" \
   "no release disposition" "$(iss "$nodisp")"
 assert_eq "a backlog label is a release decision" "" \
   "$(iss "$(printf '17\tfeature,backlog\t\n')" | grep 'release disposition' || true)"
+# Membership, not a substring: a label that merely CONTAINS the word must not
+# satisfy the decision on an issue carrying no disposition member at all.
+assert_contains "a backlog-like label does not satisfy the disposition" \
+  "no release disposition" "$(iss "$(printf '19\tfeature,needs-backlog\t\n')")"
 
 # An optional family missing is never a finding.
 assert_eq "an optional family may be absent" "" \
   "$(iss "$(printf '18\tfeature,docs-impact:none\tv0.21 — Governance as schema\n')" \
     | awk -F'\t' '$2 == "!"')"
+
+# The fallback description for a member the model does not declare has ONE
+# definition. Two writers disagreeing on it meant a label created by
+# `spark labels` was immediately reported drifted by the governance surface,
+# forever, and `--repair-drift` would then rewrite it.
+created_desc="$(taxonomy_label_desc spike "$model")"
+rows="$(gov_label_rows "$model" \
+  "$(printf 'spike\tededed\t%s\n' "$created_desc")" "feature spike")"
+assert_eq "a label created by spark labels is not reported drifted" "=" "$(row "$rows" spike)"
 
 # ======================== dependency cycles ========================
 # "<issue>\t<blocker>" — issue is blocked BY blocker.
@@ -136,6 +149,10 @@ assert_contains "naming both issues" "#1 #2" "$out"
 out="$(gov_cycle_rows "$(printf '1\t2\n2\t3\n3\t1\n')")"
 assert_contains "a three-issue cycle is caught" "cannot be started in any order" "$out"
 assert_contains "naming all three" "#1 #2 #3" "$out"
+# Numerically, not lexicographically: "#10" sorts before "#2" as a string, and
+# the list then reads as the wrong set of issues.
+out="$(gov_cycle_rows "$(printf '1\t2\n2\t10\n10\t1\n')")"
+assert_contains "cycle members are ordered numerically" "#1 #2 #10" "$out"
 # A self-edge is a cycle of one.
 assert_contains "an issue blocked by itself is caught" "cannot be started" \
   "$(gov_cycle_rows "$(printf '5\t5\n')")"
@@ -194,17 +211,44 @@ assert_contains "and say so" "NOT ASSESSED" "$out"
 case "$out" in *PASS*) bad "validate must never PASS on unread surfaces" ;; *) ok ;; esac
 rm -rf "$repo/.github" "$repo/release-please-config.json"
 
-# apply writes nothing without --yes, and nothing at all when it cannot read.
-rc=0; out="$("$SPARK" governance apply 2>&1)" || rc=$?
-assert_contains "apply is a preview by default" "Nothing" "$out"
+# apply must NEVER report a clean surface it did not read. Without this guard
+# an unauthenticated gh emptied the create list and apply announced that every
+# surface matched a model it had not compared — the one invariant this whole
+# capability rests on, inverted.
+rc=0; out="$("$SPARK" governance apply --yes 2>&1)" || rc=$?
+assert_rc "apply is not assessed when a surface is unread" 3 "$rc"
+assert_contains "and says so" "NOT ASSESSED" "$out"
+case "$out" in
+  *"already matches the model"*) bad "apply must not claim a surface it never read" ;;
+  *) ok ;;
+esac
 after="$(git -C "$repo" status --porcelain)"
-assert_eq "apply writes nothing without --yes" "$before" "$after"
+assert_eq "apply writes nothing when it cannot assess" "$before" "$after"
+
+# Every surface appears in every report: a reader must be able to tell "no
+# cycles" from "never looked", which a missing row cannot express.
+rc=0; out="$("$SPARK" governance inspect --tsv 2>&1)" || rc=$?
+for s in label metadata dependency ruleset file; do
+  assert_contains "the $s surface is always reported" "$s" \
+    "$(printf '%s\n' "$out" | awk -F'\t' '{print $1}' | sort -u | tr '\n' ' ')"
+done
+
+# diff must not promise something apply does not do.
+out="$("$SPARK" governance diff 2>&1)"
+assert_contains "diff scopes its advice to labels" "missing LABELS" "$out"
+assert_contains "and names where file surfaces come from" "spark setup" "$out"
 
 # The bare verb still renders the model — the compatibility surface #471 builds
 # on rather than replaces.
 rc=0; out="$("$SPARK" governance --tsv 2>&1)" || rc=$?
 assert_rc "the bare render still works" 0 "$rc"
 assert_contains "and still emits records" "$(printf 'family\tcategory\t')" "$out"
+
+# The verb's own help must describe its subcommands, or they are undiscoverable.
+out="$("$SPARK" governance --help 2>&1)"
+for s in inspect diff apply validate; do
+  assert_contains "help describes $s" "$s" "$out"
+done
 
 # An unknown subcommand is an error, not a silent fallthrough to the render.
 rc=0; out="$("$SPARK" governance --nonsense 2>&1)" || rc=$?
