@@ -210,6 +210,30 @@ check 1 "status outside the vocabulary is a gap" \
   "$work/bad-status.md" "$work/issues-empty.json" \
   'is outside the vocabulary'
 
+# --- `Blocked` is in the vocabulary. It was added because no existing term
+# could describe a release whose certification had been withdrawn: Merged and
+# Shipped overclaim, In progress reads as ordinary progress, and
+# Deferred/Backlog say the work was chosen against. A check that exists to
+# enforce truthfulness must not force an untruth.
+cat > "$work/blocked-status.md" <<'EOF'
+# Roadmap
+
+## v0.9 — Current train
+
+**Status:** Shipped (`v0.9.0`)
+
+Everything landed (#177).
+
+## v0.10 — Next train
+
+**Status:** Blocked — certification withdrawn; repairs in progress.
+
+Prose referencing #188.
+EOF
+check 0 "Blocked is a vocabulary status" \
+  "$work/blocked-status.md" "$work/issues-empty.json" \
+  'uses a vocabulary status'
+
 # --- the marker must start a line: the word mid-sentence is not a decision
 cat > "$work/issues-backlog-midsentence.json" <<'EOF'
 [
