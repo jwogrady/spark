@@ -82,9 +82,13 @@ separation	category	disposition	A disposition label accompanies a category; it n
 
 # --- Repository governance surfaces Spark can provision or assess --------
 surface	issue-form	.github/ISSUE_TEMPLATE	human-provisions	Issue forms; each must carry a category label and never the deprecated enhancement alias
+# Several rows may share a kind: the kind is satisfied when ANY of its paths
+# exists. GitHub accepts more than one spelling for a pull request template,
+# and naming a single one reported a correct repository as non-compliant.
 surface	pr-template	.github/pull_request_template.md	human-provisions	Pull request template
+surface	pr-template	.github/PULL_REQUEST_TEMPLATE.md	human-provisions	Pull request template (upper-case spelling)
+surface	pr-template	.github/PULL_REQUEST_TEMPLATE	human-provisions	Pull request template directory
 surface	label-set	github-labels	spark-provisions	The governed label families as they exist on the remote
-surface	ruleset	settings/github-ruleset-trunk.json	assessed-only	The trunk protection policy Spark declares; applying it stays a human act
 surface	release-config	release-please-config.json	spark-provisions	Release automation configuration
 
 # --- Enforcement requirements that can be assessed mechanically ----------
