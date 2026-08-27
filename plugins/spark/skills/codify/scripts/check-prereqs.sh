@@ -48,11 +48,16 @@ set -euo pipefail
 #   trunk   <TAB> none | unrefreshed <TAB> <trunk-ref>
 prereq_verdict() {
   local kind a b blockers=0 blocked=0 unassessed=0 trunk="" fresh_seen=0 fresh_ok=1 unrefreshed=
-  local blocked_lines="" unassessed_lines=""
+  local blocked_lines="" unassessed_lines="" drift_lines="" drifts=0
   bl() { blocked_lines="${blocked_lines}${1}
 "; blocked=$((blocked+1)); }
   na() { unassessed_lines="${unassessed_lines}${1}
 "; unassessed=$((unassessed+1)); }
+  # Drift is reported on every path and decides nothing. It is documentation
+  # disagreeing with the executable graph, which is a thing to fix, not a
+  # reason to refuse work.
+  dr() { drift_lines="${drift_lines}${1}
+"; drifts=$((drifts+1)); }
   while IFS=$'\t' read -r kind a b; do
     case "$kind" in
       blocker)
@@ -77,6 +82,8 @@ prereq_verdict() {
             # Malformed classification never passes silently.
             bl "blocked: unreadable prerequisite evidence for #$a ('$b') — verify by hand" ;;
         esac ;;
+      drift)
+        dr "drift: this issue's body says 'Blocked by #$a', but GitHub's native dependency graph does not record it — prose explains prerequisites, it never creates one; add the native edge if it is real, or correct the body" ;;
       behind|ahead)
         fresh_seen=1
         case "$a" in
@@ -101,6 +108,12 @@ prereq_verdict() {
         esac ;;
     esac
   done
+
+  # Emitted before the verdict and on every path: drift changes no exit code,
+  # so it must not be reachable only through one branch.
+  if [ "$drifts" -gt 0 ]; then
+    printf '%s' "$drift_lines"
+  fi
 
   if [ "$blocked" -gt 0 ]; then
     printf '%s' "$blocked_lines"
@@ -200,19 +213,37 @@ gather_evidence() {
   # (OPEN is a positive violation) and are otherwise NOT ASSESSED — their
   # integration into this base is never provable here, and the current
   # repository is never silently substituted.
-  local self deps slug
+  local self deps slug native_nums body_refs
   self="$(gh api "repos/{owner}/{repo}" --jq .full_name 2>/dev/null)" || return 3
   deps="$(gh api "repos/{owner}/{repo}/issues/$issue/dependencies/blocked_by" \
             --jq '.[] | "\(.number)\t\(.repository_url // "")"' 2>/dev/null)" || return 3
   body="$(gh issue view "$issue" --json body --jq .body 2>/dev/null)" || return 3
+  # ONE executable authority (#438). The native graph answered, so it IS the
+  # prerequisite graph; body prose never adds an edge to it. Merging the two
+  # gave a stale sentence the power to manufacture a blocker GitHub does not
+  # have — a phantom prerequisite that fails readiness closed, and a graph
+  # that disagrees with what selection and GitHub itself see.
   # Number first, owning-repo slug second: tab is IFS whitespace, so only a
   # TRAILING empty field survives `read` — a leading one would be stripped
   # and silently drop the unknown-repository case.
-  deps="$(printf '%s\n%s\n' \
-      "$(printf '%s\n' "$deps" | awk -F'\t' 'NF{sub(".*/repos/","",$2); print $1"\t"$2}')" \
-      "$(printf '%s\n' "$body" | grep -ioE 'blocked[- ]by[: ]*(#[0-9]+[, ]*)+' \
-         | grep -oE '#[0-9]+' | tr -d '#' | awk -v s="$self" 'NF{print $0"\t"s}' || true)" \
-    | awk 'NF' | sort -u)"
+  deps="$(printf '%s\n' "$deps" \
+    | awk -F'\t' 'NF{sub(".*/repos/","",$2); print $1"\t"$2}' | sort -u)"
+  native_nums="$(printf '%s\n' "$deps" | awk -F'\t' 'NF{print $1}' | sort -u)"
+
+  # Prose still MEANS something — it just means documentation, not execution.
+  # A `Blocked by #N` the native graph does not carry is reported as drift so
+  # the contradiction is visible and repairable, never silently enforced and
+  # never silently ignored. Bare body numbers are also repo-ambiguous, which is
+  # a second reason they cannot be trusted as edges (#363).
+  body_refs="$(printf '%s\n' "$body" | grep -ioE 'blocked[- ]by[: ]*(#[0-9]+[, ]*)+' \
+    | grep -oE '#[0-9]+' | tr -d '#' | awk 'NF' | sort -u || true)"
+  while IFS= read -r n; do
+    [ -n "$n" ] || continue
+    printf '%s\n' "$native_nums" | grep -qx -- "$n" && continue
+    printf 'drift\t%s\tprose-only\n' "$n"
+  done <<EOF_DRIFT
+$body_refs
+EOF_DRIFT
 
   while IFS=$'\t' read -r n slug; do
     [ -n "$n" ] || continue
