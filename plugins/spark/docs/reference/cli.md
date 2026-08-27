@@ -672,6 +672,18 @@ Each new type exists because its absence was where drift entered:
   sub-issue of something in the same artifact — if it is not, the plan says the
   placement **cannot be applied** and why, rather than reporting success with
   the data dropped.
+
+  Because GitHub holds it under a parent, order is **scoped to that parent**:
+
+  - positions are unique **within a parent**, so two independent gates may each
+    declare a first child. An artifact that can carry several milestones and
+    hierarchies has to be able to say what order each one wants;
+  - placement chains reset at each parent — a child is placed after its own
+    **sibling**, never after a child of a different parent, which GitHub cannot
+    do;
+  - a child attached to **more than one** parent cannot be ordered, because its
+    order parent is undecidable. Two parents with no `order` record between them
+    stay legal; the ambiguity is about ordering, not about hierarchy.
 - **`update`** — an existing issue could only ever be a link target, so every
   restructuring had to be applied by hand.
 
