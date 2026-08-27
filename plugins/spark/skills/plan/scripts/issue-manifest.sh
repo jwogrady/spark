@@ -160,9 +160,30 @@ im_ms_keys() { # <manifest-file>
     | awk 'BEGIN { FS = "\037" } $3 == "milestone" && $4 ~ /^[A-Za-z0-9_-]+$/ { print $4 }')"
 }
 
+# im_issue_ref_ok <ref> — 0 iff <ref> is a canonical positive issue reference.
+#
+# THE one rule for "#N", so every record type that names an issue agrees. The
+# `update` validator carried its own `'#'*` test that accepted any string
+# starting with '#', so `#abc` validated locally and then became the live path
+# repos/{owner}/{repo}/issues/abc — after the creates had already run (#515).
+# `#0` was accepted here too: numerically a valid digit string, never a valid
+# issue.
+#
+# Leading zeros are accepted (`#007` is issue 7); only a value that is actually
+# zero is not. Signed forms need no separate case — '+' and '-' are non-digits.
+im_issue_ref_ok() {
+  local n="${1#'#'}" t
+  case "$1" in '#'*) ;; *) return 1 ;; esac
+  case "$n" in ''|*[!0-9]*) return 1 ;; esac
+  # Positive, without arithmetic: strip leading zeros and require something left.
+  t="$n"; while [ "${t#0}" != "$t" ]; do t="${t#0}"; done
+  [ -n "$t" ] || return 1
+  return 0
+}
+
 im_ref_ok() { # <ref> <keys-fenced-list> — 0 iff ref is #N or a defined KEY
   case "$1" in
-    '#'*) case "${1#'#'}" in ''|*[!0-9]*) return 1 ;; *) return 0 ;; esac ;;
+    '#'*) im_issue_ref_ok "$1" ;;
     *)    case "$2" in *$'\n'"$1"$'\n'*) return 0 ;; *) return 1 ;; esac ;;
   esac
 }
@@ -265,11 +286,13 @@ im_validate() { # <manifest-file> — rc 1 and a report if anything is wrong
           echo "invalid: line $ln: update record needs 4 tab-separated fields, got $nf"
           errors=$((errors + 1)); continue
         fi
-        case "$f1" in
-          '#'*) ;;
-          *) echo "invalid: line $ln: update targets '$f1' — only an existing #N can be updated"
-             errors=$((errors + 1)) ;;
-        esac
+        # The same canonical rule as every other issue reference. An update
+        # target that is locally, deterministically invalid must be rejected
+        # BEFORE any call, or the creates land and the run fails half-done.
+        if ! im_issue_ref_ok "$f1"; then
+          echo "invalid: line $ln: update targets '$f1' — only an existing #N can be updated, where N is a positive issue number"
+          errors=$((errors + 1))
+        fi
         case "$f2" in
           title|labels|milestone|body-file) ;;
           *) echo "invalid: line $ln: update field '$f2' is not title|labels|milestone|body-file"

@@ -674,14 +674,22 @@ Each new type exists because its absence was where drift entered:
   the data dropped.
 - **`update`** — an existing issue could only ever be a link target, so every
   restructuring had to be applied by hand.
+
+  Its target is a **positive** `#N`, validated by the same canonical rule as
+  every other issue reference: not empty, all digits, and not zero. That
+  matters more here than elsewhere because creates and milestone creates
+  execute *before* updates — a target rejected only at call time would mean
+  remote state had already landed, leaving a partial run to reconcile. A
+  zero-padded number is accepted and means the number it denotes; a value that
+  is actually zero is not a valid target.
 - **`decision`** — unresolved meaning has to be representable, and it **refuses
   the run** rather than being applied around.
 
 ### `validate` — read-only, two layers
 
-Structure first, from the script that owns it: record shapes, refs, duplicate
-keys, self-links, duplicate links, duplicate order positions, and **dependency
-cycles**. A cycle is structural — every issue in one is permanently unstartable,
+Structure first, from the script that owns it: record shapes, refs — including
+every `update` target — duplicate keys, self-links, duplicate links, duplicate
+order positions, and **dependency cycles**. A cycle is structural — every issue in one is permanently unstartable,
 and the preflight would otherwise report each as blocked forever without naming
 the cause.
 
