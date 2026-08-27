@@ -226,6 +226,25 @@ components that had not changed, each carrying a changelog line about work they
 do not contain. Scope the carrier to a file the package owns and it cannot
 reach the others.
 
+**A carrier must declare itself.** The original and the carrier share a subject
+on purpose, so to the completeness check they look like two independent changes
+needing two bullets — while the generator, correctly, renders one. The
+relationship is therefore *declared*, never inferred: two commits sharing a
+subject stay two changes unless something explicitly says otherwise, because
+chronology is not evidence.
+
+| Where | When |
+| --- | --- |
+| `Changelog-Carrier-For: <full-40-char-sha>` — a trailer on the carrier commit | **Always, for a new carrier.** Immutable, travels with the commit, reviewed alongside it. |
+| `.github/release-notes-carriers.tsv` — `carrier-sha<TAB>original-sha` | **Only** for a relationship discovered *after* its carrier was merged, where the trailer would require rewriting immutable history. |
+
+Both are proven the same way before anything collapses: both shas must resolve,
+the named original must belong to the release being assessed, and the two
+subjects must match. Anything malformed, unresolvable, mismatched, or ambiguous
+— one carrier naming two originals, or one original claimed by two carriers —
+is **not assessed**, never a pass. An unprovable relationship must not be able
+to excuse a missing note.
+
 **Retracting a merged commit's changelog entry** is possible without touching
 history. Release Please reads a `BEGIN_COMMIT_OVERRIDE` / `END_COMMIT_OVERRIDE`
 block in the *pull request body* and parses that instead of the merged commit
