@@ -97,6 +97,55 @@ if [ -f "$roadmap" ]; then
     gap "roadmap names no next release (every ## vX.Y section is already Shipped)"
   fi
 
+  # --- the headline baseline must not lag the newest Shipped entry ----------
+  #
+  # The first summary a reader sees is where release state gets established, and
+  # it drifted independently of the sections below it: the v0.20 section said
+  # Shipped while the headline still named v0.19.0 as the published baseline, so
+  # the document contradicted itself and an operator could plan from the wrong
+  # release (#521).
+  #
+  # Planning-wave names and published tags are deliberately NOT the same thing.
+  # A section heading is a wave (`## v0.20`); what shipped is a tag (`v0.20.0`),
+  # and one wave may carry several (`v0.16.0`–`v0.16.2`). The comparison
+  # therefore reads tags out of Shipped **Status** lines and never out of
+  # headings, so a wave that has not shipped can never be mistaken for a
+  # release.
+  head_base="$(awk '
+    /published baseline/ {
+      line = $0
+      while (match(line, /`v[0-9]+\.[0-9]+\.[0-9]+`/)) {
+        print substr(line, RSTART + 1, RLENGTH - 2)
+        line = substr(line, RSTART + RLENGTH)
+      }
+    }' "$roadmap" | LC_ALL=C sort -V | awk 'END { print }')"
+  newest_tag="$(printf '%s\n' "$sections" \
+    | awk -F'\t' '$2 ~ /^[Ss]hipped/ { print $2 }' \
+    | awk '{
+        line = $0
+        while (match(line, /v[0-9]+\.[0-9]+\.[0-9]+/)) {
+          print substr(line, RSTART, RLENGTH)
+          line = substr(line, RSTART + RLENGTH)
+        }
+      }' | LC_ALL=C sort -V | awk 'END { print }')"
+
+  if [ -z "$head_base" ]; then
+    # Stated as a limit, not as a pass: the check looked, found no claim, and
+    # says so rather than implying the baseline was verified.
+    echo "ok: the summary makes no published-baseline claim, so there is nothing to contradict"
+  elif [ -z "$newest_tag" ]; then
+    gap "the summary names \`$head_base\` as the published baseline, but no roadmap section marked Shipped records a published tag"
+  elif [ "$head_base" = "$newest_tag" ]; then
+    echo "ok: the summary's published baseline (\`$head_base\`) is the newest Shipped tag"
+  else
+    latest="$(printf '%s\n%s\n' "$head_base" "$newest_tag" | LC_ALL=C sort -V | awk 'END { print }')"
+    if [ "$latest" = "$newest_tag" ]; then
+      gap "the summary names \`$head_base\` as the published baseline, but the newest Shipped tag is \`$newest_tag\` — the headline lags the roadmap"
+    else
+      gap "the summary names \`$head_base\` as the published baseline, which is newer than any Shipped tag (\`$newest_tag\`) — the headline claims a release the roadmap does not record"
+    fi
+  fi
+
   # Vocabulary: every section's Status must lead with a known term, or the
   # roadmap drifts into ad-hoc statuses no reader or tool can rely on.
   #

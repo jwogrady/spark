@@ -120,3 +120,30 @@ truthfulness must not force an untruth.
 
 Never mark an item Shipped before the release exists, and never state a status
 without the evidence that backs it.
+
+## The headline is a status too
+
+A roadmap's opening summary is where a reader — or an agent — establishes current
+release state, and it drifts independently of the sections below it. A truth pass
+that corrects a version section and leaves the summary naming an older baseline
+has fixed the smaller half.
+
+`roadmap-check.sh` therefore compares the two: **the published baseline the
+summary names must be the newest tag recorded by a section marked Shipped.**
+Lagging it is reported, and so is claiming a release ahead of it.
+
+The comparison reads **tags out of Shipped `Status` lines**, never versions out
+of headings — because those are different things:
+
+| | Example | Is it a release? |
+| --- | --- | --- |
+| a planning wave | `## v0.21 — Governance as schema` | no; a wave may never ship, or ship under a different number |
+| a published tag | `**Status:** Shipped (`v0.20.0`)` | yes |
+| a planned tag | `**Status:** Planned — will be cut as `v0.21.0`` | no; stated intent, not a release |
+
+A wave carrying several tags is compared against its **newest**
+(`Shipped (`v0.16.0`–`v0.16.2`)` means the baseline is `v0.16.2`).
+
+If the summary makes no published-baseline claim at all, the check says so
+explicitly rather than passing silently: there is nothing to contradict, and that
+is a different result from having verified one.
