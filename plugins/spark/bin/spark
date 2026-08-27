@@ -2538,9 +2538,9 @@ di_trunk() {
 # in the schema is a directory prefix; anything else is an exact file. No glob
 # engine, so the match is deterministic and needs no dependency.
 di_classify() {
-  awk -F'\t' -v model="$1" '
+  DI_MODEL="$1" awk -F'\t' '
     BEGIN {
-      n = split(model, lines, "\n")
+      n = split(ENVIRON["DI_MODEL"], lines, "\n")
       for (i = 1; i <= n; i++) {
         split(lines[i], f, "\t")
         if (f[1] != "pathclass") continue
@@ -2616,6 +2616,19 @@ di_grade() {
   return 0
 }
 
+# di_report <tsv?> <verdict> <detail> — render one verdict. NOT ASSESSED is the
+# exit that must never be mistaken for a pass, so it is spelled out in both
+# output modes rather than inferred from an exit code.
+di_report() {
+  if [ "$1" -eq 1 ]; then printf 'verdict\t%s\t%s\n' "$2" "$3"; return 0; fi
+  case "$2" in
+    PASS) green "  verdict     PASS — $3" ;;
+    WARN) yellow "  verdict     WARN — $3" ;;
+    FAIL) red "  verdict     FAIL — $3" ;;
+    *)    yellow "  verdict     NOT ASSESSED — $3" ;;
+  esac
+}
+
 # spark docs-impact [--issue N] [--branch] [--paths FILE] [--tsv]
 #
 # Verdicts and exits: PASS 0, WARN 0 (reported, never silent), FAIL 1,
@@ -2639,26 +2652,12 @@ cmd_docs_impact() {
   root="$(git_root)"
   if [ -z "$root" ]; then red "not inside a git repo"; return 1; fi
 
-  # not_assessed <reason> — the one exit that must never be mistaken for a
-  # pass. Printed the same way in both output modes.
-  di_verdict() { # <verdict> <detail>
-    if [ "$tsv" -eq 1 ]; then printf 'verdict\t%s\t%s\n' "$1" "$2"
-    else
-      case "$1" in
-        PASS) green "  verdict     PASS — $2" ;;
-        WARN) yellow "  verdict     WARN — $2" ;;
-        FAIL) red "  verdict     FAIL — $2" ;;
-        *)    yellow "  verdict     NOT ASSESSED — $2" ;;
-      esac
-    fi
-  }
-
   local model
   if ! model="$(resolve_governance 2>&1)"; then
     printf '%s\n' "$model" | while IFS= read -r l; do
       [ -n "$l" ] && red "  ${l#governance: }"
     done
-    di_verdict "NOT ASSESSED" "the governance model could not be resolved"
+    di_report "$tsv" "NOT ASSESSED" "the governance model could not be resolved"
     return 3
   fi
 
@@ -2667,7 +2666,7 @@ cmd_docs_impact() {
   members="$(printf '%s\n' "$model" \
     | awk -F'\t' -v f="$family" '$1 == "member" && $2 == f { printf "%s%s", s, $3; s = " " }')"
   if [ -z "$members" ]; then
-    di_verdict "NOT ASSESSED" "the governance model declares no $family family"
+    di_report "$tsv" "NOT ASSESSED" "the governance model declares no $family family"
     return 3
   fi
   exclusive_member="$(printf '%s\n' "$model" \
@@ -2682,7 +2681,7 @@ cmd_docs_impact() {
   fi
   case "$issue" in
     ''|*[!0-9]*)
-      di_verdict "NOT ASSESSED" "no issue number given and none in the branch name '$branch'"
+      di_report "$tsv" "NOT ASSESSED" "no issue number given and none in the branch name '$branch'"
       return 3 ;;
   esac
 
@@ -2690,14 +2689,14 @@ cmd_docs_impact() {
   [ "$tsv" -eq 1 ] && printf 'issue\t%s\n' "$issue"
 
   if ! command -v gh >/dev/null 2>&1 || ! gh auth status >/dev/null 2>&1; then
-    di_verdict "NOT ASSESSED" "the declaration lives on the GitHub issue and needs an authenticated gh"
+    di_report "$tsv" "NOT ASSESSED" "the declaration lives on the GitHub issue and needs an authenticated gh"
     return 3
   fi
 
   # --- the declaration -----------------------------------------------------
   local all_labels declared="" m
   if ! all_labels="$(gh issue view "$issue" --json labels --jq '.labels[].name' 2>/dev/null)"; then
-    di_verdict "NOT ASSESSED" "issue #$issue could not be read — never assumed compliant"
+    di_report "$tsv" "NOT ASSESSED" "issue #$issue could not be read — never assumed compliant"
     return 3
   fi
   for m in $members; do
@@ -2713,14 +2712,14 @@ cmd_docs_impact() {
   # whatever changed. Deferring them would spend network calls to reach a
   # verdict already determined.
   if [ -z "$declared" ]; then
-    di_verdict "FAIL" "issue #$issue carries no $family disposition — silence is never 'none'"
+    di_report "$tsv" "FAIL" "issue #$issue carries no $family disposition — silence is never 'none'"
     return 1
   fi
   if [ -n "$exclusive_member" ]; then
     case " $declared " in
       *" $exclusive_member "*)
         if [ "$declared" != "$exclusive_member" ]; then
-          di_verdict "FAIL" "INVALID: $exclusive_member cannot be combined with another $family value"
+          di_report "$tsv" "FAIL" "INVALID: $exclusive_member cannot be combined with another $family value"
           return 1
         fi ;;
     esac
@@ -2734,7 +2733,7 @@ cmd_docs_impact() {
   case "$mode" in
     paths)
       if [ ! -f "$paths_file" ]; then
-        di_verdict "NOT ASSESSED" "the evidence file $paths_file does not exist"
+        di_report "$tsv" "NOT ASSESSED" "the evidence file $paths_file does not exist"
         return 3
       fi
       evidence="$(awk 'NF' "$paths_file")"
@@ -2743,31 +2742,43 @@ cmd_docs_impact() {
     branch)
       trunk="$(di_trunk "$root")"
       if [ -z "$trunk" ]; then
-        di_verdict "NOT ASSESSED" "no remote trunk ref could be resolved for a branch diff"
+        di_report "$tsv" "NOT ASSESSED" "no remote trunk ref could be resolved for a branch diff"
         return 3
       fi
       if ! evidence="$(git -C "$root" diff --name-only "$trunk...HEAD" 2>/dev/null)"; then
-        di_verdict "NOT ASSESSED" "the diff against $trunk could not be resolved"
+        di_report "$tsv" "NOT ASSESSED" "the diff against $trunk could not be resolved"
         return 3
       fi
       ev_desc="branch $branch vs $trunk"
       ;;
     *)
-      prs="$(gh api graphql -f query="
-        query { repository(owner: \"{owner}\", name: \"{repo}\") {
-          issue(number: $issue) {
-            closedByPullRequestsReferences(first: 50, includeClosedPrs: true) {
-              nodes { number }
-            } } } }" --jq '.data.repository.issue.closedByPullRequestsReferences.nodes[].number' \
+      # gh expands {owner}/{repo} for REST paths only — a GraphQL document
+      # gets them verbatim and the query resolves to nothing, which would have
+      # reported "no linked PR yet" forever instead of judging. Resolve them.
+      local nwo owner name
+      if ! nwo="$(gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null)" \
+         || [ -z "$nwo" ]; then
+        di_report "$tsv" "NOT ASSESSED" "the repository could not be identified"
+        return 3
+      fi
+      owner="${nwo%%/*}"; name="${nwo##*/}"
+      prs="$(gh api graphql -F owner="$owner" -F name="$name" -F number="$issue" -f query='
+        query($owner: String!, $name: String!, $number: Int!) {
+          repository(owner: $owner, name: $name) {
+            issue(number: $number) {
+              closedByPullRequestsReferences(first: 50, includeClosedPrs: true) {
+                nodes { number }
+              } } } }' \
+        --jq '.data.repository.issue.closedByPullRequestsReferences.nodes[].number' \
         2>/dev/null)" || prs=""
       if [ -z "$prs" ]; then
-        di_verdict "NOT ASSESSED" "issue #$issue has no linked implementation PR yet — no evidence to judge"
+        di_report "$tsv" "NOT ASSESSED" "issue #$issue has no linked implementation PR yet — no evidence to judge"
         return 3
       fi
       for pr in $prs; do
         local pr_files
         if ! pr_files="$(gh pr view "$pr" --json files --jq '.files[].path' 2>/dev/null)"; then
-          di_verdict "NOT ASSESSED" "PR #$pr's changed files could not be read — evidence incomplete"
+          di_report "$tsv" "NOT ASSESSED" "PR #$pr's changed files could not be read — evidence incomplete"
           return 3
         fi
         evidence="${evidence}${pr_files}
@@ -2808,7 +2819,7 @@ cmd_docs_impact() {
   # would give the grammar two implementations to keep in step.
   local graded rc=0
   graded="$(di_grade "$declared" "$governed" "$exclusive_member")" || rc=$?
-  di_verdict "${graded%%	*}" "${graded#*	}"
+  di_report "$tsv" "${graded%%	*}" "${graded#*	}"
   return "$rc"
 }
 
