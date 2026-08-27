@@ -6123,16 +6123,48 @@ cmd_next() {
   local taxo gate order_list ev="" n labelcsv title
   taxo="$(resolve_issue_taxonomy "$root")"
   # The priority set comes from the resolved model (#473), not from a case
-  # branch here: a hard-coded P0|P1|P2|P3 was a second copy of a rule the
-  # schema already owns, so a project that renamed or extended the family got
-  # silently ignored by selection.
-  local gov_model_n="" gov_ok_n=1 prio_members=""
-  gov_model_n="$(resolve_governance 2>/dev/null)" || gov_ok_n=0
-  if [ "$gov_ok_n" -eq 1 ]; then
-    prio_members="$(printf '%s\n' "$gov_model_n" \
-      | awk -F'\t' '$1 == "member" && $2 == "priority" { printf "%s%s", s, $3; s = " " }')"
+  # branch here: a hard-coded P0|P1|P2|P3 was a second copy of a rule the schema
+  # already owns, so a project that renamed or extended the family got silently
+  # ignored by selection.
+  #
+  # An unresolvable model is fatal BEFORE any selection, because every judgment
+  # this verb makes depends on it: which labels are priorities, whether the
+  # selected issue's metadata is valid, and what the taxonomy is.
+  #
+  # It used to warn and carry on to print a route, so a caller received
+  # "readiness NOT ASSESSED" and an actionable "codify -> validate -> ship"
+  # together, at exit 0 — indistinguishable from governance-validated work, and
+  # defeating "selection is not a licence to start" at exactly the moment the
+  # governing authority was invalid (#520).
+  local gov_model_n="" prio_members="" gov_findings=""
+  if ! gov_findings="$(resolve_governance 2>&1 >/dev/null)"; then
+    yellow "NOT ASSESSED: the governance model does not resolve, so nothing here can"
+    yellow "  be judged — not the priority set, not execution metadata, not the route."
+    printf '%s\n' "$gov_findings" | while IFS= read -r l; do
+      [ -n "$l" ] || continue
+      red "    ${l#governance: }"
+    done
+    yellow "  Inspect it with: spark governance inspect"
+    return 3
   fi
-  [ -n "$prio_members" ] || prio_members="P0 P1 P2 P3"
+  gov_model_n="$(resolve_governance 2>/dev/null)"
+  prio_members="$(printf '%s\n' "$gov_model_n" \
+    | awk -F'\t' '$1 == "member" && $2 == "priority" { printf "%s%s", s, $3; s = " " }')"
+  # No hard-coded fallback. `P0 P1 P2 P3` here was a second copy of the same rule
+  # and it silently took over whenever the model was unusable — the identical
+  # defect one level down.
+  #
+  # This guard is an invariant, not a reachable branch: no record removes a
+  # family, so the shipped tier always contributes priority members to any model
+  # that resolves. It is kept because "rank by an empty set" must never become
+  # the answer if that ever changes, and it is deliberately NOT claimed as
+  # tested — a fixture cannot construct the state.
+  if [ -z "$prio_members" ]; then
+    yellow "NOT ASSESSED: the resolved governance model declares no priority family,"
+    yellow "  so there is no ranking to select by. Declare one, or inspect the model:"
+    yellow "  spark governance inspect"
+    return 3
+  fi
 
   # The gate is the milestone's release-readiness container: the open issue
   # carrying sub-issues. It is never itself selectable (a parent closes last),
@@ -6210,32 +6242,25 @@ EOF_ROWS3
   # Exit 4, not 1. Exit 1 already means "no eligible issue — a known answer",
   # and a caller has to be able to tell "everything is blocked" from "an issue
   # was selected but its metadata contradicts itself".
+  # Reaching here means the model resolved — an unresolvable one returned 3
+  # above, before any selection — so the metadata check is always performed and
+  # never skipped with a warning.
   if [ -n "$sn" ]; then
-    if [ "$gov_ok_n" -eq 0 ]; then
-      # Never skip this in silence. Doctor calls the same state an error; a
-      # clean-looking selection with no hint that governance was unassessable
-      # is the exact failure the check exists to prevent.
+    local sel_row bad_meta
+    # Every issue in this sweep belongs to $ms by construction, so the
+    # milestone column is known without another call. Passed with -v rather
+    # than interpolated: a title carries spaces and punctuation.
+    sel_row="$(printf '%s\n' "$rows" \
+      | awk -F'\t' -v n="$sn" -v m="$ms" '$1 == n { print $1 "\t" $2 "\t" m; exit }')"
+    bad_meta="$(gov_issue_rows "$gov_model_n" "$sel_row" "$taxo" \
+      | awk -F'\t' '$2 == "!" && NF { print }')"
+    if [ -n "$bad_meta" ]; then
       echo
-      yellow "readiness NOT ASSESSED: the governance model does not resolve, so #$sn's"
-      yellow "  execution metadata could not be checked. Inspect it with:"
-      yellow "  spark governance inspect"
-    else
-      local sel_row bad_meta
-      # Every issue in this sweep belongs to $ms by construction, so the
-      # milestone column is known without another call. Passed with -v rather
-      # than interpolated: a title carries spaces and punctuation.
-      sel_row="$(printf '%s\n' "$rows" \
-        | awk -F'\t' -v n="$sn" -v m="$ms" '$1 == n { print $1 "\t" $2 "\t" m; exit }')"
-      bad_meta="$(gov_issue_rows "$gov_model_n" "$sel_row" "$taxo" \
-        | awk -F'\t' '$2 == "!" && NF { print }')"
-      if [ -n "$bad_meta" ]; then
-        echo
-        red "not ready: #$sn has mechanically invalid execution metadata"
-        printf '%s\n' "$bad_meta" | awk -F'\t' 'NF { print "    ! " $4 }'
-        red "  Fix the metadata before starting. Spark reports the problem; which"
-        red "  category or disposition is meant is a human decision, never a default."
-        return 4
-      fi
+      red "not ready: #$sn has mechanically invalid execution metadata"
+      printf '%s\n' "$bad_meta" | awk -F'\t' 'NF { print "    ! " $4 }'
+      red "  Fix the metadata before starting. Spark reports the problem; which"
+      red "  category or disposition is meant is a human decision, never a default."
+      return 4
     fi
   fi
 
