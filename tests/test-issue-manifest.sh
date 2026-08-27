@@ -51,6 +51,17 @@ reject() {
   esac
 }
 
+# accept <desc> <record>... — the mirror of reject: a manifest that must pass
+# validation cleanly. Added with #472, which makes several shapes legal that
+# were previously refused.
+accept() {
+  local desc="$1"; shift
+  local m="$work/good.tsv" rc=0 out
+  printf '%s\n' "$@" > "$m"
+  out="$(im_validate "$m")" || rc=$?
+  if [ "$rc" -eq 0 ]; then ok; else bad "$desc — want rc 0, got $rc ($out)"; fi
+}
+
 T=$'\t'
 reject "duplicate KEY" "duplicate KEY 'A'" \
   "issue${T}A${T}One${T}${T}${T}$slate/bodies/a.md" \
@@ -67,7 +78,7 @@ reject "empty body file path" "missing body file path" \
   "issue${T}A${T}One${T}${T}${T}"
 reject "empty title" "empty title" \
   "issue${T}A${T}${T}${T}${T}$slate/bodies/a.md"
-reject "inconsistent milestone" "one milestone per manifest" \
+accept "two milestones in one manifest" \
   "issue${T}A${T}One${T}${T}v0.15${T}$slate/bodies/a.md" \
   "issue${T}B${T}Two${T}${T}v0.16${T}$slate/bodies/b.md"
 reject "self-link" "self-link" \
