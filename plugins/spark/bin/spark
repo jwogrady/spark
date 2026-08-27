@@ -2855,6 +2855,12 @@ di_repo_nwo() { gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/nul
 # flight. A CLOSED-unmerged PR is deliberately excluded — its paths never
 # reached the trunk, so counting them as evidence would pass a declaration that
 # nothing satisfies.
+#
+# Returns 0 with the numbers (possibly none) when the query SUCCEEDED, and
+# non-zero when it failed. Both facts are needed and they are not the same fact:
+# "this issue has no linked PR yet" is a complete answer, while "the query did
+# not come back" is no answer at all, and every caller that collapsed the two
+# into an empty string graded incomplete evidence as if it were complete (#512).
 di_linked_prs() {
   gh api graphql -F owner="$1" -F name="$2" -F number="$3" -f query='
     query($owner: String!, $name: String!, $number: Int!) {
@@ -2880,6 +2886,18 @@ di_linked_prs() {
 di_pr_paths() {
   gh api --paginate "repos/$1/$2/pulls/$3/files" \
     --jq '.[] | [.filename, .previous_filename] | .[] | select(. != null)' 2>/dev/null
+}
+
+# di_evidence_failed <tsv?> <layer> <detail> — one evidence layer did not come
+# back. Emits the machine-readable layer name AND the verdict, because a
+# consumer needs to branch on WHICH layer failed (retry the lookup vs. open a
+# PR) and prose is not a stable key. Never PASS: an evidence layer that did not
+# answer is not an answer that there is nothing there (#512).
+di_evidence_failed() {
+  local tsv="$1" layer="$2" detail="$3"
+  if [ "$tsv" -eq 1 ]; then printf 'evidence-note\t%s\t%s\n' "$layer" "$detail"
+  else yellow "  ! $detail"; fi
+  di_report "$tsv" "NOT ASSESSED" "$detail"
 }
 
 # di_report <tsv?> <verdict> <detail> — render one verdict. NOT ASSESSED is the
@@ -2999,7 +3017,7 @@ cmd_docs_impact() {
   # Aggregated across EVERY linked implementation PR, then judged. A single
   # closing PR is the common case, not the model: documentation that landed in
   # an earlier PR of the same issue must not false-fail.
-  local evidence="" ev_desc="" ev_note="" trunk pr prs nwo owner name pr_files
+  local evidence="" ev_desc="" trunk pr prs nwo owner name pr_files
   case "$mode" in
     paths)
       if [ ! -f "$paths_file" ]; then
@@ -3028,21 +3046,36 @@ cmd_docs_impact() {
       # carry only code. Union what has already landed, or say plainly that it
       # could not be included — otherwise the pre-PR check reports a FAIL the
       # agent has no way to satisfy.
-      if nwo="$(di_repo_nwo)" && [ -n "$nwo" ]; then
-        owner="${nwo%%/*}"; name="${nwo##*/}"
-        prs="$(di_linked_prs "$owner" "$name" "$issue")" || prs=""
-        for pr in $prs; do
-          if pr_files="$(di_pr_paths "$owner" "$name" "$pr")"; then
-            evidence="${evidence}
-${pr_files}"
-            ev_desc="$ev_desc + PR #$pr"
-          else
-            ev_note="a linked PR's files could not be read, so earlier merged evidence may be missing"
-          fi
-        done
-      else
-        ev_note="already-merged evidence for this issue could not be looked up"
+      # The declaration was just read off the issue, so GitHub is reachable and
+      # authenticated. A discovery failure here is therefore an anomaly, not an
+      # offline operator, and the aggregate cannot be completed: grading the
+      # branch diff alone would turn a FAIL into a PASS the moment a transient
+      # GraphQL error swallowed the earlier merged documentation.
+      if ! nwo="$(di_repo_nwo)" || [ -z "$nwo" ]; then
+        di_evidence_failed "$tsv" repo-identity \
+          "the repository could not be identified, so already-merged evidence for #$issue could not be looked up"
+        return 3
       fi
+      owner="${nwo%%/*}"; name="${nwo##*/}"
+      if ! prs="$(di_linked_prs "$owner" "$name" "$issue")"; then
+        di_evidence_failed "$tsv" linked-pr-lookup \
+          "the linked-PR lookup for #$issue failed — earlier merged evidence is unknown, never assumed absent"
+        return 3
+      fi
+      # An empty result here is an ANSWER: no PR is linked yet, so the branch
+      # diff is the whole evidence set and grading it is correct. That is the
+      # case the failure above must stay distinguishable from.
+      for pr in $prs; do
+        if pr_files="$(di_pr_paths "$owner" "$name" "$pr")"; then
+          evidence="${evidence}
+${pr_files}"
+          ev_desc="$ev_desc + PR #$pr"
+        else
+          di_evidence_failed "$tsv" pr-files \
+            "PR #$pr's changed files could not be read — earlier merged evidence is incomplete"
+          return 3
+        fi
+      done
       ;;
     *)
       if ! nwo="$(di_repo_nwo)" || [ -z "$nwo" ]; then
@@ -3050,14 +3083,24 @@ ${pr_files}"
         return 3
       fi
       owner="${nwo%%/*}"; name="${nwo##*/}"
-      prs="$(di_linked_prs "$owner" "$name" "$issue")" || prs=""
+      # Both outcomes are NOT ASSESSED here, but they are different findings and
+      # the report must not guess between them: "no PR is linked yet" tells the
+      # author to open one, while "the lookup failed" tells them to retry.
+      # Reporting the first when the second happened sent people to fix work
+      # that was already done.
+      if ! prs="$(di_linked_prs "$owner" "$name" "$issue")"; then
+        di_evidence_failed "$tsv" linked-pr-lookup \
+          "the linked-PR lookup for #$issue failed — whether an implementation PR exists is unknown"
+        return 3
+      fi
       if [ -z "$prs" ]; then
         di_report "$tsv" "NOT ASSESSED" "issue #$issue has no merged or open implementation PR — no evidence to judge"
         return 3
       fi
       for pr in $prs; do
         if ! pr_files="$(di_pr_paths "$owner" "$name" "$pr")"; then
-          di_report "$tsv" "NOT ASSESSED" "PR #$pr's changed files could not be read — evidence incomplete"
+          di_evidence_failed "$tsv" pr-files \
+            "PR #$pr's changed files could not be read — evidence incomplete"
           return 3
         fi
         evidence="${evidence}${pr_files}
@@ -3069,11 +3112,6 @@ ${pr_files}"
       ;;
   esac
   evidence="$(printf '%s\n' "$evidence" | awk 'NF' | LC_ALL=C sort -u)"
-  if [ -n "$ev_note" ]; then
-    if [ "$tsv" -eq 1 ]; then printf 'evidence-note\t%s\n' "$ev_note"
-    else yellow "  ! $ev_note"; fi
-  fi
-
   local ev_count
   ev_count="$(printf '%s\n' "$evidence" | awk 'NF' | wc -l | tr -d ' ')"
   if [ "$tsv" -eq 1 ]; then printf 'evidence\t%s\t%s\n' "$ev_desc" "$ev_count"

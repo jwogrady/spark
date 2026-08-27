@@ -544,9 +544,31 @@ trunk, so counting them would pass a declaration that nothing satisfies.
 
 `--branch` unions rather than judging the branch alone because the evidence set
 is **per issue, not per branch** — the documentation for an issue may already
-have merged in an earlier PR while this branch carries only code. When that
-lookup cannot be performed the verb says so, rather than reporting a FAIL the
-agent has no way to satisfy.
+have merged in an earlier PR while this branch carries only code.
+
+**An evidence layer that did not answer is not an answer that there was nothing
+there.** Each layer has two distinct outcomes and they are never merged:
+
+| Layer | It answered | It failed |
+| --- | --- | --- |
+| linked-PR lookup | no PR is linked yet → the branch diff is the whole set, and is graded | **NOT ASSESSED**, layer `linked-pr-lookup` |
+| a linked PR's file list | the paths join the union | **NOT ASSESSED**, layer `pr-files` |
+| repository identity | owner/name resolved | **NOT ASSESSED**, layer `repo-identity` |
+
+The distinction is the point. "This issue has no linked PR yet" is a complete
+answer that the verb must grade, or it would be unusable before the first PR
+exists. "The lookup did not come back" is no answer, and grading the branch diff
+alone against it turns a FAIL into a PASS — precisely the *absence of evidence
+is not evidence of absence* failure this verb exists to prevent.
+
+Under `--tsv` a failure emits an `evidence-note` row carrying the **layer name**
+in its own column, so a consumer can branch on which layer failed — retry a
+lookup, or open a PR — without parsing prose:
+
+```text
+evidence-note	linked-pr-lookup	the linked-PR lookup for #77 failed — earlier merged evidence is unknown, never assumed absent
+verdict	NOT ASSESSED	the linked-PR lookup for #77 failed — earlier merged evidence is unknown, never assumed absent
+```
 
 Paths come from the **paginated** REST files endpoint, not `gh pr view --json
 files`, which stops at 100 files without saying so — a documentation change at
@@ -559,8 +581,15 @@ convention `codify` creates.
 
 **NOT ASSESSED** covers: no issue number resolvable, no authenticated `gh`, an
 unreadable issue, no linked implementation PR yet, an unresolvable diff or
-evidence file, and an unresolvable governance model. None of them is ever
-reported as a pass.
+evidence file, an unresolvable governance model, and **any evidence layer that
+failed to answer** — an unidentifiable repository, a failed linked-PR lookup, or
+a PR whose file list could not be read. None of them is ever reported as a pass.
+
+The last group is worth stating separately: a *failed* linked-PR lookup and a
+lookup that *successfully* found none are both non-pass in the default mode but
+differ in `--branch`, and they always differ in what they report. Telling an
+author "this issue has no implementation PR" when the query simply failed sends
+them to open a PR that already exists.
 
 ### Where it runs
 
