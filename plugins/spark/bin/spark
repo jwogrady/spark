@@ -1996,18 +1996,8 @@ governance_records() {
 # Fails closed (returns 1, findings on stderr) when any tier is syntactically
 # invalid or the resolved model is not closed. An unreadable governance model
 # never degrades to a partial one.
-# The resolved model is memoized per process: cmd_labels asks for a colour and
-# a description per category, and re-validating three artifacts each time would
-# put a dozen awk passes on doctor's hot path. Fixture-driven suites that mutate
-# a tier mid-process call governance_cache_clear between cases.
-GOVERNANCE_RESOLVED_CACHE=""
-governance_cache_clear() { GOVERNANCE_RESOLVED_CACHE=""; }
-
 resolve_governance() {
   local shipped operator project rc=0 out
-  if [ -n "$GOVERNANCE_RESOLVED_CACHE" ]; then
-    printf '%s\n' "$GOVERNANCE_RESOLVED_CACHE"; return 0
-  fi
   shipped="$(governance_shipped_model)"
   case "$shipped" in
     __invalid__:*)
@@ -2089,7 +2079,6 @@ resolve_governance() {
     return 1
   fi
 
-  GOVERNANCE_RESOLVED_CACHE="$out"
   printf '%s\n' "$out"
 }
 
@@ -2100,11 +2089,23 @@ governance_family_members() {
     $1 == "member" && $2 == f { printf "%s%s", s, $3; s = " " }'
 }
 
-# governance_member_field <family> <label> <4|5> — the resolved colour (4) or
-# description (5) of one member; empty when the member is not declared.
-governance_member_field() {
-  resolve_governance 2>/dev/null | awk -F'\t' -v f="$1" -v l="$2" -v c="$3" '
+# governance_member_from <resolved-model> <family> <label> <4|5> — read one
+# member field out of an ALREADY-resolved model. Split out because resolution
+# validates three artifacts and layers them: a caller looking up a colour and a
+# description for each of seven categories would otherwise pay for fourteen
+# full resolutions. Caching the model in a shell variable cannot help — every
+# caller reads these through command substitution, and a subshell's assignment
+# is lost — so the fix is to resolve once and pass the model down.
+governance_member_from() {
+  printf '%s\n' "$1" | awk -F'\t' -v f="$2" -v l="$3" -v c="$4" '
     $1 == "member" && $2 == f && $3 == l { print $c; exit }'
+}
+
+# governance_member_field <family> <label> <4|5> — the resolved colour (4) or
+# description (5) of one member; empty when the member is not declared. The
+# single-lookup convenience form: it resolves the model itself.
+governance_member_field() {
+  governance_member_from "$(resolve_governance 2>/dev/null)" "$1" "$2" "$3"
 }
 
 # resolve_issue_taxonomy — the declared work categories, resolved the same way
@@ -2133,13 +2134,17 @@ resolve_issue_taxonomy() {
 # homes, so the schema owns it and these stay thin lookups. A category the
 # model does not declare still resolves — extending issue.taxonomy is a
 # supported act — to the neutral grey and the generic description.
-taxonomy_label_color() {
-  local c; c="$(governance_member_field category "$1" 4)"
+taxonomy_label_color() { # <category> [pre-resolved model]
+  local m="${2:-}" c
+  [ -n "$m" ] || m="$(resolve_governance 2>/dev/null || true)"
+  c="$(governance_member_from "$m" category "$1" 4)"
   printf '%s' "${c:-ededed}"
 }
 
-taxonomy_label_desc() {
-  local d; d="$(governance_member_field category "$1" 5)"
+taxonomy_label_desc() { # <category> [pre-resolved model]
+  local m="${2:-}" d
+  [ -n "$m" ] || m="$(resolve_governance 2>/dev/null || true)"
+  d="$(governance_member_from "$m" category "$1" 5)"
   printf '%s' "${d:-Work category declared by issue.taxonomy}"
 }
 
@@ -2205,7 +2210,11 @@ cmd_labels() {
     return 0
   fi
 
-  local cat missing=0 created=0 color desc
+  local cat missing=0 created=0 color desc gov_model
+  # Resolved once for the whole reconciliation rather than per category: the
+  # colours and descriptions come from the governance model now, and resolving
+  # it per lookup would validate three artifacts fourteen times over.
+  gov_model="$(resolve_governance 2>/dev/null || true)"
   # Unquoted on purpose: the value is a space-separated token list by schema.
   for cat in $taxo; do
     if printf '%s\n' "$existing" | grep -Fxq "$cat"; then
@@ -2214,8 +2223,8 @@ cmd_labels() {
     fi
     missing=$((missing + 1))
     if [ "$apply" -eq 1 ]; then
-      color="$(taxonomy_label_color "$cat")"
-      desc="$(taxonomy_label_desc "$cat")"
+      color="$(taxonomy_label_color "$cat" "$gov_model")"
+      desc="$(taxonomy_label_desc "$cat" "$gov_model")"
       if gh label create "$cat" --color "$color" --description "$desc" >/dev/null 2>&1; then
         green "  + $cat (created)"
         created=$((created + 1))
