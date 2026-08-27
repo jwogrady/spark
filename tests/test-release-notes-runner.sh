@@ -132,6 +132,30 @@ desc="$(printf '%s\n' "$results" | notes_status_desc)"
 [ "$desc" = "core: pass; spark-audit: fail; spark-docs: not-assessed" ] \
   && ok || bad "status description line ($desc)"
 
+# --- #487: exit 3 is duplicate-only — the notes are COMPLETE, one logical
+# change merely rendered twice. It must fold to success, and the description
+# must disclose the count rather than pass silently.
+dupes="$(printf 'core\tyes\t3\tcomplete with 13 accepted duplicate finding(s)\t13\nspark-docs\tno\t-\tno section\t0\n')"
+[ "$(printf '%s\n' "$dupes" | notes_status_for_results)" = "success" ] \
+  && ok || bad "duplicate-only folds to success"
+case "$(printf '%s\n' "$dupes" | notes_status_desc)" in
+  *'core: pass with 13 accepted duplicates'*) ok ;;
+  *) bad "duplicate-only description must disclose the count" ;;
+esac
+case "$(printf '%s\n' "$dupes" | notes_render_table)" in
+  *'| core | assessed | pass (13 accepted duplicate(s)) |'*) ok ;;
+  *) bad "table row discloses accepted duplicates" ;;
+esac
+
+# --- the blocking class must win the fold. A duplicate-only component beside
+# a blocking one is still a failure, or an omission hides behind an accepted
+# duplicate and ships under a green status.
+[ "$(printf 'core\tyes\t3\tdupes\t4\nspark-audit\tyes\t1\tomission\t0\n' | notes_status_for_results)" = "failure" ] \
+  && ok || bad "blocking finding beside duplicate-only folds to failure"
+# --- and a broken check still dominates everything.
+[ "$(printf 'core\tyes\t3\tdupes\t4\nspark-audit\tyes\t2\tbroken\t0\n' | notes_status_for_results)" = "error" ] \
+  && ok || bad "a broken check dominates a duplicate-only pass"
+
 # --- integration fixture (#291 AC-6): a real (local) git history releasing
 # core + spark-audit + spark-connect. Expected verdicts:
 #   core          — FAIL: a `feature`-labeled PR merged as `chore:` (hidden

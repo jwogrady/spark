@@ -118,8 +118,12 @@ otherwise. Two doors cover it:
   instructs a plain title, with the reason inline. Spark's own flow opens PRs
   through `ship`, so the common path is covered.
 - **Detection, at release time.** `.github/scripts/release-notes-check.sh`
-  fails the `release-notes` advisory check on a duplicate bullet, before a
-  human approves the release PR.
+  reports a duplicate bullet before a human approves the release PR. Since
+  #487 it reports it as what it is: exit `3`, projecting to a `success` status
+  whose description discloses the accepted count. A duplicate is cosmetic and
+  does not block, so it must not render as the same red `failure` an omission
+  does — a red the operator is told to ship past teaches them to ship past the
+  next one.
 
 A PR titled by hand in the GitHub web UI passes neither door until release
 time. That is a known gap, not an oversight: the release check is the backstop

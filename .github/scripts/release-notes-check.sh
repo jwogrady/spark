@@ -45,11 +45,27 @@
 #                  any commit is matched against them, independent of what the
 #                  caller's commit list happens to include.
 #
-# Exit 0 when no finding is present; 1 when any finding is found (each
-# printed); 2 on a usage error. The success message states only what actually
-# ran (#297): the subject-omission half always runs; the breaking half is
-# claimed only when a breaking commit was present in the range; the
-# hidden-feature (mislabel) half only when the caller supplied labels.
+# Exit status is the machine contract, and it carries the RELEASE CONSEQUENCE
+# of the findings, not merely their existence (#487):
+#
+#   0 — no finding.
+#   1 — at least one BLOCKING finding (omission, breaking-visibility omission,
+#       or mislabel). The notes misrepresent what shipped.
+#   3 — findings exist but every one is a duplicate. Non-blocking: the notes
+#       are complete, one logical change simply rendered more than once.
+#   2 — usage error.
+#
+# Callers that only test zero/non-zero are unaffected; a caller that wants the
+# consequence reads the code. Splitting 3 out of 1 is what lets the GitHub
+# status distinguish "the notes are wrong" from "the notes are complete but
+# repeat themselves" — before #487 both arrived as `1` and left as the same red
+# `failure`, training operators to ship past a red signal. Doctrine for the
+# split: skills/ship/references/release-please.md.
+#
+# The success message states only what actually ran (#297): the subject-omission
+# half always runs; the breaking half is claimed only when a breaking commit was
+# present in the range; the hidden-feature (mislabel) half only when the caller
+# supplied labels.
 set -euo pipefail
 
 # Changelog-visible conventional types, matching the changelog-sections in
@@ -242,6 +258,15 @@ elif [ "$dup_findings" -gt 0 ]; then
   categories="duplicate"
 else
   categories="omission/mislabel"
+fi
+# A duplicate-only result is non-blocking (exit 3): every commit reached the
+# notes, so nothing is misrepresented — one logical change merely rendered
+# twice. The blocking class always wins a mixed run, so this branch is reached
+# only when other_findings is zero. The count is stated in the last line
+# because the runner reads it into the status description.
+if [ "$other_findings" -eq 0 ]; then
+  echo "release-notes: ${component} complete with ${dup_findings} accepted duplicate finding(s) — every changelog-visible commit reached the notes; non-blocking" >&2
+  exit 3
 fi
 echo "release-notes: ${findings} ${categories} finding(s) in ${component} — reconcile before approving the release PR" >&2
 exit 1

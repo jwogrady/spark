@@ -245,7 +245,7 @@ chore	some tweak	docs	" \
 # release-notes-runner.sh's actual --no-merges collection (only the branch
 # commit is ever in range), so this fixture proves the duplicate is caught
 # from the NOTES alone, independent of what the caller's commit list contains.
-check 1 "the real v0.16.0 duplicate is caught" \
+check 3 "the real v0.16.0 duplicate is caught (non-blocking)" \
 "fix	normalize issue state case in the milestone gate		" \
 "### Bug Fixes
 
@@ -254,7 +254,7 @@ check 1 "the real v0.16.0 duplicate is caught" \
   "duplicate: normalize issue state case in the milestone gate — appears 2 times"
 
 # --- the real v0.16.1 duplicate — same mechanism, a different commit.
-check 1 "the real v0.16.1 duplicate is caught" \
+check 3 "the real v0.16.1 duplicate is caught (non-blocking)" \
 "fix	let positional evidence outrank a missing problem statement		" \
 "### Bug Fixes
 
@@ -272,7 +272,7 @@ check 0 "one bullet per logical change passes" \
 
 # --- a bullet repeated three times reports once, naming the true count —
 # proof the finding doesn't just fire per extra copy without saying how many.
-check 1 "triple duplicate reports one finding naming the count" \
+check 3 "triple duplicate reports one finding naming the count" \
 "fix	one fix, three bullets somehow		" \
 "### Bug Fixes
 
@@ -305,13 +305,52 @@ check 0 "same description, different scope, is not a false duplicate" \
 # --- a pure-duplicate failure must be named "duplicate", never blamed on
 # "omission/mislabel" — the category a human triaging the message would go
 # looking for and not find.
-check 1 "duplicate failure names its own category, not omission/mislabel" \
+check 3 "duplicate finding names its own category, not omission/mislabel" \
 "fix	normalize issue state case		" \
 "### Bug Fixes
 
 * normalize issue state case ([5a95763](https://x/a))
 * normalize issue state case ([15181a8](https://x/b))" \
-  "1 duplicate finding(s)"
+  "1 accepted duplicate finding(s)"
+
+# --- #487: the exit status carries the RELEASE CONSEQUENCE, not just
+# "findings exist". A duplicate-only result is exit 3 (non-blocking: every
+# commit reached the notes), a blocking finding is exit 1, and a run carrying
+# both must be 1 — the blocking class wins, or an omission could hide behind
+# an accepted duplicate and render as a green status.
+check 1 "duplicate PLUS omission is blocking — the blocking class wins" \
+"fix	normalize issue state case
+feat	add the widget		" \
+"### Bug Fixes
+
+* normalize issue state case ([5a95763](https://x/a))
+* normalize issue state case ([15181a8](https://x/b))" \
+  "duplicate: normalize issue state case" \
+  "omission: feat: add the widget" \
+  "omission/mislabel/duplicate"
+
+check 1 "mislabel alone is blocking" \
+"chore	quietly add a user-facing widget	feature	" \
+"### Bug Fixes
+
+* something unrelated ([aaa1111](https://x/a))" \
+  "mislabel: quietly add a user-facing widget"
+
+check 1 "breaking-visibility omission is blocking" \
+"chore!	drop the legacy state schema		" \
+"### Bug Fixes
+
+* something unrelated ([aaa1111](https://x/a))" \
+  "omission: chore!: drop the legacy state schema"
+
+check 3 "duplicate-only states completeness, not reconciliation" \
+"fix	normalize issue state case		" \
+"### Bug Fixes
+
+* normalize issue state case ([5a95763](https://x/a))
+* normalize issue state case ([15181a8](https://x/b))" \
+  "every changelog-visible commit reached the notes" \
+  "non-blocking"
 
 # --- usage errors exit 2.
 rc=0; bash "$script" --commits "$work/nope.tsv" --notes "$work/notes.md" >/dev/null 2>&1 || rc=$?
