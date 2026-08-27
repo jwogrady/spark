@@ -18,6 +18,13 @@
 #   --fresh     ignore — and, on a live run, overwrite — existing state. This
 #               forgets prior landings and CAN double-create; explicit only.
 #
+# STATE FILE records, appended as each mutation lands:
+#   created <TAB> KEY       <TAB> number <TAB> id      (an issue)
+#   created <TAB> ms:KEY    <TAB> number <TAB>         (a milestone)
+#   wired   <TAB> subissue  <TAB> REF    <TAB> REF
+#   wired   <TAB> blockedby <TAB> REF    <TAB> REF
+#   wired   <TAB> update    <TAB> #N     <TAB> field   (one per updated field)
+#
 # RESUME-TRUTH LIMITS (stated, not hidden): state records what the CLIENT saw.
 # Two windows exist where reality and state can diverge, and no retry policy
 # can close them without server-side idempotency keys (GitHub has none for
@@ -295,8 +302,15 @@ im_validate() { # <manifest-file> — rc 1 and a report if anything is wrong
         [ -n "$f2" ] || { echo "invalid: line $ln: decision question is empty"; errors=$((errors + 1)); }
         ;;
       subissue|blockedby)
-        if [ "$nf" -ne 3 ] && [ "$nf" -ne 4 ]; then
-          echo "invalid: line $ln: $type record needs 3 or 4 tab-separated fields, got $nf"
+        # The optional reason belongs to blockedby only. Relaxing both meant a
+        # subissue record with a stray trailing field passed validation and had
+        # it silently discarded.
+        if [ "$type" = "subissue" ] && [ "$nf" -ne 3 ]; then
+          echo "invalid: line $ln: subissue record needs 3 tab-separated fields, got $nf"
+          errors=$((errors + 1)); continue
+        fi
+        if [ "$type" = "blockedby" ] && [ "$nf" -ne 3 ] && [ "$nf" -ne 4 ]; then
+          echo "invalid: line $ln: blockedby record needs 3 or 4 tab-separated fields, got $nf"
           errors=$((errors + 1)); continue
         fi
         # A blocked-by edge may state WHY it exists. Naming preferred order as
@@ -304,8 +318,12 @@ im_validate() { # <manifest-file> — rc 1 and a report if anything is wrong
         # edge added to express sequence becomes a false prerequisite that the
         # codify preflight then reports as a permanent blocker.
         if [ "$type" = "blockedby" ] && [ "$nf" -eq 4 ]; then
-          case "$f3" in
-            order|preferred-order|sequence|preference)
+          # Matched loosely and case-insensitively: "ORDER", "Order",
+          # "preferred order", and "ordering" all mean the same thing, and an
+          # exact lowercase list let every one of them through to wire a real
+          # prerequisite.
+          case "$(printf '%s' "$f3" | tr '[:upper:]' '[:lower:]')" in
+            *order*|*sequence*|*preference*|*priorit*)
               echo "invalid: line $ln: blockedby $f1<-$f2 is declared as '$f3' — preferred order is not a prerequisite; use an order record"
               errors=$((errors + 1)) ;;
           esac
@@ -395,7 +413,7 @@ im_pending() { # <manifest-file> <state-file-or-empty>
   local manifest="$1" state="${2:-}" mdir records
   local ln nf type f1 f2 f3 f4 f5 st bp
   local need_ms="" need_labels="" need_ids="" creates="" wires=""
-  local mscreates="" updates="" decisions="" mstitle
+  local mscreates="" updates="" decisions="" mstitle resolves="" orders="" 
   # Titles this manifest brings with it. An issue pointing at one of them must
   # not also trigger a lookup that hard-fails for "not found on GitHub" — the
   # create is the thing that makes it exist.
@@ -413,12 +431,22 @@ im_pending() { # <manifest-file> <state-file-or-empty>
         # created milestone landed on, so a rerun assigns rather than duplicates.
         st="$(im_state_created "$state" "ms:$f1")"
         if [ -n "$st" ]; then
-          mscreates="${mscreates}skip-create-ms"$'\037'"$f1"$'\037'"${st%%$'\t'*}"$'\n'
+          # The TITLE has to travel with the skip. Without it a resumed run
+          # seeded msmap with the KEY alone, while the lookup for the title was
+          # suppressed (this manifest owns it) — so an issue referencing the
+          # milestone by title could never be resolved again, and every rerun
+          # died. That is the exact opposite of the resume contract.
+          mscreates="${mscreates}skip-create-ms"$'\037'"$f1"$'\037'"${st%%$'\t'*}"$'\037'"$f2"$'\n'
         else
           mscreates="${mscreates}create-ms"$'\037'"$f1"$'\037'"$f2"$'\037'"$f3"$'\n'
         fi
         ;;
       issue)
+        if [ -n "$f4" ]; then
+          case "$own_ms" in
+            *$'\n'"$f4"$'\n'*) resolves="${resolves}resolve-ms"$'\037'"$f4"$'\037'"milestone"$'\n' ;;
+          esac
+        fi
         st="$(im_state_created "$state" "$f1")"
         if [ -n "$st" ]; then
           creates="${creates}skip-create"$'\037'"$f1"$'\037'"${st%%$'\t'*}"$'\n'
@@ -451,6 +479,14 @@ im_pending() { # <manifest-file> <state-file-or-empty>
           fi
         fi
         ;;
+      order)
+        # Preferred order lives on GitHub as the sub-issue order under a parent
+        # — the authority `spark next` reads to break a priority tie. Collected
+        # here and applied after the wiring, once every child exists and is
+        # attached; without that it was validated and then silently discarded,
+        # while SKILL.md told the agent to use it.
+        orders="${orders}${f2}	${f1}"$'\n'
+        ;;
       decision)
         # An unresolved decision is not work to do — it is a reason not to act.
         decisions="${decisions}decision"$'\037'"$f1"$'\037'"$f2"$'\n'
@@ -468,13 +504,12 @@ im_pending() { # <manifest-file> <state-file-or-empty>
     esac
   done <<< "$records"
 
+  # ONE action for every title, so a single listing resolves them all. Emitting
+  # one lookup per title meant an identical paginated GET per milestone, and
+  # broke the header's "at most 3 lookups for the whole slate" promise.
   if [ -n "$need_ms" ]; then
-    while IFS= read -r mstitle; do
-      [ -n "$mstitle" ] || continue
-      printf 'lookup-ms\037%s\n' "$mstitle"
-    done <<EOF_MS
-$(printf '%s' "$need_ms" | awk 'NF' | sort -u)
-EOF_MS
+    printf 'lookup-ms\037%s\n' \
+      "$(printf '%s' "$need_ms" | awk 'NF' | LC_ALL=C sort -u | paste -sd'\036' -)"
   fi
   if [ -n "$need_labels" ]; then
     printf 'lookup-labels\037%s\n' \
@@ -485,10 +520,35 @@ EOF_MS
       "$(printf '%s' "$need_ids" | sort -n -u | tr '\n' ' ' | sed 's/ $//')"
   fi
   printf '%s' "$decisions"
+  printf '%s' "$(printf '%s' "$resolves" | awk 'NF' | sort -u)"
+  [ -n "$resolves" ] && printf '\n'
   printf '%s' "$mscreates"
   printf '%s' "$creates"
   printf '%s' "$updates"
   printf '%s' "$wires"
+  # Ordered by position, and only for a child the manifest actually attaches to
+  # a parent: sub-issue order is the only place GitHub can hold this, so an
+  # order record for an unattached issue has nowhere to go and says so.
+  if [ -n "$orders" ]; then
+    local pos ref parent prev=""
+    while IFS=$'\t' read -r pos ref; do
+      [ -n "$ref" ] || continue
+      parent="$(awk 'BEGIN { FS = "\037" } $3 == "subissue" && $5 == r { print $4; exit }' \
+        -v r="$ref" <<< "$records" 2>/dev/null)" || parent=""
+      if [ -z "$parent" ]; then
+        parent="$(printf '%s\n' "$records" | awk -F'\037' -v r="$ref" \
+          '$3 == "subissue" && $5 == r { print $4; exit }')"
+      fi
+      if [ -z "$parent" ]; then
+        printf 'order-unplaceable\037%s\037%s\n' "$ref" "$pos"
+      else
+        printf 'order\037%s\037%s\037%s\037%s\n' "$parent" "$ref" "$pos" "$prev"
+        prev="$ref"
+      fi
+    done <<EOF_ORD
+$(printf '%s' "$orders" | awk 'NF' | LC_ALL=C sort -n -k1,1)
+EOF_ORD
+  fi
 }
 
 # Render a ref's issue number / database id for the plan: literal when already
@@ -509,14 +569,16 @@ im_plan_id() { # <ref> <state-file-or-empty>
 
 im_plan() { # <manifest-file> <state-file-or-empty> — print the dry-run plan
   local manifest="$1" state="${2:-}" pending
-  local a b c d e f n ncreate=0 nwire=0 nskip=0 nupdate=0 ndecision=0 refs
+  local a b c d e f n ncreate=0 nwire=0 nskip=0 nupdate=0 ndecision=0 norder=0 refs
   pending="$(im_pending "$manifest" "$state")"
 
   while IFS=$'\037' read -r a b c d e f; do
     [ -n "$a" ] || continue
     case "$a" in
       lookup-ms)
-        echo "lookup: milestones GET repos/{owner}/{repo}/milestones?state=all&per_page=100 resolve \"$b\"" ;;
+        echo "lookup: milestones GET repos/{owner}/{repo}/milestones?state=all&per_page=100 resolve \"$(printf '%s' "$b" | tr '\036' '|')\"" ;;
+      resolve-ms)
+        echo "resolve: milestone \"$b\" -> this manifest's $c record" ;;
       lookup-labels)
         echo "lookup: labels GET repos/{owner}/{repo}/labels?per_page=100 verify $b" ;;
       lookup-ids)
@@ -538,6 +600,11 @@ im_plan() { # <manifest-file> <state-file-or-empty> — print the dry-run plan
       skip-update)
         nskip=$((nskip + 1))
         echo "skip: update $b $c (state)" ;;
+      order)
+        norder=$((norder + 1))
+        echo "order: $c at position $d under $b PATCH repos/{owner}/{repo}/issues/<$b.number>/sub_issues/priority" ;;
+      order-unplaceable)
+        echo "order: $b at position $c CANNOT be applied — sub-issue order is the only place GitHub holds it, and $b is not a sub-issue of anything in this manifest" ;;
       create)
         ncreate=$((ncreate + 1))
         echo "create: $b POST repos/{owner}/{repo}/issues title=\"$c\" labels=\"$d\" milestone=\"$e\" body=$f" ;;
@@ -564,6 +631,9 @@ im_plan() { # <manifest-file> <state-file-or-empty> — print the dry-run plan
   else
     echo "dry-run: $ncreate create(s), $nwire wire(s); $nskip skip(s); no calls made"
   fi
+  if [ "$norder" -gt 0 ]; then
+    echo "dry-run: $norder order placement(s)"
+  fi
   if [ "$ndecision" -gt 0 ]; then
     echo "dry-run: $ndecision unresolved decision(s) — apply refuses until they are answered"
   fi
@@ -584,6 +654,12 @@ api_list_labels() { # -> one label name per line
 
 api_create_milestone() { # <title> <description> -> "number"
   gh api "repos/{owner}/{repo}/milestones" -X POST -f "title=$1" -f "description=$2" --jq '.number'
+}
+
+api_order_subissue() { # <parent-number> <child-id> <after-id-or-empty>
+  local args=("repos/{owner}/{repo}/issues/$1/sub_issues/priority" -X PATCH -F "sub_issue_id=$2")
+  if [ -n "$3" ]; then args+=(-F "after_id=$3"); fi
+  gh api "${args[@]}" >/dev/null
 }
 
 api_update_issue() { # <number> <field> <value> -> nothing
@@ -632,10 +708,16 @@ api_resolve_existing() { # <number>... -> "number<TAB>id" lines, ONE call
 # Truthful failure epilogue: the verbatim error, the tally of what actually
 # landed, and how to resume. Never retries — state already records every
 # landing, so rerunning the same command skips them.
-im_fail() { # <step> <verbatim-error> <created> <wired> <skipped> <state-path>
+im_fail() { # <step> <verbatim-error> <created> <wired> <skipped> <state-path> [updated]
   echo "failed: $1"
   if [ -n "$2" ]; then printf '%s\n' "$2" | sed 's/^/  /'; fi
-  echo "report: created $3, wired $4, skipped $5, failed 1"
+  # The updates that DID land must appear: a run that applied three PATCHes and
+  # then failed on a wire reported "created 0, wired 0" and made them invisible.
+  if [ -n "${7:-}" ] && [ "${7:-0}" -gt 0 ]; then
+    echo "report: created $3, updated $7, wired $4, skipped $5, failed 1"
+  else
+    echo "report: created $3, wired $4, skipped $5, failed 1"
+  fi
   echo "resume: fix the cause and rerun the same command — state at $6 skips what already landed"
 }
 
@@ -693,29 +775,36 @@ im_execute() { # <manifest-file> <state-file> <fresh-0-or-1>
       lookup-ms)
         if ! out="$(api_list_milestones 2>"$errf")"; then
           im_fail "listing milestones (GET repos/{owner}/{repo}/milestones)" "$(cat "$errf")" \
-            "$created" "$wired" "$skipped" "$state"; return 1
+            "$created" "$wired" "$skipped" "$state" "$updated"; return 1
         fi
-        # Reject ambiguity rather than resolve it silently: two milestones with
-        # the same title (possible across open/closed states) must be a named
-        # error, not a first-match guess.
-        ms_matches="$(printf '%s\n' "$out" | awk -v t="$b" 'BEGIN { FS = "\t" } $2 == t { print $1 }')"
-        if [ "$(printf '%s\n' "$ms_matches" | grep -c .)" -gt 1 ]; then
-          im_fail "resolving milestone \"$b\" — $(printf '%s\n' "$ms_matches" | grep -c .) milestones share this title (ambiguous); disambiguate on GitHub first" "" \
-            "$created" "$wired" "$skipped" "$state"; return 1
-        fi
-        ms_number="$ms_matches"
-        if [ -z "$ms_number" ]; then
-          im_fail "resolving milestone \"$b\" — not found on GitHub; declare it with a milestone record so this manifest creates it, or create it first" "" \
-            "$created" "$wired" "$skipped" "$state"; return 1
-        fi
-        msmap="${msmap}${b}	${ms_number}"$'\n'
-        echo "resolved: milestone \"$b\" -> $ms_number"
+        # Every requested title resolves from this ONE listing.
+        local want_t
+        while IFS= read -r want_t; do
+          [ -n "$want_t" ] || continue
+          # Reject ambiguity rather than resolve it silently: two milestones with
+          # the same title (possible across open/closed states) must be a named
+          # error, not a first-match guess.
+          ms_matches="$(printf '%s\n' "$out" | awk -v t="$want_t" 'BEGIN { FS = "\t" } $2 == t { print $1 }')"
+          if [ "$(printf '%s\n' "$ms_matches" | grep -c .)" -gt 1 ]; then
+            im_fail "resolving milestone \"$want_t\" — $(printf '%s\n' "$ms_matches" | grep -c .) milestones share this title (ambiguous); disambiguate on GitHub first" "" \
+              "$created" "$wired" "$skipped" "$state" "$updated"; return 1
+          fi
+          ms_number="$ms_matches"
+          if [ -z "$ms_number" ]; then
+            im_fail "resolving milestone \"$want_t\" — not found on GitHub; declare it with a milestone record so this manifest creates it, or create it first" "" \
+              "$created" "$wired" "$skipped" "$state" "$updated"; return 1
+          fi
+          msmap="${msmap}${want_t}	${ms_number}"$'\n'
+          echo "resolved: milestone \"$want_t\" -> $ms_number"
+        done <<EOF_WANT
+$(printf '%s' "$b" | tr '\036' '\n')
+EOF_WANT
         ;;
       decision) ;;   # already refused above, before any call was made
       create-ms)
         if ! out="$(api_create_milestone "$c" "$d" 2>"$errf")"; then
           im_fail "creating milestone \"$c\" (POST repos/{owner}/{repo}/milestones)" "$(cat "$errf")" \
-            "$created" "$wired" "$skipped" "$state"; return 1
+            "$created" "$wired" "$skipped" "$state" "$updated"; return 1
         fi
         printf 'created\tms:%s\t%s\t\n' "$b" "$out" >> "$state"
         msmap="${msmap}${b}	${out}"$'\n'
@@ -726,6 +815,7 @@ im_execute() { # <manifest-file> <state-file> <fresh-0-or-1>
       skip-create-ms)
         skipped=$((skipped + 1))
         msmap="${msmap}${b}	${c}"$'\n'
+        [ -n "$d" ] && msmap="${msmap}${d}	${c}"$'\n'
         echo "skip: milestone $b = #$c (state)"
         ;;
       update)
@@ -734,13 +824,13 @@ im_execute() { # <manifest-file> <state-file> <fresh-0-or-1>
           msn="$(printf '%s' "$msmap" | awk -F'\t' -v t="$d" 'NF == 2 && $1 == t { print $2; exit }')"
           if [ -z "$msn" ]; then
             im_fail "resolving milestone \"$d\" for $b — neither looked up nor created in this run" "" \
-              "$created" "$wired" "$skipped" "$state"; return 1
+              "$created" "$wired" "$skipped" "$state" "$updated"; return 1
           fi
           d="$msn"
         fi
         if ! api_update_issue "$target" "$c" "$d" 2>"$errf"; then
           im_fail "updating #$target $c (PATCH repos/{owner}/{repo}/issues/$target)" "$(cat "$errf")" \
-            "$created" "$wired" "$skipped" "$state"; return 1
+            "$created" "$wired" "$skipped" "$state" "$updated"; return 1
         fi
         printf 'wired\tupdate\t%s\t%s\n' "$b" "$c" >> "$state"
         updated=$((updated + 1))
@@ -750,10 +840,26 @@ im_execute() { # <manifest-file> <state-file> <fresh-0-or-1>
         skipped=$((skipped + 1))
         echo "skip: update $b $c (state)"
         ;;
+      order)
+        # after_id empty puts the child first; otherwise it follows the child
+        # placed immediately before it, which is what makes the declared
+        # positions come out in order.
+        local after_id=""
+        [ -n "$e" ] && after_id="$(im_id_of "$e")"
+        if ! api_order_subissue "$(im_num_of "$b")" "$(im_id_of "$c")" "$after_id" 2>"$errf"; then
+          im_fail "ordering $c under $b (PATCH .../sub_issues/priority)" "$(cat "$errf")" \
+            "$created" "$wired" "$skipped" "$state" "$updated"; return 1
+        fi
+        wired=$((wired + 1))
+        echo "ordered: $c at position $d under $b"
+        ;;
+      order-unplaceable)
+        echo "order: $b at position $c was NOT applied — it is not a sub-issue of anything in this manifest" >&2
+        ;;
       lookup-labels)
         if ! out="$(api_list_labels 2>"$errf")"; then
           im_fail "listing labels (GET repos/{owner}/{repo}/labels)" "$(cat "$errf")" \
-            "$created" "$wired" "$skipped" "$state"; return 1
+            "$created" "$wired" "$skipped" "$state" "$updated"; return 1
         fi
         missing=""
         while IFS= read -r lab; do
@@ -763,7 +869,7 @@ im_execute() { # <manifest-file> <state-file> <fresh-0-or-1>
         done <<< "$(printf '%s' "$b" | tr ',' '\n')"
         if [ -n "$missing" ]; then
           im_fail "verifying labels — not found on GitHub: ${missing% } (the helper never invents label taxonomies)" "" \
-            "$created" "$wired" "$skipped" "$state"; return 1
+            "$created" "$wired" "$skipped" "$state" "$updated"; return 1
         fi
         echo "resolved: labels $b"
         ;;
@@ -771,13 +877,13 @@ im_execute() { # <manifest-file> <state-file> <fresh-0-or-1>
         # shellcheck disable=SC2086 — $b is a space-separated number list.
         if ! out="$(api_resolve_existing $b 2>"$errf")"; then
           im_fail "resolving existing issue ids (GraphQL)" "$(cat "$errf")" \
-            "$created" "$wired" "$skipped" "$state"; return 1
+            "$created" "$wired" "$skipped" "$state" "$updated"; return 1
         fi
         for n in $b; do
           id="$(printf '%s\n' "$out" | awk -v n="$n" 'BEGIN { FS = "\t" } $1 == n { print $2; exit }')"
           if [ -z "$id" ]; then
             im_fail "resolving existing issue #$n — not found in this repo" "" \
-              "$created" "$wired" "$skipped" "$state"; return 1
+              "$created" "$wired" "$skipped" "$state" "$updated"; return 1
           fi
           resolved="${resolved}#$n $n $id"$'\n'
         done
@@ -792,18 +898,18 @@ im_execute() { # <manifest-file> <state-file> <fresh-0-or-1>
           msn="$(printf '%s' "$msmap" | awk -F'\t' -v t="$e" 'NF == 2 && $1 == t { print $2; exit }')"
           if [ -z "$msn" ]; then
             im_fail "resolving milestone \"$e\" for $b — neither looked up nor created in this run" "" \
-              "$created" "$wired" "$skipped" "$state"; return 1
+              "$created" "$wired" "$skipped" "$state" "$updated"; return 1
           fi
         fi
         if ! out="$(api_create_issue "$c" "$d" "$msn" "$f" 2>"$errf")"; then
           im_fail "creating $b (\"$c\")" "$(cat "$errf")" \
-            "$created" "$wired" "$skipped" "$state"; return 1
+            "$created" "$wired" "$skipped" "$state" "$updated"; return 1
         fi
         num="${out%%$'\t'*}"; id="${out#*$'\t'}"
         case "$num" in
           ''|*[!0-9]*)
             im_fail "parsing the create response for $b (expected \"number<TAB>id\")" "$out" \
-              "$created" "$wired" "$skipped" "$state"; return 1 ;;
+              "$created" "$wired" "$skipped" "$state" "$updated"; return 1 ;;
         esac
         printf 'created\t%s\t%s\t%s\n' "$b" "$num" "$id" >> "$state"
         resolved="${resolved}$b $num $id"$'\n'
@@ -818,16 +924,16 @@ im_execute() { # <manifest-file> <state-file> <fresh-0-or-1>
         num="$(im_num_of "$c")"; id="$(im_id_of "$d")"
         if [ -z "$num" ] || [ -z "$id" ]; then
           im_fail "wiring $b $c<-$d — unresolved ref (number='$num' id='$id'); state may be stale" "" \
-            "$created" "$wired" "$skipped" "$state"; return 1
+            "$created" "$wired" "$skipped" "$state" "$updated"; return 1
         fi
         if [ "$b" = "subissue" ]; then
           out="$(api_wire_subissue "$num" "$id" 2>"$errf")" || {
             im_fail "wiring subissue $c<-$d" "$(cat "$errf")" \
-              "$created" "$wired" "$skipped" "$state"; return 1; }
+              "$created" "$wired" "$skipped" "$state" "$updated"; return 1; }
         else
           out="$(api_wire_blockedby "$num" "$id" 2>"$errf")" || {
             im_fail "wiring blockedby $c<-$d" "$(cat "$errf")" \
-              "$created" "$wired" "$skipped" "$state"; return 1; }
+              "$created" "$wired" "$skipped" "$state" "$updated"; return 1; }
         fi
         printf 'wired\t%s\t%s\t%s\n' "$b" "$c" "$d" >> "$state"
         wired=$((wired + 1))
