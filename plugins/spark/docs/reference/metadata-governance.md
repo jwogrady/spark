@@ -60,6 +60,23 @@ missing categories by default and creates them with `--apply`, create-only,
 leaving theme labels untouched. Run it once per repo after setup, or the
 taxonomy this document governs will not exist on the remote it governs.
 
+## The `docs-impact` disposition
+
+Every issue declares what documentation its change affects, and Spark verifies
+the declaration against what the implementation actually changed —
+[`spark docs-impact`](cli.md). The point is not to require a documentation
+change; very often none is correct. It is that **silence is never `none`**: an
+issue that declares nothing fails, because an undeclared omission is
+indistinguishable from a deliberate decision.
+
+`docs-impact:none` is a first-class, respectable answer and is exactly as easy
+to declare as any other. A vocabulary where "none" reads as an admission gets
+filled in dishonestly.
+
+The agent decides the semantic impact; Spark only checks that the decision was
+satisfied. The class vocabulary, the path mapping, and the exclusivity of
+`none` are all schema data, so the rule and its enforcement cannot drift.
+
 ## The `backlog` disposition label
 
 A feature that is deliberately deferred carries the `backlog` label. It is a
@@ -82,6 +99,7 @@ schema with its cardinality and whether it is required:
 | `priority` | exactly one where priority is required | `P0`–`P3`, most urgent first |
 | `theme` | any, optional | orthogonal routing/safety signals: `decision`, `human-approval` |
 | `disposition` | at most one, optional | `backlog` — the release decision, recorded mechanically |
+| `docs-impact` | at least one, **required** | the declared documentation impact of the change |
 
 **Priority order is data, not spelling.** `P0`–`P3` rank by their declaration
 order in the schema, so a project that overrides the family gets the order it
