@@ -179,8 +179,13 @@ completes so it reads the final result rather than racing it.
 
 ## The metadata-completeness audit
 
-Spark runs this audit during Ideate/Plan and before release approval. It is a
-report, not an auto-fix: gaps are handed to the human with the smallest
+`spark governance validate` mechanizes the audit below: it drives the per-issue
+invariants from the schema's own cardinality and requirement fields, detects
+cycles in the native blocked-by graph, and reports what needs a decision
+without ever making it. A required family is demanded of work that has a
+release decision; a cardinality violation is reported regardless.
+
+It is a report, not an auto-fix: gaps are handed to the human with the smallest
 decision that resolves each.
 
 Every **active** issue should have:

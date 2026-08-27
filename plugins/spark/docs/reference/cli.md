@@ -206,7 +206,7 @@ Without an authenticated `gh`, or when GitHub is unreachable, the verb reports
 listing is paginated, so a repository with more than one page of labels cannot
 have an existing category misreported as missing.
 
-## `spark governance [--tsv]`
+## `spark governance [--tsv] | inspect | diff | apply | validate`
 
 Renders the **resolved governance model** — Spark's one machine-readable
 authority for the *allowed shapes* of a Spark-managed repository's GitHub
@@ -323,8 +323,90 @@ structure	order	gate-sub-issue-order	authoritative	Preferred delivery order is �
 separation	order	priority	Delivery order is never manufactured from priority; …	default
 ```
 
-Diffing the model against live GitHub state, and provisioning it there, are
-separate capabilities that build on this render rather than restating it.
+Diffing the model against live GitHub state, and provisioning it there, are the
+subcommands below — they build on this render rather than restating it.
+
+### `spark governance inspect | diff | apply | validate`
+
+Four distinct responsibilities over the resolved model, all reading **one row
+generator** — so a rule cannot end up with two authorities and the four
+subcommands cannot disagree about what the repository looks like.
+
+Every row is `<surface> <status> <id> <detail>`:
+
+| Status | Meaning |
+| --- | --- |
+| `=` | correct |
+| `+` | missing and safe to create |
+| `~` | drifted and mechanically repairable |
+| `!` | **requires human judgment — reported, never guessed** |
+| `-` | obsolete candidate, never automatically destructive |
+| `?` | **not assessed** — the surface could not be read, never assumed healthy |
+
+Surfaces covered: `label` (every governed family), `metadata` (per-issue
+invariants), `dependency` (cycle detection), `ruleset` (server-side policy
+presence), `file` (declared governance files).
+
+#### The safety boundary
+
+This is the point of the design, not a caveat on it. Spark may report that #12
+lacks a priority; it must **not** guess `P1`. It may create the standard `P1`
+label. It may report that an issue carries two category labels; it must **not**
+choose which one is meant. A `!` row is never applied.
+
+#### `inspect` and `diff` — read-only
+
+Neither writes anything, local or remote. `inspect` reports state; `diff`
+reports the proposed reconciliation. They read the same rows, so they cannot
+disagree. `--tsv` gives the stable machine form for CI and skills.
+
+#### `apply` — create-only by default, idempotent
+
+Applies only `+` rows: labels the model declares that the remote lacks. A
+preview unless `--yes`.
+
+`~` drift is an **overwrite of something the project already chose**, so it
+needs `--repair-drift` said out loud. That keeps Spark's create-only default
+intact — an existing label is the project's decision — while still making drift
+mechanically repairable when the operator wants it. `-` obsolete candidates and
+`!` judgment rows are never applied at all; removing the deprecated
+`enhancement` alias stays with [`spark labels --apply
+--prune-deprecated`](#spark-labels---apply---prune-deprecated), which proves
+nothing carries it first.
+
+Idempotent by construction: every create is guarded by what already exists, so
+a second run is a no-op rather than a duplicate-label error.
+
+#### `validate` — fails closed
+
+Exits `1` when any `!` row is present, `3` when a surface could not be read, `0`
+only when every required invariant holds. **It never reports PASS from a surface
+it could not read**, and when a real finding coexists with an unread surface it
+says both — a definite finding still fails, but the report admits the picture is
+partial.
+
+What counts as *required* is the schema's own `requirement` field, not a list in
+the code. Adding a governed family as data brings it under validation with no
+code change.
+
+#### "Active execution issues"
+
+A **required** family is demanded of work that has a release decision — a
+milestone, or an explicit `backlog`. An issue nobody has scheduled has not been
+planned yet, and demanding its documentation disposition before anyone decided
+the work happens would report every idea as a defect.
+
+A **cardinality** violation is reported either way: two category labels is wrong
+whether or not the work is scheduled.
+
+#### Dependency cycles
+
+A cycle in the native blocked-by graph makes every issue in it permanently
+unstartable, and the codify preflight would report each one blocked forever
+without naming the cause. Detection peels off whatever has no open prerequisite;
+anything left is in, or behind, a cycle — and work *behind* one is reported with
+it, because it is equally stuck.
+
 
 ## `spark docs-impact [--issue <n>] [--branch] [--paths <file>] [--tsv]`
 
