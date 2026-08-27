@@ -75,7 +75,11 @@ assert_contains "doctor reports issue metadata governance in a user repo" \
   "Issue metadata governance" "$out"
 assert_contains "doctor names the missing issue forms rather than skipping" \
   "no .github/ISSUE_TEMPLATE/" "$out"
-assert_contains "doctor points at the verb that provisions labels" "spark labels" "$out"
+# `spark governance apply` provisions EVERY governed family, not only the
+# taxonomy, so that is what doctor now points at. `spark labels` remains a
+# working compatibility wrapper over the same rows.
+assert_contains "doctor points at the verb that provisions labels" \
+  "spark governance apply" "$out"
 
 # --- code review of #396: a failed count probe must not be asserted as fact.
 # This is the one verb whose stated discipline is "not assessed, never assumed
