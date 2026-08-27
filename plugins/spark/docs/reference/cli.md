@@ -797,10 +797,18 @@ gate itself is never selected: a parent is a container and closes last.
 
 Before selecting, the verb refuses to guess when the slate is not mechanically
 interpretable. Missing or duplicated taxonomy categories, missing or duplicated
-`P0`–`P3` labels, unreadable native blockers, a dependency cycle, or a missing
+priority labels, unreadable native blockers, a dependency cycle, or a missing
 delivery-order record all report **not assessed** (exit 3) and name the issue
 at fault. One uninterpretable issue stops the whole selection: picking around
 it would mean choosing from a set that could not be fully read.
+
+**An unresolvable governance model stops the verb before it selects anything**,
+with the findings and exit 3. Every judgment here depends on the model — which
+labels are priorities, whether the selected issue's metadata is valid, what the
+taxonomy is — so there is nothing to report and no route to print. In particular
+there is no fallback priority set: a hard-coded `P0`–`P3` would be a second copy
+of a rule the schema owns, taking over at exactly the moment the schema was
+unusable.
 
 Four outcomes, and the middle two matter:
 
@@ -808,7 +816,7 @@ Four outcomes, and the middle two matter:
 |---|---|---|
 | a selection | 0 | this issue is next, with the reason |
 | no eligible issue | 1 | **a known answer** — every candidate is genuinely blocked, or the milestone has no open leaf |
-| not assessed | 3 | the slate could not be read; nothing is claimed |
+| not assessed | 3 | the slate could not be read, **or the governance model does not resolve**; nothing is claimed and nothing is routed |
 | selected but not ready | 4 | an issue was selected and its **execution metadata is mechanically invalid** — reported before the route, never routed |
 
 Exit 4 is separate from exit 1 on purpose: "everything is blocked" and "this one
