@@ -195,6 +195,117 @@ Without an authenticated `gh`, or when GitHub is unreachable, the verb reports
 listing is paginated, so a repository with more than one page of labels cannot
 have an existing category misreported as missing.
 
+## `spark governance [--tsv]`
+
+Renders the **resolved governance model** — Spark's one machine-readable
+authority for the *allowed shapes* of a Spark-managed repository's GitHub
+governance. It is read-only and deterministic: three local artifacts, no
+network, no remote state, no writes.
+
+What the model represents:
+
+| Part | What it declares |
+| --- | --- |
+| Label families | Each governed family, its cardinality (`exactly-one`, `at-most-one`, `any`), whether it is `required`, and every member's label, colour, and description |
+| Execution structure | Which GitHub surface is `authoritative` for scope, hierarchy, dependency, order, and implementation linkage — and which readings are merely `derived` |
+| Separations | The pairs that must never be collapsed: order is never derived from blocked-by or priority; a theme or disposition label never satisfies the one-category requirement |
+| Surfaces | Governance surfaces and who provisions each (`spark-provisions`, `human-provisions`, `assessed-only`) |
+| Enforcement | The enforcement requirements that can be assessed mechanically, local and remote |
+
+The model is the authority for allowed shapes **only**. Which issue is `P0`,
+and what blocks what, is project-specific judgment: it stays the human's call
+and lives on GitHub.
+
+### The artifact and its tiers
+
+The model is its own versioned, line-oriented, tab-separated artifact — not
+flat JSON through the preference resolver, and not nested JSON. The reason is
+recorded in [ADR-0030](https://github.com/jwogrady/spark/blob/master/docs/adr/0030-governance-model-representation.md)
+(developer-only): the preference resolver is deliberately flat and drops every
+non-scalar member, and Spark's zero-dependency rule means a nested-JSON
+authority would be unreadable wherever `jq` is absent — "degrades gracefully"
+cannot mean "degrades to no governance model at all".
+
+Resolution keeps the same three tiers as every other Spark standard, later
+winning, and every rendered record names the tier it came from:
+
+| Tier | Location |
+| --- | --- |
+| `default` | `preferences/governance-models/<governance.model>.tsv` in the plugin |
+| `operator` | `$XDG_CONFIG_HOME/spark/governance.tsv` |
+| `project` | `.spark/governance.tsv` in the repo |
+
+The `governance.model` scalar preference selects which shipped model is the
+base (default `spark-default`); it must be a bare model id, and a value
+containing a path separator fails closed rather than reading an arbitrary file
+as governance authority.
+
+A later tier overrides a record by key. **A tier that declares any member of a
+family replaces that family's whole member set** — so an overlay can remove a
+member and not only add one, which a per-member merge could never express.
+Member blocks stay anchored where the base first declared them, and within a
+block the winning tier's own order holds: priority ordering is the member
+declaration order, stated as data rather than inferred from the label spelling.
+
+### Category names stay with the preference
+
+`issue.taxonomy` already owned the category **name set** across all three
+tiers, and keeps owning it. The model owns each category's **colour,
+description, cardinality, and requirement** — the values that used to be
+hard-coded in `bin/spark`. That is one authority per fact, and `spark doctor`
+holds the two shipped files in parity — compared as **sets**, since the
+question is which categories exist — so they cannot drift into two answers.
+
+Because the two are independent, a *resolved* model can be valid and still
+contradict the taxonomy, and the two cases mean different things:
+
+- **A category `issue.taxonomy` names that the shipped member set does not.**
+  It was added — the supported extension path. It resolves to neutral grey
+  with a generic description, and `spark labels` says so.
+- **An overlay tier replaced the category family and left categories
+  undeclared.** Now two of the operator's own declarations disagree. `spark
+  labels` reports which tier replaced the family and which categories are
+  undeclared, and **refuses to create them** under `--apply`: they have no
+  declared colour, the verb is create-only, so a guess written once is never
+  corrected.
+
+A model that cannot be resolved at all blocks label **creation** only.
+`--prune-deprecated` reads no colour and no description, so it is unaffected.
+
+### Adding a governed label family
+
+A new family is **data**. Add a `family` record and its `member` records to any
+tier's artifact and every generic consumer picks it up — no schema code
+changes.
+
+### Failure behaviour
+
+Fails **closed**. Any tier that is syntactically invalid, or a resolved model
+that is not closed (a member whose family nobody declared, a separation naming
+neither a declared family nor a declared structure aspect), is reported as one
+precise `<file>:<line>: <problem>` per finding and the verb exits non-zero. An
+unreadable governance model never degrades to a partial one. `spark doctor`
+validates the shipped artifact for the same reason it validates
+`preferences/defaults.json`: it is load-bearing shipped source.
+
+### Output
+
+Bare, the verb groups the records for a human and names each one's tier.
+`--tsv` prints the **stable machine-readable render** other commands and the
+behavioural suites consume — one record per line, exactly the artifact grammar
+plus a trailing source column:
+
+```
+version	1	default
+family	category	exactly-one	required	Primary work category — exactly one per issue	default
+member	category	feature	0e8a16	New capability or user-visible behaviour	default
+structure	order	gate-sub-issue-order	authoritative	Preferred delivery order is …	default
+separation	order	priority	Delivery order is never manufactured from priority; …	default
+```
+
+Diffing the model against live GitHub state, and provisioning it there, are
+separate capabilities that build on this render rather than restating it.
+
 ## `spark next [--milestone <title>]`
 
 Names the one next eligible issue in a milestone, derived entirely from live

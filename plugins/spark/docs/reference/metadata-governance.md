@@ -5,6 +5,15 @@ fact, and no ceremony. The goal is that a glance at an issue — its type,
 milestone, relationships, and status — tells you everything, without the same
 fact copied across labels, prose, and a board.
 
+**This page is the readable contract; the machine authority is the governance
+model.** Everything below — the label families, which surface is authoritative
+for scope, hierarchy, dependency and order, the separations that must not be
+collapsed, and the surfaces Spark can provision or assess — is declared as one
+versioned artifact you can render with [`spark governance`](cli.md). The two
+are deliberately not independent: the schema is what commands and tests read,
+this page is why it says what it says. Where they could drift, the schema wins
+and `spark doctor` catches it.
+
 ## Source-of-truth model
 
 Record each fact once, on the surface that owns it:
@@ -26,7 +35,12 @@ records, is drift waiting to happen.
 ## Category taxonomy
 
 Category labels are governed by the `issue.taxonomy` preference
-(`preferences/defaults.json`):
+(`preferences/defaults.json`), which owns the category **name set** across the
+shipped/operator/project tiers. Each category's **colour, description,
+cardinality, and requirement** are owned by the governance model — those values
+used to be hard-coded in `bin/spark`, which gave one fact two homes. `spark
+doctor` holds the two shipped files in parity, so the question "which
+categories exist?" cannot have two answers.
 
 ```
 feature  bug  documentation  chore  tech-debt  research  infrastructure
@@ -56,6 +70,26 @@ feature from one with no release decision at all, so a disposition recorded only
 in a comment or a linked recommendation stays invisible to the check. Apply the
 label and keep the *reason* where it belongs (the roadmap, a recommendation doc,
 or the issue body) — the label answers "decided?", the reason answers "why?".
+
+## The governed label families
+
+The taxonomy is one family among several, and each one is declared in the
+schema with its cardinality and whether it is required:
+
+| Family | Cardinality | Members |
+| --- | --- | --- |
+| `category` | exactly one, required | the `issue.taxonomy` categories |
+| `priority` | exactly one where priority is required | `P0`–`P3`, most urgent first |
+| `theme` | any, optional | orthogonal routing/safety signals: `decision`, `human-approval` |
+| `disposition` | at most one, optional | `backlog` — the release decision, recorded mechanically |
+
+**Priority order is data, not spelling.** `P0`–`P3` rank by their declaration
+order in the schema, so a project that overrides the family gets the order it
+declared rather than one inferred from the label text.
+
+**Adding a governed family is data.** A `family` record and its `member`
+records in any tier's artifact is the whole change — generic consumers pick the
+family up with no code change.
 
 ## Milestone rules
 

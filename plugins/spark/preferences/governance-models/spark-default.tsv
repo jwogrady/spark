@@ -1,0 +1,94 @@
+# spark-default — Spark's shipped canonical governance model (#470).
+#
+# ONE machine-readable authority for the ALLOWED SHAPES of a Spark-managed
+# repository's GitHub governance: which label families exist, what each one
+# means, how execution structure is expressed, and which surfaces Spark can
+# provision or assess. It is NEVER an authority for project-specific judgment
+# — that issue #12 is P0, or that #20 blocks #21, is the human's call and
+# lives on GitHub.
+#
+# FORMAT — line-oriented, tab-separated, '#'-comment and blank-line tolerant,
+# the same discipline as the plan skill's issue manifest. Records:
+#
+#   version    <int>
+#   model      <id>       <description>
+#   family     <name>     <cardinality>   <requirement>   <description>
+#   member     <family>   <label>         <color>         <description>
+#   structure  <aspect>   <surface>       <authority>     <rule>
+#   separation <aspect>   <not-from>      <rule>
+#   surface    <kind>     <path>          <provisioning>  <description>
+#   enforce    <name>     <scope>         <assessment>    <description>
+#
+#   cardinality   exactly-one | at-most-one | any
+#   requirement   required | optional
+#   authority     authoritative | derived
+#   provisioning  spark-provisions | human-provisions | assessed-only
+#   assessment    mechanical | not-assessable
+#
+# A NEW GOVERNED LABEL FAMILY IS DATA. Add a `family` record and its `member`
+# records here (or in an operator/project model) and every generic consumer
+# picks it up — no schema code changes.
+#
+# CATEGORY NAMES ARE NOT OWNED HERE. The `issue.taxonomy` scalar preference
+# already owns the category NAME SET across the shipped/operator/project
+# tiers, and keeps owning it; this model owns each category's colour,
+# description, cardinality, and requirement. The two shipped files are held
+# in parity mechanically (`spark doctor`), so they cannot drift.
+
+version	1
+model	spark-default	Spark's shipped canonical repository governance model
+
+# --- Issue taxonomy: the one primary work category ------------------------
+family	category	exactly-one	required	Primary work category — exactly one per issue
+member	category	feature	0e8a16	New capability or user-visible behaviour
+member	category	bug	d73a4a	Something behaves other than as documented
+member	category	documentation	0075ca	Docs, references, and explanatory prose
+member	category	chore	fef2c0	Maintenance with no behaviour change
+member	category	tech-debt	d4c5f9	Deliberate cleanup of a known compromise
+member	category	research	1d76db	Investigation whose output is a decision
+member	category	infrastructure	c2e0c6	CI, tooling, and delivery plumbing
+
+# --- Priority: one of P0-P3 where active work needs a priority ------------
+# Ordering semantics are the member DECLARATION ORDER below, most urgent
+# first, stated as data rather than inferred from the label spelling.
+family	priority	exactly-one	optional	Execution priority — exactly one where priority is required
+member	priority	P0	b60205	Architectural blocker — nothing meaningful proceeds until decided
+member	priority	P1	d93f0b	Core north-star work
+member	priority	P2	fbca04	Important, not on the critical path
+member	priority	P3	c2e0c6	Nice-to-have / polish
+
+# --- Orthogonal routing signals: themes, never a category -----------------
+family	theme	any	optional	Orthogonal routing/safety signal — accompanies a category, never replaces it
+member	theme	decision	5319e7	Carries a semantic decision only a human can make
+member	theme	human-approval	e99695	Needs explicit human approval before it may proceed
+
+# --- Disposition: the release decision recorded mechanically --------------
+family	disposition	at-most-one	optional	Release disposition where an issue has no milestone
+member	disposition	backlog	cfd3d7	Deferred with a reason; revisit before a future milestone (roadmap-check disposition)
+
+# --- Execution structure --------------------------------------------------
+structure	scope	milestone	authoritative	A milestone is release/outcome scope; a milestone titled vX.Y maps to the release whose version is X.Y.*
+structure	hierarchy	parent-sub-issue	authoritative	Native parent/sub-issue links are the hierarchy; a sub-issue is an issue, a parent is a container that closes last
+structure	dependency	native-blocked-by	authoritative	Native blocked-by records a TRUE prerequisite only — what must be true before work can start
+structure	dependency	issue-body-prose	derived	A "Blocked by #N" sentence explains a prerequisite; it never creates one
+structure	order	gate-sub-issue-order	authoritative	Preferred delivery order is the release-gate's sub-issue order — its own authority
+structure	linkage	closing-keyword	authoritative	Implementation linkage is a linked PR plus a closing keyword
+
+# --- Separations that must not be collapsed ------------------------------
+separation	order	native-blocked-by	Delivery order is never manufactured from blocked-by; an edge added to express preference becomes a false blocker
+separation	order	priority	Delivery order is never manufactured from priority; distorting P0-P3 to express sequence destroys both facts
+separation	category	theme	A theme label never satisfies the exactly-one category requirement
+separation	category	disposition	A disposition label accompanies a category; it never replaces it
+
+# --- Repository governance surfaces Spark can provision or assess --------
+surface	issue-form	.github/ISSUE_TEMPLATE	human-provisions	Issue forms; each must carry a category label and never the deprecated enhancement alias
+surface	pr-template	.github/pull_request_template.md	human-provisions	Pull request template
+surface	label-set	github-labels	spark-provisions	The governed label families as they exist on the remote
+surface	ruleset	settings/github-ruleset-trunk.json	assessed-only	The trunk protection policy Spark declares; applying it stays a human act
+surface	release-config	release-please-config.json	spark-provisions	Release automation configuration
+
+# --- Enforcement requirements that can be assessed mechanically ----------
+enforce	trunk-protection	remote	mechanical	Trunk requires a pull request and blocks force-push and deletion
+enforce	required-checks	remote	mechanical	The trunk ruleset requires the validation check the workflow actually publishes
+enforce	local-guard	local	mechanical	The PreToolUse guard blocks force-push and pushes to trunk
+enforce	commit-convention	local	mechanical	The commit-msg hook enforces Conventional Commits
