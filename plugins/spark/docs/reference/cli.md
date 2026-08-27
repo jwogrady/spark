@@ -43,6 +43,31 @@ Validates the whole marketplace and reports health. Checks:
 Exit code is non-zero if any error is found. JSON validation uses `jq` or
 `python3` if present, and is skipped (not failed) if neither is available.
 
+### Governance readiness
+
+Doctor consumes the **same row generators** as `spark governance` rather than
+restating their rules, and distinguishes every state that matters:
+
+| State | Meaning |
+| --- | --- |
+| model valid | the resolved governance model parses and is closed |
+| model unresolvable | an **error** — every check below it is unassessable |
+| surfaces present | every declared governance file exists |
+| surfaces need a decision | a human-owned surface is missing; Spark will not write it |
+| remote NOT ASSESSED | no authenticated `gh` — **explicitly not a pass** |
+| remote MISSING | declared labels do not exist; `spark governance apply --yes` |
+| remote DRIFTED | labels differ from the model; reported only, since an existing label is the project's decision |
+
+**What doctor deliberately does not assess, and says so.** Issue metadata, the
+prerequisite graph, and the trunk policy cost an API call per issue, and doctor
+runs on a latency budget and must work offline. It names
+`spark governance validate` as the verb that owns them. That is a *stated
+deferral*, not a silent skip — a green doctor never means a remote surface was
+quietly passed over.
+
+The issue-form parity check reads the resolved model's category family, so it
+and the governance commands cannot disagree about which categories exist.
+
 ### `spark doctor --requirements [--json]`
 
 Environment readiness, grouped by the capability each dependency serves —
@@ -531,6 +556,26 @@ PR        → merge
 `--tsv` prints the same result as stable records (`issue`, `declared`,
 `evidence`, `governed`, `verdict`) for CI and skills.
 
+### Selection is not a licence to start
+
+After naming the next issue, `spark next` checks that issue's **execution
+metadata** against the schema and **refuses** if it is mechanically invalid —
+two categories, or a required family undeclared on scheduled work. It exits
+non-zero and names each problem.
+
+It exits **4**, distinct from exit 1's "no eligible issue", and reports before
+printing the route — reading a lane and then "not ready" invites acting on the
+first half.
+
+It does not fix anything. Which category was meant, or which disposition
+applies, is a human decision and never a default. And when the governance model
+does not resolve, the check is reported as **NOT ASSESSED** rather than skipped:
+a clean-looking selection with no hint that governance was unassessable is the
+failure this check exists to prevent.
+
+Both the priority *set* and its *ranking* come from the model's `priority`
+family, so a project that extends or renames it is understood.
+
 ## `spark plan validate|diff|apply|verify <artifact>`
 
 Compiles an **approved** plan artifact into GitHub state:
@@ -657,9 +702,11 @@ Collapsing the two is what makes a backlog lie: an ordering preference encoded
 as a `blocked-by` edge becomes a false blocker that fails readiness closed,
 and a real prerequisite demoted to "ordering" starts work too early.
 
-Ranking is priority (`P0`→`P3`), then the explicit sub-issue order, then issue
-number as a documented stable fallback. The gate itself is never selected — a
-parent is a container and closes last.
+Ranking is priority, then the explicit sub-issue order, then issue number as a
+documented stable fallback. Priority ranks by the **declaration order of the
+model's `priority` family** — not by the label spelling — so a project that
+renames the family is ranked as it declared it, rather than alphabetically. The
+gate itself is never selected: a parent is a container and closes last.
 
 Before selecting, the verb refuses to guess when the slate is not mechanically
 interpretable. Missing or duplicated taxonomy categories, missing or duplicated
@@ -668,13 +715,18 @@ delivery-order record all report **not assessed** (exit 3) and name the issue
 at fault. One uninterpretable issue stops the whole selection: picking around
 it would mean choosing from a set that could not be fully read.
 
-Three outcomes, and the middle one matters:
+Four outcomes, and the middle two matter:
 
 | Outcome | Exit | Meaning |
 |---|---|---|
 | a selection | 0 | this issue is next, with the reason |
 | no eligible issue | 1 | **a known answer** — every candidate is genuinely blocked, or the milestone has no open leaf |
 | not assessed | 3 | the slate could not be read; nothing is claimed |
+| selected but not ready | 4 | an issue was selected and its **execution metadata is mechanically invalid** — reported before the route, never routed |
+
+Exit 4 is separate from exit 1 on purpose: "everything is blocked" and "this one
+was chosen but contradicts itself" are different facts, and a caller has to be
+able to act differently on them.
 
 "Everything is blocked" is a determinate result and is reported as one. It is
 never folded into "could not tell" — a known negative and an unknown are

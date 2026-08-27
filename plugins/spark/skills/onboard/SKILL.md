@@ -7,8 +7,8 @@ description: Guide a repository's first run as one narrative — orient, choose 
 
 > **onboard or bootstrap?** One question: **is there a runtime to scaffold?**
 > No runtime yet → [`bootstrap`](../bootstrap/SKILL.md) first; it scaffolds one
-> and ends by calling `spark setup`. Runtime already present → `onboard`.
-> `spark orient` prints the answer under **Next**.
+> and ends by calling `spark setup`. Runtime present → `onboard`. `spark orient`
+> prints the answer under **Next**.
 
 Own the *narrative* of a repository's first run. Each motion is a create-only
 CLI verb; you supply the sequencing and stop at every human decision rather
@@ -54,13 +54,16 @@ resolved standard — including the two repo-root docs `CONVENTIONS.md` and
 
 - `+ created` — a new artifact.
 - `= exists, kept` — a project decision, preserved untouched.
-- `! needs a decision` — **stop on every one.** The LICENSE choice always is
-  one; resolve each with the operator before moving on. Attention items are
-  decisions, not failures — the run still exits 0.
+- `! needs a decision` — **stop on every one.** LICENSE always is one; resolve
+  each with the operator first. Attention items are decisions, not failures —
+  the run still exits 0.
 
 Then record the confirmed verdict as a durable project fact:
 `spark orient --set <verdict>`. It merges into the committed facts without
-clobbering the profile, so the whole lifecycle shares one answer.
+clobbering the profile, so the whole lifecycle shares one answer. A `new` repo
+also needs governance provisioned — `setup` is offline, so labels are not: relay
+`spark governance diff`, apply create-only on approval, never repair a `~` row.
+For an `existing` repo, report and stop.
 
 ### 4. BRIEF — close the loop
 Run `spark brief` as the closing summary: what was created, what was kept, the
@@ -80,8 +83,8 @@ of where the repo landed.
 - **Never scaffold over an `existing` repo.** Its decisions are authoritative;
   adopt create-only.
 - **Compose, never fork.** Drive the real verbs (`orient`, `profiles`, `setup`,
-  `brief`); do not reimplement their mechanics here — that is why rerunning is
-  safe (ADR-0021).
+  `brief`); reimplementing their mechanics here is what would make a rerun
+  unsafe (ADR-0021).
 - **Stop at every human decision** — ambiguous verdict, profile choice, each `!`
   placeholder. Do not default through a judgment call.
 - **Defer recording the verdict to SEED** (`spark orient --set …` after
