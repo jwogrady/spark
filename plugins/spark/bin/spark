@@ -784,12 +784,20 @@ cmd_doctor() {
     # Parity, not a second authority: issue.taxonomy owns the category NAME
     # set, the model owns each category's presentation. If the two shipped
     # files disagree about which categories exist, one of them is lying.
-    local gov_cats def_cats
+    # Compared as SETS, not as strings. Both this check's own wording and
+    # ADR-0030 define the question as "do the two files name the same
+    # categories" — and member declaration order is meaningful elsewhere in
+    # the artifact, so reordering one file is a natural edit. A string compare
+    # failed it and then printed two lines holding the same seven names, which
+    # reads as a doctor bug rather than a finding.
+    local gov_cats def_cats gov_set def_set
     gov_cats="$(awk -F'\t' '$1 == "member" && $2 == "category" { printf "%s%s", s, $3; s = " " }' \
       "$gov_shipped")"
     def_cats="$(read_flat_json "$SPARK_ROOT/preferences/defaults.json" \
       | awk -F'\t' '$1 == "issue.taxonomy" { print $2 }')"
-    if [ "$gov_cats" = "$def_cats" ]; then
+    gov_set="$(printf '%s\n' $gov_cats | LC_ALL=C sort | tr '\n' ' ')"
+    def_set="$(printf '%s\n' $def_cats | LC_ALL=C sort | tr '\n' ' ')"
+    if [ "$gov_set" = "$def_set" ]; then
       green "✓ the shipped governance model is valid and in parity with issue.taxonomy"
     else
       red "✗ the shipped governance model's category family and the shipped issue.taxonomy disagree"
@@ -1898,8 +1906,12 @@ governance_validate() {
     /^[[:space:]]*$/ { next }
     $1 == "version" {
       if (!fields(2, "version")) next
+      # Count the record as SEEN before judging its value, or a malformed
+      # version also trips the END check and reports a second, phantom
+      # "no version record" finding for the record sitting on line 1.
+      nver++
+      if (nver > 1) { bad("duplicate version record"); next }
       if ($2 !~ /^[0-9]+$/) { bad("version must be an integer"); next }
-      if (nver++) { bad("duplicate version record"); next }
       if ($2 + 0 != want + 0)
         bad(sprintf("governance model version %s is not supported by this Spark (expects %s)", $2, want))
       next
@@ -2061,15 +2073,22 @@ resolve_governance() {
   local closure
   closure="$(printf '%s\n' "$out" | awk -F'\t' '
       $1 == "family"    { fam[$2] = 1 }
-      $1 == "structure" { aspect[$2] = 1 }
+      $1 == "structure" { aspect[$2] = 1; surf[$3] = 1 }
       { rows[++n] = $0 }
       END {
         for (i = 1; i <= n; i++) {
           split(rows[i], r, "\t")
           if (r[1] == "member" && !(r[2] in fam))
             printf "member %s belongs to undeclared family %s\n", r[3], r[2]
-          if (r[1] == "separation" && !(r[2] in fam) && !(r[2] in aspect))
-            printf "separation names %s, which is neither a declared family nor a structure aspect\n", r[2]
+          if (r[1] == "separation") {
+            # BOTH sides are checked. The one thing a separation asserts is
+            # that X is never derived from Y; leaving Y unvalidated let a typo
+            # render as a rule about something that does not exist.
+            if (!(r[2] in fam) && !(r[2] in aspect))
+              printf "separation names %s, which is neither a declared family nor a structure aspect\n", r[2]
+            if (!(r[3] in fam) && !(r[3] in aspect) && !(r[3] in surf))
+              printf "separation %s is declared against %s, which is not a declared family, structure aspect, or structure surface\n", r[2], r[3]
+          }
         }
       }')"
   if [ -n "$closure" ]; then
@@ -2101,12 +2120,6 @@ governance_member_from() {
     $1 == "member" && $2 == f && $3 == l { print $c; exit }'
 }
 
-# governance_member_field <family> <label> <4|5> — the resolved colour (4) or
-# description (5) of one member; empty when the member is not declared. The
-# single-lookup convenience form: it resolves the model itself.
-governance_member_field() {
-  governance_member_from "$(resolve_governance 2>/dev/null)" "$1" "$2" "$3"
-}
 
 # resolve_issue_taxonomy — the declared work categories, resolved the same way
 # every other standard is: the preference first, then the machine-backed marker
@@ -2205,7 +2218,13 @@ cmd_labels() {
   # to neutral grey and every description to the generic one, and --apply would
   # have created labels from that guess — a remote mutation derived from an
   # authority that could not be read. Report either way; refuse to write.
-  local gov_model gov_findings gov_ok=1
+  #
+  # Creation is what gets blocked, never `apply` itself: deleting the
+  # deprecated `enhancement` alias reads no colour and no description, so
+  # --prune-deprecated has nothing to do with the governance model and must
+  # keep working. Clearing `apply` also made the fallthrough tell the operator
+  # to re-run the exact command they had just run.
+  local gov_model gov_findings gov_ok=1 gov_block_creates=0
   if ! gov_model="$(resolve_governance 2>&1)"; then
     gov_ok=0; gov_findings="$gov_model"; gov_model=""
     red "  ! the governance model could not be resolved:"
@@ -2213,14 +2232,61 @@ cmd_labels() {
       [ -n "$gl" ] && red "      ${gl#governance: }"
     done
     if [ "$apply" -eq 1 ]; then
+      gov_block_creates=1
       red "    Refusing to create labels: their colours and descriptions come from"
       red "    the governance model, and creating them from a fallback would write a"
       red "    guess to the remote. Fix the model, then re-run: spark labels --apply"
-      apply=0
     else
       yellow "    Colours and descriptions below are the fallbacks, not the declared ones."
     fi
     echo
+  fi
+
+  # A RESOLVED model can be valid and still contradict the taxonomy, and that
+  # is where the drift actually happens. Whole-set replacement is deliberate,
+  # and issue.taxonomy owns the name set independently — so an operator model
+  # declaring only `feature` leaves the other six categories with no declared
+  # colour, resolution still succeeds, and --apply would create them neutral
+  # grey with a generic description. Create-only means they are never
+  # corrected. The shipped-vs-shipped parity check in doctor cannot see this:
+  # it is a contradiction between two tiers the operator controls.
+  #
+  # The two cases are distinguishable. If the winning member set is the shipped
+  # one, a category it does not name was ADDED to issue.taxonomy — the
+  # documented extension path, and neutral grey is the intended answer. If an
+  # overlay tier replaced the set, the same gap is two of the operator's own
+  # declarations disagreeing, and Spark must not pick one and write it.
+  local gov_cat_src gov_cat_members tc undeclared=""
+  if [ "$gov_ok" -eq 1 ]; then
+    gov_cat_src="$(printf '%s\n' "$gov_model" \
+      | awk -F'\t' '$1 == "member" && $2 == "category" { print $NF; exit }')"
+    gov_cat_members="$(printf '%s\n' "$gov_model" \
+      | awk -F'\t' '$1 == "member" && $2 == "category" { printf "%s%s", s, $3; s = " " }')"
+    for tc in $taxo; do
+      case " $gov_cat_members " in
+        *" $tc "*) ;;
+        *) undeclared="${undeclared:+$undeclared }$tc" ;;
+      esac
+    done
+    if [ -n "$undeclared" ] && [ -n "$gov_cat_src" ] && [ "$gov_cat_src" != "default" ]; then
+      red "  ! the governance model and issue.taxonomy disagree about which categories exist"
+      red "      the $gov_cat_src tier replaced the whole category family, and these"
+      red "      categories are declared by issue.taxonomy but not by the model:"
+      red "        $undeclared"
+      if [ "$apply" -eq 1 ]; then
+        gov_block_creates=1
+        red "    Refusing to create labels: these have no declared colour or description,"
+        red "    and 'labels' is create-only, so a guess written now is never corrected."
+        red "    Reconcile the $gov_cat_src governance model with issue.taxonomy, then"
+        red "    re-run: spark labels --apply"
+      fi
+      echo
+    elif [ -n "$undeclared" ]; then
+      echo "  - not declared by the governance model, so neutral grey: $undeclared"
+      echo "    (extending issue.taxonomy is supported; declare them in a governance"
+      echo "    model to give them a colour and a description)"
+      echo
+    fi
   fi
 
   if ! command -v gh >/dev/null 2>&1 || ! gh auth status >/dev/null 2>&1; then
@@ -2247,7 +2313,9 @@ cmd_labels() {
       continue
     fi
     missing=$((missing + 1))
-    if [ "$apply" -eq 1 ]; then
+    if [ "$apply" -eq 1 ] && [ "$gov_block_creates" -eq 1 ]; then
+      red "  + $cat (missing — not created: the governance model is unusable)"
+    elif [ "$apply" -eq 1 ]; then
       color="$(taxonomy_label_color "$cat" "$gov_model")"
       desc="$(taxonomy_label_desc "$cat" "$gov_model")"
       if gh label create "$cat" --color "$color" --description "$desc" >/dev/null 2>&1; then
@@ -2301,8 +2369,8 @@ cmd_labels() {
   fi
 
   echo
-  if [ "$gov_ok" -eq 0 ]; then
-    red "The governance model is unresolvable, so nothing was created. $missing of the"
+  if [ "$gov_block_creates" -eq 1 ]; then
+    red "The governance model is unusable, so no label was created. $missing of the"
     red "declared categories do not exist on the remote."
   elif [ "$apply" -eq 1 ]; then
     echo "Labels: $created created, $((${missing} - ${created})) unresolved."
