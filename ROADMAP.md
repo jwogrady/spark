@@ -406,32 +406,45 @@ a true prerequisite of publication, recorded as a native blocked-by edge on gate
 
 ## v0.20 — Self-host Spark
 
-**Status:** In progress
+**Status:** Merged (awaiting release) — every leaf of milestone #17 is closed
+and on `master`; the version has not been cut. Record:
+[`docs/releases/v0.20.md`](docs/releases/v0.20.md).
 
 Spark itself becomes a conforming Spark-managed repository and gains the
 deterministic orchestration required to dogfood `zd-dns` safely. GitHub
-milestone #17 is the version authority; issue #443 is the release gate.
-
-Phase A is under way and must finish before the orchestration slice starts;
-none of the orchestration behaviour is implemented yet.
+milestone #17 is the version authority; issue #443 is the release gate. It is
+also the first release developed and published normally under the repaired
+governance model — every change issue-backed, branched, and merged through its
+own pull request.
 
 - **Phase A — Spark conforms to Spark:** the repository conformance audit
-  (#442, **complete** — its matrix is
-  [`docs/governance/self-conformance-audit-v020.md`](docs/governance/self-conformance-audit-v020.md)),
-  the pre-dogfood IS-state documentation baseline (#441), and truthful
-  release-note severity in the GitHub status (#487).
-- **Phase B — dogfood-capable orchestration:** native GitHub blocked-by as the
-  one dependency authority (#438), deterministic next-work selection (#436),
-  and category/approval-aware routing (#437). The shipped reference that still
-  calls blocked-by a delivery-order mechanism is corrected in #447.
+  (#442) with its matrix at
+  [`docs/governance/self-conformance-audit-v020.md`](docs/governance/self-conformance-audit-v020.md),
+  the pre-dogfood IS-state baseline (#441) at
+  [`docs/governance/is-state-baseline-pre-v020.md`](docs/governance/is-state-baseline-pre-v020.md),
+  truthful release-note severity in the GitHub status (#487), and the shipped
+  reference that called `blocked-by` a delivery-order mechanism corrected
+  (#447).
+- **Phase B — dogfood-capable orchestration:** native GitHub `blocked-by` as
+  the one executable dependency authority (#438), deterministic next-work
+  selection via `spark next` (#436), and category/approval-aware routing
+  (#437).
 
-Preferred delivery order is
-`#442 (+ #487) → #441 → #438 (+ #447) → #436 → #437 → #443`. Phase A
-gating Phase B **is** a native dependency graph — both #441 and #442 state in
-their own bodies that the orchestration work cannot begin until they are
-satisfied, so each of #438/#436/#437 carries a native `blocked-by` edge from
-both. The rest of that order is preference only; blocked-by stays reserved for
-true prerequisites.
+The slice rests on refusing to collapse two questions that look alike: what
+must be **true** before work can start (the native `blocked-by` graph) and
+which eligible issue to take **first** (the gate's native sub-issue order).
+Milestone prose explains the order; it never defines it.
+
+Phase A gating Phase B **was** a native dependency graph — both #441 and #442
+state the prerequisite in their own bodies, so each of #438/#436/#437 carried a
+native `blocked-by` edge from both. The rest of the order was preference only;
+`blocked-by` stays reserved for true prerequisites.
+
+One conformance defect the audit found is deliberately **not** in this release:
+#488 (`spark resume` reports a verified absent PR as unverified) is `P2` and
+`backlog`, and fails this milestone's own P0/P1 scope-growth test. Codex host
+support (#439 / PR #440) also stayed out — it is `backlog` and unrelated to the
+dogfood path.
 
 ---
 
