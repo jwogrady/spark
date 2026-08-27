@@ -3694,11 +3694,33 @@ next_select() {
 # A theme is not a replacement category: `decision` on a feature still routes
 # through the feature lane, it just cannot end in a merge without a human.
 #
-# next_route <issue> <category> <themes-csv>
+# next_route <issue> <category> <themes-csv> <declared-taxonomy>
 # Exits 0 with a route, 3 when the metadata cannot be routed.
+#
+# The declared taxonomy is passed in, never assumed: issue.taxonomy is a
+# project preference, so a downstream repo may declare categories Spark has
+# never heard of. Spark's lane table must not become a second, hard-coded
+# taxonomy that silently overrules the declared one — so "not declared here"
+# and "declared, but Spark maps no lane for it" are different answers with
+# different corrections.
 next_route() {
-  local n="$1" cat="$2" themes="${3:-}"
-  local lane="" why="" gate="" t
+  local n="$1" cat="$2" themes="${3:-}" taxo="${4:-}"
+  local lane="" why="" gate="" audience="" t declared=0
+
+  if [ -z "$cat" ]; then
+    yellow "not assessed: #$n carries no issue.taxonomy category — cannot route"
+    yellow "  smallest correction: add exactly one category label"
+    return 3
+  fi
+  if [ -n "$taxo" ]; then
+    for t in $taxo; do [ "$t" = "$cat" ] && declared=1; done
+    if [ "$declared" -ne 1 ]; then
+      yellow "not assessed: #$n's category '$cat' is not one of this project's declared categories — cannot route"
+      yellow "  declared: $taxo"
+      yellow "  smallest correction: replace it with exactly one declared category"
+      return 3
+    fi
+  fi
 
   case "$cat" in
     bug|feature|infrastructure|tech-debt|chore)
@@ -3706,19 +3728,24 @@ next_route() {
       why="implementation work: the lane that writes code owns it" ;;
     documentation)
       # Codify is code-only by contract, so sending documentation there would
-      # hand the work to a skill whose own description refuses it.
+      # hand the work to a skill whose own description refuses it. Which DOCS
+      # lane is a second question: internal truth/audit/runbook/ADR work is
+      # knowledge's, outward-facing documentation is docit's, and no label
+      # distinguishes them. Rather than guess an audience, the default is
+      # stated and the fork is disclosed.
       lane="knowledge/audit -> validate -> ship"
-      why="documentation work: codify is code-only by contract, so the docs lane owns it" ;;
+      audience="internal by default — truth, audit, runbook and ADR work. Outward-facing documentation belongs to docit; no metadata distinguishes the two, so confirm the audience before running the lane"
+      why="documentation work: codify is code-only by contract, so a docs lane owns it" ;;
     research)
-      lane="ideate/knowledge -> human decision"
-      why="research work: it produces evidence and options, not an implementation" ;;
-    '')
-      yellow "not assessed: #$n carries no issue.taxonomy category — cannot route"
-      yellow "  smallest correction: add exactly one category label"
-      return 3 ;;
+      # Research produces evidence and a durable record. It does NOT imply a
+      # human-decision gate: that gate belongs to the `decision` theme, and
+      # binding it to a category instead would collapse the two signal kinds
+      # this router exists to keep apart.
+      lane="ideate/knowledge -> validate -> ship"
+      why="research work: it produces evidence and a durable record, not an implementation" ;;
     *)
-      yellow "not assessed: #$n's category '$cat' is not in the declared taxonomy — cannot route"
-      yellow "  smallest correction: replace it with exactly one declared category"
+      yellow "not assessed: #$n's category '$cat' is declared here, but Spark maps no lane for it"
+      yellow "  smallest correction: route it by hand, or use a category Spark routes"
       return 3 ;;
   esac
 
@@ -3739,6 +3766,7 @@ next_route() {
   printf 'category  %s\n' "$cat"
   printf 'themes    %s\n' "${themes:-none}"
   printf 'route     %s\n' "$lane"
+  [ -z "$audience" ] || printf 'audience  %s\n' "$audience"
   if [ -n "$gate" ]; then
     printf 'approval  %s\n' "$gate"
   else
@@ -3863,7 +3891,7 @@ $rows
 EOF_ROWS3
 
   echo
-  next_route "$sn" "$scat" "$sthemes"
+  next_route "$sn" "$scat" "$sthemes" "$taxo"
 }
 
 # Dispatch only when executed, not when sourced — sourcing (e.g. from behavioral

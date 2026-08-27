@@ -259,11 +259,25 @@ Two signal kinds, and they never merge:
 |---|---|
 | `bug`, `feature`, `infrastructure`, `tech-debt`, `chore` | `codify → validate → ship` |
 | `documentation` | `knowledge/audit → validate → ship` |
-| `research` | `ideate/knowledge → human decision` |
+| `research` | `ideate/knowledge → validate → ship` |
 
 A `documentation` issue is never sent to `codify` — that skill's own contract
 says it does not write documentation, so routing docs there would hand work to
-a skill that refuses it.
+a skill that refuses it. *Which* docs lane is a second question: internal
+truth, audit, runbook, and ADR work belongs to `knowledge`, outward-facing
+documentation belongs to `docit`, and no label distinguishes them. The verb
+states the internal default and discloses the fork on an `audience` line
+rather than silently guessing an audience.
+
+`research` produces evidence and a durable record. It does **not** imply a
+human-decision gate — that gate belongs to the `decision` theme. Binding it to
+a category instead would collapse the two signal kinds this router exists to
+keep apart.
+
+`issue.taxonomy` is a project preference, so the lane table above is **not** a
+second taxonomy. A category the project has not declared and a category it has
+declared but Spark maps no lane for are different answers with different
+corrections, and the verb says which one it hit.
 
 | Theme | Effect |
 |---|---|
