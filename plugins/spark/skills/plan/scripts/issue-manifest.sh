@@ -193,7 +193,7 @@ im_ref_ok() { # <ref> <keys-fenced-list> — 0 iff ref is #N or a defined KEY
 im_validate() { # <manifest-file> — rc 1 and a report if anything is wrong
   local manifest="$1" mdir records keys errors=0
   local ln nf type f1 f2 f3 f4 f5 seen=$'\n' linksigs=$'\n' bp sig
-  local msseen=$'\n' orderpos=$'\n' orderrefs=$'\n' mskeys edgelist="" 
+  local msseen=$'\n' orderrefs=$'\n' mskeys edgelist="" 
   mdir="$(cd "$(dirname "$manifest")" && pwd)"
   records="$(im_records "$manifest")"
   # Re-fence: command substitution strips the trailing newline, which would
@@ -268,13 +268,11 @@ im_validate() { # <manifest-file> — rc 1 and a report if anything is wrong
         case "$f2" in
           ''|*[!0-9]*) echo "invalid: line $ln: order position '$f2' is not a number"
             errors=$((errors + 1)) ;;
-          *)
-            case "$orderpos" in
-              *$'\n'"$f2"$'\n'*)
-                echo "invalid: line $ln: duplicate order position '$f2'"; errors=$((errors + 1)) ;;
-              *) orderpos="${orderpos}${f2}"$'\n' ;;
-            esac ;;
         esac
+        # Position uniqueness is checked per PARENT after the loop, not here.
+        # Globally, two independent gates could not each declare a first child —
+        # and preferred order is a fact about siblings, so a position only means
+        # anything relative to the other children of the same parent (#518).
         case "$orderrefs" in
           *$'\n'"$f1"$'\n'*)
             echo "invalid: line $ln: '$f1' already has an order position"; errors=$((errors + 1)) ;;
@@ -375,6 +373,43 @@ im_validate() { # <manifest-file> — rc 1 and a report if anything is wrong
         ;;
     esac
   done <<< "$records"
+
+  # ORDER is scoped to a parent, and both facts it needs — the order records and
+  # the hierarchy that gives them meaning — are only all known once every line
+  # has been read. A `subissue` may follow the `order` it applies to.
+  #
+  # Two things are wrong globally and right per parent: a duplicate position
+  # (two gates may each have a first child) and, before this, nothing at all
+  # rejected a child attached to two parents, whose order parent is then
+  # undecidable rather than merely ambiguous.
+  local orderfindings
+  orderfindings="$(printf '%s' "$records" | awk 'BEGIN { FS = "\037" }
+    $3 == "subissue" { np[$5]++; par[$5] = par[$5] " " $4 }
+    $3 == "order"    { pos[$4] = $5; seen[$4] = 1 }
+    END {
+      for (r in seen) {
+        if (np[r] > 1) {
+          printf "invalid: order ref %s is a sub-issue of more than one parent (%s), so its order parent cannot be determined\n", r, substr(par[r], 2)
+          continue
+        }
+        # "No parent" is its own scope rather than an exemption. Such records are
+        # unplaceable and reported as that at plan time, but two of them claiming
+        # one position is still an authoring mistake, and it stops being visible
+        # the moment the parents are added.
+        p = (np[r] == 0) ? "" : substr(par[r], 2)
+        k = p SUBSEP pos[r]
+        if (k in taken) {
+          if (p == "")
+            printf "invalid: duplicate order position %s — both %s and %s claim it, and neither is a sub-issue of anything\n", pos[r], taken[k], r
+          else
+            printf "invalid: duplicate order position %s — both %s and %s claim it under parent %s\n", pos[r], taken[k], r, p
+        } else taken[k] = r
+      }
+    }' | LC_ALL=C sort)"
+  if [ -n "$orderfindings" ]; then
+    printf '%s\n' "$orderfindings"
+    errors=$((errors + $(printf '%s\n' "$orderfindings" | grep -c .)))
+  fi
 
   # A dependency CYCLE is structural, so it belongs here rather than in a
   # caller: every issue in it is permanently unstartable, and the preflight
@@ -553,23 +588,40 @@ im_pending() { # <manifest-file> <state-file-or-empty>
   # a parent: sub-issue order is the only place GitHub can hold this, so an
   # order record for an unattached issue has nowhere to go and says so.
   if [ -n "$orders" ]; then
-    local pos ref parent prev=""
-    while IFS=$'\t' read -r pos ref; do
+    # `after_id` names the sibling to place this child behind, so the chain must
+    # RESET at each parent. One global `prev` handed parent P2's first child an
+    # `after_id` belonging to a child of P1 — a placement GitHub cannot make,
+    # after the creates and wires had already landed (#518).
+    #
+    # Emitted grouped by parent, ascending position within the group, because
+    # each placement references the sibling placed immediately before it.
+    local pos ref parent prevs="" prev
+    while IFS=$'\t' read -r parent pos ref; do
       [ -n "$ref" ] || continue
-      parent="$(awk 'BEGIN { FS = "\037" } $3 == "subissue" && $5 == r { print $4; exit }' \
-        -v r="$ref" <<< "$records" 2>/dev/null)" || parent=""
-      if [ -z "$parent" ]; then
-        parent="$(printf '%s\n' "$records" | awk -F'\037' -v r="$ref" \
-          '$3 == "subissue" && $5 == r { print $4; exit }')"
-      fi
-      if [ -z "$parent" ]; then
+      if [ "$parent" = "-" ]; then
         printf 'order-unplaceable\037%s\037%s\n' "$ref" "$pos"
-      else
-        printf 'order\037%s\037%s\037%s\037%s\n' "$parent" "$ref" "$pos" "$prev"
-        prev="$ref"
+        continue
       fi
+      prev="$(printf '%s' "$prevs" | awk -F'\t' -v p="$parent" 'NF == 2 && $1 == p { v = $2 } END { print v }')"
+      printf 'order\037%s\037%s\037%s\037%s\n' "$parent" "$ref" "$pos" "$prev"
+      prevs="${prevs}${parent}	${ref}
+"
     done <<EOF_ORD
-$(printf '%s' "$orders" | awk 'NF' | LC_ALL=C sort -n -k1,1)
+$(printf '%s' "$orders" | awk 'NF' \
+  | awk -F'\t' -v recs="$records" '
+      BEGIN {
+        n = split(recs, rl, "\n")
+        for (i = 1; i <= n; i++) {
+          split(rl[i], f, "\037")
+          if (f[3] == "subissue") { par[f[5]] = f[4]; ord[f[4]] = ord[f[4]] ? ord[f[4]] : ++np }
+        }
+      }
+      { p = ($2 in par) ? par[$2] : "-"
+        # Parents keep first-appearance order so the emitted plan is stable;
+        # unplaceable refs sort last and carry no parent.
+        printf "%d\t%s\t%s\t%s\n", (p == "-" ? 999999 : ord[p]), p, $1, $2 }' \
+  | LC_ALL=C sort -t"$(printf '\t')" -k1,1n -k3,3n \
+  | cut -f2-)
 EOF_ORD
   fi
 }
