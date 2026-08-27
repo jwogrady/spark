@@ -59,6 +59,7 @@ hub|cmd_hub|Report the memory hub this project declares and where the value came
 labels|cmd_labels|Compare this repo'\''s GitHub labels against the declared issue taxonomy; --apply creates the missing ones
 governance|cmd_governance|Render the model, or inspect/diff/apply/validate repository governance against it
 docs-impact|cmd_docs_impact|Verify the declared documentation impact of an issue against its implementation evidence
+plan|cmd_plan|Compile an approved plan artifact into GitHub state: validate, diff, apply, verify
 next|cmd_next|Select the next eligible milestone issue from live GitHub metadata
 help|usage|Show this help'
 
@@ -3516,6 +3517,239 @@ EOF_REPAIR
       echo "Applied $n change(s), $failed failure(s)."
       echo "Re-running apply now is a no-op: every create is guarded by what already exists."
       [ "$failed" -eq 0 ] || return 1
+      return 0 ;;
+  esac
+}
+
+# ---------------------------------------------------------------------------
+# The plan compiler's command surface (#472).
+#
+#   agent/human intent -> structured plan -> validate -> diff -> approve
+#                                                      -> apply -> verify
+#
+# There is exactly ONE compiler. `issue-manifest.sh` owns the manifest's
+# STRUCTURE — record shapes, refs, duplicates, cycles — and owns creating,
+# updating and wiring with its resumable state and its shared dry-run/live
+# analyzer. This surface owns MEANING: it resolves categories and priorities
+# against the governance model, compares the artifact to live GitHub state, and
+# verifies the result afterwards. Neither restates the other, and nothing here
+# re-implements a call the script already makes.
+# ---------------------------------------------------------------------------
+
+plan_script() {
+  printf '%s' "$SPARK_ROOT/skills/plan/scripts/issue-manifest.sh"
+}
+
+# plan_schema_rows <model> <artifact> — MEANING checks the script deliberately
+# does not make: the manifest treats labels as an opaque CSV, so an invalid
+# category, two categories, or a typo passed validation and reached GitHub.
+# Emits "plan <status> <id> <detail>" rows, the same vocabulary as governance.
+plan_schema_rows() {
+  local model="$1" artifact="$2"
+  PLAN_MODEL="$model" awk -F'\t' '
+    BEGIN {
+      n = split(ENVIRON["PLAN_MODEL"], ml, "\n")
+      for (i = 1; i <= n; i++) {
+        split(ml[i], f, "\t")
+        if (f[1] == "family") { card[f[2]] = f[3]; req[f[2]] = f[4]
+                                if (!(f[2] in seen)) { seen[f[2]] = 1; order[++nf] = f[2] } }
+        else if (f[1] == "member") memof[f[3]] = f[2]
+      }
+    }
+    /^[[:space:]]*(#|$)/ { next }
+    $1 == "issue" || ($1 == "update" && $3 == "labels") {
+      key = ($1 == "issue") ? $2 : $2
+      csv = ($1 == "issue") ? $4 : $4
+      delete cnt
+      nl = split(csv, lab, ",")
+      for (j = 1; j <= nl; j++) {
+        if (lab[j] == "") continue
+        if (!(lab[j] in memof)) {
+          printf "plan\t!\t%s\tlabel \"%s\" is not declared by any governed family\n", key, lab[j]
+          continue
+        }
+        cnt[memof[lab[j]]] = cnt[memof[lab[j]]] " " lab[j]
+      }
+      for (fi = 1; fi <= nf; fi++) {
+        fm = order[fi]
+        v = (fm in cnt) ? cnt[fm] : ""
+        k = split(v, vv, " "); c = 0
+        for (x = 1; x <= k; x++) if (vv[x] != "") c++
+        if (c == 0 && req[fm] == "required")
+          printf "plan\t!\t%s\t%s is required and the plan declares none\n", key, fm
+        else if (c > 1 && (card[fm] == "exactly-one" || card[fm] == "at-most-one"))
+          printf "plan\t!\t%s\t%s allows %s but the plan sets %d:%s\n", key, fm, card[fm], c, v
+      }
+      next
+    }
+  ' "$artifact"
+}
+
+# plan_live_rows <artifact> — compare what the artifact says about EXISTING
+# issues to what GitHub holds. --dry-run only ever planned calls; it could not
+# say `=` correct or `~` drifted, so an update that was already applied looked
+# identical to one that had never run.
+plan_live_rows() {
+  local artifact="$1" n field want live
+  awk -F'\t' '/^[[:space:]]*(#|$)/ { next } $1 == "update" { print $2 "\t" $3 "\t" $4 }' "$artifact" \
+  | while IFS=$'\t' read -r n field want; do
+      [ -n "$n" ] || continue
+      case "$n" in '#'*) ;; *) continue ;; esac
+      case "$field" in
+        title)     live="$(gh issue view "${n#'#'}" --json title --jq .title 2>/dev/null)" || live="__unreadable__" ;;
+        milestone) live="$(gh issue view "${n#'#'}" --json milestone --jq '.milestone.title // ""' 2>/dev/null)" || live="__unreadable__" ;;
+        labels)    live="$(gh issue view "${n#'#'}" --json labels \
+                     --jq '[.labels[].name] | sort | join(",")' 2>/dev/null)" || live="__unreadable__"
+                   want="$(printf '%s' "$want" | tr ',' '\n' | awk 'NF' | LC_ALL=C sort | paste -sd, -)" ;;
+        *)         continue ;;
+      esac
+      if [ "$live" = "__unreadable__" ]; then
+        printf 'live\t?\t%s\t%s could not be read — never assumed to match\n' "$n" "$field"
+      elif [ "$live" = "$want" ]; then
+        printf 'live\t=\t%s\t%s already matches the plan\n' "$n" "$field"
+      else
+        printf 'live\t~\t%s\t%s is "%s"; the plan says "%s"\n' "$n" "$field" "$live" "$want"
+      fi
+    done
+}
+
+# spark plan validate|diff|apply|verify <artifact>
+cmd_plan() {
+  local usage_line="usage: spark plan validate|diff|apply|verify <artifact> [--tsv] [--yes] [--state FILE]"
+  local sub="${1:-}" artifact="" tsv=0 yes=0 state=""
+  case "$sub" in
+    validate|diff|apply|verify) shift ;;
+    -h|--help|'')
+      echo "$usage_line"
+      echo
+      echo "  validate   structure and schema, read-only — nothing is contacted or written"
+      echo "  diff       compare the artifact to live GitHub state, read-only"
+      echo "  apply      create/update/wire what the artifact specifies (needs --yes)"
+      echo "  verify     confirm GitHub matches the artifact after a run"
+      return 0 ;;
+    *) red "unknown subcommand: $sub"; echo "$usage_line"; return 1 ;;
+  esac
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --tsv) tsv=1 ;;
+      --yes) yes=1 ;;
+      --state) shift; state="${1:-}" ;;
+      -h|--help) echo "$usage_line"; return 0 ;;
+      -*) red "unknown option: $1"; echo "$usage_line"; return 1 ;;
+      *) if [ -n "$artifact" ]; then red "only one artifact is accepted"; return 1; fi
+         artifact="$1" ;;
+    esac
+    shift
+  done
+  if [ -z "$artifact" ]; then red "an artifact path is required"; echo "$usage_line"; return 1; fi
+  if [ ! -f "$artifact" ]; then red "artifact not found: $artifact"; return 1; fi
+
+  local script model rows structural rc=0
+  script="$(plan_script)"
+  if [ ! -f "$script" ]; then red "the compiler is missing: $script"; return 1; fi
+
+  case "$sub" in
+    validate)
+      # Structure first, from the one authority that owns it.
+      structural="$(bash "$script" --dry-run "$artifact" 2>&1)" || rc=$?
+      if [ "$rc" -ne 0 ]; then
+        [ "$tsv" -eq 1 ] || echo "Spark plan — validate"
+        printf '%s\n' "$structural" | awk 'NF && /^invalid:/ { print "  ! " substr($0, 10) }'
+        printf '%s\n' "$structural" | awk 'NF && !/^invalid:/ && !/^lookup:/ && !/^create:/ && !/^wire:/ && !/^skip:/ && !/^dry-run:/ { print "  " $0 }'
+        red "FAIL — the artifact is structurally invalid; nothing would be applied"
+        return 1
+      fi
+      if ! model="$(resolve_governance)"; then
+        red "the governance model could not be resolved — see the findings above"
+        return 3
+      fi
+      rows="$(plan_schema_rows "$model" "$artifact")"
+      if [ "$tsv" -eq 1 ]; then printf '%s\n' "$rows"; else
+        echo "Spark plan — validate"
+        echo
+        green "  = structure: valid"
+        if [ -z "$rows" ]; then green "  = schema: every label resolves, and every cardinality holds"
+        else printf '%s\n' "$rows" | awk -F'\t' 'NF { printf "  %s %-14s %s\n", $2, $3, $4 }'
+        fi
+      fi
+      [ -z "$rows" ] || { [ "$tsv" -eq 1 ] || red "FAIL — the plan declares metadata the schema refuses"; return 1; }
+      [ "$tsv" -eq 1 ] || green "PASS — read-only: nothing was contacted or written"
+      return 0 ;;
+    diff)
+      # Read-only. The structural plan says what WOULD be called; the live rows
+      # say what already matches, so an applied update is distinguishable from
+      # one that never ran.
+      structural="$(bash "$script" --dry-run ${state:+--state "$state"} "$artifact" 2>&1)" || {
+        red "the artifact is structurally invalid — run: spark plan validate $artifact"; return 1; }
+      if ! command -v gh >/dev/null 2>&1 || ! gh auth status >/dev/null 2>&1; then
+        rows="$(printf 'live\t?\tall\tnot assessed: comparing to live state needs an authenticated gh\n')"
+      else
+        rows="$(plan_live_rows "$artifact")"
+      fi
+      if [ "$tsv" -eq 1 ]; then
+        printf '%s\n' "$structural" | awk 'NF { print "structural\t" $0 }'
+        printf '%s\n' "$rows"
+        return 0
+      fi
+      echo "Spark plan — diff"
+      echo
+      printf '%s\n' "$structural" | awk 'NF { print "  " $0 }'
+      if [ -n "$rows" ]; then
+        echo
+        echo "  Against live state:"
+        printf '%s\n' "$rows" | awk -F'\t' 'NF { printf "    %s %-10s %s\n", $2, $3, $4 }'
+      fi
+      echo
+      echo "Nothing was written. Apply it with: spark plan apply $artifact --yes"
+      return 0 ;;
+    apply)
+      if [ "$yes" -eq 0 ]; then
+        echo "Spark plan — apply is a remote mutation and needs explicit approval."
+        echo
+        echo "Preview it first:  spark plan diff $artifact"
+        echo "Then apply it:     spark plan apply $artifact --yes"
+        return 1
+      fi
+      # Meaning is checked before anything is written: the script validates
+      # structure itself, but it treats labels as an opaque CSV.
+      if ! cmd_plan validate "$artifact" >/dev/null 2>&1; then
+        red "the artifact does not validate — run: spark plan validate $artifact"
+        return 1
+      fi
+      bash "$script" ${state:+--state "$state"} "$artifact"
+      return $? ;;
+    verify)
+      # Confirm GitHub holds what the artifact says, rather than trusting the
+      # apply report. A run that reported success can still have been followed
+      # by someone editing the issue.
+      if ! command -v gh >/dev/null 2>&1 || ! gh auth status >/dev/null 2>&1; then
+        yellow "NOT ASSESSED — verifying needs an authenticated gh"
+        return 3
+      fi
+      rows="$(plan_live_rows "$artifact")"
+      local bad na
+      bad="$(printf '%s\n' "$rows" | awk -F'\t' '$2 == "~" && NF { print }')"
+      na="$(printf '%s\n' "$rows" | awk -F'\t' '$2 == "?" && NF { print }')"
+      if [ "$tsv" -eq 1 ]; then
+        printf '%s\n' "$rows"
+        printf 'verdict\t%s\n' \
+          "$([ -n "$bad" ] && echo FAIL || { [ -n "$na" ] && echo "NOT ASSESSED" || echo PASS; })"
+      else
+        echo "Spark plan — verify"
+        echo
+        if [ -z "$rows" ]; then
+          echo "  the artifact asserts nothing about existing issues, so there is nothing to verify"
+        else
+          printf '%s\n' "$rows" | awk -F'\t' 'NF { printf "  %s %-10s %s\n", $2, $3, $4 }'
+        fi
+        echo
+        if [ -n "$bad" ]; then red "FAIL — GitHub does not match the artifact"
+        elif [ -n "$na" ]; then yellow "NOT ASSESSED — some state could not be read; never assumed to match"
+        else green "PASS — GitHub matches the artifact"
+        fi
+      fi
+      [ -z "$bad" ] || return 1
+      [ -z "$na" ] || return 3
       return 0 ;;
   esac
 }
