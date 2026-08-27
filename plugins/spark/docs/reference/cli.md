@@ -697,6 +697,14 @@ Each new type exists because its absence was where drift entered:
 - **`decision`** — unresolved meaning has to be representable, and it **refuses
   the run** rather than being applied around.
 
+  The refusal is **local**, and happens before `gh` is required and before
+  anything is written. Detecting an unresolved decision needs no network, so
+  demanding an authenticated `gh` to reach that answer reported the wrong problem
+  on a machine without one — the run failed with "gh was not found" and the
+  blocking human decision was never surfaced. `--fresh` waits for the same
+  reason: it truncates the state file, so a refused run must not already have
+  forgotten prior landings.
+
 ### `validate` — read-only, two layers
 
 Structure first, from the script that owns it: record shapes, refs — including
