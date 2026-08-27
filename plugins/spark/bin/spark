@@ -57,6 +57,7 @@ footprint|cmd_footprint|Measure Spark'\''s context footprint per surface (--json
 orient|cmd_orient|Classify this repo as new, existing, or ambiguous before setup; --set records the decision
 hub|cmd_hub|Report the memory hub this project declares and where the value came from; --set records it (or none)
 labels|cmd_labels|Compare this repo'\''s GitHub labels against the declared issue taxonomy; --apply creates the missing ones
+next|cmd_next|Select the next eligible milestone issue from live GitHub metadata
 help|usage|Show this help'
 
 usage() {
@@ -3550,6 +3551,220 @@ cmd_state() {
     printf '\n}\n'
   } > "$state" || { red "could not write $state"; return 1; }
   green "state: $state (updated $updated)"
+}
+
+# ---------------------------------------------------------------------------
+# spark next — deterministic next-work selection (#436)
+#
+# TWO QUESTIONS, TWO AUTHORITIES. Hard prerequisites come from GitHub's native
+# blocked-by graph; preferred delivery order comes from the release-readiness
+# gate's native SUB-ISSUE ORDER. They stay separate on purpose: an ordering
+# preference encoded as a blocked-by edge becomes a false blocker, and a real
+# prerequisite demoted to "ordering" starts work too early. Free-form milestone
+# prose is never parsed — it explains the order, it does not define it
+# (docs/reference/metadata-governance.md).
+#
+# next_select is a pure function over evidence lines so the policy is testable
+# offline; gathering (gh) runs only when the verb is invoked.
+#   issue <TAB> n <TAB> order <TAB> cats <TAB> prios <TAB> prio <TAB> blocked <TAB> title
+#       order   0-based index in the gate's sub-issue list, or "-" when absent
+#       cats    count of issue.taxonomy category labels carried
+#       prios   count of P0-P3 labels carried
+#       prio    the priority token, or "-"
+#       blocked count of OPEN native blockers, or "?" when unreadable
+#   cycle <TAB> <n> <TAB> <path>
+#   orderdrift <TAB> <kind> <TAB> <detail>
+#
+# Exits: 0 a selection was made / 1 nothing is eligible (a DETERMINATE answer —
+# every candidate is genuinely blocked) / 3 not assessed (the slate is not
+# mechanically interpretable). A determinate "nothing eligible" is never
+# reported as "could not tell", and an uninterpretable slate never yields a
+# pick.
+next_select() {
+  local kind a b c d e f g
+  local gaps="" gapn=0 cand="" cands=0 blocked_lines="" blockedn=0
+  local n order cats prios prio blocked title
+  gap() { gaps="${gaps}${1}
+"; gapn=$((gapn+1)); }
+
+  while IFS=$'\t' read -r kind a b c d e f g; do
+    case "$kind" in
+      cycle)
+        gap "not assessed: dependency cycle through #$a ($b) — no delivery order exists; break the cycle" ;;
+      orderdrift)
+        gap "not assessed: the delivery-order record $a — $b" ;;
+      issue)
+        n="$a" order="$b" cats="$c" prios="$d" prio="$e" blocked="$f" title="$g"
+        if [ "$cats" != "1" ]; then
+          gap "not assessed: #$n carries $cats taxonomy category labels — exactly one is required"
+          continue
+        fi
+        if [ "$prios" != "1" ]; then
+          gap "not assessed: #$n carries $prios P0-P3 labels — exactly one is required"
+          continue
+        fi
+        case "$blocked" in
+          '?')
+            gap "not assessed: #$n's native blockers could not be read — never assumed clear"
+            continue ;;
+          ''|*[!0-9]*)
+            gap "not assessed: #$n's blocker evidence is unreadable ('$blocked')"
+            continue ;;
+        esac
+        if [ "$blocked" -gt 0 ]; then
+          blocked_lines="${blocked_lines}  #$n ($prio) — blocked by $blocked open prerequisite(s)
+"
+          blockedn=$((blockedn+1))
+          continue
+        fi
+        # Sort key: priority, then explicit order, then issue number. An issue
+        # absent from the order record sorts after every ordered one (999) and
+        # is reported as drift by the gatherer — it stays selectable, so a
+        # missing order line can never strand a milestone.
+        case "$order" in ''|*[!0-9]*) order=999 ;; esac
+        cand="${cand}$(printf '%s|%03d|%09d|%s' "$prio" "$order" "$n" "$title")
+"
+        cands=$((cands+1)) ;;
+    esac
+  done
+
+  if [ "$gapn" -gt 0 ]; then
+    printf '%s' "$gaps"
+    echo "not assessed: the active slate is not mechanically interpretable; fix the metadata above, then re-run"
+    return 3
+  fi
+  if [ "$cands" -eq 0 ]; then
+    if [ "$blockedn" -gt 0 ]; then
+      echo "no eligible issue: every candidate is blocked by an open prerequisite"
+      printf '%s' "$blocked_lines"
+      echo "This is a known answer, not an unassessed one — clear a prerequisite to advance."
+      return 1
+    fi
+    echo "no eligible issue: this milestone has no open leaf issues"
+    return 1
+  fi
+
+  local pick pick_n pick_prio pick_order pick_title total
+  pick="$(printf '%s' "$cand" | awk 'NF' | LC_ALL=C sort | head -n1)"
+  pick_prio="$(printf '%s' "$pick" | cut -d'|' -f1)"
+  pick_order="$(printf '%s' "$pick" | cut -d'|' -f2)"
+  pick_n="$(printf '%s' "$pick" | cut -d'|' -f3)"
+  pick_title="$(printf '%s' "$pick" | cut -d'|' -f4-)"
+  pick_n=$((10#$pick_n))
+  total=$((cands + blockedn))
+
+  printf 'selected  #%s\n' "$pick_n"
+  printf 'title     %s\n' "$pick_title"
+  printf 'priority  %s\n' "$pick_prio"
+  printf 'eligible  yes\n'
+  printf 'blocked   no\n'
+  if [ "$pick_order" = "999" ]; then
+    printf 'order     not recorded — sorted last; add it to the gate sub-issues\n'
+  else
+    printf 'order     %s of %s in the gate sub-issue order\n' "$((10#$pick_order + 1))" "$total"
+  fi
+  printf 'reason    highest-priority eligible issue'
+  if [ "$cands" -gt 1 ]; then
+    printf '; the explicit sub-issue order broke the %s tie' "$pick_prio"
+  fi
+  printf '\n'
+  if [ "$blockedn" -gt 0 ]; then
+    printf 'note      %s candidate(s) excluded as blocked by an open prerequisite\n' "$blockedn"
+  fi
+  return 0
+}
+
+cmd_next() {
+  local usage_line="usage: spark next [--milestone <title>]"
+  local want_ms=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --milestone) shift; want_ms="${1:-}" ;;
+      -h|--help) echo "$usage_line"; return 0 ;;
+      *) red "unknown option: $1"; echo "$usage_line"; return 1 ;;
+    esac
+    shift
+  done
+
+  local root
+  root="$(git_root)"
+  if [ -z "$root" ]; then red "not inside a git repo"; return 1; fi
+
+  if ! command -v gh >/dev/null 2>&1 || ! gh auth status >/dev/null 2>&1; then
+    yellow "not assessed: selection reads live GitHub metadata and needs an authenticated gh"
+    return 3
+  fi
+
+  # The milestone: the caller's, else the open milestone with open issues whose
+  # title sorts first by version. Deterministic, and never a guess at intent.
+  local ms
+  if [ -n "$want_ms" ]; then
+    ms="$want_ms"
+  else
+    ms="$(gh api --paginate 'repos/{owner}/{repo}/milestones?state=open' \
+            --jq '.[] | select(.open_issues > 0) | .title' 2>/dev/null \
+          | LC_ALL=C sort -V | head -n1)" || ms=""
+    if [ -z "$ms" ]; then
+      yellow "not assessed: no open milestone with open issues could be read from GitHub"
+      return 3
+    fi
+  fi
+
+  # One call, gh's embedded jq: number, comma-joined labels, title.
+  local rows
+  if ! rows="$(gh issue list --milestone "$ms" --state open --limit 200 \
+      --json number,title,labels \
+      --jq '.[] | [.number, ([.labels[].name] | join(",")), .title] | @tsv' 2>/dev/null)"; then
+    yellow "not assessed: this milestone's issues could not be read — never assumed empty"
+    return 3
+  fi
+
+  echo "Spark next — milestone \"$ms\""
+  echo
+
+  local taxo gate order_list ev="" n labelcsv title
+  taxo="$(resolve_issue_taxonomy "$root")"
+
+  # The gate is the milestone's release-readiness container: the open issue
+  # carrying sub-issues. It is never itself selectable (a parent closes last),
+  # and its sub-issue order IS the delivery-order authority.
+  gate=""; order_list=""
+  while IFS=$'\t' read -r n labelcsv title; do
+    [ -n "$n" ] || continue
+    local subs
+    subs="$(gh api "repos/{owner}/{repo}/issues/$n/sub_issues" --jq '.[].number' 2>/dev/null)" || subs=""
+    if [ -n "$subs" ]; then gate="$n"; order_list="$subs"; break; fi
+  done <<EOF_ROWS
+$rows
+EOF_ROWS
+  if [ -z "$gate" ]; then
+    ev="${ev}orderdrift	is missing	no issue in this milestone carries sub-issues, so no explicit order exists
+"
+  fi
+
+  while IFS=$'\t' read -r n labelcsv title; do
+    [ -n "$n" ] || continue
+    [ "$n" = "$gate" ] && continue
+    local cats=0 prios=0 prio="-" order blockers l t
+    for l in $(printf '%s' "$labelcsv" | tr ',' ' '); do
+      for t in $taxo; do [ "$l" = "$t" ] && cats=$((cats+1)); done
+      case "$l" in P0|P1|P2|P3) prios=$((prios+1)); prio="$l" ;; esac
+    done
+    order="$(printf '%s\n' "$order_list" | grep -nx -- "$n" 2>/dev/null | cut -d: -f1)" || order=""
+    if [ -n "$order" ]; then order=$((order - 1)); else order="-"; fi
+    if blockers="$(gh api "repos/{owner}/{repo}/issues/$n/dependencies/blocked_by" \
+        --jq '[.[] | select(.state == "open")] | length' 2>/dev/null)"; then
+      [ -n "$blockers" ] || blockers=0
+    else
+      blockers='?'
+    fi
+    ev="${ev}issue	$n	$order	$cats	$prios	$prio	$blockers	$(printf '%s' "$title" | tr '\t' ' ')
+"
+  done <<EOF_ROWS2
+$rows
+EOF_ROWS2
+
+  printf '%s' "$ev" | next_select
 }
 
 # Dispatch only when executed, not when sourced — sourcing (e.g. from behavioral

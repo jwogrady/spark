@@ -195,6 +195,52 @@ Without an authenticated `gh`, or when GitHub is unreachable, the verb reports
 listing is paginated, so a repository with more than one page of labels cannot
 have an existing category misreported as missing.
 
+## `spark next [--milestone <title>]`
+
+Names the one next eligible issue in a milestone, derived entirely from live
+GitHub metadata, and explains why it was chosen. Read-only: it changes no
+label, milestone, priority, dependency, issue state, or branch.
+
+Two questions, two authorities, deliberately kept apart:
+
+- **Hard prerequisites** come from GitHub's **native `blocked-by` graph**. An
+  issue with an open native blocker is not eligible, whatever its priority.
+- **Preferred delivery order** comes from the release-readiness gate's
+  **native sub-issue order**. Free-form milestone prose is never parsed — it
+  explains the order, it does not define it.
+
+Collapsing the two is what makes a backlog lie: an ordering preference encoded
+as a `blocked-by` edge becomes a false blocker that fails readiness closed,
+and a real prerequisite demoted to "ordering" starts work too early.
+
+Ranking is priority (`P0`→`P3`), then the explicit sub-issue order, then issue
+number as a documented stable fallback. The gate itself is never selected — a
+parent is a container and closes last.
+
+Before selecting, the verb refuses to guess when the slate is not mechanically
+interpretable. Missing or duplicated taxonomy categories, missing or duplicated
+`P0`–`P3` labels, unreadable native blockers, a dependency cycle, or a missing
+delivery-order record all report **not assessed** (exit 3) and name the issue
+at fault. One uninterpretable issue stops the whole selection: picking around
+it would mean choosing from a set that could not be fully read.
+
+Three outcomes, and the middle one matters:
+
+| Outcome | Exit | Meaning |
+|---|---|---|
+| a selection | 0 | this issue is next, with the reason |
+| no eligible issue | 1 | **a known answer** — every candidate is genuinely blocked, or the milestone has no open leaf |
+| not assessed | 3 | the slate could not be read; nothing is claimed |
+
+"Everything is blocked" is a determinate result and is reported as one. It is
+never folded into "could not tell" — a known negative and an unknown are
+different facts, and a tool that confuses them teaches its reader to distrust
+both.
+
+With no `--milestone`, the target is the open milestone with open issues whose
+title sorts first by version. Without an authenticated `gh`, the verb reports
+not assessed rather than guessing.
+
 ## `spark profiles`
 
 Lists the shipped setup profiles — small, flat-JSON sets of project facts
