@@ -58,6 +58,7 @@ orient|cmd_orient|Classify this repo as new, existing, or ambiguous before setup
 hub|cmd_hub|Report the memory hub this project declares and where the value came from; --set records it (or none)
 labels|cmd_labels|Compare this repo'\''s GitHub labels against the declared issue taxonomy; --apply creates the missing ones
 governance|cmd_governance|Render the resolved governance model: label families, structure, surfaces, enforcement (--tsv)
+docs-impact|cmd_docs_impact|Verify the declared documentation impact of an issue against its implementation evidence
 next|cmd_next|Select the next eligible milestone issue from live GitHub metadata
 help|usage|Show this help'
 
@@ -1942,6 +1943,25 @@ governance_validate() {
       mem[k] = 1
       next
     }
+    $1 == "exclusive" {
+      if (!fields(4, "exclusive")) next
+      k = $2 SUBSEP $3
+      if (k in exc) bad(sprintf("duplicate exclusive record %s/%s", $2, $3)); exc[k] = 1
+      next
+    }
+    $1 == "pathclass" {
+      if (!fields(5, "pathclass")) next
+      if ($4 != "core" && $4 != "repo" && $4 != "companion")
+        bad(sprintf("pathclass %s surface %s is not core|repo|companion", $3, $4))
+      # A leading "/" or any ".." would let a governed path escape the repo it
+      # is meant to describe, and an absolute path can never match a
+      # repo-relative changed path anyway.
+      if ($5 ~ /^\// || $5 ~ /\.\./)
+        bad(sprintf("pathclass %s path %s must be repo-relative and free of ..", $3, $5))
+      k = $2 SUBSEP $3 SUBSEP $5
+      if (k in pcl) bad(sprintf("duplicate pathclass %s -> %s", $3, $5)); pcl[k] = 1
+      next
+    }
     $1 == "structure" {
       if (!fields(5, "structure")) next
       if ($4 != "authoritative" && $4 != "derived")
@@ -1981,10 +2001,14 @@ governance_validate() {
   return 1
 }
 
-# governance_records <file> <tier> — emit "<key>|<record>|<tier>" (US-separated)
-# per real record, declaration order preserved. The key is what a later tier
-# overrides; families and enforcement key on their name, everything else on
-# its first two identifying fields.
+# governance_records <file> <tier> — emit "<key>|<group>|<record>|<tier>"
+# (US-separated) per real record, declaration order preserved.
+#
+# <key> is what a later tier overrides one-for-one. <group> names a SET that a
+# later tier replaces WHOLESALE, or is empty for records that are not part of
+# one. Two record kinds are sets, for the same reason: a per-key merge can only
+# add, never remove, so an overlay could not narrow a taxonomy or re-point a
+# class's paths.
 governance_records() {
   local f="$1" tier="$2"
   [ -f "$f" ] || return 0
@@ -1992,10 +2016,14 @@ governance_records() {
     /^[[:space:]]*#/ { next }
     /^[[:space:]]*$/ { next }
     {
+      group = ""
       if ($1 == "version" || $1 == "model")            key = $1
       else if ($1 == "family" || $1 == "enforce")      key = $1 "/" $2
+      else if ($1 == "member")                       { key = $1 "/" $2 "/" $3; group = "member/" $2 }
+      else if ($1 == "pathclass")                    { key = $1 "/" $2 "/" $3 "/" $5
+                                                       group = "pathclass/" $2 "/" $3 }
       else                                             key = $1 "/" $2 "/" $3
-      printf "%s\037%s\037%s\n", key, $0, tier
+      printf "%s\037%s\037%s\037%s\n", key, group, $0, tier
     }
   ' "$f"
 }
@@ -2044,26 +2072,23 @@ resolve_governance() {
     governance_records "$operator" operator
     [ -n "$project" ] && governance_records "$project" project
   } | awk -F'\037' '
-      { k[++N] = $1; rec[N] = $2; tier[N] = $3
-        if ($1 ~ /^member\//) {
-          split($1, p, "/"); f = p[2]
-          memwin[f] = $3                       # input is tier-ordered: last wins
-          if (!(f in famanchor)) famanchor[f] = N
+      { k[++N] = $1; grp[N] = $2; rec[N] = $3; tier[N] = $4
+        if ($2 != "") {
+          setwin[$2] = $4                  # input is tier-ordered: last wins
+          if (!($2 in anchor)) anchor[$2] = N
         }
         if (!($1 in firstpos)) firstpos[$1] = N
         last[$1] = N
       }
       END {
         for (i = 1; i <= N; i++) {
-          key = k[i]
-          if (key ~ /^member\//) {
-            split(key, p, "/"); f = p[2]
-            if (tier[i] != memwin[f]) continue          # superseded member set
-            printf "%d\t%09d\t%s\t%s\n", famanchor[f], i, rec[i], tier[i]
+          if (grp[i] != "") {
+            if (tier[i] != setwin[grp[i]]) continue      # superseded set
+            printf "%d\t%09d\t%s\t%s\n", anchor[grp[i]], i, rec[i], tier[i]
             continue
           }
-          if (last[key] != i) continue                  # a later tier overrode it
-          printf "%d\t%09d\t%s\t%s\n", firstpos[key], i, rec[i], tier[i]
+          if (last[k[i]] != i) continue                  # a later tier overrode it
+          printf "%d\t%09d\t%s\t%s\n", firstpos[k[i]], i, rec[i], tier[i]
         }
       }' | LC_ALL=C sort -s -t"$(printf '\t')" -k1,1n -k2,2n | cut -f3- )"
 
@@ -2073,6 +2098,7 @@ resolve_governance() {
   local closure
   closure="$(printf '%s\n' "$out" | awk -F'\t' '
       $1 == "family"    { fam[$2] = 1 }
+      $1 == "member"    { mem[$2 SUBSEP $3] = 1 }
       $1 == "structure" { aspect[$2] = 1; surf[$3] = 1 }
       { rows[++n] = $0 }
       END {
@@ -2080,6 +2106,12 @@ resolve_governance() {
           split(rows[i], r, "\t")
           if (r[1] == "member" && !(r[2] in fam))
             printf "member %s belongs to undeclared family %s\n", r[3], r[2]
+          if (r[1] == "exclusive" && !(r[2] in fam))
+            printf "exclusive names undeclared family %s\n", r[2]
+          if (r[1] == "exclusive" && (r[2] in fam) && !((r[2] SUBSEP r[3]) in mem))
+            printf "exclusive %s names %s, which is not a member of that family\n", r[2], r[3]
+          if (r[1] == "pathclass" && !((r[2] SUBSEP r[3]) in mem))
+            printf "pathclass names %s, which is not a member of family %s\n", r[3], r[2]
           if (r[1] == "separation") {
             # BOTH sides are checked. The one thing a separation asserts is
             # that X is never derived from Y; leaving Y unvalidated let a typo
@@ -2474,6 +2506,310 @@ EOF
   echo "Category NAMES stay owned by the issue.taxonomy preference; this model"
   echo "owns each category's colour, description, cardinality, and requirement."
   return 0
+}
+
+# ---------------------------------------------------------------------------
+# docs-impact (#483). Spark reminded you to check documentation; it did not
+# prove you had. The failure mode is not "a PR changed no docs" — very often
+# that is correct. It is SILENT docs impact: work lands, nobody declares
+# whether documentation was affected, and that omission is indistinguishable
+# from a deliberate "none".
+#
+# The agent decides the semantic impact. Spark verifies the decision was
+# satisfied. Every rule below is schema data, not a constant in here: the
+# family, its members, the exclusivity of `none`, and every path-class
+# mapping live in the governance model.
+# ---------------------------------------------------------------------------
+
+# di_trunk <root> — the remote trunk ref, by the same idiom cmd_brief uses.
+di_trunk() {
+  local root="$1" trunk='' t
+  trunk="$(git -C "$root" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)"
+  if [ -z "$trunk" ]; then
+    for t in origin/master origin/main; do
+      git -C "$root" show-ref --verify --quiet "refs/remotes/$t" && { trunk="$t"; break; }
+    done
+  fi
+  printf '%s' "$trunk"
+}
+
+# di_classify <model> — read repo-relative paths on stdin, emit
+# "<class><TAB><surface><TAB><path>" per GOVERNED path. A path ending in "/"
+# in the schema is a directory prefix; anything else is an exact file. No glob
+# engine, so the match is deterministic and needs no dependency.
+di_classify() {
+  awk -F'\t' -v model="$1" '
+    BEGIN {
+      n = split(model, lines, "\n")
+      for (i = 1; i <= n; i++) {
+        split(lines[i], f, "\t")
+        if (f[1] != "pathclass") continue
+        nc++; cls[nc] = f[3]; sur[nc] = f[4]; pat[nc] = f[5]
+      }
+    }
+    {
+      path = $0
+      if (path == "") next
+      for (i = 1; i <= nc; i++) {
+        p = pat[i]
+        if (p ~ /\/$/) { if (index(path, p) == 1) print cls[i] "\t" sur[i] "\t" path }
+        else if (path == p)                       print cls[i] "\t" sur[i] "\t" path
+      }
+    }'
+}
+
+# di_grade <declared> <governed> <exclusive-member> — THE GRAMMAR, factored out
+# so it is drivable from fixtures without GitHub, the same way the remote
+# enforcement verdict is. Prints "<VERDICT><TAB><detail>"; returns 1 on FAIL,
+# 0 on PASS and on WARN (a warning is reported, never silent, but it does not
+# fail a build).
+#
+# Both arguments are space-separated sets. `governed` names the classes that
+# actually changed; `exclusive` is the member the schema marks as
+# uncombinable, empty when the family has none.
+di_grade() {
+  local declared="$1" governed="$2" exclusive="$3" c unsatisfied="" extra=""
+
+  # Zero disposition always fails. Silence is never `none`.
+  if [ -z "$declared" ]; then
+    printf 'FAIL\tno docs-impact disposition is declared — silence is never "none"\n'
+    return 1
+  fi
+
+  # The exclusive member plus anything else is INVALID, not merely odd.
+  if [ -n "$exclusive" ]; then
+    case " $declared " in
+      *" $exclusive "*)
+        if [ "$declared" != "$exclusive" ]; then
+          printf 'FAIL\tINVALID: %s cannot be combined with another value (declared: %s)\n' \
+            "$exclusive" "$declared"
+          return 1
+        fi
+        if [ -n "$governed" ]; then
+          printf 'FAIL\tdeclared %s, but governed documentation changed: %s\n' "$exclusive" "$governed"
+          return 1
+        fi
+        printf 'PASS\tdeclared %s, and no governed documentation changed\n' "$exclusive"
+        return 0 ;;
+    esac
+  fi
+
+  for c in $declared; do
+    case " $governed " in *" $c "*) ;; *) unsatisfied="${unsatisfied:+$unsatisfied }$c" ;; esac
+  done
+  if [ -n "$unsatisfied" ]; then
+    printf 'FAIL\tdeclared but with no qualifying evidence: %s\n' "$unsatisfied"
+    return 1
+  fi
+
+  # WARN is only ever an ADDITIONAL class beyond an otherwise valid non-`none`
+  # declaration. It is not a general "docs changed but nothing was declared"
+  # escape hatch — that case is an undeclared issue, which fails above.
+  for c in $governed; do
+    case " $declared " in *" $c "*) ;; *) extra="${extra:+$extra }$c" ;; esac
+  done
+  if [ -n "$extra" ]; then
+    printf 'WARN\tevery declared class is satisfied, but an undeclared class also changed: %s\n' "$extra"
+    return 0
+  fi
+  printf 'PASS\tevery declared class has qualifying evidence, and nothing else changed\n'
+  return 0
+}
+
+# spark docs-impact [--issue N] [--branch] [--paths FILE] [--tsv]
+#
+# Verdicts and exits: PASS 0, WARN 0 (reported, never silent), FAIL 1,
+# NOT ASSESSED 3 — never PASS by assumption, which is the whole point.
+cmd_docs_impact() {
+  local usage_line="usage: spark docs-impact [--issue <n>] [--branch] [--paths <file>] [--tsv]"
+  local issue="" mode="" paths_file="" tsv=0
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --issue) shift; issue="${1:-}" ;;
+      --branch) mode="branch" ;;
+      --paths) shift; paths_file="${1:-}"; mode="paths" ;;
+      --tsv) tsv=1 ;;
+      -h|--help) echo "$usage_line"; return 0 ;;
+      *) red "unknown option: $1"; echo "$usage_line"; return 1 ;;
+    esac
+    shift
+  done
+
+  local root
+  root="$(git_root)"
+  if [ -z "$root" ]; then red "not inside a git repo"; return 1; fi
+
+  # not_assessed <reason> — the one exit that must never be mistaken for a
+  # pass. Printed the same way in both output modes.
+  di_verdict() { # <verdict> <detail>
+    if [ "$tsv" -eq 1 ]; then printf 'verdict\t%s\t%s\n' "$1" "$2"
+    else
+      case "$1" in
+        PASS) green "  verdict     PASS — $2" ;;
+        WARN) yellow "  verdict     WARN — $2" ;;
+        FAIL) red "  verdict     FAIL — $2" ;;
+        *)    yellow "  verdict     NOT ASSESSED — $2" ;;
+      esac
+    fi
+  }
+
+  local model
+  if ! model="$(resolve_governance 2>&1)"; then
+    printf '%s\n' "$model" | while IFS= read -r l; do
+      [ -n "$l" ] && red "  ${l#governance: }"
+    done
+    di_verdict "NOT ASSESSED" "the governance model could not be resolved"
+    return 3
+  fi
+
+  # The family and its exclusive member are schema data, never constants here.
+  local family="docs-impact" members exclusive_member
+  members="$(printf '%s\n' "$model" \
+    | awk -F'\t' -v f="$family" '$1 == "member" && $2 == f { printf "%s%s", s, $3; s = " " }')"
+  if [ -z "$members" ]; then
+    di_verdict "NOT ASSESSED" "the governance model declares no $family family"
+    return 3
+  fi
+  exclusive_member="$(printf '%s\n' "$model" \
+    | awk -F'\t' -v f="$family" '$1 == "exclusive" && $2 == f { print $3; exit }')"
+
+  # The issue: explicit, else the number the branch name carries — the same
+  # feat/<n>-slug convention codify creates.
+  local branch=""
+  branch="$(git -C "$root" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+  if [ -z "$issue" ]; then
+    issue="$(printf '%s' "$branch" | sed -n 's|^[a-z][a-z]*/\([0-9][0-9]*\)-.*|\1|p')"
+  fi
+  case "$issue" in
+    ''|*[!0-9]*)
+      di_verdict "NOT ASSESSED" "no issue number given and none in the branch name '$branch'"
+      return 3 ;;
+  esac
+
+  [ "$tsv" -eq 1 ] || echo "Spark docs-impact — issue #$issue"
+  [ "$tsv" -eq 1 ] && printf 'issue\t%s\n' "$issue"
+
+  if ! command -v gh >/dev/null 2>&1 || ! gh auth status >/dev/null 2>&1; then
+    di_verdict "NOT ASSESSED" "the declaration lives on the GitHub issue and needs an authenticated gh"
+    return 3
+  fi
+
+  # --- the declaration -----------------------------------------------------
+  local all_labels declared="" m
+  if ! all_labels="$(gh issue view "$issue" --json labels --jq '.labels[].name' 2>/dev/null)"; then
+    di_verdict "NOT ASSESSED" "issue #$issue could not be read — never assumed compliant"
+    return 3
+  fi
+  for m in $members; do
+    printf '%s\n' "$all_labels" | grep -Fxq "$m" && declared="${declared:+$declared }$m"
+  done
+
+  if [ "$tsv" -eq 1 ]; then printf 'declared\t%s\n' "$declared"
+  else echo "  declared    ${declared:-(none)}"; fi
+
+  # Two grammar rows are decidable from the declaration alone, and both must
+  # be reported BEFORE any evidence is gathered: an undeclared issue fails
+  # whether or not evidence exists, and an invalid combination is invalid
+  # whatever changed. Deferring them would spend network calls to reach a
+  # verdict already determined.
+  if [ -z "$declared" ]; then
+    di_verdict "FAIL" "issue #$issue carries no $family disposition — silence is never 'none'"
+    return 1
+  fi
+  if [ -n "$exclusive_member" ]; then
+    case " $declared " in
+      *" $exclusive_member "*)
+        if [ "$declared" != "$exclusive_member" ]; then
+          di_verdict "FAIL" "INVALID: $exclusive_member cannot be combined with another $family value"
+          return 1
+        fi ;;
+    esac
+  fi
+
+  # --- the evidence set ----------------------------------------------------
+  # Aggregated across EVERY linked implementation PR, then judged. A single
+  # closing PR is the common case, not the model: documentation that landed in
+  # an earlier PR of the same issue must not false-fail.
+  local evidence="" ev_desc="" trunk pr prs
+  case "$mode" in
+    paths)
+      if [ ! -f "$paths_file" ]; then
+        di_verdict "NOT ASSESSED" "the evidence file $paths_file does not exist"
+        return 3
+      fi
+      evidence="$(awk 'NF' "$paths_file")"
+      ev_desc="paths from $(basename "$paths_file")"
+      ;;
+    branch)
+      trunk="$(di_trunk "$root")"
+      if [ -z "$trunk" ]; then
+        di_verdict "NOT ASSESSED" "no remote trunk ref could be resolved for a branch diff"
+        return 3
+      fi
+      if ! evidence="$(git -C "$root" diff --name-only "$trunk...HEAD" 2>/dev/null)"; then
+        di_verdict "NOT ASSESSED" "the diff against $trunk could not be resolved"
+        return 3
+      fi
+      ev_desc="branch $branch vs $trunk"
+      ;;
+    *)
+      prs="$(gh api graphql -f query="
+        query { repository(owner: \"{owner}\", name: \"{repo}\") {
+          issue(number: $issue) {
+            closedByPullRequestsReferences(first: 50, includeClosedPrs: true) {
+              nodes { number }
+            } } } }" --jq '.data.repository.issue.closedByPullRequestsReferences.nodes[].number' \
+        2>/dev/null)" || prs=""
+      if [ -z "$prs" ]; then
+        di_verdict "NOT ASSESSED" "issue #$issue has no linked implementation PR yet — no evidence to judge"
+        return 3
+      fi
+      for pr in $prs; do
+        local pr_files
+        if ! pr_files="$(gh pr view "$pr" --json files --jq '.files[].path' 2>/dev/null)"; then
+          di_verdict "NOT ASSESSED" "PR #$pr's changed files could not be read — evidence incomplete"
+          return 3
+        fi
+        evidence="${evidence}${pr_files}
+"
+      done
+      evidence="$(printf '%s\n' "$evidence" | awk 'NF' | LC_ALL=C sort -u)"
+      ev_desc="$(printf '%s' "$prs" | tr '\n' ' ' | sed 's/ *$//' | sed 's/^/PR(s) #/; s/ / #/g')"
+      ;;
+  esac
+
+  local ev_count
+  ev_count="$(printf '%s\n' "$evidence" | awk 'NF' | wc -l | tr -d ' ')"
+  if [ "$tsv" -eq 1 ]; then printf 'evidence\t%s\t%s\n' "$ev_desc" "$ev_count"
+  else echo "  evidence    $ev_desc ($ev_count changed path(s))"; fi
+
+  # --- classify ------------------------------------------------------------
+  local hits governed=""
+  hits="$(printf '%s\n' "$evidence" | di_classify "$model")"
+  governed="$(printf '%s\n' "$hits" | awk -F'\t' 'NF { print $1 }' | LC_ALL=C sort -u | tr '\n' ' ' | sed 's/ *$//')"
+
+  if [ "$tsv" -eq 1 ]; then
+    printf '%s\n' "$hits" | awk -F'\t' 'NF { c[$1"\t"$2]++ } END { for (k in c) print "governed\t" k "\t" c[k] }' \
+      | LC_ALL=C sort
+  else
+    if [ -n "$governed" ]; then
+      echo "  governed    documentation changed in these classes:"
+      printf '%s\n' "$hits" | awk -F'\t' 'NF { c[$1"\t"$2]++ } END { for (k in c) print k "\t" c[k] }' \
+        | LC_ALL=C sort | while IFS=$'\t' read -r cls sur cnt; do
+          printf '                %-28s %-10s %s path(s)\n' "$cls" "$sur" "$cnt"
+        done
+    else
+      echo "  governed    no governed documentation changed"
+    fi
+  fi
+
+  # --- the grammar ---------------------------------------------------------
+  # One authority: di_grade decides, this only renders. Restating the rows here
+  # would give the grammar two implementations to keep in step.
+  local graded rc=0
+  graded="$(di_grade "$declared" "$governed" "$exclusive_member")" || rc=$?
+  di_verdict "${graded%%	*}" "${graded#*	}"
+  return "$rc"
 }
 
 # spark orient [--set new|existing] — the orientation preflight (issue #183,
