@@ -25,7 +25,10 @@ record* around that machinery — it never recreates release management.
       and any commit merged under a hidden type whose PR is labeled `feature`.
       Offline-tested by `tests/test-release-notes-check.sh`. The failure it
       prevents: a user-facing change merged under a hidden type never
-      reaching the notes. Both halves now run automatically as an advisory on the
+      reaching the notes. Its exit status carries the release consequence —
+      `1` blocking, `3` duplicate-only (non-blocking, disclosed in the status
+      description), `0` clean — so the GitHub status never shows a blocking
+      omission and an accepted duplicate as the same red. Both halves now run automatically as an advisory on the
       Release Please PR (`.github/scripts/release-notes-runner.sh`, wired into
       the milestone-gate workflow): the **omission** half per component against
       its own tag range and notes section, and the **mislabel** half using

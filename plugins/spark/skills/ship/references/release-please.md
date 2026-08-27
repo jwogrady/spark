@@ -67,15 +67,30 @@ do not hand-edit it. Merging a stale one publishes a GitHub Release whose body
 is missing entries while `CHANGELOG.md` has them — the artifact most readers
 see is then the wrong one.
 
-### Read the release-notes check by its finding, not its colour
+### The release-notes status carries the finding's weight
 
 The advisory `release-notes` status distinguishes two findings, and they carry
-opposite weight:
+opposite weight — so the status itself now says which one happened:
 
-| Finding | Meaning | Action |
-|---|---|---|
-| **omission** | a changelog-visible commit's subject is absent from the notes | **Blocks.** The notes misrepresent what shipped. Close and recreate. |
-| **duplicate bullet** | one logical change rendered twice | Known and accepted here (see `docs/ops/release-merge-convention.md`). Ship it. |
+| Finding | Meaning | Status | Action |
+|---|---|---|---|
+| **omission** | a changelog-visible commit's subject is absent from the notes | `failure` | **Blocks.** The notes misrepresent what shipped. Close and recreate. |
+| **mislabel / breaking-visibility** | a user-facing change hidden behind an excluded type, or a breaking change missing from the notes | `failure` | **Blocks.** Same reason. |
+| **duplicate bullet** | one logical change rendered twice | `success`, description disclosing the count | Known and accepted here (see `docs/ops/release-merge-convention.md`). Ship it. |
+| **check could not run** | bad range, unresolvable head, usage error | `error` | Nothing was verified. Never read as a pass. |
+
+A mixed result takes the strongest consequence: one omission beside any number
+of accepted duplicates is still `failure`.
+
+This split exists because a green that means "not assessed" and a red that
+means "ignore me" are the same bug in opposite directions. When a blocking
+omission and an accepted duplicate both render red, the standing instruction
+becomes "ship past the red" — which is exactly how an operator learns to
+ignore the signal that will one day be real.
+
+Still read the finding, not only the colour: the detailed PR comment names
+every finding by class and remains the evidence surface. The status is the
+release-disposition projection of that evidence, not a replacement for it.
 
 The word "notes" in that check's message means the **PR body**, not the
 changelog — `release-notes-check.sh --notes` expects the body. Feeding it the
