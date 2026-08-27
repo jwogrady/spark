@@ -1120,8 +1120,18 @@ cmd_doctor() {
   if [ -n "$proj_root" ]; then
     echo
     echo "Issue metadata governance:"
-    local taxo
+    local taxo gov_model_d="" gov_ok_d=1
     taxo="$(resolve_issue_taxonomy "$proj_root")"
+    # The SAME resolved model the governance commands read (#473). Doctor used
+    # to reach for the taxonomy alone, which meant this check and
+    # `spark governance` could disagree about which categories exist.
+    gov_model_d="$(resolve_governance 2>/dev/null)" || gov_ok_d=0
+    if [ "$gov_ok_d" -eq 1 ]; then
+      local model_cats
+      model_cats="$(printf '%s\n' "$gov_model_d" \
+        | awk -F'\t' '$1 == "member" && $2 == "category" { printf "%s%s", s, $3; s = " " }')"
+      [ -n "$model_cats" ] && taxo="$model_cats"
+    fi
     if [ -z "$taxo" ]; then
       yellow "  ! could not resolve issue.taxonomy — skipping label parity"; warnings=$((warnings+1))
     elif [ ! -d "$tmpl_dir" ]; then
@@ -1131,7 +1141,7 @@ cmd_doctor() {
       # for (#396). Report the state instead of skipping it.
       echo "  - no .github/ISSUE_TEMPLATE/ — no issue forms to check for taxonomy parity"
       echo "    Declared categories: $taxo"
-      echo "    Labels live on GitHub; reconcile them with: spark labels"
+      echo "    Labels live on GitHub; reconcile them with: spark governance apply"
     else
       local tmpl base labels_line found_cat bad_alias tok
       for tmpl in "$tmpl_dir"/*.yml; do
@@ -1156,6 +1166,65 @@ cmd_doctor() {
           green "  ✓ $base carries a taxonomy category label"
         fi
       done
+    fi
+  fi
+
+  # Governance readiness (#473). Doctor consumes the SAME row generators as
+  # `spark governance` rather than restating their rules, and it distinguishes
+  # every state #473 names — including the ones it does not assess here.
+  #
+  # Why it does not assess everything: the per-issue metadata sweep and the
+  # prerequisite graph cost one API call per issue with a declared blocker, and
+  # doctor runs on a latency budget and must work offline. So it reports the
+  # local model and the label/file surfaces, and NAMES the verb that owns the
+  # rest. That is a stated deferral, not a silent skip — a green doctor never
+  # means a remote surface was quietly passed over.
+  if [ -n "$proj_root" ]; then
+    echo
+    echo "Governance readiness:"
+    if [ "$gov_ok_d" -eq 0 ]; then
+      red "  ✗ the governance model could not be resolved — every check below is unassessable"
+      errors=$((errors+1))
+    else
+      green "  ✓ the resolved governance model is valid"
+      local gov_files gov_live_d gov_lrows nplus nsquig nbang
+      gov_files="$(gov_file_rows "$gov_model_d" "$proj_root")"
+      nbang="$(printf '%s\n' "$gov_files" | awk -F'\t' '$2 == "!" && NF' | wc -l | tr -d ' ')"
+      if [ "$nbang" -gt 0 ]; then
+        yellow "  ! $nbang governance file surface(s) need a human decision:"
+        printf '%s\n' "$gov_files" | awk -F'\t' '$2 == "!" && NF { print "      " $3 " — " $4 }'
+        warnings=$((warnings+1))
+      else
+        green "  ✓ every declared governance file surface is present"
+      fi
+      if ! command -v gh >/dev/null 2>&1 || ! gh auth status >/dev/null 2>&1; then
+        yellow "  ! remote governance NOT ASSESSED — labels live on GitHub and need an authenticated gh"
+        yellow "    This is not a pass. Re-run where gh is authenticated, or: spark governance inspect"
+        warnings=$((warnings+1))
+      elif ! gov_live_d="$(gov_live_labels)" || [ -z "$gov_live_d" ]; then
+        yellow "  ! remote governance NOT ASSESSED — the label list could not be read"
+        warnings=$((warnings+1))
+      else
+        gov_lrows="$(gov_label_rows "$gov_model_d" "$gov_live_d" "$taxo")"
+        nplus="$(printf '%s\n' "$gov_lrows" | awk -F'\t' '$2 == "+" && NF' | wc -l | tr -d ' ')"
+        nsquig="$(printf '%s\n' "$gov_lrows" | awk -F'\t' '$2 == "~" && NF' | wc -l | tr -d ' ')"
+        if [ "$nplus" -gt 0 ]; then
+          yellow "  ! remote governance MISSING — $nplus declared label(s) do not exist"
+          yellow "    Provision them create-only with: spark governance apply --yes"
+          warnings=$((warnings+1))
+        fi
+        if [ "$nsquig" -gt 0 ]; then
+          yellow "  ! remote governance DRIFTED — $nsquig label(s) differ from the model"
+          yellow "    Reported only: an existing label is the project's own decision."
+          yellow "    Repair deliberately with: spark governance apply --yes --repair-drift"
+          warnings=$((warnings+1))
+        fi
+        [ "$nplus" -eq 0 ] && [ "$nsquig" -eq 0 ] \
+          && green "  ✓ every governed label exists on the remote and matches the model"
+      fi
+      echo "  - issue metadata, the prerequisite graph, and the trunk policy are NOT"
+      echo "    assessed here — they cost an API call per issue. Assess them with:"
+      echo "    spark governance validate"
     fi
   fi
 
@@ -1636,6 +1705,23 @@ cmd_brief() {
     echo "  standards docs     $std_docs"
   else
     echo "  standards docs     none yet — 'spark setup' seeds CONVENTIONS.md and ENGINEERING-STANDARDS.md"
+  fi
+
+  # Governance readiness (#473), from deterministic local state rather than
+  # prose. Cheap and offline by construction: three local files resolve the
+  # model and each declared surface is a stat. Anything that needs the network
+  # names the verb that owns it instead of guessing at it.
+  local b_model="" b_bang
+  if b_model="$(resolve_governance 2>/dev/null)"; then
+    b_bang="$(gov_file_rows "$b_model" "$root" 2>/dev/null \
+      | awk -F'\t' '$2 == "!" && NF' | wc -l | tr -d ' ')"
+    if [ "${b_bang:-0}" -gt 0 ]; then
+      yellow "  governance         $b_bang surface(s) need a decision — spark governance diff"
+    else
+      echo "  governance         model resolves; declared surfaces present"
+    fi
+  else
+    yellow "  governance         the model does not resolve — spark governance will not run"
   fi
   return 0
 }
@@ -4789,6 +4875,21 @@ cmd_resume() {
     yellow "      (rebase or re-branch from $trunk if a dependency landed there)."
   fi
 
+  # Governance readiness, from deterministic local state rather than prose
+  # (#473). Offline and cheap by construction: the model resolves from three
+  # local files and the declared file surfaces are a stat each. Anything that
+  # needs the network names the verb that owns it instead of guessing.
+  local brief_model="" brief_files brief_bang
+  if brief_model="$(resolve_governance 2>/dev/null)"; then
+    brief_files="$(gov_file_rows "$brief_model" "$root" 2>/dev/null)" || brief_files=""
+    brief_bang="$(printf '%s\n' "$brief_files" | awk -F'\t' '$2 == "!" && NF' | wc -l | tr -d ' ')"
+    if [ "$brief_bang" -gt 0 ]; then
+      yellow "    ! $brief_bang governance surface(s) need a decision — spark governance diff"
+    fi
+  else
+    yellow "    ! the governance model does not resolve — spark governance will not run"
+  fi
+
   # Recorded intent: the judgment half, read from the state file as a claim.
   local key value got=0 legacy=0 blockers="" next="" updated=""
   if [ -f "$state" ]; then
@@ -5697,6 +5798,17 @@ cmd_next() {
 
   local taxo gate order_list ev="" n labelcsv title
   taxo="$(resolve_issue_taxonomy "$root")"
+  # The priority set comes from the resolved model (#473), not from a case
+  # branch here: a hard-coded P0|P1|P2|P3 was a second copy of a rule the
+  # schema already owns, so a project that renamed or extended the family got
+  # silently ignored by selection.
+  local gov_model_n="" gov_ok_n=1 prio_members=""
+  gov_model_n="$(resolve_governance 2>/dev/null)" || gov_ok_n=0
+  if [ "$gov_ok_n" -eq 1 ]; then
+    prio_members="$(printf '%s\n' "$gov_model_n" \
+      | awk -F'\t' '$1 == "member" && $2 == "priority" { printf "%s%s", s, $3; s = " " }')"
+  fi
+  [ -n "$prio_members" ] || prio_members="P0 P1 P2 P3"
 
   # The gate is the milestone's release-readiness container: the open issue
   # carrying sub-issues. It is never itself selectable (a parent closes last),
@@ -5724,7 +5836,9 @@ EOF_ROWS
     local cats=0 prios=0 prio="-" order blockers l t
     for l in $(printf '%s' "$labelcsv" | tr ',' ' '); do
       for t in $taxo; do [ "$l" = "$t" ] && cats=$((cats+1)); done
-      case "$l" in P0|P1|P2|P3) prios=$((prios+1)); prio="$l" ;; esac
+      for t in $prio_members; do
+        [ "$l" = "$t" ] && { prios=$((prios+1)); prio="$l"; }
+      done
     done
     order="$(printf '%s\n' "$order_list" | grep -nx -- "$n" 2>/dev/null | cut -d: -f1)" || order=""
     if [ -n "$order" ]; then order=$((order - 1)); else order="-"; fi
@@ -5763,6 +5877,30 @@ EOF_ROWS3
 
   echo
   next_route "$sn" "$scat" "$sthemes" "$taxo"
+
+  # Selection is not a licence to start. An issue whose execution metadata is
+  # mechanically invalid — two categories, a required family undeclared — is
+  # not ready to be worked, and handing it to codify anyway would build on a
+  # contradiction. Refuse, name it, and leave the decision to the human: Spark
+  # must not pick which category was meant (#471's safety boundary, #473's
+  # integration).
+  if [ "$gov_ok_n" -eq 1 ] && [ -n "$sn" ]; then
+    local sel_row bad_meta
+    # Every issue in this sweep belongs to $ms by construction, so the milestone
+    # column is known without another call. Passed with -v rather than
+    # interpolated: a title carries spaces and punctuation.
+    sel_row="$(printf '%s\n' "$rows" \
+      | awk -F'\t' -v n="$sn" -v m="$ms" '$1 == n { print $1 "\t" $2 "\t" m; exit }')"
+    bad_meta="$(gov_issue_rows "$gov_model_n" "$sel_row" | awk -F'\t' '$2 == "!" && NF { print }')"
+    if [ -n "$bad_meta" ]; then
+      echo
+      red "not ready: #$sn's execution metadata is mechanically invalid"
+      printf '%s\n' "$bad_meta" | awk -F'\t' 'NF { print "    ! " $4 }'
+      red "  Fix the metadata before starting. Spark reports the problem; which"
+      red "  category or disposition is meant is a human decision, never a default."
+      return 1
+    fi
+  fi
 }
 
 # Dispatch only when executed, not when sourced — sourcing (e.g. from behavioral
