@@ -20,6 +20,37 @@ Keep a Changelog format. Do not hand-edit released sections.
 
 ---
 
+## [0.20.0](https://github.com/jwogrady/spark/compare/v0.19.0...v0.20.0) (2026-08-27)
+
+
+### Features
+
+* route selected work by category and approval boundary ([c4d4651](https://github.com/jwogrady/spark/commit/c4d46519051369edecb50d1f9950ef119dfb3b24)), closes [#437](https://github.com/jwogrady/spark/issues/437)
+* select the next milestone issue from live GitHub metadata ([fb5cb6c](https://github.com/jwogrady/spark/commit/fb5cb6c0787f41da63133d5fcb33b9d505c293a9)), closes [#436](https://github.com/jwogrady/spark/issues/436)
+
+
+### Bug Fixes
+
+* count the order position against the order record ([7e0d97b](https://github.com/jwogrady/spark/commit/7e0d97ba779cab17c09adb8e54c7716e5284b2ff)), closes [#436](https://github.com/jwogrady/spark/issues/436)
+* make native blocked-by the one executable prerequisite authority ([d357445](https://github.com/jwogrady/spark/commit/d357445a4295d4680270feec023dc6db4e4efcc0)), closes [#438](https://github.com/jwogrady/spark/issues/438)
+* make the release-notes exit status carry release consequence ([9d7474c](https://github.com/jwogrady/spark/commit/9d7474c4b7aa489dae8a918914ecd18ac4991fcf)), closes [#487](https://github.com/jwogrady/spark/issues/487)
+* project the release-notes finding class onto the GitHub status ([f8aaf63](https://github.com/jwogrady/spark/commit/f8aaf63309ca549bfae745029a520459aee62aaf)), closes [#487](https://github.com/jwogrady/spark/issues/487)
+* stop routing from collapsing category into theme or taxonomy ([0358032](https://github.com/jwogrady/spark/commit/0358032e912998cfe834d224a0545ef308270d60)), closes [#437](https://github.com/jwogrady/spark/issues/437)
+
+
+### Documentation
+
+* align release doctrine with the honest notes status ([0ce3641](https://github.com/jwogrady/spark/commit/0ce3641e343a5a5ff10df579f481df82e876892e)), closes [#487](https://github.com/jwogrady/spark/issues/487)
+* document spark next and the two order authorities ([785369a](https://github.com/jwogrady/spark/commit/785369a33b078d60a6ac6b449c34c3b896fd5eec))
+* document the route and its two signal kinds ([9d9f102](https://github.com/jwogrady/spark/commit/9d9f1027e91fd6f673865007520bdb2f40d0beac))
+* give v0.20 a truthful roadmap section and release record ([426fd8c](https://github.com/jwogrady/spark/commit/426fd8c8e0d85527567764fae3fe4d1060c34112))
+* point the roadmap at the release that actually shipped ([5f4724e](https://github.com/jwogrady/spark/commit/5f4724e3e710ec8855b00f22076688db86f6eba3))
+* read the v0.17 problem statement as history ([fb249bc](https://github.com/jwogrady/spark/commit/fb249bcec9de09e10003eb5051ba502f80fa9e1a))
+* record Spark's self-conformance audit against its own model ([bdd829f](https://github.com/jwogrady/spark/commit/bdd829f329a0f15ccbfb35db93a22f8594cdb77b))
+* record v0.20 and correct the v0.19 record to past tense ([e2c869d](https://github.com/jwogrady/spark/commit/e2c869da3dc65cee102281776760deb09b20a652))
+* record what Spark is on the eve of v0.20 ([df6c6db](https://github.com/jwogrady/spark/commit/df6c6db513d4f9fbea6222e49236d784525658b2))
+* state one canonical dependency authority ([1211642](https://github.com/jwogrady/spark/commit/12116427b8b63043ad6e9a33a9cd128a8d3291fc)), closes [#438](https://github.com/jwogrady/spark/issues/438)
+
 ## [0.19.0](https://github.com/jwogrady/spark/compare/v0.16.2...v0.19.0) (2026-08-26)
 
 
