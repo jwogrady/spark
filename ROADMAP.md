@@ -474,7 +474,9 @@ beside them.
 - Lifecycle integration into `doctor`, work selection, `brief`/`resume`, and
   new-repo provisioning (#473).
 - `docs-impact` as a schema-defined label family with a deterministic evidence
-  validator (#483), so no change can have silent documentation impact.
+  validator (#483). The intent is that no change can have silent documentation
+  impact; #512 shows the validator does not yet hold that line when evidence
+  retrieval fails, which is one of the release blockers.
 
 The milestone is also the first held to its own `docs-impact` rule, with #470 as
 the sole bootstrap exception. Making that rule satisfiable required correcting
