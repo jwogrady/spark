@@ -72,9 +72,14 @@ assert_contains "with the neutral fallback colour" "#ededed" "$(det "$rows" inve
 # "<number>\t<labels csv>\t<milestone>"
 iss() { gov_issue_rows "$model" "$1"; }
 
-# A clean, fully-declared active issue produces nothing.
+# A clean, fully-declared active issue reports itself CORRECT rather than
+# reporting nothing: emitting no row made the summary say "=0", which reads as
+# "not one issue is correct" instead of "every issue is".
 clean="$(printf '10\tfeature,P1,docs-impact:none\tv0.21 — Governance as schema\n')"
-assert_eq "a fully-declared active issue is silent" "" "$(iss "$clean")"
+out="$(iss "$clean")"
+assert_eq "a fully-declared active issue is reported correct" "=" "$(row "$out" "#10")"
+assert_eq "and raises no finding" "" \
+  "$(printf '%s\n' "$out" | awk -F'\t' '$2 == "!"')"
 
 # Two categories is invalid whether or not the work is scheduled.
 two="$(printf '11\tfeature,bug,docs-impact:none\tv0.21 — Governance as schema\n')"
@@ -116,7 +121,8 @@ assert_eq "a backlog label is a release decision" "" \
 
 # An optional family missing is never a finding.
 assert_eq "an optional family may be absent" "" \
-  "$(iss "$(printf '18\tfeature,docs-impact:none\tv0.21 — Governance as schema\n')")"
+  "$(iss "$(printf '18\tfeature,docs-impact:none\tv0.21 — Governance as schema\n')" \
+    | awk -F'\t' '$2 == "!"')"
 
 # ======================== dependency cycles ========================
 # "<issue>\t<blocker>" — issue is blocked BY blocker.

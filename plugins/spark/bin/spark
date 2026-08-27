@@ -3103,6 +3103,7 @@ gov_issue_rows() {
         # CARDINALITY violation is reported either way — two categories is
         # wrong whether or not the work is scheduled.
         active = (f[3] != "")
+        buf = ""
         for (fi = 1; fi <= nf; fi++) {
           fm = order[fi]
           v = (fm in cnt) ? cnt[fm] : ""
@@ -3111,15 +3112,17 @@ gov_issue_rows() {
           c = 0; for (x = 1; x <= k; x++) if (vv[x] != "") c++
           if (c == 0) {
             if (req[fm] == "required" && active)
-              printf "metadata\t!\t#%s\t%s is required and none is declared\n", num, fm
+              buf = buf sprintf("metadata\t!\t#%s\t%s is required and none is declared\n", num, fm)
           } else if (c > 1 && (card[fm] == "exactly-one" || card[fm] == "at-most-one")) {
-            printf "metadata\t!\t#%s\t%s allows %s but %d are set:%s\n", num, fm, card[fm], c, v
+            buf = buf sprintf("metadata\t!\t#%s\t%s allows %s but %d are set:%s\n", num, fm, card[fm], c, v)
           }
           if ((fm in excl) && c > 1 && index(v, " " excl[fm]) > 0)
-            printf "metadata\t!\t#%s\t%s is exclusive but is combined with another %s value\n", num, excl[fm], fm
+            buf = buf sprintf("metadata\t!\t#%s\t%s is exclusive but is combined with another %s value\n", num, excl[fm], fm)
         }
         if (f[3] == "" && !(index(f[2], "backlog") > 0))
-          printf "metadata\t!\t#%s\tno release disposition: neither a milestone nor a backlog decision\n", num
+          buf = buf sprintf("metadata\t!\t#%s\tno release disposition: neither a milestone nor a backlog decision\n", num)
+        if (buf == "") printf "metadata\t=\t#%s\tevery declared invariant holds\n", num
+        else printf "%s", buf
       }
     }
   ' </dev/null
