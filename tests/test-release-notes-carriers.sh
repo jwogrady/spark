@@ -137,6 +137,22 @@ out="$( ( cd "$fix" && NOTES_CARRIER_LEDGER=".carriers.tsv" \
 [ "$(count_blocked "$out")" = "2" ] \
   && ok || bad "the trailer must collapse its own pair (got $(count_blocked "$out"))"
 
+# Surrounding whitespace, by contrast, is only formatting and must still parse.
+# This one carries `other`, not `orig`: an earlier fixture commit already
+# declares a trailer for `orig`, and two carriers claiming one original is
+# itself rejected — correctly, but for a different reason than this asserts.
+: > "$fix/.carriers.tsv"
+date +%s%N > "$fix/padded.txt"; gitc add -A
+GIT_AUTHOR_DATE='2026-01-03T17:00:00' GIT_COMMITTER_DATE='2026-01-03T17:00:00' \
+  gitc commit -q -m "feat: something new
+
+Changelog-Carrier-For:    $other   "
+head8="$(gitc rev-parse HEAD)"
+rc=0
+out="$( ( cd "$fix" && NOTES_CARRIER_LEDGER=".carriers.tsv" \
+    notes_component_commits_tsv "o/r" "core" "v1.0.0..$head8" ) 2>/dev/null )" || rc=$?
+[ "$rc" -eq 0 ] && ok || bad "a padded trailer value must still parse (got $rc)"
+
 # --- unprovable declarations are NOT ASSESSED, never a pass ------------------
 notassessed() { # <desc> <ledger-content> [range-head]
   printf '%s\n' "$2" > "$fix/.carriers.tsv"
@@ -204,6 +220,23 @@ rc=0
 ( cd "$fix" && NOTES_CARRIER_LEDGER=".carriers.tsv" \
     notes_component_commits_tsv "o/r" "core" "v1.0.0..$head6" ) >/dev/null 2>&1 || rc=$?
 [ "$rc" -eq 2 ] && ok || bad "an empty carrier trailer must not be assessed (got $rc)"
+
+# HOSTILE: internal whitespace in the value. Two half-shas separated by a space
+# are 40 hex characters once the space is removed, so a trim that strips
+# whitespace everywhere would splice them into a valid-looking sha and accept
+# malformed metadata. Only the surrounding whitespace may be trimmed.
+: > "$fix/.carriers.tsv"
+half_a="$(printf 'a%.0s' $(seq 20))"; half_b="$(printf 'b%.0s' $(seq 20))"
+date +%s%N > "$fix/split.txt"; gitc add -A
+GIT_AUTHOR_DATE='2026-01-03T16:00:00' GIT_COMMITTER_DATE='2026-01-03T16:00:00' \
+  gitc commit -q -m "docs: spliceable trailer
+
+Changelog-Carrier-For: $half_a $half_b"
+head7="$(gitc rev-parse HEAD)"
+rc=0
+( cd "$fix" && NOTES_CARRIER_LEDGER=".carriers.tsv" \
+    notes_component_commits_tsv "o/r" "core" "v1.0.0..$head7" ) >/dev/null 2>&1 || rc=$?
+[ "$rc" -eq 2 ] && ok || bad "internal whitespace in a trailer value must not be assessed (got $rc)"
 
 # A malformed trailer is unprovable too — and must fail rather than be ignored.
 : > "$fix/.carriers.tsv"

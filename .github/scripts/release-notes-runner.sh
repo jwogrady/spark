@@ -243,7 +243,13 @@ notes_carrier_pairs() { # <shas> -> carrier<TAB>original rows; rc 2 on bad metad
       echo "carrier trailer on $sha appears $n times — one carrier cannot name multiple originals" >&2
       return 2
     fi
-    raw="$(notes_carrier_trailer_raw "$sha" | tr -d '[:space:]')"
+    # Trim the SURROUNDING whitespace only. Stripping it everywhere would splice
+    # two half-shas into one valid-looking 40-character value, turning malformed
+    # metadata into a passing declaration — internal whitespace is malformed and
+    # the hex check below must still see it.
+    raw="$(notes_carrier_trailer_raw "$sha")"
+    raw="${raw#"${raw%%[![:space:]]*}"}"
+    raw="${raw%"${raw##*[![:space:]]}"}"
     case "$raw" in *[!0-9a-f]*) echo "carrier trailer on $sha is not lowercase hex: '$raw'" >&2; return 2 ;; esac
     if [ "${#raw}" -ne 40 ]; then
       echo "carrier trailer on $sha must be a full 40-character sha: '$raw'" >&2; return 2
