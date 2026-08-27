@@ -253,7 +253,24 @@ declaration order, stated as data rather than inferred from the label spelling.
 tiers, and keeps owning it. The model owns each category's **colour,
 description, cardinality, and requirement** — the values that used to be
 hard-coded in `bin/spark`. That is one authority per fact, and `spark doctor`
-holds the two shipped files in parity so they cannot drift into two answers.
+holds the two shipped files in parity — compared as **sets**, since the
+question is which categories exist — so they cannot drift into two answers.
+
+Because the two are independent, a *resolved* model can be valid and still
+contradict the taxonomy, and the two cases mean different things:
+
+- **A category `issue.taxonomy` names that the shipped member set does not.**
+  It was added — the supported extension path. It resolves to neutral grey
+  with a generic description, and `spark labels` says so.
+- **An overlay tier replaced the category family and left categories
+  undeclared.** Now two of the operator's own declarations disagree. `spark
+  labels` reports which tier replaced the family and which categories are
+  undeclared, and **refuses to create them** under `--apply`: they have no
+  declared colour, the verb is create-only, so a guess written once is never
+  corrected.
+
+A model that cannot be resolved at all blocks label **creation** only.
+`--prune-deprecated` reads no colour and no description, so it is unaffected.
 
 ### Adding a governed label family
 

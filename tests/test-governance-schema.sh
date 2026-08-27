@@ -207,6 +207,23 @@ fail_case "bad structure authority" \
   "$(printf 'version\t1\nstructure\torder\tsomewhere\tmaybe\tRule\n')" \
   "authority maybe is not authoritative|derived"
 
+# BOTH sides of a separation are checked. The one thing the record asserts is
+# that X is never derived from Y; an unvalidated Y let a typo render as a rule
+# about something that does not exist.
+fail_case "typo in a separation's second field" \
+  "$(printf 'version\t1\nseparation\tcategory\tprioriy\tRule text\n')" \
+  "is declared against prioriy, which is not a declared family"
+
+# One problem, one finding: counting the version record as seen before judging
+# its value keeps a malformed version from also tripping the END check.
+printf 'version\tX\n' > "$repo/.spark/governance.tsv"
+rc=0; out="$(gov --tsv 2>&1)" || rc=$?
+assert_rc "a non-integer version fails closed" 1 "$rc"
+assert_eq "and yields exactly one finding" 1 \
+  "$(printf '%s\n' "$out" | grep -c 'governance:')"
+assert_contains "naming the real problem" "version must be an integer" "$out"
+rm -f "$repo/.spark/governance.tsv"
+
 # A traversal in governance.model must never read an arbitrary file as the
 # governance authority.
 printf '{ "governance.model": "../../../etc/passwd" }' > "$repo/.spark/preferences.json"
@@ -252,12 +269,53 @@ rc=0; out="$("$SPARK" doctor 2>&1)" || rc=$?
 assert_contains "doctor reports shipped model parity" \
   "the shipped governance model is valid and in parity with issue.taxonomy" "$out"
 
+# Parity is a SET comparison: member declaration order is meaningful elsewhere
+# in the artifact, so reordering one file is a natural edit and must not fail
+# with two lines holding the same seven names.
+defaults_file="$WORK/plugin/preferences/defaults.json"
+python3 - "$defaults_file" <<'PY'
+import collections, json, sys
+p = sys.argv[1]
+d = json.load(open(p), object_pairs_hook=collections.OrderedDict)
+t = d["issue.taxonomy"].split()
+d["issue.taxonomy"] = " ".join([t[1], t[0]] + t[2:])
+json.dump(d, open(p, "w"), indent=2)
+PY
+rc=0; out="$("$SPARK" doctor 2>&1)" || rc=$?
+assert_rc "reordering the taxonomy keeps parity" 0 "$rc"
+assert_contains "and still reports parity" "in parity with issue.taxonomy" "$out"
+# A genuinely different set must still fail.
+python3 - "$defaults_file" <<'PY'
+import collections, json, sys
+p = sys.argv[1]
+d = json.load(open(p), object_pairs_hook=collections.OrderedDict)
+d["issue.taxonomy"] = d["issue.taxonomy"] + " invented"
+json.dump(d, open(p, "w"), indent=2)
+PY
+rc=0; out="$("$SPARK" doctor 2>&1)" || rc=$?
+assert_rc "a different set still fails parity" 1 "$rc"
+assert_contains "naming the disagreement" "disagree" "$out"
+python3 - "$defaults_file" <<'PY'
+import collections, json, sys
+p = sys.argv[1]
+d = json.load(open(p), object_pairs_hook=collections.OrderedDict)
+d["issue.taxonomy"] = "feature bug documentation chore tech-debt research infrastructure"
+json.dump(d, open(p, "w"), indent=2)
+PY
+
 model_file="$WORK/plugin/preferences/governance-models/spark-default.tsv"
+cp "$model_file" "$WORK/model.pristine"
 printf 'member\tcategory\tinvented\tededed\tDrifted in\n' >> "$model_file"
 rc=0; out="$("$SPARK" doctor 2>&1)" || rc=$?
 assert_rc "doctor fails on shipped drift" 1 "$rc"
 assert_contains "doctor names the drift" \
   "category family and the shipped issue.taxonomy disagree" "$out"
+# Restore it: leaving the shipped model drifted made every later case run
+# against a model that declares `invented`, which silently changed what those
+# cases were testing.
+cp "$WORK/model.pristine" "$model_file"
+rc=0; "$SPARK" doctor >/dev/null 2>&1 || rc=$?
+assert_rc "the shipped model is restored for the cases that follow" 0 "$rc"
 
 # ============ an unresolvable model must not be written to a remote ============
 # The colours and descriptions spark labels --apply writes come from the model.
@@ -282,6 +340,55 @@ fi
 rc=0; out="$("$SPARK" labels 2>&1)" || rc=$?
 assert_contains "report-only warns the colours are fallbacks" \
   "are the fallbacks, not the declared ones" "$out"
+rm -f "$repo/.spark/governance.tsv"
+
+# ====== a valid model can still contradict the taxonomy (resolved tiers) ======
+# Whole-set replacement is deliberate and issue.taxonomy owns the name set
+# independently, so an overlay declaring only `feature` leaves six categories
+# with no declared colour while resolution still SUCCEEDS. Creating them from
+# the fallback would write a guess that create-only never corrects.
+mkdir -p "$XDG_CONFIG_HOME/spark"
+{ printf 'version\t1\n'
+  printf 'family\tcategory\texactly-one\trequired\tNarrowed\n'
+  printf 'member\tcategory\tfeature\t111111\tOps feature\n'
+} > "$XDG_CONFIG_HOME/spark/governance.tsv"
+rc=0; out="$("$SPARK" labels --apply 2>&1)" || rc=$?
+assert_contains "a narrowed overlay is reported as a disagreement" \
+  "disagree about which categories exist" "$out"
+assert_contains "naming the tier that replaced the family" \
+  "the operator tier replaced the whole category family" "$out"
+assert_contains "and listing the undeclared categories" \
+  "bug documentation chore tech-debt research infrastructure" "$out"
+assert_contains "refusing to write a guess" "Refusing to create labels" "$out"
+# The model itself is VALID — this is a cross-tier contradiction, not a parse
+# error, which is exactly why the fail-closed path alone could not catch it.
+rc=0; "$SPARK" governance --tsv >/dev/null 2>&1 || rc=$?
+assert_rc "the narrowed model is itself valid" 0 "$rc"
+rm -f "$XDG_CONFIG_HOME/spark/governance.tsv"
+
+# Extending issue.taxonomy stays the supported act: when the SHIPPED member set
+# is the winner, a category it does not name was added, and neutral grey is the
+# intended answer rather than a contradiction.
+mkdir -p "$repo/.spark"
+printf '{ "issue.taxonomy": "feature bug documentation chore tech-debt research infrastructure invented" }' \
+  > "$repo/.spark/preferences.json"
+rc=0; out="$("$SPARK" labels 2>&1)" || rc=$?
+assert_contains "an added category is the supported extension path" \
+  "not declared by the governance model, so neutral grey: invented" "$out"
+assert_contains "and it is not reported as a disagreement" "extending issue.taxonomy is supported" "$out"
+case "$out" in
+  *"disagree about which categories exist"*) bad "an added category must not read as a disagreement" ;;
+  *) ok ;;
+esac
+rm -f "$repo/.spark/preferences.json"
+
+# --prune-deprecated reads no colour and no description, so an unusable model
+# must not disable it — and the fallthrough must not tell the operator to
+# re-run the command they just ran.
+printf 'version\t1\nnonsense\tx\ty\n' > "$repo/.spark/governance.tsv"
+rc=0; out="$("$SPARK" labels --apply --prune-deprecated 2>&1)" || rc=$?
+assert_eq "the misdirecting re-run message is gone" 0 \
+  "$(printf '%s\n' "$out" | grep -c 'Remove it deliberately with: spark labels --apply --prune-deprecated')"
 rm -f "$repo/.spark/governance.tsv"
 
 # ======================== read-only by construction ========================
