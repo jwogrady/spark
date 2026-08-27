@@ -391,6 +391,27 @@ assert_eq "the misdirecting re-run message is gone" 0 \
   "$(printf '%s\n' "$out" | grep -c 'Remove it deliberately with: spark labels --apply --prune-deprecated')"
 rm -f "$repo/.spark/governance.tsv"
 
+# ============ the human view renders every record type it resolves ============
+# Omitting a record type made `spark governance` claim to render "the resolved
+# model" while silently dropping rules that decide real verdicts.
+rc=0; out="$("$SPARK" governance 2>&1)" || rc=$?
+assert_rc "the human view renders" 0 "$rc"
+assert_contains "it shows label families" "Label families:" "$out"
+assert_contains "it shows execution structure" "Execution structure:" "$out"
+assert_contains "it shows the separations" "Separations that must not be collapsed:" "$out"
+assert_contains "it shows the surfaces" "Governance surfaces:" "$out"
+assert_contains "it shows enforcement" "Enforcement requirements:" "$out"
+# Every record type present in --tsv must be visible in the human view too.
+for t in exclusive pathclass; do
+  if printf '%s\n' "$("$SPARK" governance --tsv)" | awk -F'\t' -v t="$t" '$1==t{f=1} END{exit !f}'; then
+    case "$t" in
+      exclusive) assert_contains "the exclusivity rule is rendered" \
+        "may not be combined with any other value" "$out" ;;
+      pathclass) assert_contains "the governed paths are rendered" "governs" "$out" ;;
+    esac
+  fi
+done
+
 # ======================== read-only by construction ========================
 # The verb must not write anything: no network, no remote, no local mutation.
 git -C "$repo" checkout -q -- . 2>/dev/null || true
