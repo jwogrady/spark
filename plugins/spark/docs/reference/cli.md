@@ -723,14 +723,34 @@ part-way would leave the slate half-applied on top of that.
 
 Confirms GitHub holds what the artifact says, rather than trusting the apply
 report: a run that reported success can still have been followed by someone
-editing the issue. It checks both halves — what the artifact asserts about
-**existing** issues, and what a run **created**, reading the state file to learn
-which `KEY` became which number.
+editing the issue.
 
-Exits `1` on a mismatch, `3` when state could not be read, `0` only on a match.
-**An empty result is `3`, never `0`**: having nothing to check is not the same
-as having checked and found agreement, and reporting a pass there would be a
-confirmation of nothing.
+**Every mutation-bearing record is checked**, because a verification gate that
+covers a subset certifies the whole:
+
+| Row | What it compares |
+| --- | --- |
+| `live` | each `update` record — title, labels, milestone, and **body** — against the existing issue |
+| `created` | each created issue's title, labels, **milestone assignment**, and **body**, via the state file that records which `KEY` became which number |
+| `milestone` | each `milestone` record exists on the remote, with the description the artifact declares |
+| `hierarchy` | each `subissue` record is actually wired as a sub-issue |
+| `dependency` | each `blockedby` record exists in the native blocked-by graph |
+| `order` | the declared children appear under their parent in declared-position order |
+
+Order is compared as **relative** placement, which is how it is applied: the
+declared children are placed one after another, so a parent may also hold
+sub-issues the artifact never mentions without that reading as drift.
+
+Bodies are compared after normalising line endings and trailing blank lines.
+GitHub returns CRLF for bodies submitted with LF, and a check that reported every
+correct body as drifted would be worse than no check at all — one that always
+fails gets switched off.
+
+Exits `1` on a mismatch, `3` when any surface could not be read, `0` only when
+everything checked agreed. **An empty result is `3`, never `0`**: having nothing
+to check is not the same as having checked and found agreement, and reporting a
+pass there would be a confirmation of nothing. The same holds per surface — an
+unreadable sub-issue list is `?`, never assumed wired.
 
 ### What the compiler will not do
 

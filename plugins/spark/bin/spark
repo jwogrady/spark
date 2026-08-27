@@ -3779,6 +3779,175 @@ plan_schema_rows() {
   ' "$artifact"
 }
 
+# plan_ref_num <ref> <state> — the issue NUMBER a manifest ref denotes: a
+# literal #N, or the number a KEY became, which only the state file records.
+# Empty when unknowable, and callers must report that rather than skip it.
+plan_ref_num() {
+  case "$1" in
+    '#'*) printf '%s' "${1#'#'}" ;;
+    *)    [ -f "$2" ] && awk -F'\t' -v k="$1" \
+            '$1 == "created" && $2 == k { print $3; exit }' "$2" ;;
+  esac
+}
+
+# plan_ms_title <value> <artifact> — a milestone field may name a KEY the
+# artifact defines; GitHub only ever holds the TITLE. Resolve, else pass through.
+plan_ms_title() {
+  local t
+  t="$(awk -F'\t' -v k="$1" '/^[[:space:]]*(#|$)/ { next }
+        $1 == "milestone" && $2 == k { print $3; exit }' "$2")"
+  printf '%s' "${t:-$1}"
+}
+
+# plan_body_matches <file> <live-body> — 0 iff the issue body is the file.
+#
+# Compared after normalising line endings and trailing blank lines, because
+# GitHub returns CRLF for bodies submitted with LF and drops or adds a trailing
+# newline depending on the client. Without that, every correct body reported
+# drift, which is worse than not checking: a check that always fails gets
+# switched off.
+plan_body_matches() {
+  local want got
+  want="$(tr -d '\r' < "$1" | awk '{ print }' | sed -e :a -e '/^$/{$d;N;};/\n$/ba')"
+  got="$(printf '%s' "$2" | tr -d '\r' | sed -e :a -e '/^$/{$d;N;};/\n$/ba')"
+  [ "$want" = "$got" ]
+}
+
+# plan_relation_rows <artifact> <state> — the mutation-bearing facts that are
+# NOT fields on an issue: milestone existence, hierarchy, hard dependencies, and
+# preferred order.
+#
+# `verify` used to read title and labels only. A slate could therefore declare a
+# milestone, a parent/child hierarchy, a blocked-by edge and an explicit delivery
+# order, have every one of them absent from GitHub, and still be certified as
+# matching the artifact — because nothing looked (#517).
+plan_relation_rows() {
+  local artifact="$1" state="$2"
+  local key title desc a b c live num pnum cnum found kids reason
+
+  # --- milestone records ---------------------------------------------------
+  local ms_live ms_ok=1
+  if ! ms_live="$(gh api "repos/{owner}/{repo}/milestones?state=all&per_page=100" --paginate \
+                    --jq '.[] | "\(.title)\t\(.description // "")"' 2>/dev/null)"; then
+    ms_ok=0
+  fi
+  awk -F'\t' '/^[[:space:]]*(#|$)/ { next } $1 == "milestone" { print $2 "\t" $3 "\t" $4 }' "$artifact" \
+  | while IFS=$'\t' read -r key title desc; do
+      [ -n "$key" ] || continue
+      if [ "$ms_ok" -eq 0 ]; then
+        printf 'milestone\t?\t%s\tthe milestone list could not be read — never assumed to exist\n' "$key"
+        continue
+      fi
+      live="$(printf '%s\n' "$ms_live" | awk -F'\t' -v t="$title" '$1 == t { print "found\t" $2; exit }')"
+      if [ -z "$live" ]; then
+        printf 'milestone\t~\t%s\tno milestone titled "%s" exists\n' "$key" "$title"
+      elif [ -n "$desc" ] && [ "${live#found	}" != "$desc" ]; then
+        printf 'milestone\t~\t%s\tdescription is "%s"; the artifact says "%s"\n' \
+          "$key" "${live#found	}" "$desc"
+      else
+        printf 'milestone\t=\t%s\texists with the title the artifact asked for\n' "$key"
+      fi
+    done
+
+  # --- hierarchy -----------------------------------------------------------
+  awk -F'\t' '/^[[:space:]]*(#|$)/ { next } $1 == "subissue" { print $2 "\t" $3 }' "$artifact" \
+  | while IFS=$'\t' read -r a b; do
+      [ -n "$a" ] && [ -n "$b" ] || continue
+      pnum="$(plan_ref_num "$a" "$state")"; cnum="$(plan_ref_num "$b" "$state")"
+      if [ -z "$pnum" ] || [ -z "$cnum" ]; then
+        printf 'hierarchy\t?\t%s/%s\tone side is not a known issue number, so the link cannot be checked\n' "$a" "$b"
+        continue
+      fi
+      if ! kids="$(gh api "repos/{owner}/{repo}/issues/$pnum/sub_issues" --paginate \
+                     --jq '.[].number' 2>/dev/null)"; then
+        printf 'hierarchy\t?\t#%s\tsub-issues could not be read — never assumed wired\n' "$pnum"
+        continue
+      fi
+      if printf '%s\n' "$kids" | grep -Fxq "$cnum"; then
+        printf 'hierarchy\t=\t#%s\t#%s is a sub-issue of it, as the artifact asks\n' "$pnum" "$cnum"
+      else
+        printf 'hierarchy\t~\t#%s\t#%s is NOT a sub-issue of it\n' "$pnum" "$cnum"
+      fi
+    done
+
+  # --- hard dependencies ---------------------------------------------------
+  awk -F'\t' '/^[[:space:]]*(#|$)/ { next } $1 == "blockedby" { print $2 "\t" $3 }' "$artifact" \
+  | while IFS=$'\t' read -r a b; do
+      [ -n "$a" ] && [ -n "$b" ] || continue
+      num="$(plan_ref_num "$a" "$state")"; cnum="$(plan_ref_num "$b" "$state")"
+      if [ -z "$num" ] || [ -z "$cnum" ]; then
+        printf 'dependency\t?\t%s/%s\tone side is not a known issue number, so the edge cannot be checked\n' "$a" "$b"
+        continue
+      fi
+      if ! found="$(gh api "repos/{owner}/{repo}/issues/$num/dependencies/blocked_by" --paginate \
+                      --jq '.[].number' 2>/dev/null)"; then
+        printf 'dependency\t?\t#%s\tblocked-by could not be read — never assumed wired\n' "$num"
+        continue
+      fi
+      if printf '%s\n' "$found" | grep -Fxq "$cnum"; then
+        printf 'dependency\t=\t#%s\tis blocked by #%s, as the artifact asks\n' "$num" "$cnum"
+      else
+        printf 'dependency\t~\t#%s\tis NOT blocked by #%s\n' "$num" "$cnum"
+      fi
+    done
+
+  # --- preferred order ----------------------------------------------------
+  # Order is applied as RELATIVE placement: the declared children are placed one
+  # after another under the parent. So the check is that their relative order in
+  # the live sub-issue list matches ascending declared positions — not that each
+  # sits at an absolute index, since a parent may hold sub-issues the artifact
+  # never mentions.
+  local parents
+  parents="$(awk -F'\t' '/^[[:space:]]*(#|$)/ { next }
+      $1 == "order" { pos[$2] = $3 }
+      $1 == "subissue" { par[$3] = $2 }
+      END { for (r in pos) if (r in par) print par[r] }' "$artifact" | LC_ALL=C sort -u)"
+  printf '%s\n' "$parents" | while IFS= read -r a; do
+    [ -n "$a" ] || continue
+    pnum="$(plan_ref_num "$a" "$state")"
+    if [ -z "$pnum" ]; then
+      printf 'order\t?\t%s\tthe parent is not a known issue number, so order cannot be checked\n' "$a"
+      continue
+    fi
+    if ! kids="$(gh api "repos/{owner}/{repo}/issues/$pnum/sub_issues" --paginate \
+                   --jq '.[].number' 2>/dev/null)"; then
+      printf 'order\t?\t#%s\tsub-issue order could not be read — never assumed correct\n' "$pnum"
+      continue
+    fi
+    # The children this parent orders, in declared-position order.
+    local want_nums="" r pos_list
+    pos_list="$(awk -F'\t' -v p="$a" '/^[[:space:]]*(#|$)/ { next }
+        $1 == "order" { pos[$2] = $3 }
+        $1 == "subissue" && $2 == p { child[$3] = 1 }
+        END { for (r in child) if (r in pos) print pos[r] "\t" r }' "$artifact" \
+      | LC_ALL=C sort -n -k1,1 | cut -f2)"
+    local missing=0
+    for r in $pos_list; do
+      cnum="$(plan_ref_num "$r" "$state")"
+      if [ -z "$cnum" ]; then missing=1; break; fi
+      want_nums="${want_nums}${cnum}"$'\n'
+    done
+    if [ "$missing" -eq 1 ]; then
+      printf 'order\t?\t#%s\tan ordered child is not a known issue number\n' "$pnum"
+      continue
+    fi
+    # Live order, restricted to the ordered children.
+    local live_seq
+    live_seq="$(printf '%s\n' "$kids" | awk 'NF' \
+      | grep -Fx -f <(printf '%s' "$want_nums" | awk 'NF') 2>/dev/null || true)"
+    if [ "$(printf '%s' "$live_seq" | awk 'NF' | wc -l | tr -d ' ')" \
+         != "$(printf '%s' "$want_nums" | awk 'NF' | wc -l | tr -d ' ')" ]; then
+      printf 'order\t~\t#%s\tnot every ordered child is a sub-issue of it\n' "$pnum"
+    elif [ "$(printf '%s' "$live_seq" | awk 'NF')" = "$(printf '%s' "$want_nums" | awk 'NF')" ]; then
+      printf 'order\t=\t#%s\tits sub-issues are in the order the artifact declares\n' "$pnum"
+    else
+      printf 'order\t~\t#%s\tsub-issue order is %s; the artifact declares %s\n' "$pnum" \
+        "$(printf '%s' "$live_seq" | awk 'NF' | paste -sd, -)" \
+        "$(printf '%s' "$want_nums" | awk 'NF' | paste -sd, -)"
+    fi
+  done
+}
+
 # plan_live_rows <artifact> — compare what the artifact says about EXISTING
 # issues to what GitHub holds. --dry-run only ever planned calls; it could not
 # say `=` correct or `~` drifted, so an update that was already applied looked
@@ -3805,6 +3974,25 @@ plan_live_rows() {
         labels)    live="$(gh issue view "${n#'#'}" --json labels \
                      --jq '[.labels[].name] | sort | join(",")' 2>/dev/null)" || live="__unreadable__"
                    want="$(printf '%s' "$want" | tr ',' '\n' | awk 'NF' | LC_ALL=C sort | paste -sd, -)" ;;
+        body-file)
+          # Skipped before, so an applied body update was indistinguishable
+          # from one that never ran — and `verify` said PASS either way.
+          local bp="$want"
+          case "$bp" in /*) ;; *) bp="$(dirname "$artifact")/$bp" ;; esac
+          if [ ! -f "$bp" ]; then
+            printf 'live\t?\t%s\tbody file %s is missing, so the body cannot be compared\n' "$n" "$want"
+            continue
+          fi
+          if ! live="$(gh issue view "${n#'#'}" --json body --jq .body 2>/dev/null)"; then
+            printf 'live\t?\t%s\tbody could not be read — never assumed to match\n' "$n"
+            continue
+          fi
+          if plan_body_matches "$bp" "$live"; then
+            printf 'live\t=\t%s\tbody already matches %s\n' "$n" "$want"
+          else
+            printf 'live\t~\t%s\tbody does not match %s\n' "$n" "$want"
+          fi
+          continue ;;
         *)         continue ;;
       esac
       if [ "$live" = "__unreadable__" ]; then
@@ -3831,32 +4019,60 @@ plan_created_rows() {
       "$artifact"
     return 0
   fi
-  awk -F'\t' '/^[[:space:]]*(#|$)/ { next } $1 == "issue" { print $2 "\t" $3 "\t" $4 "\t" $5 }' "$artifact" \
-  | while IFS=$'\t' read -r key title labels ms; do
+  local body bp mswant
+  awk -F'\t' '/^[[:space:]]*(#|$)/ { next } $1 == "issue" { print $2 "\t" $3 "\t" $4 "\t" $5 "\t" $6 }' "$artifact" \
+  | while IFS=$'\t' read -r key title labels ms body; do
       [ -n "$key" ] || continue
       num="$(awk -F'\t' -v k="$key" '$1 == "created" && $2 == k { print $3; exit }' "$state")"
       if [ -z "$num" ]; then
         printf 'created\t?\t%s\tnot recorded as created, so nothing to verify\n' "$key"
         continue
       fi
-      live="$(gh issue view "$num" --json title --jq .title 2>/dev/null)" || {
+      # One read for the three scalar facts, so they cannot be mutually
+      # inconsistent and the call count does not grow with the checks. The body
+      # is a second read only when the artifact declares one.
+      live="$(gh issue view "$num" --json title,labels,milestone \
+        --jq '[.title, ([.labels[].name] | sort | join(",")), (.milestone.title // "")] | @tsv' 2>/dev/null)" || {
         printf 'created\t?\t#%s\t%s could not be read — never assumed to match\n' "$num" "$key"
         continue; }
-      if [ "$live" = "$title" ]; then
-        printf 'created\t=\t#%s\t%s exists with the title the artifact asked for\n' "$num" "$key"
+      local l_title l_labels l_ms
+      IFS=$'\t' read -r l_title l_labels l_ms <<EOF_LIVE
+$live
+EOF_LIVE
+      if [ "$l_title" = "$title" ]; then
+        printf 'created\t=\t#%s\t%s exists with the title the artifact asked for\n' "$num" "$title"
       else
-        printf 'created\t~\t#%s\ttitle is "%s"; the artifact says "%s"\n' "$num" "$live" "$title"
+        printf 'created\t~\t#%s\ttitle is "%s"; the artifact says "%s"\n' "$num" "$l_title" "$title"
       fi
       if [ -n "$labels" ]; then
         want="$(printf '%s' "$labels" | tr ',' '\n' | awk 'NF' | LC_ALL=C sort | paste -sd, -)"
-        live="$(gh issue view "$num" --json labels --jq '[.labels[].name] | sort | join(",")' 2>/dev/null)" \
-          || live="__unreadable__"
-        if [ "$live" = "__unreadable__" ]; then
-          printf 'created\t?\t#%s\tlabels could not be read\n' "$num"
-        elif [ "$live" = "$want" ]; then
+        if [ "$l_labels" = "$want" ]; then
           printf 'created\t=\t#%s\tlabels match the artifact\n' "$num"
         else
-          printf 'created\t~\t#%s\tlabels are "%s"; the artifact says "%s"\n' "$num" "$live" "$want"
+          printf 'created\t~\t#%s\tlabels are "%s"; the artifact says "%s"\n' "$num" "$l_labels" "$want"
+        fi
+      fi
+      # The milestone field was READ and then discarded. An issue created into
+      # the wrong milestone — or into none — verified clean.
+      if [ -n "$ms" ]; then
+        mswant="$(plan_ms_title "$ms" "$artifact")"
+        if [ "$l_ms" = "$mswant" ]; then
+          printf 'created\t=\t#%s\tis in milestone "%s", as the artifact asks\n' "$num" "$mswant"
+        else
+          printf 'created\t~\t#%s\tmilestone is "%s"; the artifact says "%s"\n' \
+            "$num" "${l_ms:-(none)}" "$mswant"
+        fi
+      fi
+      if [ -n "$body" ]; then
+        bp="$body"; case "$bp" in /*) ;; *) bp="$(dirname "$artifact")/$bp" ;; esac
+        if [ ! -f "$bp" ]; then
+          printf 'created\t?\t#%s\tbody file %s is missing, so the body cannot be compared\n' "$num" "$body"
+        elif ! l_title="$(gh issue view "$num" --json body --jq .body 2>/dev/null)"; then
+          printf 'created\t?\t#%s\tbody could not be read — never assumed to match\n' "$num"
+        elif plan_body_matches "$bp" "$l_title"; then
+          printf 'created\t=\t#%s\tbody matches %s\n' "$num" "$body"
+        else
+          printf 'created\t~\t#%s\tbody does not match %s\n' "$num" "$body"
         fi
       fi
     done
@@ -3982,7 +4198,8 @@ cmd_plan() {
       # wiring produced no rows at all and reported PASS.
       local st_path="${state:-./.issue-manifest.state}"
       rows="$(plan_live_rows "$artifact")
-$(plan_created_rows "$artifact" "$st_path")"
+$(plan_created_rows "$artifact" "$st_path")
+$(plan_relation_rows "$artifact" "$st_path")"
       rows="$(printf '%s\n' "$rows" | awk 'NF')"
       local bad na
       bad="$(printf '%s\n' "$rows" | awk -F'\t' '$2 == "~" && NF { print }')"
