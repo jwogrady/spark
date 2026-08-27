@@ -815,27 +815,27 @@ im_id_of() { # <ref>
 
 im_execute() { # <manifest-file> <state-file> <fresh-0-or-1>
   local manifest="$1" state="$2" fresh="$3"
-  if ! command -v gh >/dev/null 2>&1; then
-    echo "gh (GitHub CLI) is required for a live run and was not found — install gh, or preview with --dry-run" >&2
-    return 2
-  fi
 
   local st_prior="$state"
-  if [ "$fresh" -eq 1 ]; then
-    st_prior=""
-    : > "$state"   # --fresh: prior landings are deliberately forgotten
-  fi
+  [ "$fresh" -eq 1 ] && st_prior=""
 
   local pending resolved="" ms_number="" created=0 wired=0 skipped=0 updated=0
   local act b c d e f out errf n num id lab missing msn
   # title<TAB>number per line. One variable could only ever hold one milestone,
   # which is why a slate was limited to a single release scope.
   local msmap=$'\n' ms_matches ndecision=0 target
+
+  # LOCAL REFUSALS COME FIRST, before `gh` is required and before anything is
+  # written. Detecting an unresolved decision needs no network, so demanding gh
+  # to reach that answer reported the wrong problem: on a machine without gh the
+  # run failed with "gh was not found" and the blocking human decision in the
+  # artifact was never surfaced at all (#516).
+  #
+  # `--fresh` truncates the state file, so it must also wait: a refused run had
+  # already forgotten prior landings, which is a write on a path that promises
+  # none.
   pending="$(im_pending "$manifest" "$st_prior")"
-  if [ -n "$st_prior" ] && [ -f "$st_prior" ]; then
-    # Preload prior landings so wiring can reference skip-created keys.
-    resolved="$(awk 'BEGIN { FS = "\t" } $1 == "created" { print $2, $3, $4 }' "$st_prior")"$'\n'
-  fi
+
   # An unresolved decision refuses the whole run BEFORE the first call. Acting
   # around one would commit Spark to a meaning nobody chose, and doing it
   # part-way through would leave the slate half-applied on top of that.
@@ -844,6 +844,19 @@ im_execute() { # <manifest-file> <state-file> <fresh-0-or-1>
       $1 == "decision" { printf "decision: %s needs a human answer — \"%s\"\n", $2, $3 }' >&2
     echo "unresolved decision(s) — nothing was created, updated, or wired" >&2
     return 2
+  fi
+
+  if ! command -v gh >/dev/null 2>&1; then
+    echo "gh (GitHub CLI) is required for a live run and was not found — install gh, or preview with --dry-run" >&2
+    return 2
+  fi
+
+  # Only now, past every refusal: this is the first thing that writes.
+  [ "$fresh" -eq 1 ] && : > "$state"   # prior landings are deliberately forgotten
+
+  if [ -n "$st_prior" ] && [ -f "$st_prior" ]; then
+    # Preload prior landings so wiring can reference skip-created keys.
+    resolved="$(awk 'BEGIN { FS = "\t" } $1 == "created" { print $2, $3, $4 }' "$st_prior")"$'\n'
   fi
 
   errf="$(mktemp)"

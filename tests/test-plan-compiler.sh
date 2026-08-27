@@ -300,10 +300,54 @@ refuse "a decision needs a question" "decision question is empty" \
 m="$(man "issue${T}A${T}One${T}feature${T}${T}$A" "decision${T}A${T}One issue or two?")"
 assert_contains "the dry-run surfaces the decision" "needs a human answer" "$(im_plan "$m" "")"
 assert_contains "and warns that apply refuses" "apply refuses until" "$(im_plan "$m" "")"
-# A live run must refuse BEFORE the first call, not part-way through.
-rc=0; out="$(bash "$IM" --state "$work/st2" "$m" 2>&1)" || rc=$?
-assert_rc "a live run refuses on an unresolved decision" 2 "$rc"
-assert_contains "and says nothing was written" "nothing was created, updated, or wired" "$out"
+# A live run must refuse BEFORE the first call, not part-way through — and
+# WITHOUT needing gh, because detecting an unresolved decision is local. This
+# assertion used to depend on the host: with gh absent the run failed with
+# "gh was not found" instead, so the artifact's blocking human decision was never
+# surfaced and the documented all-suite validation did not pass in a supported
+# zero-gh environment (#516). CI has gh, which is why it stayed hidden.
+#
+# Both hosts are now driven explicitly rather than inherited.
+nogh_bin="$work/nogh"; mkdir -p "$nogh_bin"
+for t in bash sh env awk sed grep cat cut tr sort head tail wc printf mktemp rm \
+         mkdir cp mv ln chmod touch find dirname basename date ls readlink uname \
+         paste comm uniq git jq python3 timeout; do
+  ts="$(command -v "$t" 2>/dev/null || true)"; [ -n "$ts" ] && ln -sf "$ts" "$nogh_bin/$t"
+done
+withgh="$work/withgh"; mkdir -p "$withgh"
+cp -a "$nogh_bin/." "$withgh/"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$withgh/gh"; chmod +x "$withgh/gh"
+
+for host in nogh withgh; do
+  case "$host" in
+    nogh)   hbin="$nogh_bin"; hdesc="with no gh on PATH" ;;
+    withgh) hbin="$withgh";   hdesc="with a gh on PATH" ;;
+  esac
+  st="$work/st2-$host"
+  rc=0; out="$(env PATH="$hbin" bash "$IM" --state "$st" "$m" 2>&1)" || rc=$?
+  assert_rc "a live run refuses on an unresolved decision, $hdesc" 2 "$rc"
+  assert_contains "and says nothing was written, $hdesc" \
+    "nothing was created, updated, or wired" "$out"
+  assert_contains "naming the decision, $hdesc" "needs a human answer" "$out"
+  # The refusal must NOT report the wrong problem.
+  case "$out" in
+    *"gh (GitHub CLI) is required"*)
+      bad "the decision refusal reported a missing gh instead, $hdesc" ;;
+    *) ok ;;
+  esac
+  # No state file: a run that contacted nothing has nothing to resume.
+  if [ -e "$st" ]; then bad "a refused run wrote a state file, $hdesc"; else ok; fi
+done
+
+# --fresh truncates the state file, so it must also wait for every refusal. A
+# refused --fresh run had already forgotten prior landings — a write on a path
+# that promises none.
+st="$work/st2-fresh"
+printf 'created\tOLD\t42\t9042\n' > "$st"
+before="$(cat "$st")"
+rc=0; out="$(env PATH="$nogh_bin" bash "$IM" --fresh --state "$st" "$m" 2>&1)" || rc=$?
+assert_rc "a refused --fresh run still exits 2" 2 "$rc"
+assert_eq "and leaves prior landings intact" "$before" "$(cat "$st")"
 assert_eq "and no state file was written" "0" \
   "$([ -s "$work/st2" ] && echo 1 || echo 0)"
 
