@@ -111,15 +111,13 @@ issue PR → `master` (ADR-0027, and the delivery section of
 
 - One issue per branch; multiple focused Conventional Commits per branch.
 - **Ordering invariant:** if issue B depends on issue A, B's base must
-  verifiably contain A's merged result. Declare the dependency as a **native
-  GitHub `blocked-by` edge** — that graph is the one executable prerequisite
-  authority, and it is reserved for true prerequisites, never for delivery
-  order. A `Blocked by #N` sentence in an issue body explains a prerequisite
-  and never creates one; where the two disagree, codify's preflight reports the
-  prose as drift and proceeds from the native graph. The preflight demands
-  positive proof (merged closing PR an ancestor of HEAD; HEAD exactly at the
-  fresh trunk) and blocks — or reports not-assessed — otherwise. Branch with an
-  explicit `origin/<trunk>` start point.
+  verifiably contain A's merged result. Record true prerequisites with
+  GitHub's native `blocked-by` relationship; codify's preflight treats that
+  native graph as the executable dependency authority. Prose may explain the
+  dependency but does not create one. The preflight demands positive proof
+  (merged closing PR an ancestor of HEAD; HEAD exactly at the fresh trunk) and
+  blocks — or reports not-assessed — otherwise. Branch from an explicit fresh
+  `origin/<trunk>` start point.
 - **One writer per working tree:** concurrent mutation needs genuinely
   isolated worktrees; read-only analysis may run concurrently.
 - A temporary integration branch is a recovery/exception technique — never a
