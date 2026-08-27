@@ -469,10 +469,28 @@ below are **schema data** in the governance model — see
 | `docs-impact:companion` | a companion plugin's shipped documentation |
 
 Multiple non-`none` values are valid and expected. `none` is **exclusive** —
-combining it with any other value is invalid, not merely odd. A family may
-declare **at most one** exclusive member: a consumer can act on only one, so a
-second would validate and then be silently ignored, accepting a combination the
-schema appears to forbid.
+combining it with any other value is invalid, not merely odd.
+
+**Exclusivity is one overridable fact per family.** A tier declares at most one
+exclusive member, and a later tier *replaces* it through the ordinary
+shipped → operator → project precedence — so the resolved model always carries
+**exactly one** exclusive row for a family, or none. That single row is what
+every consumer reads.
+
+Two consequences worth stating, because they are what make the rule trustworthy:
+
+- **Two exclusive members in the same tier fail closed.** That is incoherent
+  rather than something to resolve, and it is rejected where it is written.
+- **Narrowing a member set prunes an obsolete rule** — but only across tiers. If
+  an overlay replaces the family's members and a **lower** tier's exclusive
+  member is no longer among them, that lower rule is dropped rather than left
+  pointing at nothing. A tier that narrows the members *and* names a dropped
+  member in its **own** `exclusive` row is incoherent with itself and **fails
+  closed**: pruning is not an amnesty for a rule pointing at nothing.
+
+Before this was resolved per family, an override left the old and new rules both
+standing, and consumers reading in different orders enforced different members —
+one rule with two answers.
 
 `CHANGELOG.md` files are deliberately **not** governed: Release Please
 generates them and hand-editing them is forbidden, so they can never be a
