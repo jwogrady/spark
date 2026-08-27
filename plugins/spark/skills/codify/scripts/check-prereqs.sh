@@ -31,12 +31,22 @@
 #                         while prerequisites exist). Verify
 #                         by hand; this script never guesses.
 #
-# Blockers come from GitHub's native blocked-by dependencies (what the plan
-# skill's manifest writes) plus "Blocked by #N" body lines (the templates'
-# convention), deduped. The verdict is a pure function over evidence lines so
-# the policy is testable offline; gathering (gh + git) runs only when executed
-# directly. All GitHub access is read-only; nothing is fetched destructively
-# and drift is never repaired silently.
+# ONE EXECUTABLE AUTHORITY: blockers come from GitHub's native blocked-by
+# dependencies (what the plan skill's manifest writes) and from nowhere else.
+# When that endpoint answers, it IS the prerequisite graph. A failed read is
+# "cannot answer" (NOT ASSESSED), never "no blockers".
+#
+# "Blocked by #N" prose in an issue body is documentation: it explains a
+# prerequisite, it never creates one. A body reference the native graph does
+# not carry is reported as DRIFT — visible, repairable, and decisive of
+# nothing. Merging the two sources let a stale sentence manufacture a blocker
+# GitHub does not have, which both failed readiness closed on a phantom and
+# produced a graph disagreeing with the one selection and GitHub see.
+#
+# The verdict is a pure function over evidence lines so the policy is testable
+# offline; gathering (gh + git) runs only when executed directly. All GitHub
+# access is read-only; nothing is fetched destructively and drift is never
+# repaired silently.
 set -euo pipefail
 
 # prereq_verdict — read evidence lines on stdin, print the human verdict,
@@ -46,6 +56,7 @@ set -euo pipefail
 #   behind  <TAB> <count> <TAB> <trunk-ref>
 #   ahead   <TAB> <count> <TAB> <trunk-ref>
 #   trunk   <TAB> none | unrefreshed <TAB> <trunk-ref>
+#   drift   <TAB> <n> <TAB> prose-only    (advisory; never changes the verdict)
 prereq_verdict() {
   local kind a b blockers=0 blocked=0 unassessed=0 trunk="" fresh_seen=0 fresh_ok=1 unrefreshed=
   local blocked_lines="" unassessed_lines="" drift_lines="" drifts=0
