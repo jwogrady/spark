@@ -43,6 +43,15 @@ How the layers fit together, and the dated record of why Spark is built this way
 - [adr/0029-four-tier-artifact-separation.md](adr/0029-four-tier-artifact-separation.md) — **Accepted**: every artifact is code, shipped documentation, prose/provenance, or project management; repo-root `docs/` cannot ship structurally and `spark doctor` errors on development-only kinds under `plugins/`
 - [adr/0000-template.md](adr/0000-template.md) — the ADR template
 
+## Governance
+
+How Spark is held to its own standards — the entry test for new capability, and
+the dated record of Spark audited against the model it ships:
+
+- [governance/capability-evaluation.md](governance/capability-evaluation.md) — applying the five-question capability entry test
+- [governance/self-conformance-audit-v020.md](governance/self-conformance-audit-v020.md) — the #442 conformance matrix at master `4823979`, with every bounded exception argued
+- [governance/is-state-baseline-pre-v020.md](governance/is-state-baseline-pre-v020.md) — the #441 pre-dogfood IS-state baseline: what Spark is immediately before the v0.20 orchestration changes
+
 ## Packaging reference
 
 Information about how the plugin is packaged and how it relates to Claude Code's
