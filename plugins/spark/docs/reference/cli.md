@@ -241,6 +241,42 @@ With no `--milestone`, the target is the open milestone with open issues whose
 title sorts first by version. Without an authenticated `gh`, the verb reports
 not assessed rather than guessing.
 
+### The route
+
+Knowing *which* issue is next is not enough if the answer is then always handed
+to `codify`. After a selection, the verb names the Spark lane that owns the
+work and any mandatory human gate — before anything mutates.
+
+Two signal kinds, and they never merge:
+
+- The **category** — the one `issue.taxonomy` label — decides the **lane**.
+- **Theme** labels (`decision`, `human-approval`) decide where that lane must
+  **stop**. A theme never replaces a category: `decision` on a `feature` still
+  routes through the feature lane, it just cannot end in a merge without a
+  human.
+
+| Category | Lane |
+|---|---|
+| `bug`, `feature`, `infrastructure`, `tech-debt`, `chore` | `codify → validate → ship` |
+| `documentation` | `knowledge/audit → validate → ship` |
+| `research` | `ideate/knowledge → human decision` |
+
+A `documentation` issue is never sent to `codify` — that skill's own contract
+says it does not write documentation, so routing docs there would hand work to
+a skill that refuses it.
+
+| Theme | Effect |
+|---|---|
+| `decision` | The lane stops at a human decision. Spark may gather evidence, compare options, and prepare the durable record; the decision is not Spark's to make. |
+| `human-approval` | Preparation, tests, rollback, and verification may proceed. The live, destructive, or credential-touching action does not, until a human authorizes it. |
+
+Both may apply at once, and each gate is stated separately.
+
+A category that is missing or outside the declared taxonomy is **not assessed**:
+the verb names the smallest correction and refuses to guess a lane. Routing is
+composition, not a new lifecycle stage — it selects among the existing skills
+and owns none of their work.
+
 ## `spark profiles`
 
 Lists the shipped setup profiles — small, flat-JSON sets of project facts
