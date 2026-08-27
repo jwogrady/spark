@@ -144,6 +144,31 @@ of headings — because those are different things:
 A wave carrying several tags is compared against its **newest**
 (`Shipped (`v0.16.0`–`v0.16.2`)` means the baseline is `v0.16.2`).
 
+### Where the claim has to be
+
+The claim is read **only from the headline region**: the prose above the first
+`##` section heading, excluding blockquoted lines.
+
+Both halves of that boundary are load-bearing:
+
+- **Above the first heading**, because scanning the whole file lets a later
+  migration note or comparison that happens to use the phrase *supply* the value.
+  A guard that reads the newest version mentioned anywhere can certify the exact
+  contradiction it exists to prevent.
+- **Not blockquoted**, because that is where a roadmap keeps its historical
+  asides, and history legitimately names superseded baselines. A reconciliation
+  note recording that withdrawn releases "returned the published baseline to
+  `v0.16.2`" is true, is not the headline, and must not make the summary
+  ambiguous.
+
+A claim written *only* inside a blockquote is therefore invisible to the check,
+which reports "no claim" rather than passing — the safe direction to be wrong in.
+
+**Two different versions claimed in the headline region is a GAP**, named as
+ambiguity. Reducing them to the greatest is how an unsound version of this check
+hid a stale headline, so it refuses to choose. The same version stated twice is
+one claim, not ambiguity.
+
 If the summary makes no published-baseline claim at all, the check says so
 explicitly rather than passing silently: there is nothing to contradict, and that
 is a different result from having verified one.

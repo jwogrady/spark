@@ -111,14 +111,45 @@ if [ -f "$roadmap" ]; then
   # therefore reads tags out of Shipped **Status** lines and never out of
   # headings, so a wave that has not shipped can never be mistaken for a
   # release.
+  # THE HEADLINE REGION is the prose before the first `## ` section heading,
+  # excluding blockquoted lines.
+  #
+  # The first cut scanned the WHOLE file and took the greatest version it found,
+  # so a later migration note mentioning the current tag masked a stale summary —
+  # the guard could positively certify the exact contradiction it was added to
+  # prevent (#541). A boundary is not a refinement here; without one the check is
+  # unsound.
+  #
+  # Blockquotes are excluded because that is where a roadmap keeps its historical
+  # asides, and history legitimately names superseded baselines. Applying the
+  # boundary to this repository immediately found the case: a reconciliation note
+  # recording that withdrawn releases "returned the published baseline to
+  # `v0.16.2`" sits above the first heading. It is true, it is not the headline,
+  # and counting it made the summary ambiguous.
+  #
+  # A claim written only inside a blockquote is therefore invisible here, and the
+  # check says "no claim" rather than passing — which is the safe direction to be
+  # wrong in.
   head_base="$(awk '
-    /published baseline/ {
+    /^## / { exit }
+    /^[[:space:]]*>/ { next }
+    tolower($0) ~ /published baseline/ {
       line = $0
       while (match(line, /`v[0-9]+\.[0-9]+\.[0-9]+`/)) {
         print substr(line, RSTART + 1, RLENGTH - 2)
         line = substr(line, RSTART + RLENGTH)
       }
-    }' "$roadmap" | LC_ALL=C sort -V | awk 'END { print }')"
+    }' "$roadmap" | LC_ALL=C sort -u)"
+  head_count="$(printf '%s\n' "$head_base" | grep -c . || true)"
+  # More than one DISTINCT claim in the summary is ambiguity, and reducing it to
+  # the greatest version is how the unsound version hid a stale headline. Name it.
+  if [ "$head_count" -gt 1 ]; then
+    gap "the summary names more than one published baseline ($(printf '%s' "$head_base" | paste -sd' ' -)) — one claim, or the check cannot judge it"
+    head_base=""
+    head_ambiguous=1
+  else
+    head_ambiguous=0
+  fi
   newest_tag="$(printf '%s\n' "$sections" \
     | awk -F'\t' '$2 ~ /^[Ss]hipped/ { print $2 }' \
     | awk '{
@@ -129,7 +160,9 @@ if [ -f "$roadmap" ]; then
         }
       }' | LC_ALL=C sort -V | awk 'END { print }')"
 
-  if [ -z "$head_base" ]; then
+  if [ "$head_ambiguous" -eq 1 ]; then
+    : # already reported above; do not also claim a limit or a match
+  elif [ -z "$head_base" ]; then
     # Stated as a limit, not as a pass: the check looked, found no claim, and
     # says so rather than implying the baseline was verified.
     echo "ok: the summary makes no published-baseline claim, so there is nothing to contradict"

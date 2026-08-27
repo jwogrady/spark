@@ -13,8 +13,10 @@
 # stay distinct: `## v0.21` is a wave, `v0.20.0` is a tag, and a wave that has
 # not shipped must never be read as a release.
 #
-# Measured discrimination, not asserted: removing the headline check turns 13 of
-# the 19 assertions red, including the reported state itself.
+# Measured discrimination, not asserted. Of the 34 assertions: removing the whole
+# headline check turns 13 red, and restoring only the unsound extraction — no
+# region boundary, no ambiguity check, a silent maximum — turns 8, including
+# #541's own reproduction.
 set -euo pipefail
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 
@@ -93,6 +95,80 @@ run_check "# Roadmap" "$BASE_OK" \
   '## v0.20 — Latest' '**Status:** Shipped — `v0.20.0` was published 2026-08-27.' \
   '## v0.21 — Next'   '**Status:** Planned — will be cut as `v0.21.0`, see #478.'
 assert_eq "a planned tag in a Planned status is not a published tag" "" "$(gapline)"
+
+# ============ the claim is bounded to the HEADLINE REGION =================
+# The guard first scanned the whole file and took the greatest version it found,
+# so a later migration note mentioning the current tag masked a stale summary —
+# it could positively certify the exact contradiction it exists to prevent
+# (#541). This is that reproduction, verbatim.
+run_check "# Roadmap" \
+  'Published baseline: `v1.0.0`.' \
+  '## v1.1 — shipped' '**Status:** Shipped (`v1.1.0`)' \
+  '## v1.2 — next'    '**Status:** Planned' 'Tracks #1.' \
+  'Migration note: the published baseline for this comparison is `v1.1.0`.'
+if [ -n "$(gapline)" ]; then ok; else bad "#541: a later prose mention masked a stale headline"; fi
+assert_contains "naming the stale headline" "v1.0.0" "$RC_OUT"
+assert_contains "and the tag it should have named" "v1.1.0" "$RC_OUT"
+assert_contains "and which way it diverges" "lags the roadmap" "$RC_OUT"
+
+# A mention inside a SECTION cannot supply the claim either, in the other
+# direction: with no headline claim at all, later prose must not manufacture one.
+run_check "# Roadmap" \
+  '**Current phase.** The pipeline is proven.' \
+  '## v1.1 — shipped' '**Status:** Shipped (`v1.1.0`)' \
+  '## v1.2 — next'    '**Status:** Planned — see #1.' \
+  'Historical: the published baseline was once `v1.1.0`.'
+assert_eq "section prose does not manufacture a headline claim" "" "$(gapline)"
+assert_contains "and the limit is still stated" "makes no published-baseline claim" "$RC_OUT"
+
+# ============ blockquoted history is not the headline =====================
+# A roadmap keeps historical asides in blockquotes, and history legitimately
+# names superseded baselines. Counting them made this repository's own summary
+# ambiguous: a reconciliation note recording that withdrawn releases "returned
+# the published baseline to `v0.16.2`" sits above the first heading.
+run_check "# Roadmap" \
+  '**Current phase.** `v1.1.0` is the published baseline.' \
+  '> **Reconciliation.** Withdrawn releases returned the published baseline to' \
+  '> `v0.9.0` until the catch-up tag was cut.' \
+  '## v1.1 — shipped' '**Status:** Shipped (`v1.1.0`)' \
+  '## v1.2 — next'    '**Status:** Planned — see #1.'
+assert_eq "a blockquoted historical baseline is not a second claim" "" "$(gapline)"
+assert_eq "and the run is clean" 0 "$RC_RC"
+
+# ============ two claims in the summary is AMBIGUITY, not a maximum =======
+# Reducing them to the greatest version is precisely how the unsound version hid
+# a stale headline, so the check refuses to choose.
+run_check "# Roadmap" \
+  '**Current phase.** `v1.0.0` is the published baseline.' \
+  'Note: for tooling, `v1.1.0` is the published baseline.' \
+  '## v1.1 — shipped' '**Status:** Shipped (`v1.1.0`)' \
+  '## v1.2 — next'    '**Status:** Planned — see #1.'
+if [ -n "$(gapline)" ]; then ok; else bad "two summary claims were silently reduced to one"; fi
+assert_contains "and it says the summary is ambiguous" "more than one published baseline" "$RC_OUT"
+assert_contains "naming both" "v1.0.0" "$RC_OUT"
+# ...and it must not ALSO report a match or a limit for the same file.
+case "$RC_OUT" in
+  *"newest Shipped tag"*) bad "an ambiguous summary also reported a match" ;;
+  *) ok ;;
+esac
+case "$RC_OUT" in
+  *"makes no published-baseline claim"*) bad "an ambiguous summary also reported no claim" ;;
+  *) ok ;;
+esac
+# The same version named twice is not ambiguous — one claim, stated twice.
+run_check "# Roadmap" \
+  '**Current phase.** `v1.1.0` is the published baseline.' \
+  'Restated: `v1.1.0` is the published baseline.' \
+  '## v1.1 — shipped' '**Status:** Shipped (`v1.1.0`)' \
+  '## v1.2 — next'    '**Status:** Planned — see #1.'
+assert_eq "one version named twice is not ambiguity" "" "$(gapline)"
+
+# ============ the phrase is matched case-insensitively ===================
+run_check "# Roadmap" \
+  'Published Baseline: `v1.0.0`.' \
+  '## v1.1 — shipped' '**Status:** Shipped (`v1.1.0`)' \
+  '## v1.2 — next'    '**Status:** Planned — see #1.'
+if [ -n "$(gapline)" ]; then ok; else bad "a capitalised claim was not read"; fi
 
 # ============ several tags in one wave: the newest wins ===================
 run_check "# Roadmap" '**Current phase.** `v0.16.2` is the published baseline.' \
