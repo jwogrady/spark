@@ -31,22 +31,50 @@
 # MANIFEST — line-oriented, tab-separated, '#'-comment and blank-line
 # tolerant. Three record types:
 #
-#   issue <TAB> KEY <TAB> title <TAB> labels,csv <TAB> milestone-title <TAB> body-file
+#   issue     <TAB> KEY <TAB> title <TAB> labels,csv <TAB> milestone <TAB> body-file
+#   milestone <TAB> KEY <TAB> title <TAB> description
 #   subissue  <TAB> PARENT_REF <TAB> CHILD_REF
-#   blockedby <TAB> ISSUE_REF  <TAB> BLOCKER_REF
+#   blockedby <TAB> ISSUE_REF  <TAB> BLOCKER_REF [<TAB> reason]
+#   order     <TAB> REF <TAB> position
+#   update    <TAB> #N <TAB> title|labels|milestone|body-file <TAB> value
+#   decision  <TAB> REF <TAB> question
 #
-#   KEY         manifest-local name ([A-Za-z0-9_-]+) for a not-yet-created issue.
+#   KEY         manifest-local name ([A-Za-z0-9_-]+) for a not-yet-created
+#               issue or milestone.
 #   REF         a KEY defined by an `issue` record, or `#N` for an issue that
 #               already exists on GitHub.
 #   labels,csv  may be empty; every named label must already exist in the repo.
-#   milestone   may be empty; at most ONE distinct title per manifest, and it
-#               must already exist — the helper assigns, it never creates.
+#   milestone   may be empty; a literal title, or a KEY a `milestone` record
+#               defines. More than one milestone per manifest is allowed now
+#               that a manifest can bring its own release scope.
 #   body-file   required; a relative path resolves against the manifest's dir.
+#
+# THE NEW RECORDS, and why each exists rather than being folded into another:
+#
+#   milestone   a slate could not previously bring its own release scope —
+#               milestones were lookup-only and a missing one was a hard error.
+#   order       preferred delivery order needs its own home. Without one it gets
+#               encoded as `blockedby`, and an edge added to express sequence
+#               becomes a false prerequisite the codify preflight then reports
+#               as a permanent blocker. A `blockedby` record whose optional
+#               reason names order or sequence is REFUSED for the same reason.
+#   update      an existing issue could only ever be a link target. Every
+#               restructuring of this repository was therefore hand-applied.
+#   decision    unresolved meaning has to be representable, and it refuses the
+#               run rather than being applied around.
 #
 # VALIDATION runs fully before any call. Rejected (exit 2, nothing touched):
 # unknown record type, wrong field count, empty/malformed/duplicate KEY, empty
-# title, missing body file, two different milestone titles, a link ref that is
-# neither `#N` nor a defined KEY, self-links, duplicate links.
+# title, missing body file, a link ref that is neither `#N` nor a defined KEY,
+# self-links, duplicate links, a duplicate order position or a ref ordered
+# twice, an update to anything but an existing `#N`, an unknown update field, a
+# `blockedby` declared as preferred order, and a DEPENDENCY CYCLE — which is
+# structural: every issue in one is permanently unstartable, and the preflight
+# would otherwise report each as blocked forever without naming the cause.
+#
+# Category and priority MEANING is validated by `spark plan validate`, which
+# resolves them against the governance model. Structure is this script's;
+# meaning belongs to the schema, and neither restates the other.
 #
 # EXECUTION — call count grows with mutations, never with lookups:
 #   lookups (at most 3 for the whole slate):
@@ -54,6 +82,8 @@
 #     GET  repos/{owner}/{repo}/labels?per_page=100                (verify labels)
 #     GraphQL aliased issue(number:N){fullDatabaseId}              (ids of #N refs)
 #   mutations (one per manifest record):
+#     POST  repos/{owner}/{repo}/milestones                       (create-ms)
+#     PATCH repos/{owner}/{repo}/issues/{n}                          (update)
 #     POST repos/{owner}/{repo}/issues                                  (create)
 #     POST repos/{owner}/{repo}/issues/{n}/sub_issues            -F sub_issue_id=ID
 #     POST repos/{owner}/{repo}/issues/{n}/dependencies/blocked_by -F issue_id=ID
@@ -115,6 +145,14 @@ im_keys() { # <manifest-file>
     | awk 'BEGIN { FS = "\037" } $3 == "issue" && $4 ~ /^[A-Za-z0-9_-]+$/ { print $4 }')"
 }
 
+# The milestone KEYs a manifest defines, fenced the same way. Milestones used to
+# be lookup-only — a title resolved to a number, and one that did not exist was
+# a hard error — so a slate could never bring its own release scope with it.
+im_ms_keys() { # <manifest-file>
+  printf '\n%s\n' "$(im_records "$1" \
+    | awk 'BEGIN { FS = "\037" } $3 == "milestone" && $4 ~ /^[A-Za-z0-9_-]+$/ { print $4 }')"
+}
+
 im_ref_ok() { # <ref> <keys-fenced-list> — 0 iff ref is #N or a defined KEY
   case "$1" in
     '#'*) case "${1#'#'}" in ''|*[!0-9]*) return 1 ;; *) return 0 ;; esac ;;
@@ -126,12 +164,14 @@ im_ref_ok() { # <ref> <keys-fenced-list> — 0 iff ref is #N or a defined KEY
 
 im_validate() { # <manifest-file> — rc 1 and a report if anything is wrong
   local manifest="$1" mdir records keys errors=0
-  local ln nf type f1 f2 f3 f4 f5 seen=$'\n' milestone="" linksigs=$'\n' bp sig
+  local ln nf type f1 f2 f3 f4 f5 seen=$'\n' linksigs=$'\n' bp sig
+  local msseen=$'\n' orderpos=$'\n' orderrefs=$'\n' mskeys edgelist="" 
   mdir="$(cd "$(dirname "$manifest")" && pwd)"
   records="$(im_records "$manifest")"
   # Re-fence: command substitution strips the trailing newline, which would
   # unfence the LAST key and make membership checks miss it.
   keys="$(im_keys "$manifest")"$'\n'
+  mskeys="$(im_ms_keys "$manifest")"$'\n'
 
   while IFS=$'\037' read -r ln nf type f1 f2 f3 f4 f5; do
     [ -n "$ln" ] || continue
@@ -164,19 +204,111 @@ im_validate() { # <manifest-file> — rc 1 and a report if anything is wrong
             echo "invalid: line $ln: body file not found: $f5"; errors=$((errors + 1))
           fi
         fi
-        if [ -n "$f4" ]; then
-          if [ -z "$milestone" ]; then
-            milestone="$f4"
-          elif [ "$milestone" != "$f4" ]; then
-            echo "invalid: line $ln: milestone '$f4' conflicts with '$milestone' — one milestone per manifest"
-            errors=$((errors + 1))
-          fi
+        # The milestone field is a literal title or a KEY a milestone record
+        # defines. More than one milestone per manifest is now representable:
+        # the old single-milestone rule existed because milestones were
+        # lookup-only, so a slate could not bring its own release scope.
+        ;;
+      milestone)
+        if [ "$nf" -ne 4 ]; then
+          echo "invalid: line $ln: milestone record needs 4 tab-separated fields, got $nf"
+          errors=$((errors + 1)); continue
         fi
+        case "$f1" in
+          '') echo "invalid: line $ln: milestone KEY is empty"; errors=$((errors + 1)) ;;
+          *[!A-Za-z0-9_-]*)
+            echo "invalid: line $ln: milestone KEY '$f1' has characters outside [A-Za-z0-9_-]"
+            errors=$((errors + 1)) ;;
+          *)
+            case "$msseen" in
+              *$'\n'"$f1"$'\n'*)
+                echo "invalid: line $ln: duplicate milestone KEY '$f1'"; errors=$((errors + 1)) ;;
+              *) msseen="${msseen}${f1}"$'\n' ;;
+            esac ;;
+        esac
+        [ -n "$f2" ] || { echo "invalid: line $ln: milestone title is empty"; errors=$((errors + 1)); }
+        ;;
+      order)
+        if [ "$nf" -ne 3 ]; then
+          echo "invalid: line $ln: order record needs 3 tab-separated fields, got $nf"
+          errors=$((errors + 1)); continue
+        fi
+        if ! im_ref_ok "$f1" "$keys"; then
+          echo "invalid: line $ln: order ref '$f1' is neither #N nor a KEY defined by an issue record"
+          errors=$((errors + 1))
+        fi
+        case "$f2" in
+          ''|*[!0-9]*) echo "invalid: line $ln: order position '$f2' is not a number"
+            errors=$((errors + 1)) ;;
+          *)
+            case "$orderpos" in
+              *$'\n'"$f2"$'\n'*)
+                echo "invalid: line $ln: duplicate order position '$f2'"; errors=$((errors + 1)) ;;
+              *) orderpos="${orderpos}${f2}"$'\n' ;;
+            esac ;;
+        esac
+        case "$orderrefs" in
+          *$'\n'"$f1"$'\n'*)
+            echo "invalid: line $ln: '$f1' already has an order position"; errors=$((errors + 1)) ;;
+          *) orderrefs="${orderrefs}${f1}"$'\n' ;;
+        esac
+        ;;
+      update)
+        if [ "$nf" -ne 4 ]; then
+          echo "invalid: line $ln: update record needs 4 tab-separated fields, got $nf"
+          errors=$((errors + 1)); continue
+        fi
+        case "$f1" in
+          '#'*) ;;
+          *) echo "invalid: line $ln: update targets '$f1' — only an existing #N can be updated"
+             errors=$((errors + 1)) ;;
+        esac
+        case "$f2" in
+          title|labels|milestone|body-file) ;;
+          *) echo "invalid: line $ln: update field '$f2' is not title|labels|milestone|body-file"
+             errors=$((errors + 1)) ;;
+        esac
+        if [ -z "$f3" ]; then
+          echo "invalid: line $ln: update value is empty — use an explicit value, never a blank"
+          errors=$((errors + 1))
+        elif [ "$f2" = "body-file" ]; then
+          bp="$f3"; case "$bp" in /*) ;; *) bp="$mdir/$bp" ;; esac
+          [ -f "$bp" ] || { echo "invalid: line $ln: update body file not found: $f3"
+            errors=$((errors + 1)); }
+        fi
+        sig="update/$f1/$f2"
+        case "$linksigs" in
+          *$'\n'"$sig"$'\n'*)
+            echo "invalid: line $ln: '$f2' is updated twice for $f1"; errors=$((errors + 1)) ;;
+          *) linksigs="${linksigs}${sig}"$'\n' ;;
+        esac
+        ;;
+      decision)
+        if [ "$nf" -ne 3 ]; then
+          echo "invalid: line $ln: decision record needs 3 tab-separated fields, got $nf"
+          errors=$((errors + 1)); continue
+        fi
+        if ! im_ref_ok "$f1" "$keys"; then
+          echo "invalid: line $ln: decision ref '$f1' is neither #N nor a KEY defined by an issue record"
+          errors=$((errors + 1))
+        fi
+        [ -n "$f2" ] || { echo "invalid: line $ln: decision question is empty"; errors=$((errors + 1)); }
         ;;
       subissue|blockedby)
-        if [ "$nf" -ne 3 ]; then
-          echo "invalid: line $ln: $type record needs 3 tab-separated fields, got $nf"
+        if [ "$nf" -ne 3 ] && [ "$nf" -ne 4 ]; then
+          echo "invalid: line $ln: $type record needs 3 or 4 tab-separated fields, got $nf"
           errors=$((errors + 1)); continue
+        fi
+        # A blocked-by edge may state WHY it exists. Naming preferred order as
+        # the reason is refused outright: order has its own record type, and an
+        # edge added to express sequence becomes a false prerequisite that the
+        # codify preflight then reports as a permanent blocker.
+        if [ "$type" = "blockedby" ] && [ "$nf" -eq 4 ]; then
+          case "$f3" in
+            order|preferred-order|sequence|preference)
+              echo "invalid: line $ln: blockedby $f1<-$f2 is declared as '$f3' — preferred order is not a prerequisite; use an order record"
+              errors=$((errors + 1)) ;;
+          esac
         fi
         local r
         for r in "$f1" "$f2"; do
@@ -194,12 +326,42 @@ im_validate() { # <manifest-file> — rc 1 and a report if anything is wrong
             echo "invalid: line $ln: duplicate link ($type $f1<-$f2)"; errors=$((errors + 1)) ;;
           *) linksigs="${linksigs}${sig}"$'\n' ;;
         esac
+        [ "$type" = "blockedby" ] && edgelist="${edgelist}${f1}	${f2}
+"
         ;;
       *)
         echo "invalid: line $ln: unknown record type '$type'"; errors=$((errors + 1))
         ;;
     esac
   done <<< "$records"
+
+  # A dependency CYCLE is structural, so it belongs here rather than in a
+  # caller: every issue in it is permanently unstartable, and the preflight
+  # would report each one blocked forever without naming the cause. Peel off
+  # whatever has no prerequisite; anything left is in, or behind, a cycle.
+  local stuck
+  stuck="$(printf '%s' "$edgelist" | awk -F'\t' '
+    NF == 2 { indeg[$1]++; adj[$2] = adj[$2] " " $1; node[$1] = 1; node[$2] = 1 }
+    END {
+      for (v in node) if (!(v in indeg)) indeg[v] = 0
+      changed = 1
+      while (changed) {
+        changed = 0
+        for (v in node) {
+          if (gone[v] || indeg[v] > 0) continue
+          gone[v] = 1; changed = 1
+          k = split(adj[v], a, " ")
+          for (i = 1; i <= k; i++) if (a[i] != "") indeg[a[i]]--
+        }
+      }
+      out = ""
+      for (v in node) if (!gone[v]) out = out " " v
+      if (out != "") print out
+    }')"
+  if [ -n "$stuck" ]; then
+    echo "invalid: dependency cycle — these cannot be ordered:$stuck"
+    errors=$((errors + 1))
+  fi
 
   [ "$errors" -eq 0 ]
 }
@@ -233,12 +395,29 @@ im_pending() { # <manifest-file> <state-file-or-empty>
   local manifest="$1" state="${2:-}" mdir records
   local ln nf type f1 f2 f3 f4 f5 st bp
   local need_ms="" need_labels="" need_ids="" creates="" wires=""
+  local mscreates="" updates="" decisions="" mstitle
+  # Titles this manifest brings with it. An issue pointing at one of them must
+  # not also trigger a lookup that hard-fails for "not found on GitHub" — the
+  # create is the thing that makes it exist.
+  local own_ms
+  own_ms=$'\n'"$(awk 'BEGIN { FS = "\037" } $3 == "milestone" { print $4; print $5 }' \
+    <<< "$(im_records "$manifest")")"$'\n'
   mdir="$(cd "$(dirname "$manifest")" && pwd)"
   records="$(im_records "$manifest")"
 
   while IFS=$'\037' read -r ln nf type f1 f2 f3 f4 f5; do
     [ -n "$ln" ] || continue
     case "$type" in
+      milestone)
+        # Resumable exactly like an issue: the state file records the number a
+        # created milestone landed on, so a rerun assigns rather than duplicates.
+        st="$(im_state_created "$state" "ms:$f1")"
+        if [ -n "$st" ]; then
+          mscreates="${mscreates}skip-create-ms"$'\037'"$f1"$'\037'"${st%%$'\t'*}"$'\n'
+        else
+          mscreates="${mscreates}create-ms"$'\037'"$f1"$'\037'"$f2"$'\037'"$f3"$'\n'
+        fi
+        ;;
       issue)
         st="$(im_state_created "$state" "$f1")"
         if [ -n "$st" ]; then
@@ -246,9 +425,35 @@ im_pending() { # <manifest-file> <state-file-or-empty>
         else
           bp="$f5"; case "$bp" in /*) ;; *) bp="$mdir/$bp" ;; esac
           creates="${creates}create"$'\037'"$f1"$'\037'"$f2"$'\037'"$f3"$'\037'"$f4"$'\037'"$bp"$'\n'
-          if [ -n "$f4" ]; then need_ms="$f4"; fi
+          case "$own_ms" in
+            *$'\n'"$f4"$'\n'*) ;;                       # this manifest creates it
+            *) [ -n "$f4" ] && need_ms="${need_ms}${f4}"$'\n' ;;
+          esac
           if [ -n "$f3" ]; then need_labels="${need_labels}${f3},"; fi
         fi
+        ;;
+      update)
+        # Keyed by target+field so a rerun that already applied it is skipped:
+        # updating an existing issue has to be idempotent the same way creating
+        # one is, or a resumed run would rewrite what it already wrote.
+        if im_state_wired "$state" "update" "$f1" "$f2"; then
+          updates="${updates}skip-update"$'\037'"$f1"$'\037'"$f2"$'\037'"$f3"$'\n'
+        else
+          bp="$f3"
+          if [ "$f2" = "body-file" ]; then case "$bp" in /*) ;; *) bp="$mdir/$bp" ;; esac; fi
+          updates="${updates}update"$'\037'"$f1"$'\037'"$f2"$'\037'"$bp"$'\n'
+          if [ "$f2" = "labels" ]; then need_labels="${need_labels}${f3},"; fi
+          if [ "$f2" = "milestone" ]; then
+            case "$own_ms" in
+              *$'\n'"$f3"$'\n'*) ;;
+              *) need_ms="${need_ms}${f3}"$'\n' ;;
+            esac
+          fi
+        fi
+        ;;
+      decision)
+        # An unresolved decision is not work to do — it is a reason not to act.
+        decisions="${decisions}decision"$'\037'"$f1"$'\037'"$f2"$'\n'
         ;;
       subissue|blockedby)
         if im_state_wired "$state" "$type" "$f1" "$f2"; then
@@ -263,7 +468,14 @@ im_pending() { # <manifest-file> <state-file-or-empty>
     esac
   done <<< "$records"
 
-  if [ -n "$need_ms" ]; then printf 'lookup-ms\037%s\n' "$need_ms"; fi
+  if [ -n "$need_ms" ]; then
+    while IFS= read -r mstitle; do
+      [ -n "$mstitle" ] || continue
+      printf 'lookup-ms\037%s\n' "$mstitle"
+    done <<EOF_MS
+$(printf '%s' "$need_ms" | awk 'NF' | sort -u)
+EOF_MS
+  fi
   if [ -n "$need_labels" ]; then
     printf 'lookup-labels\037%s\n' \
       "$(printf '%s' "$need_labels" | tr ',' '\n' | grep -v '^[[:space:]]*$' | sort -u | paste -sd, -)"
@@ -272,7 +484,10 @@ im_pending() { # <manifest-file> <state-file-or-empty>
     printf 'lookup-ids\037%s\n' \
       "$(printf '%s' "$need_ids" | sort -n -u | tr '\n' ' ' | sed 's/ $//')"
   fi
+  printf '%s' "$decisions"
+  printf '%s' "$mscreates"
   printf '%s' "$creates"
+  printf '%s' "$updates"
   printf '%s' "$wires"
 }
 
@@ -294,7 +509,7 @@ im_plan_id() { # <ref> <state-file-or-empty>
 
 im_plan() { # <manifest-file> <state-file-or-empty> — print the dry-run plan
   local manifest="$1" state="${2:-}" pending
-  local a b c d e f n ncreate=0 nwire=0 nskip=0 refs
+  local a b c d e f n ncreate=0 nwire=0 nskip=0 nupdate=0 ndecision=0 refs
   pending="$(im_pending "$manifest" "$state")"
 
   while IFS=$'\037' read -r a b c d e f; do
@@ -308,6 +523,21 @@ im_plan() { # <manifest-file> <state-file-or-empty> — print the dry-run plan
         refs=""
         for n in $b; do refs="${refs}#$n "; done
         echo "lookup: ids GraphQL issue fullDatabaseId for ${refs% }" ;;
+      decision)
+        ndecision=$((ndecision + 1))
+        echo "decision: $b needs a human answer — \"$c\"" ;;
+      create-ms)
+        ncreate=$((ncreate + 1))
+        echo "create: milestone $b POST repos/{owner}/{repo}/milestones title=\"$c\"" ;;
+      skip-create-ms)
+        nskip=$((nskip + 1))
+        echo "skip: milestone $b = exists #$c (state)" ;;
+      update)
+        nupdate=$((nupdate + 1))
+        echo "update: $b PATCH repos/{owner}/{repo}/issues/${b#'#'} $c=\"$d\"" ;;
+      skip-update)
+        nskip=$((nskip + 1))
+        echo "skip: update $b $c (state)" ;;
       create)
         ncreate=$((ncreate + 1))
         echo "create: $b POST repos/{owner}/{repo}/issues title=\"$c\" labels=\"$d\" milestone=\"$e\" body=$f" ;;
@@ -327,7 +557,16 @@ im_plan() { # <manifest-file> <state-file-or-empty> — print the dry-run plan
     esac
   done <<< "$pending"
 
-  echo "dry-run: $ncreate create(s), $nwire wire(s); $nskip skip(s); no calls made"
+  # The update count appears only when there is one: manifests that predate
+  # update records keep their exact tally line, which is a documented contract.
+  if [ "$nupdate" -gt 0 ]; then
+    echo "dry-run: $ncreate create(s), $nupdate update(s), $nwire wire(s); $nskip skip(s); no calls made"
+  else
+    echo "dry-run: $ncreate create(s), $nwire wire(s); $nskip skip(s); no calls made"
+  fi
+  if [ "$ndecision" -gt 0 ]; then
+    echo "dry-run: $ndecision unresolved decision(s) — apply refuses until they are answered"
+  fi
 }
 
 # --- GitHub endpoints (one function per endpoint; adjust shapes here) ---------
@@ -341,6 +580,26 @@ api_list_milestones() { # -> "number<TAB>title" lines
 
 api_list_labels() { # -> one label name per line
   gh api "repos/{owner}/{repo}/labels?per_page=100" --paginate --jq '.[].name'
+}
+
+api_create_milestone() { # <title> <description> -> "number"
+  gh api "repos/{owner}/{repo}/milestones" -X POST -f "title=$1" -f "description=$2" --jq '.number'
+}
+
+api_update_issue() { # <number> <field> <value> -> nothing
+  case "$2" in
+    title)     gh api "repos/{owner}/{repo}/issues/$1" -X PATCH -f "title=$3" >/dev/null ;;
+    body-file) gh api "repos/{owner}/{repo}/issues/$1" -X PATCH -F "body=@$3" >/dev/null ;;
+    milestone) gh api "repos/{owner}/{repo}/issues/$1" -X PATCH -F "milestone=$3" >/dev/null ;;
+    labels)
+      # Replace the whole set, which is the only unambiguous reading of "set the
+      # labels to this": a merge would silently keep a label the plan removed.
+      local args=("repos/{owner}/{repo}/issues/$1" -X PATCH) l
+      while IFS= read -r l; do
+        [ -n "$l" ] && args+=(-f "labels[]=$l")
+      done <<< "$(printf '%s' "$3" | tr ',' '\n')"
+      gh api "${args[@]}" >/dev/null ;;
+  esac
 }
 
 api_create_issue() { # <title> <labels-csv> <milestone-number-or-empty> <body-file> -> "number<TAB>id"
@@ -404,13 +663,26 @@ im_execute() { # <manifest-file> <state-file> <fresh-0-or-1>
     : > "$state"   # --fresh: prior landings are deliberately forgotten
   fi
 
-  local pending resolved="" ms_number="" created=0 wired=0 skipped=0
+  local pending resolved="" ms_number="" created=0 wired=0 skipped=0 updated=0
   local act b c d e f out errf n num id lab missing msn
+  # title<TAB>number per line. One variable could only ever hold one milestone,
+  # which is why a slate was limited to a single release scope.
+  local msmap=$'\n' ms_matches ndecision=0 target
   pending="$(im_pending "$manifest" "$st_prior")"
   if [ -n "$st_prior" ] && [ -f "$st_prior" ]; then
     # Preload prior landings so wiring can reference skip-created keys.
     resolved="$(awk 'BEGIN { FS = "\t" } $1 == "created" { print $2, $3, $4 }' "$st_prior")"$'\n'
   fi
+  # An unresolved decision refuses the whole run BEFORE the first call. Acting
+  # around one would commit Spark to a meaning nobody chose, and doing it
+  # part-way through would leave the slate half-applied on top of that.
+  if printf '%s\n' "$pending" | grep -q "^decision$(printf '\037')"; then
+    printf '%s\n' "$pending" | awk 'BEGIN { FS = "\037" }
+      $1 == "decision" { printf "decision: %s needs a human answer — \"%s\"\n", $2, $3 }' >&2
+    echo "unresolved decision(s) — nothing was created, updated, or wired" >&2
+    return 2
+  fi
+
   errf="$(mktemp)"
   # shellcheck disable=SC2064 — expand errf now; it never changes.
   trap "rm -f '$errf'" RETURN
@@ -433,10 +705,50 @@ im_execute() { # <manifest-file> <state-file> <fresh-0-or-1>
         fi
         ms_number="$ms_matches"
         if [ -z "$ms_number" ]; then
-          im_fail "resolving milestone \"$b\" — not found on GitHub; create it first (the helper assigns milestones, it never creates them)" "" \
+          im_fail "resolving milestone \"$b\" — not found on GitHub; declare it with a milestone record so this manifest creates it, or create it first" "" \
             "$created" "$wired" "$skipped" "$state"; return 1
         fi
+        msmap="${msmap}${b}	${ms_number}"$'\n'
         echo "resolved: milestone \"$b\" -> $ms_number"
+        ;;
+      decision) ;;   # already refused above, before any call was made
+      create-ms)
+        if ! out="$(api_create_milestone "$c" "$d" 2>"$errf")"; then
+          im_fail "creating milestone \"$c\" (POST repos/{owner}/{repo}/milestones)" "$(cat "$errf")" \
+            "$created" "$wired" "$skipped" "$state"; return 1
+        fi
+        printf 'created\tms:%s\t%s\t\n' "$b" "$out" >> "$state"
+        msmap="${msmap}${b}	${out}"$'\n'
+        msmap="${msmap}${c}	${out}"$'\n'
+        created=$((created + 1))
+        echo "created: milestone $b -> #$out"
+        ;;
+      skip-create-ms)
+        skipped=$((skipped + 1))
+        msmap="${msmap}${b}	${c}"$'\n'
+        echo "skip: milestone $b = #$c (state)"
+        ;;
+      update)
+        target="${b#'#'}"
+        if [ "$c" = "milestone" ]; then
+          msn="$(printf '%s' "$msmap" | awk -F'\t' -v t="$d" 'NF == 2 && $1 == t { print $2; exit }')"
+          if [ -z "$msn" ]; then
+            im_fail "resolving milestone \"$d\" for $b — neither looked up nor created in this run" "" \
+              "$created" "$wired" "$skipped" "$state"; return 1
+          fi
+          d="$msn"
+        fi
+        if ! api_update_issue "$target" "$c" "$d" 2>"$errf"; then
+          im_fail "updating #$target $c (PATCH repos/{owner}/{repo}/issues/$target)" "$(cat "$errf")" \
+            "$created" "$wired" "$skipped" "$state"; return 1
+        fi
+        printf 'wired\tupdate\t%s\t%s\n' "$b" "$c" >> "$state"
+        updated=$((updated + 1))
+        echo "updated: $b $c"
+        ;;
+      skip-update)
+        skipped=$((skipped + 1))
+        echo "skip: update $b $c (state)"
         ;;
       lookup-labels)
         if ! out="$(api_list_labels 2>"$errf")"; then
@@ -472,8 +784,17 @@ im_execute() { # <manifest-file> <state-file> <fresh-0-or-1>
         echo "resolved: ids for $(printf '#%s ' $b | sed 's/ $//')"
         ;;
       create)
+        # Resolve THIS issue's milestone from the map, by KEY or by title. A
+        # single ms_number could only ever serve one milestone, which is what
+        # limited a slate to one release scope.
         msn=""
-        if [ -n "$e" ]; then msn="$ms_number"; fi
+        if [ -n "$e" ]; then
+          msn="$(printf '%s' "$msmap" | awk -F'\t' -v t="$e" 'NF == 2 && $1 == t { print $2; exit }')"
+          if [ -z "$msn" ]; then
+            im_fail "resolving milestone \"$e\" for $b — neither looked up nor created in this run" "" \
+              "$created" "$wired" "$skipped" "$state"; return 1
+          fi
+        fi
         if ! out="$(api_create_issue "$c" "$d" "$msn" "$f" 2>"$errf")"; then
           im_fail "creating $b (\"$c\")" "$(cat "$errf")" \
             "$created" "$wired" "$skipped" "$state"; return 1
@@ -519,7 +840,13 @@ im_execute() { # <manifest-file> <state-file> <fresh-0-or-1>
     esac
   done <<< "$pending"
 
-  echo "report: created $created, wired $wired, skipped $skipped, failed 0"
+  # The updated count appears only when there is one, so a manifest that
+  # predates update records keeps its exact report line.
+  if [ "$updated" -gt 0 ]; then
+    echo "report: created $created, updated $updated, wired $wired, skipped $skipped, failed 0"
+  else
+    echo "report: created $created, wired $wired, skipped $skipped, failed 0"
+  fi
 }
 
 # --- entry point ---------------------------------------------------------------
