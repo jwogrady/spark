@@ -182,6 +182,95 @@ for sc in unread:milestones unread:subissues unread:blockedby unread:body unread
   esac
 done
 
+# ============ an EMPTY milestone field, with adjacent tabs ================
+# Tab is an IFS *whitespace* character, so `IFS=$'\t' read` collapses runs of it.
+# An issue record that legitimately omits its milestone —
+# `A<TAB>One<TAB>labels<TAB><TAB>body.md` — lost the empty field, `body.md` was
+# read as the milestone, and verification reported `milestone is "(none)"; the
+# artifact says "body.md"` while never comparing the body at all (#540).
+#
+# This is the shape the fields are read in, so it is checked here rather than
+# left to the happy path: the artifact above always supplies a milestone.
+printf 'Unmilestoned body\n' > "$work/nom.md"
+art2="$work/plan-nom.tsv"
+printf 'issue\tU\tUnmilestoned\tfeature,P1,docs-impact:none\t\tnom.md\n' > "$art2"
+st2="$work/plan-nom.state"
+printf 'created\tU\t300\t9300\n' > "$st2"
+
+cat > "$stub/gh" <<'STUB3'
+#!/usr/bin/env bash
+args="$*"
+case "$1 $2" in "auth status") exit 0 ;; esac
+if [ "$1" = "issue" ] && [ "$2" = "view" ]; then
+  case "$args" in
+    *"--json body"*)                  cat "$BODY_U"; exit 0 ;;
+    *"--json title,labels,milestone"*)
+      # No milestone, exactly as the artifact asks.
+      printf '%s\t%s\t%s\n' "Unmilestoned" "P1,docs-impact:none,feature" ""
+      exit 0 ;;
+  esac
+  exit 1
+fi
+[ "$1" = "api" ] && exit 0
+exit 1
+STUB3
+chmod +x "$stub/gh"
+
+n_rc=0
+n_out="$(cd "$work" && env PATH="$stub:$PATH" BODY_U="$work/nom.md" \
+  "$SPARK" plan verify "$art2" --state "$st2" --tsv 2>&1)" || n_rc=$?
+assert_eq "an empty milestone with a matching live issue verifies" 0 "$n_rc"
+assert_eq "with a PASS verdict" "PASS" \
+  "$(printf '%s\n' "$n_out" | awk -F'\t' '$1=="verdict"{print $2}')"
+# The specific corruption: the body path must never be read as the milestone.
+case "$n_out" in
+  *'the artifact says "nom.md"'*)
+    bad "#540: the body path was reported as the expected milestone" ;;
+  *) ok ;;
+esac
+# And the body must actually be compared, not silently skipped.
+assert_contains "the body is compared" "body matches nom.md" "$n_out"
+
+# The body still fails when it genuinely differs, so the PASS above is not
+# vacuous.
+printf 'something else\n' > "$work/other.md"
+n_rc=0
+n_out="$(cd "$work" && env PATH="$stub:$PATH" BODY_U="$work/other.md" \
+  "$SPARK" plan verify "$art2" --state "$st2" --tsv 2>&1)" || n_rc=$?
+assert_eq "and a genuinely different body still fails" 1 "$n_rc"
+assert_contains "naming the body" "body does not match" "$n_out"
+
+# An empty milestone field asserts NOTHING, and the documentation says so: a
+# create leaves the milestone unset rather than setting it to none, so `verify`
+# makes no claim about it either. `apply` and `verify` must read one field the
+# same way, or the verb reports drift against a state `apply` never intended.
+cat > "$stub/gh" <<'STUB4'
+#!/usr/bin/env bash
+args="$*"
+case "$1 $2" in "auth status") exit 0 ;; esac
+if [ "$1" = "issue" ] && [ "$2" = "view" ]; then
+  case "$args" in
+    *"--json body"*)                  cat "$BODY_U"; exit 0 ;;
+    *"--json title,labels,milestone"*)
+      # GitHub carries a milestone the artifact never asked for.
+      printf '%s\t%s\t%s\n' "Unmilestoned" "P1,docs-impact:none,feature" "v9.9 — added later"
+      exit 0 ;;
+  esac
+  exit 1
+fi
+[ "$1" = "api" ] && exit 0
+exit 1
+STUB4
+chmod +x "$stub/gh"
+n_rc=0
+n_out="$(cd "$work" && env PATH="$stub:$PATH" BODY_U="$work/nom.md" \
+  "$SPARK" plan verify "$art2" --state "$st2" --tsv 2>&1)" || n_rc=$?
+assert_eq "a milestone added on GitHub is not drift against an empty field" 0 "$n_rc"
+case "$n_out" in
+  *"milestone is"*) bad "an empty milestone field was treated as an assertion" ;;
+  *) ok ;;
+esac
+
 # ============ the #517 scenario, verbatim ==================================
 # "returns the expected titles and labels; would return a deliberately wrong
 # milestone and body if asked; exposes no matching hierarchy/dependency/order

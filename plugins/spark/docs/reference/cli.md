@@ -761,6 +761,15 @@ Order is compared as **relative** placement, which is how it is applied: the
 declared children are placed one after another, so a parent may also hold
 sub-issues the artifact never mentions without that reading as drift.
 
+**An empty milestone field asserts nothing.** A create leaves the milestone unset
+when the field is empty, rather than setting it to none, so `verify` makes no
+claim about it either — a milestone added on GitHub afterwards is not reported as
+drift. The field says *"do not set this"*, not *"this must be absent"*. Give the
+record a milestone to have it verified.
+
+That symmetry is the point: `apply` and `verify` must read one field the same way,
+or the verb reports drift against a state `apply` never intended to create.
+
 Bodies are compared after normalising line endings and trailing blank lines.
 GitHub returns CRLF for bodies submitted with LF, and a check that reported every
 correct body as drifted would be worse than no check at all — one that always

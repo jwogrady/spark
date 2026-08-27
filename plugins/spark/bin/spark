@@ -3959,8 +3959,11 @@ plan_live_rows() {
   # drift and failed verify after a perfectly correct apply.
   local mstitles
   mstitles="$(awk -F'\t' '/^[[:space:]]*(#|$)/ { next } $1 == "milestone" { print $2 "\t" $3 }' "$artifact")"
-  awk -F'\t' '/^[[:space:]]*(#|$)/ { next } $1 == "update" { print $2 "\t" $3 "\t" $4 }' "$artifact" \
-  | while IFS=$'\t' read -r n field want; do
+  # Same reason as plan_created_rows: tab is IFS-whitespace and collapses, so an
+  # empty field would shift every later one left.
+  awk -F'\t' -v US=$'\037' '/^[[:space:]]*(#|$)/ { next }
+    $1 == "update" { print $2 US $3 US $4 }' "$artifact" \
+  | while IFS=$'\037' read -r n field want; do
       [ -n "$n" ] || continue
       case "$n" in '#'*) ;; *) continue ;; esac
       if [ "$field" = "milestone" ]; then
@@ -4020,8 +4023,18 @@ plan_created_rows() {
     return 0
   fi
   local body bp mswant
-  awk -F'\t' '/^[[:space:]]*(#|$)/ { next } $1 == "issue" { print $2 "\t" $3 "\t" $4 "\t" $5 "\t" $6 }' "$artifact" \
-  | while IFS=$'\t' read -r key title labels ms body; do
+  # Fields are separated by \037, NOT by tab, and read with IFS=$'\037'.
+  #
+  # Tab is an IFS *whitespace* character, so `IFS=$'\t' read` collapses runs of
+  # tabs and strips them at the ends. An issue record that legitimately omits its
+  # milestone — `A<TAB>One<TAB>labels<TAB><TAB>body.md` — therefore lost the empty
+  # field, `body.md` was read as the milestone, and verification reported
+  # `milestone is "(none)"; the artifact says "body.md"` while never comparing the
+  # body at all (#540). A unit separator is not IFS-whitespace and preserves
+  # empty fields exactly.
+  awk -F'\t' -v US=$'\037' '/^[[:space:]]*(#|$)/ { next }
+    $1 == "issue" { print $2 US $3 US $4 US $5 US $6 }' "$artifact" \
+  | while IFS=$'\037' read -r key title labels ms body; do
       [ -n "$key" ] || continue
       num="$(awk -F'\t' -v k="$key" '$1 == "created" && $2 == k { print $3; exit }' "$state")"
       if [ -z "$num" ]; then
