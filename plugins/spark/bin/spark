@@ -3682,6 +3682,72 @@ next_select() {
   return 0
 }
 
+# next_route — map one selected issue's canonical metadata to the Spark lane
+# that owns it, and name any mandatory human gate BEFORE anything mutates
+# (#437).
+#
+# Routing, not a sixth lifecycle stage: it composes the existing skills and
+# owns none of their work. Two signal kinds, and they never merge —
+#   CATEGORY  the one issue.taxonomy label, which decides the lane;
+#   THEME     orthogonal labels (decision, human-approval), which decide where
+#             the lane must STOP.
+# A theme is not a replacement category: `decision` on a feature still routes
+# through the feature lane, it just cannot end in a merge without a human.
+#
+# next_route <issue> <category> <themes-csv>
+# Exits 0 with a route, 3 when the metadata cannot be routed.
+next_route() {
+  local n="$1" cat="$2" themes="${3:-}"
+  local lane="" why="" gate="" t
+
+  case "$cat" in
+    bug|feature|infrastructure|tech-debt|chore)
+      lane="codify -> validate -> ship"
+      why="implementation work: the lane that writes code owns it" ;;
+    documentation)
+      # Codify is code-only by contract, so sending documentation there would
+      # hand the work to a skill whose own description refuses it.
+      lane="knowledge/audit -> validate -> ship"
+      why="documentation work: codify is code-only by contract, so the docs lane owns it" ;;
+    research)
+      lane="ideate/knowledge -> human decision"
+      why="research work: it produces evidence and options, not an implementation" ;;
+    '')
+      yellow "not assessed: #$n carries no issue.taxonomy category — cannot route"
+      yellow "  smallest correction: add exactly one category label"
+      return 3 ;;
+    *)
+      yellow "not assessed: #$n's category '$cat' is not in the declared taxonomy — cannot route"
+      yellow "  smallest correction: replace it with exactly one declared category"
+      return 3 ;;
+  esac
+
+  # Themes are stop boundaries, applied in order of how early they bite.
+  for t in $(printf '%s' "$themes" | tr ',' ' '); do
+    case "$t" in
+      decision)
+        lane="${lane%% -> *} -> STOP: human decision"
+        gate="human judgement required: Spark may gather evidence, compare options and prepare the durable record, but the decision is not Spark's to make" ;;
+      human-approval)
+        lane="$lane (live action gated)"
+        gate="${gate:+$gate
+}human authorization required before the live/destructive action: preparation, tests, rollback and verification may proceed up to that line, and no further" ;;
+    esac
+  done
+
+  printf 'issue     #%s\n' "$n"
+  printf 'category  %s\n' "$cat"
+  printf 'themes    %s\n' "${themes:-none}"
+  printf 'route     %s\n' "$lane"
+  if [ -n "$gate" ]; then
+    printf 'approval  %s\n' "$gate"
+  else
+    printf 'approval  none\n'
+  fi
+  printf 'why       %s\n' "$why"
+  return 0
+}
+
 cmd_next() {
   local usage_line="usage: spark next [--milestone <title>]"
   local want_ms=""
@@ -3775,7 +3841,29 @@ EOF_ROWS
 $rows
 EOF_ROWS2
 
-  printf '%s' "$ev" | next_select
+  local sel_out sel_rc=0
+  sel_out="$(printf '%s' "$ev" | next_select)" || sel_rc=$?
+  printf '%s\n' "$sel_out"
+  [ "$sel_rc" -eq 0 ] || return "$sel_rc"
+
+  # Route the selection before anything acts on it: knowing WHICH issue is
+  # next is not enough if the answer is then always handed to codify.
+  local sn scat sthemes l t
+  sn="$(printf '%s' "$sel_out" | awk '/^selected/{print $2}' | tr -d '#')"
+  scat=""; sthemes=""
+  while IFS=$'\t' read -r n labelcsv title; do
+    [ "$n" = "$sn" ] || continue
+    for l in $(printf '%s' "$labelcsv" | tr ',' ' '); do
+      for t in $taxo; do [ "$l" = "$t" ] && scat="$l"; done
+      case "$l" in decision|human-approval) sthemes="${sthemes:+$sthemes,}$l" ;; esac
+    done
+    break
+  done <<EOF_ROWS3
+$rows
+EOF_ROWS3
+
+  echo
+  next_route "$sn" "$scat" "$sthemes"
 }
 
 # Dispatch only when executed, not when sourced — sourcing (e.g. from behavioral
