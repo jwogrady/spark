@@ -130,8 +130,8 @@ mkdir -p "$repo/.spark"
 {
   printf 'version\t1\n'
   printf 'member\tcategory\tfeature\t333333\tProject feature\n'
-  printf 'family\tdocs-impact\texactly-one\trequired\tA data-defined family\n'
-  printf 'member\tdocs-impact\tdocs-none\t444444\tNo documentation impact\n'
+  printf 'family\tproving-family\texactly-one\trequired\tA data-defined family\n'
+  printf 'member\tproving-family\tproving-member\t444444\tAdded as data, with no schema code\n'
 } > "$repo/.spark/governance.tsv"
 rc=0; out_pr="$(gov --tsv)" || rc=$?
 assert_rc "project tier resolves over operator" 0 "$rc"
@@ -142,9 +142,9 @@ assert_eq "the project member set replaces the operator one too" "" "$gone"
 
 # A new governed label family is DATA: declared in a tier, no schema code.
 assert_contains "a new family needs no schema code" \
-  "$(printf 'family\tdocs-impact\texactly-one\trequired\tA data-defined family\tproject')" "$out_pr"
+  "$(printf 'family\tproving-family\texactly-one\trequired\tA data-defined family\tproject')" "$out_pr"
 assert_contains "the new family's member resolves generically" \
-  "$(printf 'member\tdocs-impact\tdocs-none\t444444\t')" "$out_pr"
+  "$(printf 'member\tproving-family\tproving-member\t444444\t')" "$out_pr"
 
 rm -f "$repo/.spark/governance.tsv" "$opgov"
 
@@ -390,6 +390,27 @@ rc=0; out="$("$SPARK" labels --apply --prune-deprecated 2>&1)" || rc=$?
 assert_eq "the misdirecting re-run message is gone" 0 \
   "$(printf '%s\n' "$out" | grep -c 'Remove it deliberately with: spark labels --apply --prune-deprecated')"
 rm -f "$repo/.spark/governance.tsv"
+
+# ============ the human view renders every record type it resolves ============
+# Omitting a record type made `spark governance` claim to render "the resolved
+# model" while silently dropping rules that decide real verdicts.
+rc=0; out="$("$SPARK" governance 2>&1)" || rc=$?
+assert_rc "the human view renders" 0 "$rc"
+assert_contains "it shows label families" "Label families:" "$out"
+assert_contains "it shows execution structure" "Execution structure:" "$out"
+assert_contains "it shows the separations" "Separations that must not be collapsed:" "$out"
+assert_contains "it shows the surfaces" "Governance surfaces:" "$out"
+assert_contains "it shows enforcement" "Enforcement requirements:" "$out"
+# Every record type present in --tsv must be visible in the human view too.
+for t in exclusive pathclass; do
+  if printf '%s\n' "$("$SPARK" governance --tsv)" | awk -F'\t' -v t="$t" '$1==t{f=1} END{exit !f}'; then
+    case "$t" in
+      exclusive) assert_contains "the exclusivity rule is rendered" \
+        "may not be combined with any other value" "$out" ;;
+      pathclass) assert_contains "the governed paths are rendered" "governs" "$out" ;;
+    esac
+  fi
+done
 
 # ======================== read-only by construction ========================
 # The verb must not write anything: no network, no remote, no local mutation.

@@ -160,8 +160,19 @@ human's call.
 
 ## `spark labels [--apply] [--prune-deprecated]`
 
-Reconciles the declared issue taxonomy with the labels that actually exist on
-the remote. Spark declares a seven-category taxonomy (`issue.taxonomy`), writes
+Reconciles **every governed label family** — the issue taxonomy plus the
+priority, theme, disposition, and `docs-impact` families the governance model
+declares — with the labels that actually exist on the remote.
+
+Reconciling only the taxonomy left a real gap: `docs-impact` ships as a
+*required* family, `plan` instructs the agent to declare a disposition, and the
+issue manifest hard-fails on a label the repo does not have — so a family
+nothing provisioned took the lifecycle down with it. The same omission had left
+`decision` and `human-approval` unprovisioned in repos where `spark next`
+routes on them.
+
+Category **names** still come from `issue.taxonomy`; every other family's
+members come from the governance model, which is their only authority. Spark declares a seven-category taxonomy (`issue.taxonomy`), writes
 it into every onboarded repo's `CONVENTIONS.md`, and builds
 [metadata governance](metadata-governance.md) on top of it — but labels live on
 GitHub, and `setup` is an offline, create-only pass, so provisioning them is
@@ -242,7 +253,16 @@ as governance authority.
 
 A later tier overrides a record by key. **A tier that declares any member of a
 family replaces that family's whole member set** — so an overlay can remove a
-member and not only add one, which a per-member merge could never express.
+member and not only add one, which a per-member merge could never express. The
+same applies to a class's governed paths.
+
+Removing a member leaves the lower tiers' rules about it — its exclusivity, its
+governed paths — pointing at nothing. Those rules are **pruned**, not treated as
+errors, or narrowing would make the model permanently unresolvable: declaring a
+replacement rule for a member that no longer exists is itself unclosed. Pruning
+applies only to a **strictly lower** tier. A rule declared at or above the tier
+that owns the member set is naming a member that tier can see does not exist,
+which is a typo, and still fails closed.
 Member blocks stay anchored where the base first declared them, and within a
 block the winning tier's own order holds: priority ordering is the member
 declaration order, stated as data rather than inferred from the label spelling.
@@ -305,6 +325,127 @@ separation	order	priority	Delivery order is never manufactured from priority; �
 
 Diffing the model against live GitHub state, and provisioning it there, are
 separate capabilities that build on this render rather than restating it.
+
+## `spark docs-impact [--issue <n>] [--branch] [--paths <file>] [--tsv]`
+
+Verifies that an issue's **declared** documentation impact matches what its
+implementation actually changed. Read-only: it reads labels, a diff, and the
+governance model, and writes nothing.
+
+Spark used to *remind* you to check documentation; it could not *prove* you
+had. The failure mode it closes is not "this PR changed no docs" — very often
+that is the correct outcome. It is **silent docs impact**: work lands, nobody
+declares whether documentation was affected, and that omission is
+indistinguishable from a deliberate "none".
+
+> The agent decides the semantic impact. Spark verifies that the decision was
+> satisfied.
+
+### The declaration
+
+A `docs-impact:*` label on the GitHub issue, so GitHub stays the durable
+authority and the value is queryable. The family, its members, and everything
+below are **schema data** in the governance model — see
+[`spark governance`](cli.md#spark-governance---tsv).
+
+| Value | Governs |
+| --- | --- |
+| `docs-impact:none` | nothing — a first-class, respectable answer |
+| `docs-impact:public` | shipped user-facing prose: README, explanation, how-to, tutorials |
+| `docs-impact:reference` | shipped reference contracts |
+| `docs-impact:operator` | runbooks and operational procedure |
+| `docs-impact:architecture` | decision records and the internals map |
+| `docs-impact:roadmap` | the product roadmap |
+| `docs-impact:release` | release records and release documentation |
+| `docs-impact:companion` | a companion plugin's shipped documentation |
+
+Multiple non-`none` values are valid and expected. `none` is **exclusive** —
+combining it with any other value is invalid, not merely odd. A family may
+declare **at most one** exclusive member: a consumer can act on only one, so a
+second would validate and then be silently ignored, accepting a combination the
+schema appears to forbid.
+
+`CHANGELOG.md` files are deliberately **not** governed: Release Please
+generates them and hand-editing them is forbidden, so they can never be a
+declarable impact.
+
+### The grammar
+
+| Declared | Governed change | Verdict |
+| --- | --- | --- |
+| no `docs-impact` label | — | **FAIL** — silence is never `none` |
+| `docs-impact:none` **and** any other value | — | **FAIL** (invalid) |
+| `docs-impact:none` | none | **PASS** |
+| `docs-impact:none` | any governed class changed | **FAIL** |
+| one or more non-`none` | every declared class has evidence | **PASS** |
+| one or more non-`none` | a declared class has no evidence | **FAIL** |
+| one or more non-`none` | an **additional** class changed | **WARN** |
+| any | evidence cannot be assessed | **NOT ASSESSED** |
+
+Two rows carry the weight. **Zero disposition always fails** — an issue that
+declares nothing fails whether or not documentation changed, because the
+omission is the defect. And **WARN applies only to an additional class beyond
+an otherwise valid non-`none` declaration**; it is not a general "docs changed
+but nothing was declared" escape hatch, since that case is an undeclared issue,
+which fails.
+
+Exit codes: `0` PASS and WARN (a warning is reported, never silent, but does
+not fail a build), `1` FAIL, `3` NOT ASSESSED — **never** `0`.
+
+### Core and companion are distinct surfaces
+
+Each governed path carries a surface — `core`, `repo`, or `companion`. A change
+under a companion plugin's docs never satisfies a core declaration, and a core
+change never satisfies `docs-impact:companion`. That distinction is mechanical,
+held by the surface column rather than by convention.
+
+### The evidence set
+
+A single closing PR is the common case, not the model. The evidence set is the
+**union of changed paths across every linked implementation PR**, aggregated
+and *then* judged — so documentation that landed in an earlier PR of the same
+issue does not false-fail.
+
+| Mode | Evidence |
+| --- | --- |
+| default | every **merged or open** PR linked to the issue as a closer, aggregated |
+| `--branch` | the branch's diff against the remote trunk, **unioned** with the issue's linked PRs — the pre-PR signal `validate` uses |
+| `--paths <file>` | repo-relative paths, one per line; deterministic and offline |
+
+A **closed-unmerged** PR is deliberately excluded: its paths never reached the
+trunk, so counting them would pass a declaration that nothing satisfies.
+
+`--branch` unions rather than judging the branch alone because the evidence set
+is **per issue, not per branch** — the documentation for an issue may already
+have merged in an earlier PR while this branch carries only code. When that
+lookup cannot be performed the verb says so, rather than reporting a FAIL the
+agent has no way to satisfy.
+
+Paths come from the **paginated** REST files endpoint, not `gh pr view --json
+files`, which stops at 100 files without saying so — a documentation change at
+position 140 of a 150-file PR was invisible and the verdict came back PASS.
+Renames contribute **both** paths: a doc moved out of a governed tree reports
+only its destination otherwise, so the tree it left would look untouched.
+
+Without `--issue`, the number comes from the branch name (`feat/483-slug`), the
+convention `codify` creates.
+
+**NOT ASSESSED** covers: no issue number resolvable, no authenticated `gh`, an
+unreadable issue, no linked implementation PR yet, an unresolvable diff or
+evidence file, and an unresolvable governance model. None of them is ever
+reported as a pass.
+
+### Where it runs
+
+```text
+plan      → the issue declares its docs-impact
+codify
+validate  → spark docs-impact --branch, so the signal precedes the PR
+PR        → merge
+```
+
+`--tsv` prints the same result as stable records (`issue`, `declared`,
+`evidence`, `governed`, `verdict`) for CI and skills.
 
 ## `spark next [--milestone <title>]`
 

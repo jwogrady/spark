@@ -35,7 +35,9 @@ reasoning steps inside Plan, not new verbs.
    possible. **Capture dependencies now**: when issue B builds on issue A,
    record it — the manifest's `blockedby` records become GitHub blocked-by
    links, and `codify` refuses to start dependent work whose prerequisite
-   isn't in its base.
+   isn't in its base. **Declare each issue's `docs-impact` disposition** now,
+   while the reasoning is in hand — `docs-impact:none` is a first-class answer,
+   silence is not.
 4. **Design the implementation — last.** Now pick the stack the shaped outcome
    needs: language/runtime, top-level layout, key dependencies, deployment and
    security boundaries where relevant. Record each material choice as an ADR

@@ -92,3 +92,52 @@ enforce	trunk-protection	remote	mechanical	Trunk requires a pull request and blo
 enforce	required-checks	remote	mechanical	The trunk ruleset requires the validation check the workflow actually publishes
 enforce	local-guard	local	mechanical	The PreToolUse guard blocks force-push and pushes to trunk
 enforce	commit-convention	local	mechanical	The commit-msg hook enforces Conventional Commits
+
+# --- docs-impact: the declared documentation impact of a change (#483) ----
+# `any` + `required`: at least one value is mandatory, several compose, and
+# SILENCE IS NEVER `none` — an issue carrying no disposition fails.
+#
+# `docs-impact:none` is a first-class, respectable answer and is exactly as
+# easy to declare as any other; a vocabulary where "none" reads as an
+# admission gets filled in dishonestly. It is `exclusive`, so combining it
+# with any other value is invalid rather than merely odd.
+family	docs-impact	any	required	Declared documentation impact — at least one value; silence is never "none"
+member	docs-impact	docs-impact:none	c5def5	This change affects no governed documentation
+member	docs-impact	docs-impact:public	0075ca	Shipped user-facing prose: README, positioning, install/quickstart, explanation, how-to, tutorials
+member	docs-impact	docs-impact:reference	1d76db	Shipped reference contracts
+member	docs-impact	docs-impact:operator	fbca04	Runbooks and operational procedure
+member	docs-impact	docs-impact:architecture	5319e7	Decision records and the internals map
+member	docs-impact	docs-impact:roadmap	0e8a16	The product roadmap
+member	docs-impact	docs-impact:release	d4c5f9	Release records and release documentation
+# Companion plugins are a distinct surface: a change under a companion's docs
+# never satisfies a core declaration, and a core change never satisfies this
+# one. The core vocabulary cannot express that distinction, so the surface is
+# declarable in its own right — added as schema data, which is what #470's
+# data-defined families exist for.
+member	docs-impact	docs-impact:companion	c2e0c6	A companion plugin's shipped documentation
+exclusive	docs-impact	docs-impact:none	"none" may not be combined with any other value in its family — a declaration cannot be both nothing and something
+
+# --- What each docs-impact class actually governs -------------------------
+# pathclass <family> <member> <surface> <path>
+#
+# A <path> ending in "/" is a directory prefix; anything else is an exact file.
+# No glob engine, so matching is deterministic and needs no dependency. The
+# <surface> column is what keeps core and companion apart mechanically rather
+# than by convention.
+#
+# CHANGELOG.md files are deliberately absent: Release Please generates them and
+# hand-editing them is forbidden, so they can never be a declarable impact.
+pathclass	docs-impact	docs-impact:public	core	README.md
+pathclass	docs-impact	docs-impact:public	core	plugins/spark/docs/README.md
+pathclass	docs-impact	docs-impact:public	core	plugins/spark/docs/explanation/
+pathclass	docs-impact	docs-impact:public	core	plugins/spark/docs/how-to/
+pathclass	docs-impact	docs-impact:public	core	plugins/spark/docs/tutorials/
+pathclass	docs-impact	docs-impact:reference	core	plugins/spark/docs/reference/
+pathclass	docs-impact	docs-impact:operator	repo	docs/ops/
+pathclass	docs-impact	docs-impact:architecture	repo	docs/adr/
+pathclass	docs-impact	docs-impact:architecture	repo	docs/architecture/
+pathclass	docs-impact	docs-impact:roadmap	repo	ROADMAP.md
+pathclass	docs-impact	docs-impact:release	repo	docs/releases/
+pathclass	docs-impact	docs-impact:companion	companion	plugins/spark-audit/docs/
+pathclass	docs-impact	docs-impact:companion	companion	plugins/spark-connect/docs/
+pathclass	docs-impact	docs-impact:companion	companion	plugins/spark-docs/docs/
