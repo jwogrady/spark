@@ -181,6 +181,51 @@ once wrongly overridden. Rapid merges can also race two release PRs into
 existence, leaving the stale one at risk of being merged. Detection before
 merging, and how to read the check's findings, are in the ship reference below.
 
+## A second failure mode: the commit dated before the tag it merges after
+
+Duplication is not the only way generated notes go wrong. **A commit whose date
+precedes the previous release tag is silently dropped from the next release's
+notes, even though it is genuinely unreleased.**
+
+Observed at the `v0.20.0` cut. Commit `2a88518`
+(*"docs: reserve blocked-by for true prerequisites"*, PR #464) was committed
+`2026-08-26T16:19:45-05:00` on a branch opened before the `v0.19.0` cut, and
+merged to `master` **after** that tag existed. It is not an ancestor of
+`v0.19.0`, so it shipped for the first time in `v0.20.0` — and Release Please
+omitted it.
+
+The mechanism is the walk, not the parse. Release Please enumerates commits in
+reverse chronological order and stops when it reaches the previous release's
+SHA. A commit dated *earlier* than that SHA sits beyond the stop point, so the
+walk never reaches it. Its subject is perfectly conventional; it is simply never
+read.
+
+The correlation at that cut was exact: of the 23 non-merge commits in
+`v0.19.0..master`, `2a88518` was the only one dated before the tag commit
+(`2026-08-26T18:58:43-05:00`), and it was the only one missing from the notes.
+
+**Regenerating does not fix it.** Closing and recreating the release pull
+request reruns the same date-ordered walk against the same history and reaches
+the same stop point, so the omission reproduces. This is the one `omission`
+finding that a rebuild cannot clear.
+
+**What does fix it** is making the change visible inside the walk window — a
+commit dated after the previous tag that carries the same conventional subject.
+The original commit stays exactly where it is; nothing is rewritten,
+force-pushed, or re-dated. The generated notes then state what shipped, which
+is the only property that matters.
+
+**Prevention:** a long-lived branch that spans a release cut carries this risk.
+Bringing the trunk into the branch does not help — that adds a *merge* commit
+whose date is current while the branch's own commits keep their original dates.
+Where a branch is expected to outlive a cut, land it before the cut or expect to
+carry its subject forward deliberately.
+
+The detection is unchanged and worked: `release-notes-check.sh` reported it as
+an `omission`, which **blocks**, and is exactly the class that must never be
+waved through. A release that needs a human to override its own gate has no
+gate.
+
 ## Related docs
 
 - [`plugins/spark/docs/explanation/release-ownership.md`](../../plugins/spark/docs/explanation/release-ownership.md) — the shipped ownership model this doc extends for one repo-operations fact.
