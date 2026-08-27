@@ -271,6 +271,58 @@ assert_rc "no prerequisites at fresh trunk is ready" 0 "$rc"
     && [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/master)" ] ) \
   && ok || bad "explicit start point puts the new branch exactly at origin/master"
 
+# --- #438: ONE executable dependency authority.
+# ATTACK: the native graph answers [] while the body still carries a stale
+# "Blocked by #99". Prose must not manufacture a prerequisite GitHub does not
+# have — that is a phantom blocker failing readiness closed. It is reported as
+# drift, and the drift must never be resolved against GitHub as if it were an
+# edge (no state lookup for #99 at all).
+repo="$(fresh e2e-stale-prose)"
+cat > "$fakebin/gh" <<'EOF'
+#!/usr/bin/env bash
+log="${GH_PROSE_LOG:-/dev/null}"; printf '%s\n' "$*" >> "$log"
+case "$*" in
+  *"api repos/{owner}/{repo} --jq .full_name"*) printf 'o/self\n' ;;
+  *"dependencies/blocked_by"*) : ;;
+  *"issue view 7 --json body"*) printf 'Blocked by #99 (left over from an earlier plan).\n' ;;
+  *) exit 1 ;;
+esac
+EOF
+chmod +x "$fakebin/gh"
+export GH_PROSE_LOG="$WORK/prose-calls.log"
+rc=0; out="$(cd "$repo" && env PATH="$fakebin:$PATH" bash "$script" 7 2>&1)" || rc=$?
+assert_rc "stale body prose does not block when the native graph is empty" 0 "$rc"
+assert_contains "the stale reference is reported as drift" "drift:" "$out"
+assert_contains "drift names the stale issue" "Blocked by #99" "$out"
+[ "$(grep -c 'issue view 99' "$GH_PROSE_LOG")" = "0" ] \
+  && ok || bad "a prose-only reference must never be resolved as an edge"
+unset GH_PROSE_LOG
+
+# ATTACK: native carries #12 and the body ALSO claims #98. Only the native
+# edge is executable; the extra body reference is drift, never a second edge.
+# The open native blocker still blocks, so drift never softens a real verdict.
+repo="$(fresh e2e-extra-prose)"
+cat > "$fakebin/gh" <<'EOF'
+#!/usr/bin/env bash
+log="${GH_EXTRA_LOG:-/dev/null}"; printf '%s\n' "$*" >> "$log"
+case "$*" in
+  *"api repos/{owner}/{repo} --jq .full_name"*) printf 'o/self\n' ;;
+  *"dependencies/blocked_by"*) printf '12\thttps://api.github.com/repos/o/self\n' ;;
+  *"issue view 7 --json body"*) printf 'Blocked by #12 and Blocked by #98\n' ;;
+  *"issue view 12 --json state"*) printf 'OPEN\n' ;;
+  *) exit 1 ;;
+esac
+EOF
+chmod +x "$fakebin/gh"
+export GH_EXTRA_LOG="$WORK/extra-calls.log"
+rc=0; out="$(cd "$repo" && env PATH="$fakebin:$PATH" bash "$script" 7 2>&1)" || rc=$?
+assert_rc "a contradictory body reference adds no executable edge" 1 "$rc"
+assert_contains "the native blocker still blocks" "#12 is OPEN" "$out"
+assert_contains "the extra body reference is drift" "Blocked by #98" "$out"
+[ "$(grep -c 'issue view 98' "$GH_EXTRA_LOG")" = "0" ] \
+  && ok || bad "the extra body reference must never be resolved as an edge"
+unset GH_EXTRA_LOG
+
 # read-only: the whole flow never calls a mutating gh endpoint.
 repo="$(fresh e2e-readonly)"; mk_gh "$PREREQ_SHA"
 sed -i.bak 's|^case "\$\*" in|log="${GH_STUB_LOG:-/dev/null}"; printf "%s\\n" "$*" >> "$log"\ncase "$*" in|' "$fakebin/gh" 2>/dev/null || \
