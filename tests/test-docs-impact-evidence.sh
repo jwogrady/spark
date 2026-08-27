@@ -16,9 +16,11 @@
 #   lookup returns a PR   -> union it in, then grade   (a complete answer)
 #   the PR's files fail   -> NOT ASSESSED, exit 3      (partial is not whole)
 #
-# Measured discrimination, not asserted: restoring the branch-mode conflation
-# turns 8 of the 21 red — including the reported symptom exactly, PASS with exit
-# 0 where a FAIL was due — and restoring the default mode's half turns 2 red.
+# Measured discrimination, not asserted. Of the 30 assertions: restoring the
+# branch-mode conflation turns 8 red — including the reported symptom exactly,
+# PASS with exit 0 where a FAIL was due; restoring the default mode's half turns
+# 2 red; restoring the duplicated human-mode line turns 1 red; and stopping the
+# aggregate after the first linked PR turns 3 red.
 set -euo pipefail
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 
@@ -67,12 +69,23 @@ case "$1 $2" in
     case "${EV_LOOKUP:-ok}" in
       fail)  exit 1 ;;
       empty) exit 0 ;;
+      two)   printf '%s\n%s\n' 11 12; exit 0 ;;
       *)     printf '%s\n' 9; exit 0 ;;
     esac ;;
   "api --paginate")
     case "${EV_FILES:-ok}" in
       fail) exit 1 ;;
-      *)    printf '%s\n' "$EV_PATH"; exit 0 ;;
+      *)
+        case "$3" in
+          # The documentation is deliberately in the LAST PR processed. Put it
+          # first and a loop that stops after one PR still reaches the right
+          # verdict, so the assertions below could not fail — the union has to
+          # be broken in the direction that changes the answer.
+          *"/pulls/11/files") printf '%s\n' "plugins/spark/bin/spark" ;;
+          *"/pulls/12/files") printf '%s\n' "$EV_PATH" ;;
+          *)                  printf '%s\n' "$EV_PATH" ;;
+        esac
+        exit 0 ;;
     esac ;;
 esac
 exit 1
@@ -156,6 +169,24 @@ d_out="$(cd "$repo" && env PATH="$shim" EV_LOOKUP=empty EV_PATH="$GOVERNED_PATH"
 assert_rc "and a genuine absence is still not assessed" 3 "$d_rc"
 assert_contains "with the message that fits it" \
   "no merged or open implementation PR" "$d_out"
+
+# ============ the aggregate is across ALL linked PRs =======================
+# #483 requires the evidence set to be the union across every linked
+# implementation PR, so documentation that landed in an EARLIER PR does not
+# false-fail a later code-only branch. The existing coverage models that as the
+# path set handed to the classifier; this drives the verb, which is where the
+# union is actually built — and where a second linked PR could be dropped
+# without any classifier test noticing.
+a_rc=0
+a_out="$(cd "$repo" && env PATH="$shim" EV_LOOKUP=two EV_FILES=ok \
+  EV_PATH="$GOVERNED_PATH" "$SPARK" docs-impact --issue 77 --branch --tsv 2>&1)" || a_rc=$?
+assert_contains "both linked PRs appear in the evidence description" "PR #11" "$a_out"
+assert_contains "not just the first" "PR #12" "$a_out"
+# `docs-impact:none` is declared, and PR #11 changed governed reference docs.
+# The aggregate must therefore FAIL — dropping PR #11 would PASS.
+assert_rc "the aggregate is judged, not the branch alone" 1 "$a_rc"
+assert_contains "and the governed class comes from a linked PR, not the branch" \
+  "docs-impact:reference" "$a_out"
 
 # ============ human mode reports it ONCE ===================================
 # Every assertion above reads --tsv. The human surface is a separate renderer,

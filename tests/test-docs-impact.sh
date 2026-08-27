@@ -131,6 +131,11 @@ assert_eq "an explanation doc classifies as public" "$PUB" \
 assert_eq "a how-to classifies as public" "$PUB" "$(classes 'plugins/spark/docs/how-to/x.md')"
 assert_eq "a tutorial classifies as public" "$PUB" "$(classes 'plugins/spark/docs/tutorials/x.md')"
 assert_eq "the repo README classifies as public" "$PUB" "$(classes 'README.md')"
+# The shipped docs README is a separate mapping from the repo README, and #483
+# requires `public` to cover the WHOLE shipped non-reference user-doc set — not
+# the four quadrants minus their index page.
+assert_eq "the shipped docs README classifies as public" "$PUB" \
+  "$(classes 'plugins/spark/docs/README.md')"
 assert_eq "a release record classifies as release" "$REL" "$(classes 'docs/releases/v0.21.md')"
 assert_eq "an ops runbook classifies as operator" "$OPS" \
   "$(classes 'docs/ops/release-conventions.md')"
@@ -271,6 +276,26 @@ assert_contains "the exclusive rule survives with its member" \
 # And the verb is usable against the narrowed model rather than stuck.
 rc=0; "$SPARK" docs-impact --issue 1 --paths "$WORK/ev" >/dev/null 2>&1 || rc=$?
 assert_rc "the verb still runs against a narrowed model" 3 "$rc"
+rm -f "$repo/.spark/governance.tsv"
+
+# A SECOND family's pathclass must classify, with no code that knows about
+# `docs-impact`. The existing coverage proves a foreign family's BROKEN
+# pathclass fails closed; that is the error path. This is the success path — the
+# actual extensibility claim, which a fail-closed test cannot make.
+{ printf 'version\t1\n'
+  printf 'family\tmirror\tany\toptional\tA second family, data only\n'
+  printf 'member\tmirror\tmirror:docs\t222222\tDocs\n'
+  printf 'pathclass\tmirror\tmirror:docs\tcore\tplugins/spark/docs/\n'
+} > "$repo/.spark/governance.tsv"
+rc=0; out="$("$SPARK" governance --tsv 2>&1)" || rc=$?
+assert_rc "a second family with its own pathclass resolves" 0 "$rc"
+gm="$(printf '%s\n' "$out" | awk -F'\t' 'NF { NF--; print }' OFS='\t')"
+assert_eq "and its mapping classifies a path under it" "mirror:docs" \
+  "$(printf '%s\n' 'plugins/spark/docs/reference/cli.md' | di_classify "$gm" \
+     | awk -F'\t' '$1 ~ /^mirror:/ { print $1 }' | head -1)"
+assert_eq "while docs-impact still classifies the same path too" "$REF" \
+  "$(printf '%s\n' 'plugins/spark/docs/reference/cli.md' | di_classify "$gm" \
+     | awk -F'\t' '$1 ~ /^docs-impact:/ { print $1 }' | head -1)"
 rm -f "$repo/.spark/governance.tsv"
 
 # A genuine SAME-TIER typo must still fail closed — dropping superseded rules
