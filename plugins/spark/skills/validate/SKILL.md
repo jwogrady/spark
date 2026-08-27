@@ -19,9 +19,9 @@ ones, then drives the fixes.
      handling, secrets, or network surface.
    - The `verify` skill — actually run the app/tests and observe behavior, not
      just read the diff.
-   - `spark docs-impact --branch` — prove the issue's declared documentation
-     impact matches what the branch changed, here rather than after the PR.
-     FAIL is a must-fix; NOT ASSESSED is never a pass.
+   - `spark docs-impact --branch` — prove the declared documentation impact
+     matches what the branch changed, before the PR rather than after. FAIL is
+     a must-fix; NOT ASSESSED is never a pass.
 2. **Triage findings.** Sort into: must-fix (breaks a criterion or is a real
    bug), should-fix (quality), and out-of-scope (file as a new issue, don't fix
    here).

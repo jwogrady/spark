@@ -43,6 +43,31 @@ Validates the whole marketplace and reports health. Checks:
 Exit code is non-zero if any error is found. JSON validation uses `jq` or
 `python3` if present, and is skipped (not failed) if neither is available.
 
+### Governance readiness
+
+Doctor consumes the **same row generators** as `spark governance` rather than
+restating their rules, and distinguishes every state that matters:
+
+| State | Meaning |
+| --- | --- |
+| model valid | the resolved governance model parses and is closed |
+| model unresolvable | an **error** — every check below it is unassessable |
+| surfaces present | every declared governance file exists |
+| surfaces need a decision | a human-owned surface is missing; Spark will not write it |
+| remote NOT ASSESSED | no authenticated `gh` — **explicitly not a pass** |
+| remote MISSING | declared labels do not exist; `spark governance apply --yes` |
+| remote DRIFTED | labels differ from the model; reported only, since an existing label is the project's decision |
+
+**What doctor deliberately does not assess, and says so.** Issue metadata, the
+prerequisite graph, and the trunk policy cost an API call per issue, and doctor
+runs on a latency budget and must work offline. It names
+`spark governance validate` as the verb that owns them. That is a *stated
+deferral*, not a silent skip — a green doctor never means a remote surface was
+quietly passed over.
+
+The issue-form parity check reads the resolved model's category family, so it
+and the governance commands cannot disagree about which categories exist.
+
 ### `spark doctor --requirements [--json]`
 
 Environment readiness, grouped by the capability each dependency serves —
@@ -530,6 +555,18 @@ PR        → merge
 
 `--tsv` prints the same result as stable records (`issue`, `declared`,
 `evidence`, `governed`, `verdict`) for CI and skills.
+
+### Selection is not a licence to start
+
+After naming the next issue, `spark next` checks that issue's **execution
+metadata** against the schema and **refuses** if it is mechanically invalid —
+two categories, or a required family undeclared on scheduled work. It exits
+non-zero and names each problem.
+
+It does not fix them. Which category was meant, or which disposition applies, is
+a human decision and never a default. The priority set it ranks by comes from
+the model's `priority` family, not from a hard-coded list, so a project that
+extends or renames the family is still understood.
 
 ## `spark plan validate|diff|apply|verify <artifact>`
 
