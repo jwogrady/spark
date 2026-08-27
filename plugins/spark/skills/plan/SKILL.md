@@ -32,12 +32,11 @@ reasoning steps inside Plan, not new verbs.
    from the capabilities that outcome requires — not from framework or file
    structure. Prefer 3–7 features; more means the milestone is too big — cut
    scope. Express acceptance criteria as domain/product behavior where
-   possible. **Capture dependencies now**: when issue B builds on issue A,
-   record it — the manifest's `blockedby` records become GitHub blocked-by
-   links, and `codify` refuses to start dependent work whose prerequisite
-   isn't in its base. **Declare each issue's `docs-impact` disposition** now,
-   while the reasoning is in hand — `docs-impact:none` is a first-class answer,
-   silence is not.
+   possible. **Capture dependencies now**: `blockedby` records become GitHub
+   blocked-by links, and `codify` refuses dependent work whose prerequisite is
+   not in its base. **Declare each issue's `docs-impact` disposition** while the
+   reasoning is in hand — `docs-impact:none` is a first-class answer, silence is
+   not.
 4. **Design the implementation — last.** Now pick the stack the shaped outcome
    needs: language/runtime, top-level layout, key dependencies, deployment and
    security boundaries where relevant. Record each material choice as an ADR
@@ -66,12 +65,13 @@ reasoning steps inside Plan, not new verbs.
 
 ## Creating the issues
 
-Draft first; create on GitHub only after explicit confirmation. Then create
-and wire the whole approved slate — issues, sub-issues, and blocked-by
-dependencies — with one deterministic helper: write a manifest, preview it
-with `bash scripts/issue-manifest.sh --dry-run <file>` (run from this skill's
-directory), and rerun without `--dry-run` to execute. Manifest format and
-resume rules: [references/creating-issues.md](references/creating-issues.md).
+Draft first; create on GitHub only after explicit confirmation. Then compile
+the approved slate with `spark plan`: `validate` (structure and schema,
+read-only), `diff` (against live state), `apply --yes` (only once the human
+approves), `verify`. Record an unresolved question as a `decision` record rather
+than guessing — it refuses the run until answered — and put preferred order in
+an `order` record, never in `blockedby`.
+[references/creating-issues.md](references/creating-issues.md) has the format.
 
 ## Guardrails
 

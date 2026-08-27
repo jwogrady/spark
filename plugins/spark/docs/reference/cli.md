@@ -531,6 +531,101 @@ PR        → merge
 `--tsv` prints the same result as stable records (`issue`, `declared`,
 `evidence`, `governed`, `verdict`) for CI and skills.
 
+## `spark plan validate|diff|apply|verify <artifact>`
+
+Compiles an **approved** plan artifact into GitHub state:
+
+```text
+agent/human intent → structured plan → validate → diff → approve → apply → verify
+```
+
+There is exactly **one** compiler, and this is its command surface. The
+[plan skill's](../../skills/plan/SKILL.md) `issue-manifest.sh` owns the
+manifest's **structure** — record shapes, refs, duplicates, cycles — and owns
+creating, updating and wiring with its resumable state and its shared
+dry-run/live analyzer. This surface owns **meaning**: it resolves categories and
+priorities against the [governance model](#spark-governance---tsv-inspect-diff-apply-validate),
+compares the artifact to live GitHub state, and verifies the result afterwards.
+Neither restates the other.
+
+### The artifact
+
+Line-oriented and tab-separated, the format `issue-manifest.sh` already
+documents, extended with four record types:
+
+| Record | Shape |
+| --- | --- |
+| `issue` | `KEY`, title, `labels,csv`, milestone, body-file |
+| `milestone` | `KEY`, title, description |
+| `subissue` | `PARENT_REF`, `CHILD_REF` |
+| `blockedby` | `ISSUE_REF`, `BLOCKER_REF`, *optional* reason |
+| `order` | `REF`, position |
+| `update` | `#N`, `title`\|`labels`\|`milestone`\|`body-file`, value |
+| `decision` | `REF`, question |
+
+Each new type exists because its absence was where drift entered:
+
+- **`milestone`** — milestones used to be lookup-only, and a missing one was a
+  hard error, so a slate could not bring its own release scope. It can now be
+  created, and **more than one milestone per artifact** is representable.
+- **`order`** — preferred delivery order needs its own home. Without one it gets
+  encoded as `blockedby`, and an edge added to express sequence becomes a false
+  prerequisite the codify preflight then reports as a permanent blocker. A
+  `blockedby` whose optional reason names `order`, `preferred-order`,
+  `sequence`, or `preference` is **refused outright**.
+- **`update`** — an existing issue could only ever be a link target, so every
+  restructuring had to be applied by hand.
+- **`decision`** — unresolved meaning has to be representable, and it **refuses
+  the run** rather than being applied around.
+
+### `validate` — read-only, two layers
+
+Structure first, from the script that owns it: record shapes, refs, duplicate
+keys, self-links, duplicate links, duplicate order positions, and **dependency
+cycles**. A cycle is structural — every issue in one is permanently unstartable,
+and the preflight would otherwise report each as blocked forever without naming
+the cause.
+
+Then meaning, from the schema: every label must be declared by a governed
+family, and every family's cardinality and requirement must hold. The manifest
+treats labels as an opaque CSV, so before this an invalid category, two
+categories, a missing priority, or a plain typo passed validation and reached
+GitHub.
+
+Nothing is contacted and nothing is written.
+
+### `diff` — read-only, against live state
+
+The structural plan says what *would* be called. The live rows say what already
+matches, so an `update` that has already been applied is distinguishable from
+one that never ran — `--dry-run` alone could only ever compare against the empty
+case. A value that cannot be read is reported `?`, never assumed to match.
+
+### `apply` — approved, idempotent
+
+Refuses without `--yes`: this is a remote mutation. Re-validates meaning before
+writing anything, then hands execution to the script, which skips exactly what
+its state file records. A second run over the same artifact is a no-op rather
+than a duplicate.
+
+An unresolved `decision` refuses the whole run **before the first call** —
+applying around it would commit Spark to a meaning nobody chose, and doing it
+part-way would leave the slate half-applied on top of that.
+
+### `verify` — after the fact
+
+Confirms GitHub holds what the artifact says, rather than trusting the apply
+report: a run that reported success can still have been followed by someone
+editing the issue. Exits `1` on a mismatch, `3` when state could not be read,
+`0` only on a match.
+
+### What the compiler will not do
+
+It does not choose an ambiguous category, priority, or dependency meaning; it
+does not approve its own mutations; and it does not create a milestone the
+artifact did not ask for. Ambiguity is what the `decision` record is for.
+
+
 ## `spark next [--milestone <title>]`
 
 Names the one next eligible issue in a milestone, derived entirely from live
