@@ -4,7 +4,8 @@ This roadmap reflects current intent, not a commitment or timeline.
 Priorities may shift as the project evolves.
 
 **Current phase: Alpha (v0.x).** The engineering pipeline is proven and
-`v0.16.2` has shipped; the product itself is now being validated by real users.
+`v0.19.0` is the published baseline; the product itself is now being validated
+by real users.
 The program, its evidence gates, and the Alpha → Beta → v1.0.0 promotion path
 are the [Alpha program](docs/alpha/alpha-program.md) — a stable v1.0.0 is
 **not** authorized just because the proving releases shipped.
@@ -14,10 +15,11 @@ are the [Alpha program](docs/alpha/alpha-program.md) — a stable v1.0.0 is
 > milestone, a release-readiness gate, a roadmap entry and a plan, and was
 > published anyway on a gate closed with unmet criteria; v0.18 and v0.19 had no
 > milestone, no gate and no roadmap entry at all. Their GitHub Releases and tags
-> were deleted and `v0.16.2` is again the published baseline. **No commit was removed and no pull request was unmerged** — the
+> were deleted, which returned the published baseline to `v0.16.2` until the
+> catch-up tag was cut. **No commit was removed and no pull request was unmerged** — the
 > implementation stayed on `master` and was replanned into the milestones below,
 > where v0.17 and v0.18 are recorded as `Complete (no release)` and the
-> cumulative implementation is published once, as `v0.19.0`.
+> cumulative implementation was published once, as `v0.19.0` (2026-08-26).
 
 Each entry carries one **Status** backed by evidence — `Planned`,
 `In progress`, `Merged (awaiting release)`, `Shipped (vX.Y.Z)`,
@@ -365,9 +367,10 @@ the `Complete (no release)` disposition record is #452.
 
 ## v0.19 — Four-tier artifact separation
 
-**Status:** Merged (awaiting release) — **the cumulative catch-up release, and
-the first core tag after `v0.16.2`.** The earlier `v0.19.0`/`v0.19.1` were
-published 2026-08-25/26 and **withdrawn** 2026-08-26.
+**Status:** Shipped (`v0.19.0`) — released 2026-08-26. **The cumulative
+catch-up release, and the first core tag after `v0.16.2`.** The earlier
+`v0.19.0`/`v0.19.1` were published 2026-08-25/26 and **withdrawn** 2026-08-26;
+the tag now published is the reconstructed one, at commit `4823979`.
 
 Spark's artifacts separate into four tiers, the shipped/development boundary is
 mechanically held by `doctor`, and the release-record convention tells one
@@ -379,13 +382,13 @@ enforcement, so the two withdrawn publications are one outcome. **No issue was
 ever filed for any of this work** — it merged as direct PRs, a departure from
 Spark's one-issue-per-branch doctrine that #442 owns as a conformance finding.
 
-`v0.19.0` publishes, in one tag, the cumulative implemented state on `master`
+`v0.19.0` published, in one tag, the cumulative implemented state on `master`
 through the reconstructed v0.17, v0.18, and v0.19 outcomes. Its generated
 changelog spans every commit since `v0.16.2`; the release record (#450)
 attributes the v0.17 and v0.18 blocks to their own milestones so the tag does not
-read as though that work originated here. Version-state reconciliation (#446) is
+read as though that work originated here. Version-state reconciliation (#446) was
 a true prerequisite of publication, recorded as a native blocked-by edge on gate
-#445.
+#445; both closed before the tag was cut.
 
 - **The separation** (ADR-0029, PR #434) with `doctor` holding the
   shipped/development boundary (PR #428), the dev-side `docs/reference`
@@ -403,23 +406,27 @@ a true prerequisite of publication, recorded as a native blocked-by edge on gate
 
 ## v0.20 — Self-host Spark
 
-**Status:** Planned
+**Status:** In progress
 
 Spark itself becomes a conforming Spark-managed repository and gains the
 deterministic orchestration required to dogfood `zd-dns` safely. GitHub
 milestone #17 is the version authority; issue #443 is the release gate.
 
-Nothing here is implemented. Phase A must finish before the orchestration slice
-starts.
+Phase A is under way and must finish before the orchestration slice starts;
+none of the orchestration behaviour is implemented yet.
 
 - **Phase A — Spark conforms to Spark:** the repository conformance audit
-  (#442) and the pre-dogfood IS-state documentation baseline (#441).
+  (#442, **complete** — its matrix is
+  [`docs/governance/self-conformance-audit-v020.md`](docs/governance/self-conformance-audit-v020.md)),
+  the pre-dogfood IS-state documentation baseline (#441), and truthful
+  release-note severity in the GitHub status (#487).
 - **Phase B — dogfood-capable orchestration:** native GitHub blocked-by as the
   one dependency authority (#438), deterministic next-work selection (#436),
   and category/approval-aware routing (#437). The shipped reference that still
   calls blocked-by a delivery-order mechanism is corrected in #447.
 
-Preferred delivery order is `#442 → #441 → #438 → #436 → #437 → #443`. Phase A
+Preferred delivery order is
+`#442 (+ #487) → #441 → #438 (+ #447) → #436 → #437 → #443`. Phase A
 gating Phase B **is** a native dependency graph — both #441 and #442 state in
 their own bodies that the orchestration work cannot begin until they are
 satisfied, so each of #438/#436/#437 carries a native `blocked-by` edge from
