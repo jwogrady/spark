@@ -85,9 +85,16 @@ epic:
 - The release-readiness issue carries the milestone's issues as **native
   sub-issues**, so scope and progress are visible on the gate itself.
 - **Blocked-by links record true prerequisites only** — what must be *true*
-  before work can start. They are not a sequencing hint: once a preflight treats
-  the native graph as the executable prerequisite authority, an edge added merely
-  to express preference becomes a false blocker that fails readiness closed.
+  before work can start. They are not a sequencing hint: the Codify preflight
+  treats the native graph as the executable prerequisite authority, so an edge
+  added merely to express preference becomes a false blocker that fails
+  readiness closed.
+- **The native graph is the only executable dependency authority.** A
+  `Blocked by #N` sentence in an issue body explains a prerequisite; it never
+  creates one. Where the two disagree, the preflight reports the body as drift
+  to reconcile and proceeds from the native graph — one fact, one surface. When
+  the native graph cannot be read at all, readiness is *not assessed*, never
+  assumed clear.
 - **Delivery order lives in sub-issue order** within the parent (as above: the
   top issue is next), and in the readiness issue's own stated preferred order —
   never in `blocked-by`, and never by distorting `P0`–`P3`.
