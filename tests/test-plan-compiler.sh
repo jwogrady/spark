@@ -97,6 +97,24 @@ refuse "an issue cannot be ordered twice" "already has an order position" \
   "order${T}A${T}1" \
   "order${T}A${T}2"
 
+# The refusal list is STEMS, and every entry must behave like one. `priorit` was
+# a stem while `sequence` was a whole word, so "for sequencing" — as natural a
+# phrasing as any here — wired a real prerequisite while "ordering" was caught.
+# Found by the #472 re-audit.
+for w in order ordering reorder sequence sequencing resequence \
+         priority prioritise prioritisation preference preferential; do
+  refuse "a reason naming '$w' is refused" "preferred order is not a prerequisite" \
+    "issue${T}A${T}One${T}feature${T}${T}$A" \
+    "issue${T}B${T}Two${T}feature${T}${T}$A" \
+    "blockedby${T}A${T}B${T}Because of $w"
+done
+# The negative control: a genuine prerequisite reason must still be accepted, or
+# the loop above would pass by refusing everything.
+allow "a genuine prerequisite reason is accepted" \
+  "issue${T}A${T}One${T}feature${T}${T}$A" \
+  "issue${T}B${T}Two${T}feature${T}${T}$A" \
+  "blockedby${T}A${T}B${T}A consumes the schema B defines"
+
 # THE rule this record type exists for: an edge that only expresses sequence is
 # refused, because as a prerequisite it becomes a permanent false blocker.
 for reason in order preferred-order sequence preference; do

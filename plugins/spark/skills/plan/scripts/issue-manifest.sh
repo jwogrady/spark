@@ -343,8 +343,14 @@ im_validate() { # <manifest-file> — rc 1 and a report if anything is wrong
           # "preferred order", and "ordering" all mean the same thing, and an
           # exact lowercase list let every one of them through to wire a real
           # prerequisite.
+          #
+          # STEMS, not whole words. `priorit` was already a stem but `sequence`
+          # was not, so "for sequencing" — as natural a phrasing as any here —
+          # passed straight through while "ordering" was caught. Found by the
+          # #472 re-audit, which is exactly the inconsistency this list exists
+          # to prevent.
           case "$(printf '%s' "$f3" | tr '[:upper:]' '[:lower:]')" in
-            *order*|*sequence*|*preference*|*priorit*)
+            *order*|*sequenc*|*preferen*|*priorit*)
               echo "invalid: line $ln: blockedby $f1<-$f2 is declared as '$f3' — preferred order is not a prerequisite; use an order record"
               errors=$((errors + 1)) ;;
           esac
