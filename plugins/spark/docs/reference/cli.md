@@ -571,8 +571,15 @@ Each new type exists because its absence was where drift entered:
 - **`order`** — preferred delivery order needs its own home. Without one it gets
   encoded as `blockedby`, and an edge added to express sequence becomes a false
   prerequisite the codify preflight then reports as a permanent blocker. A
-  `blockedby` whose optional reason names `order`, `preferred-order`,
-  `sequence`, or `preference` is **refused outright**.
+  `blockedby` whose reason mentions order, sequence, preference or priority is
+  **refused outright**, matched loosely and case-insensitively.
+
+  Order is *applied*, not merely recorded: GitHub holds preferred order as the
+  **sub-issue order under a parent**, which is the authority `spark next` reads
+  to break a priority tie. An `order` record therefore needs its issue to be a
+  sub-issue of something in the same artifact — if it is not, the plan says the
+  placement **cannot be applied** and why, rather than reporting success with
+  the data dropped.
 - **`update`** — an existing issue could only ever be a link target, so every
   restructuring had to be applied by hand.
 - **`decision`** — unresolved meaning has to be representable, and it **refuses
@@ -616,8 +623,14 @@ part-way would leave the slate half-applied on top of that.
 
 Confirms GitHub holds what the artifact says, rather than trusting the apply
 report: a run that reported success can still have been followed by someone
-editing the issue. Exits `1` on a mismatch, `3` when state could not be read,
-`0` only on a match.
+editing the issue. It checks both halves — what the artifact asserts about
+**existing** issues, and what a run **created**, reading the state file to learn
+which `KEY` became which number.
+
+Exits `1` on a mismatch, `3` when state could not be read, `0` only on a match.
+**An empty result is `3`, never `0`**: having nothing to check is not the same
+as having checked and found agreement, and reporting a pass there would be a
+confirmation of nothing.
 
 ### What the compiler will not do
 

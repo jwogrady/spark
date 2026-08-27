@@ -93,7 +93,7 @@ reject "unknown record type" "unknown record type 'frobnicate'" \
   "frobnicate${T}A${T}B"
 reject "wrong field count (issue)" "needs 6 tab-separated fields" \
   "issue${T}A${T}One${T}$slate/bodies/a.md"
-reject "wrong field count (link)" "needs 3 or 4 tab-separated fields" \
+reject "wrong field count (link)" "needs 3 tab-separated fields" \
   "issue${T}A${T}One${T}${T}${T}$slate/bodies/a.md" \
   "subissue${T}A"
 reject "malformed KEY" "characters outside" \

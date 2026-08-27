@@ -197,7 +197,9 @@ assert_eq "and nothing is re-updated" "" \
 printf 'created\tA\t99\tID99\n' >> "$st"
 m="$(man "issue${T}A${T}One${T}feature${T}${T}$A" "issue${T}B${T}Two${T}feature${T}${T}$A")"
 pending="$(im_pending "$m" "$st")"
-assert_contains "the landed issue is skipped" "skip-create${sep:-}" "$pending"
+# The separator matters: a bare "skip-create" needle also matches
+# "skip-create-ms", so the assertion would have passed on the wrong record.
+assert_contains "the landed issue is skipped" "skip-create$(printf '\037')A" "$pending"
 assert_eq "and the unlanded one is still created" "B" \
   "$(printf '%s\n' "$pending" | awk -F'\037' '$1 == "create" { print $2 }')"
 
@@ -207,6 +209,68 @@ m="$(man "milestone${T}MS${T}v9.9${T}x" "issue${T}A${T}One${T}feature${T}MS${T}$
 assert_contains "a first run creates the milestone" "create-ms" "$(im_pending "$m" "$st")"
 printf 'created\tms:MS\t7\t\n' >> "$st"
 assert_contains "a second run skips it" "skip-create-ms" "$(im_pending "$m" "$st")"
+
+# A resumed run must still resolve a milestone referenced by TITLE. The skip
+# record used to carry only the KEY, while the lookup for the title was
+# suppressed because this manifest owns it — so every rerun died on a milestone
+# it had already created. The opposite of the resume contract.
+: > "$st"
+printf 'created\tms:MS1\t42\t\n' >> "$st"
+m="$(man "milestone${T}MS1${T}v9.9 — probe${T}d" \
+        "issue${T}A${T}One${T}feature${T}v9.9 — probe${T}$A" \
+        "issue${T}B${T}Two${T}feature${T}MS1${T}$A")"
+pending="$(im_pending "$m" "$st")"
+assert_contains "the skip carries the milestone title" \
+  "skip-create-ms$(printf '\037')MS1$(printf '\037')42$(printf '\037')v9.9 — probe" "$pending"
+assert_eq "and a rerun needs no lookup for a title it owns" "" \
+  "$(printf '%s\n' "$pending" | grep '^lookup-ms' || true)"
+
+# One action for every external title, so a single listing resolves them all.
+m="$(man "issue${T}A${T}One${T}feature${T}v1.0${T}$A" \
+        "issue${T}B${T}Two${T}feature${T}v2.0${T}$A")"
+assert_eq "every external milestone resolves from one listing" "1" \
+  "$(im_pending "$m" "" | grep -c '^lookup-ms')"
+
+# ======================== order is applied, not discarded =================
+# Preferred order lives on GitHub as sub-issue order under a parent — the
+# authority `spark next` reads. An order record that produced no action was
+# validated and then thrown away, while the skill told the agent to use it.
+m="$(man "issue${T}P${T}Parent${T}feature${T}${T}$A" \
+        "issue${T}A${T}One${T}feature${T}${T}$A" \
+        "issue${T}B${T}Two${T}feature${T}${T}$A" \
+        "subissue${T}P${T}A" \
+        "subissue${T}P${T}B" \
+        "order${T}A${T}1" \
+        "order${T}B${T}2")"
+plan="$(im_plan "$m" "")"
+assert_contains "an order under a parent is planned" "sub_issues/priority" "$plan"
+assert_contains "and counted" "2 order placement(s)" "$plan"
+assert_contains "naming the position" "at position 1 under P" "$plan"
+# Ordered by position, so the placements come out in the declared sequence.
+assert_eq "placements are emitted in position order" "A B" \
+  "$(im_pending "$m" "" | awk -F'\037' '$1 == "order" { printf "%s%s", s, $3; s = " " }')"
+# An order record for an issue attached to nothing has nowhere to go, and must
+# say so rather than reporting success with the data dropped.
+m="$(man "issue${T}A${T}One${T}feature${T}${T}$A" "order${T}A${T}1")"
+assert_contains "an unattached order says it cannot be applied" \
+  "CANNOT be applied" "$(im_plan "$m" "")"
+
+# ======================== a disguised prerequisite, loosely ===============
+# The refusal was exact-match and case-sensitive, so ORDER, Order, "preferred
+# order" and "ordering" all slipped through and wired a real prerequisite.
+for reason in ORDER Order "preferred order" ordering SEQUENCE "by priority"; do
+  refuse "a blockedby declared '$reason' is refused" "preferred order is not a prerequisite" \
+    "issue${T}A${T}One${T}feature${T}${T}$A" \
+    "issue${T}B${T}Two${T}feature${T}${T}$A" \
+    "blockedby${T}B${T}A${T}$reason"
+done
+
+# The optional reason belongs to blockedby only: relaxing subissue too meant a
+# record with a stray trailing field passed with it discarded.
+refuse "a subissue takes no fourth field" "subissue record needs 3" \
+  "issue${T}A${T}One${T}feature${T}${T}$A" \
+  "issue${T}B${T}Two${T}feature${T}${T}$A" \
+  "subissue${T}A${T}B${T}junk"
 
 # ======================== unresolved decisions refuse =====================
 allow "a decision record is valid" \
@@ -244,6 +308,17 @@ assert_contains "two priorities are refused" "priority allows exactly-one but th
 # An update that sets labels is held to the same rules.
 assert_contains "an update's labels are validated too" "is not declared by any governed family" \
   "$(sch "update${T}#12${T}labels${T}nonsense-category")"
+# The exclusive member must be refused HERE too. Without it a plan declaring
+# `docs-impact:none` beside another value validated cleanly and was then
+# hard-FAILed as INVALID at validate time — the exact drift between plan and
+# enforcement this surface exists to stop.
+assert_contains "an exclusive value combined with another is refused" \
+  "is exclusive but the plan combines it" \
+  "$(sch "issue${T}A${T}One${T}feature,docs-impact:none,docs-impact:reference${T}${T}$A")"
+# And the enforcement layer agrees, which is the point.
+rc=0; out="$(di_grade "docs-impact:none docs-impact:reference" "" "docs-impact:none")" || rc=$?
+assert_eq "the enforcement layer refuses the same combination" 1 "$rc"
+assert_contains "for the same reason" "INVALID" "$out"
 
 # ======================== the verb's own contract =========================
 good="$(man "issue${T}A${T}One${T}feature,P1,docs-impact:none${T}${T}$A")"
@@ -266,11 +341,39 @@ assert_rc "a missing artifact fails" 1 "$rc"
 rc=0; out="$("$SPARK" plan 2>&1)" || rc=$?
 assert_contains "bare plan prints usage" "validate|diff|apply|verify" "$out"
 
-# verify cannot claim a match it could not read.
+# verify cannot claim a match it could not read, and — the case that matters —
+# must not report PASS for an artifact it checked NOTHING about. A slate of
+# creates and wiring produced no rows at all, so the empty set read as
+# confirmation.
+#
+# Pinned with a stub gh that authenticates: relying on the sandbox to
+# de-authenticate made these assertions invert whenever GH_TOKEN was set in the
+# environment, which is the same vacuous-pass hazard one level up.
+mkdir -p "$WORK/stub"
+cat > "$WORK/stub/gh" <<'STUB'
+#!/usr/bin/env bash
+case "$1" in
+  auth) exit 0 ;;
+  issue) echo ""; exit 1 ;;
+  *) exit 1 ;;
+esac
+STUB
+chmod +x "$WORK/stub/gh"
+rc=0; out="$(PATH="$WORK/stub:$PATH" "$SPARK" plan verify "$good" --state "$work/absent.state" 2>&1)" || rc=$?
+assert_rc "verify with nothing verifiable is not assessed" 3 "$rc"
+case "$out" in *PASS*) bad "verify must never PASS for an artifact it checked nothing about" ;; *) ok ;; esac
+assert_contains "and says why" "NOT ASSESSED" "$out"
+
+# Without gh at all it is also not assessed, never a pass.
 rc=0; out="$("$SPARK" plan verify "$good" 2>&1)" || rc=$?
 assert_rc "verify is not assessed without gh" 3 "$rc"
 assert_contains "and says so" "NOT ASSESSED" "$out"
 case "$out" in *PASS*) bad "verify must never PASS without reading GitHub" ;; *) ok ;; esac
+
+# An option that takes a value must say so rather than aborting with no output.
+rc=0; out="$("$SPARK" plan diff "$good" --state 2>&1)" || rc=$?
+assert_rc "--state with no value fails" 1 "$rc"
+assert_contains "and names the problem" "needs a file argument" "$out"
 
 # diff is read-only.
 before="$(git -C "$repo" status --porcelain)"

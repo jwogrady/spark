@@ -28,9 +28,10 @@
 - **The artifact may create its milestone** — a `milestone` record, referenced
   by KEY; more than one is allowed. Labels must already exist (`spark
   governance apply`).
-- **Preferred order goes in an `order` record, never `blockedby`.** An edge
+- **Preferred order goes in an `order` record, never `blockedby`** — an edge
   expressing sequence becomes a false prerequisite `codify` reports as a
-  permanent blocker; a `blockedby` whose reason names order is refused.
+  permanent blocker. It applies as sub-issue order under a parent, the
+  authority `spark next` reads, so the issue must also be a `subissue` here.
 - **An existing issue is changed with an `update` record**, not by hand.
 - **Never guess at unresolved meaning** — a `decision` record refuses the run
   until it is answered.
