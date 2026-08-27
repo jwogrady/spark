@@ -63,6 +63,21 @@ issue	40	-	1	1	P1	0	lower number
 " \
   "selected  #40" "order     not recorded"
 
+# --- the order position counts places in the ORDER RECORD, not candidates
+# left on the slate. Found the first time `spark next` ran for real: six of
+# seven ordered issues had closed, so one candidate remained and the verb
+# reported "order 5 of 1".
+sel 0 "order position counts the order record, not the remaining slate" \
+"ordercount	7
+issue	437	4	1	1	P1	0	the only one left
+" \
+  "order     5 of 7 in the gate sub-issue order"
+
+sel 0 "without an order count the total falls back to the slate size" \
+"issue	10	0	1	1	P1	0	only candidate
+" \
+  "order     1 of 1 in the gate sub-issue order"
+
 # --- metadata that is not mechanically interpretable NEVER yields a pick.
 sel 3 "a missing category is not assessed" \
 "issue	50	0	0	1	P1	0	no category

@@ -3574,6 +3574,7 @@ cmd_state() {
 #       blocked count of OPEN native blockers, or "?" when unreadable
 #   cycle <TAB> <n> <TAB> <path>
 #   orderdrift <TAB> <kind> <TAB> <detail>
+#   ordercount <TAB> <n>   how many issues the order record holds
 #
 # Exits: 0 a selection was made / 1 nothing is eligible (a DETERMINATE answer —
 # every candidate is genuinely blocked) / 3 not assessed (the slate is not
@@ -3582,7 +3583,7 @@ cmd_state() {
 # pick.
 next_select() {
   local kind a b c d e f g
-  local gaps="" gapn=0 cand="" cands=0 blocked_lines="" blockedn=0
+  local gaps="" gapn=0 cand="" cands=0 blocked_lines="" blockedn=0 ordertotal=""
   local n order cats prios prio blocked title
   gap() { gaps="${gaps}${1}
 "; gapn=$((gapn+1)); }
@@ -3593,6 +3594,8 @@ next_select() {
         gap "not assessed: dependency cycle through #$a ($b) — no delivery order exists; break the cycle" ;;
       orderdrift)
         gap "not assessed: the delivery-order record $a — $b" ;;
+      ordercount)
+        case "$a" in ''|*[!0-9]*) ;; *) ordertotal="$a" ;; esac ;;
       issue)
         n="$a" order="$b" cats="$c" prios="$d" prio="$e" blocked="$f" title="$g"
         if [ "$cats" != "1" ]; then
@@ -3651,7 +3654,12 @@ next_select() {
   pick_n="$(printf '%s' "$pick" | cut -d'|' -f3)"
   pick_title="$(printf '%s' "$pick" | cut -d'|' -f4-)"
   pick_n=$((10#$pick_n))
-  total=$((cands + blockedn))
+  # "N of M in the sub-issue order" counts positions in the ORDER RECORD, not
+  # the candidates left on the slate. Counting candidates produced "5 of 1"
+  # the first time this verb ran for real: every earlier issue had closed, so
+  # one candidate remained while the order still held seven positions.
+  total="$ordertotal"
+  [ -n "$total" ] || total=$((cands + blockedn))
 
   printf 'selected  #%s\n' "$pick_n"
   printf 'title     %s\n' "$pick_title"
@@ -3739,6 +3747,9 @@ $rows
 EOF_ROWS
   if [ -z "$gate" ]; then
     ev="${ev}orderdrift	is missing	no issue in this milestone carries sub-issues, so no explicit order exists
+"
+  else
+    ev="${ev}ordercount	$(printf '%s\n' "$order_list" | awk 'NF' | wc -l | tr -d ' ')
 "
   fi
 
