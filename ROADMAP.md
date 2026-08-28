@@ -491,7 +491,7 @@ accumulated 22 open issues across six unrelated outcomes.
 
 ## v0.22 — Truth-first onboarding
 
-**Status:** Planned
+**Status:** In progress — see #479.
 
 An existing repository is understood read-only, reconciled through approval, and
 only then given a coherent course. Today `onboard` is an *arming* flow, which is
@@ -499,14 +499,37 @@ right for a clean repo and wrong for one carrying years of history, stale
 branches, contradictory docs, and abandoned release state. GitHub milestone #19
 is the version authority; issue #479 is the release gate.
 
-Nothing here is implemented.
+Spark has two entry motions: **Greenfield** begins with an idea, **Triage** begins
+with an existing repository. They are entry motions, not lifecycle stages —
+ADR-0022's `new | existing | ambiguous` remain repository-classification facts.
+v0.22 delivers Triage and does not redesign Greenfield.
 
-- A read-only truth pass before Spark writes anything, then approval-gated
-  governance provisioning for existing repositories (#467).
-- Audit findings turned into a KEEP / REWRITE-COLLAPSE / DROP-ARCHIVE /
-  DECISION-REQUIRED reconciliation slate (#468).
+- The v0.21 ledger truth check anchored to the release interval it certifies
+  rather than the moving tree, so v0.22 can add behavioural suites without
+  falsifying v0.21's history (#567).
+- The human-authority boundary made structural: a governance gap that needs
+  project judgment reports **DECISION REQUIRED** and cannot be turned green by
+  the same agent supplying the judgment (#559).
+- `spark triage` — a read-only truth pass before Spark writes anything, composing
+  `orient`, `brief`, and `governance inspect/diff` rather than collecting
+  evidence again, then approval-gated governance provisioning (#467).
+- Findings turned into a KEEP / REWRITE-COLLAPSE / DROP-ARCHIVE /
+  DECISION-REQUIRED reconciliation slate, owned by the core plugin (#468).
 - A coherent course derived from reconciled truth rather than session memory
   (#469).
+
+Delivery order is `#567 -> #559 -> #467 -> #468 -> #469 -> #479`, recorded in
+#479's sub-issue order. Two constraints the release must hold: **unknown evidence
+is not human judgment**, and **recommendation is not authority**.
+
+#567 was admitted after this section was first written, as a prerequisite repair
+rather than part of the Triage outcome: implementing #559 added one behavioural
+suite, which exposed that the v0.21 ledger check compared a closed historical
+tally against the current tree. It sits first in the order because #559's
+full-suite verification needs it. That is **order, not dependency** — no
+`blocked-by` edge exists between #567 and #559, because #559's work both started
+and finished without it, and a native prerequisite records what must be true
+before work can start.
 
 ---
 
