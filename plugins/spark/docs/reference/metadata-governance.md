@@ -88,6 +88,47 @@ in a comment or a linked recommendation stays invisible to the check. Apply the
 label and keep the *reason* where it belongs (the roadmap, a recommendation doc,
 or the issue body) — the label answers "decided?", the reason answers "why?".
 
+## Which surfaces carry release-decision authority
+
+Exactly two, and both are structured fields a human sets deliberately:
+
+| Surface | Records |
+| --- | --- |
+| **milestone** | the work is scheduled into a release |
+| a **`disposition`** family label | the decision *not* to schedule it yet |
+
+The `disposition` members come from the resolved model, so the set has one
+authority and adding a member is schema data rather than a code change.
+`roadmap-check` reads them from the model rather than naming them, and reports
+**not assessed** if the family cannot be resolved — a hard-coded fallback would
+take over at exactly the moment the real authority was unusable.
+
+### An issue body carries none of it
+
+A sentence is evidence *about* a decision, never the decision. These are all
+prose, and none of them records a release disposition:
+
+```text
+Backlog: automated recommendation only; pending human approval.
+Blocked pending a human decision about the next release.
+Depends on: #<n>
+```
+
+The model already says this of dependencies — *"a `Blocked by #N` sentence
+explains a prerequisite; it never creates one"* — and the same holds for the
+release disposition. `roadmap-check` once accepted all three spellings, so an
+agent could clear a human-decision gap by writing one sentence into an issue
+body: a false green reachable by prose, which is precisely what the authority
+boundary exists to prevent.
+
+Recommendation text is still welcome, and the check still reports that it is
+there. It simply has no authority on its own, and the report says so rather than
+staying silent about a proposal a reader can see.
+
+**Being blocked is not a release decision.** It says work cannot start, not
+whether the work happens in this release. A blocked feature with no milestone
+and no disposition label still owes a decision.
+
 ## The governed label families
 
 The taxonomy is one family among several, and each one is declared in the
@@ -115,8 +156,8 @@ family up with no code change.
   A milestone titled `vX.Y …` maps to the release whose version is `X.Y.*`.
 - **Issue order within a milestone is delivery priority.** The top issue is
   next.
-- **No feature begins without a release decision** — a milestone, an explicit
-  backlog with a reason, or blocked on a named decision. This is the
+- **No feature begins without a release decision**, recorded in a governed
+  field — a milestone, or a label from the `disposition` family. This is the
   [`plan` release-assignment rule](../../skills/plan/references/release-assignment.md),
   checked by `plan/scripts/roadmap-check.sh`.
 - **Spark recommends; the human approves.** Spark never silently assigns a
@@ -224,8 +265,8 @@ one.
 Every **active** issue should have:
 
 - [ ] one `issue.taxonomy` category label;
-- [ ] a release disposition — milestone, explicit backlog+reason, or
-      blocked+decision (features especially, per the `plan` rule);
+- [ ] a release disposition in a governed field — a milestone, or a
+      `disposition` label (features especially, per the `plan` rule);
 - [ ] native dependency/sub-issue links where the relationship affects order;
 - [ ] an assignee or an explicit unassigned state;
 - [ ] a linked PR + closing keyword once implementation starts.
