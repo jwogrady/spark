@@ -549,11 +549,27 @@ entered the set and was graded as though a human had written it. Its file list i
 decided by the release tool, carries no author intent about documentation, and
 changes with release timing.
 
-The signal is **durable configuration, not a title match**: Release Please opens
-its PR from `<branch-prefix>--branches--<base>`, and `branch-prefix` is a key in
-`release-please-config.json` (default `release-please`). A title pattern would be
-free text a human can edit, and an implementation PR may mention a release in its
-own title. Where release automation is not configured, nothing is excluded.
+The signal is **durable configuration, and it takes two facts**, both read from
+`release-please-config.json`:
+
+| Fact | Key | Default |
+| --- | --- | --- |
+| the head-branch prefix it opens its PR from | `branch-prefix` | `release-please` |
+| the label it puts on that PR | `label` | `autorelease: pending` (and `autorelease: tagged` after release) |
+
+**The prefix alone is not sufficient.** Branch names are user-controlled and
+`release-please--branches--` is not reserved, so a human PR called
+`release-please--branches--manual-doc-fix` would have its evidence silently
+dropped — and if another PR still carried code, the declaration could then PASS on
+an incomplete set.
+
+Author is not usable as the corroborating fact: Release Please is commonly run
+with a token, so its PRs are authored by a human account. What it always applies —
+and re-applies — is its label, and a human branch collision does not carry it.
+
+A title pattern would be worse than either: the configured title pattern is free
+text a human can edit, and an implementation PR may mention a release in its own
+title. Where release automation is not configured, nothing is excluded.
 
 The exclusion is **reported, not silent** — an exclusion nobody can see is
 indistinguishable from a PR that was never linked:

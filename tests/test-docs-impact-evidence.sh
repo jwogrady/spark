@@ -76,30 +76,50 @@ case "$1 $2" in
     case "${EV_LOOKUP:-ok}" in
       fail)  exit 1 ;;
       empty) printf 'false\t\n'; exit 0 ;;
-      two)   printf 'false\t\n%s\n%s\n' 11 12; exit 0 ;;
+      two)   printf 'false\t\n'
+             printf '%s\t%s\t%s\n' 11 'feat/11-impl' ''
+             printf '%s\t%s\t%s\n' 12 'feat/12-impl' ''
+             exit 0 ;;
       release)
         # One implementation PR carrying CODE only, and one release-automation PR
         # carrying a GOVERNED release document. Including it flips the verdict —
         # the only arrangement that can tell the two implementations apart.
+        #
+        # The release row carries BOTH signals: the branch prefix and Release
+        # Please's own label. The prefix alone is a name a human can also use.
         printf 'false\t\n'
-        printf '%s\t%s\n' 11 'feat/11-implementation'
-        printf '%s\t%s\n' 900 'release-please--branches--master'
+        printf '%s\t%s\t%s\n' 11 'feat/11-implementation' ''
+        printf '%s\t%s\t%s\n' 900 'release-please--branches--master' 'autorelease: pending'
         exit 0 ;;
       onlyrelease)
         printf 'false\t\n'
-        printf '%s\t%s\n' 900 'release-please--branches--master'
+        printf '%s\t%s\t%s\n' 900 'release-please--branches--master' 'autorelease: pending'
         exit 0 ;;
       custompfx)
         printf 'false\t\n'
-        printf '%s\t%s\n' 11 'feat/11-implementation'
-        printf '%s\t%s\n' 900 'shipit--branches--master'
+        printf '%s\t%s\t%s\n' 11 'feat/11-implementation' ''
+        printf '%s\t%s\t%s\n' 900 'shipit--branches--master' 'autorelease: pending'
+        exit 0 ;;
+      collision)
+        # A HUMAN PR whose branch happens to start with the configured prefix and
+        # which carries NO release label. It is the only governed documentation,
+        # so dropping it flips FAIL to PASS — the arrangement #554 specifies.
+        printf 'false\t\n'
+        printf '%s\t%s\t%s\n' 11 'feat/11-implementation' ''
+        printf '%s\t%s\t%s\n' 901 'release-please--branches--manual-doc-fix' 'documentation'
+        exit 0 ;;
+      taggedrelease)
+        # The same release PR after the release: the label moves to tagged.
+        printf 'false\t\n'
+        printf '%s\t%s\t%s\n' 11 'feat/11-implementation' ''
+        printf '%s\t%s\t%s\n' 900 'release-please--branches--master' 'autorelease: tagged'
         exit 0 ;;
       paged|pagefail|nocursor)
         # Page 2 is requested with after=CUR1.
         case "$*" in
           *CUR1*)
             [ "${EV_LOOKUP}" = "pagefail" ] && exit 1
-            printf 'false\t\n%s\n' 151; exit 0 ;;
+            printf 'false\t\n'; printf '%s\t%s\t%s\n' 151 'feat/151-late' ''; exit 0 ;;
           *)
             if [ "${EV_LOOKUP}" = "nocursor" ]; then
               # hasNextPage true with no cursor: uncontinuable. Refusing is the
@@ -108,10 +128,10 @@ case "$1 $2" in
             else
               printf 'true\tCUR1\n'
             fi
-            i=101; while [ "$i" -le 150 ]; do printf '%s\n' "$i"; i=$((i + 1)); done
+            i=101; while [ "$i" -le 150 ]; do printf '%s\t%s\t%s\n' "$i" "feat/$i" ''; i=$((i + 1)); done
             exit 0 ;;
         esac ;;
-      *)     printf 'false\t\n%s\n' 9; exit 0 ;;
+      *)     printf 'false\t\n'; printf '%s\t%s\t%s\n' 9 'feat/9-impl' ''; exit 0 ;;
     esac ;;
   "api --paginate")
     case "${EV_FILES:-ok}" in
@@ -143,6 +163,9 @@ case "$1 $2" in
           # release PRs need not, but they may, and the contract is about what
           # counts as implementation evidence rather than about today's file set.
           900) printf '%s\n' "docs/releases/v9.9.md" ;;
+          # The human prefix-collision PR carries the ONLY governed reference
+          # documentation, so dropping it flips the verdict.
+          901) printf '%s\n' "$EV_PATH" ;;
           1[0-4][0-9]|150) printf '%s\n' "plugins/spark/bin/spark" ;;
           *)   : ;;
         esac
@@ -362,6 +385,39 @@ assert_rc "only release automation linked is not assessed" 3 "$r_rc"
 assert_eq "rather than graded on the branch alone" "NOT ASSESSED" \
   "$(printf '%s\n' "$r_out" | awk -F'\t' '$1=="verdict"{print $2}')"
 assert_contains "and says why" "every PR linked to #77 is release automation" "$r_out"
+
+# ============ a HUMAN PR sharing the prefix keeps its evidence =============
+# A branch prefix describes a NAME, not provenance: branch names are
+# user-controlled and `release-please--branches--` is not reserved. A human PR
+# called `release-please--branches--manual-doc-fix` was classified as automation
+# and its evidence silently dropped (#554).
+#
+# Here it is the ONLY governed documentation, so dropping it flips FAIL to PASS —
+# the arrangement that discriminates.
+r_rc=0
+r_out="$(cd "$repo" && env PATH="$shim" EV_LOOKUP=collision EV_FILES=ok \
+  EV_PATH="$GOVERNED_PATH" "$SPARK" docs-impact --issue 77 --branch --tsv 2>&1)" || r_rc=$?
+assert_rc "#554: a human PR sharing the prefix is still implementation evidence" 1 "$r_rc"
+assert_eq "so its governed documentation reaches the verdict" "FAIL" \
+  "$(printf '%s\n' "$r_out" | awk -F'\t' '$1=="verdict"{print $2}')"
+assert_eq "and nothing is excluded" "" \
+  "$(printf '%s\n' "$r_out" | awk -F'\t' '$1=="evidence-excluded"{print $3}')"
+assert_contains "the collision PR is named in the evidence" "PR #901" "$r_out"
+
+# ...while a GENUINE release PR — prefix AND the release label — is still excluded.
+r_rc=0
+r_out="$(cd "$repo" && env PATH="$shim" EV_LOOKUP=release EV_FILES=ok \
+  EV_PATH="$GOVERNED_PATH" "$SPARK" docs-impact --issue 77 --branch --tsv 2>&1)" || r_rc=$?
+assert_eq "a genuine release PR remains excluded" "900" \
+  "$(printf '%s\n' "$r_out" | awk -F'\t' '$1=="evidence-excluded"{print $3}')"
+
+# The same PR AFTER the release carries `autorelease: tagged`, and is still
+# release automation.
+r_rc=0
+r_out="$(cd "$repo" && env PATH="$shim" EV_LOOKUP=taggedrelease EV_FILES=ok \
+  EV_PATH="$GOVERNED_PATH" "$SPARK" docs-impact --issue 77 --branch --tsv 2>&1)" || r_rc=$?
+assert_eq "a tagged release PR is excluded too" "900" \
+  "$(printf '%s\n' "$r_out" | awk -F'\t' '$1=="evidence-excluded"{print $3}')"
 
 # ============ the prefix comes from CONFIGURATION ========================
 # A project that renames the branch prefix must still have its release PR
