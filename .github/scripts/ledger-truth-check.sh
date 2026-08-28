@@ -201,7 +201,65 @@ fi
 # Both rows are derived. The definition is stated in the row itself so the count
 # is reproducible: a "behavioural suite" is a `tests/test-*.sh` file, and the
 # baseline is a named commit.
-suites_now="$(find "$root/tests" -maxdepth 1 -name 'test-*.sh' 2>/dev/null | grep -c . || true)"
+#
+# The interval's UPPER bound is the RELEASE, not the working tree (#567). The
+# ledger's "48 → 58" is a closed claim about what the v0.21 run produced. The
+# tree keeps growing after the release, so comparing that claim against the tree
+# made every later suite falsify a truthful record — and left exactly one
+# mechanical route to green: rewrite the history. A guard whose only remedy is a
+# falsehood is worse than no guard.
+#
+# So the upper bound is read from the release RECORD, which is the durable
+# evidence for where the release actually landed. The ledger needs no edit: its
+# figures were right, and only the boundary they were compared against was
+# wrong. Preference order is commit then tag, because a commit cannot be moved.
+# The blockquote continuation marker is stripped BEFORE flattening: the real
+# record wraps "…published … at" and "`<sha>`" onto separate quoted lines, so a
+# plain newline-to-space join leaves a "> " between them and the commit never
+# parses. That left the tag as the only working path — a silent single point of
+# failure, since a tag can be deleted or moved and a commit cannot.
+rel_commit="$(sed 's/^[[:space:]]*>[[:space:]]*//' "$record" 2>/dev/null | tr '\n' ' ' \
+  | sed -n 's/.*was published[^`]*at *`\([0-9a-f]\{7,40\}\)`.*/\1/p' | head -1)"
+rel_tag="$(sed -n 's/.*`\(v[0-9]\{1,\}\.[0-9]\{1,\}\.[0-9]\{1,\}\)` was published.*/\1/p' \
+  "$record" 2>/dev/null | head -1)"
+release_ref=""
+for cand in "$rel_commit" "$rel_tag"; do
+  [ -n "$release_ref" ] && break
+  [ -n "$cand" ] || continue
+  if git -C "$root" rev-parse --verify --quiet "$cand^{commit}" >/dev/null 2>&1; then
+    release_ref="$cand"
+  fi
+done
+
+# tests_at <ref> — the suite basenames at a ref, one per line, sorted.
+tests_at() {
+  git -C "$root" ls-tree "$1" tests/ --name-only 2>/dev/null \
+    | sed -n 's|^tests/\(test-.*\.sh\)$|\1|p' | LC_ALL=C sort
+}
+# tests_worktree — the same, from the working tree.
+tests_worktree() {
+  find "$root/tests" -maxdepth 1 -name 'test-*.sh' -printf '%f\n' 2>/dev/null | LC_ALL=C sort
+}
+
+# Three states, and the middle one must never silently become the third:
+#   the record names a boundary and it resolves  -> the release tree (the point)
+#   the record names one that does NOT resolve   -> NOT VERIFIED, said out loud.
+#                                                   Substituting the tree here
+#                                                   would resurrect the defect
+#                                                   inside a shallow clone.
+#   the record names none                        -> the working tree, as before,
+#                                                   which is what the offline
+#                                                   fixtures exercise.
+upper_src="" suites_now=""
+if [ -n "$release_ref" ]; then
+  suites_now="$(tests_at "$release_ref" | grep -c . || true)"
+  upper_src="the $rel_tag release tree"
+elif [ -n "$rel_commit$rel_tag" ]; then
+  upper_src=""      # named, unresolvable: verified below as a stated limit
+else
+  suites_now="$(tests_worktree | grep -c . || true)"
+  upper_src="the tree"
+fi
 tot_row="$(grep -m1 '^| suites total |' "$ledger" || true)"
 if [ -z "$tot_row" ]; then
   gap "the ledger tally has no 'suites total' row"
@@ -212,9 +270,11 @@ else
   if [ -z "$claim_from" ] || [ -z "$claim_to" ]; then
     gap "the 'suites total' row is not of the form 'A → B (baseline \`REF\`)'"
   else
-    # The CURRENT total is always checkable: it needs only the working tree.
-    if [ "$claim_to" -ne "$suites_now" ]; then
-      gap "the tally claims $claim_to suites, but the tree holds $suites_now"
+    # The upper bound, over the interval the row actually claims.
+    if [ -z "$upper_src" ]; then
+      echo "note: the release boundary named by the record (${rel_commit:-$rel_tag}) is not in this clone, so the suite totals were not verified"
+    elif [ "$claim_to" -ne "$suites_now" ]; then
+      gap "the tally claims $claim_to suites, but $upper_src holds $suites_now"
     fi
     if [ -z "$base_ref" ]; then
       gap "the 'suites total' row names no baseline commit, so its starting figure cannot be reproduced"
@@ -231,11 +291,12 @@ else
       # "New" is the set difference, not the arithmetic difference: a suite
       # removed and another added would leave the total unchanged while the new
       # count moved.
-      new_n="$(comm -13 \
-        <(git -C "$root" ls-tree "$base_ref" tests/ --name-only 2>/dev/null \
-          | sed -n 's|^tests/\(test-.*\.sh\)$|\1|p' | LC_ALL=C sort) \
-        <(find "$root/tests" -maxdepth 1 -name 'test-*.sh' -printf '%f\n' 2>/dev/null \
-          | LC_ALL=C sort) | grep -c . || true)"
+      # Same interval as the total above: baseline → release, never → tree.
+      if [ -n "$release_ref" ]; then
+        new_n="$(comm -13 <(tests_at "$base_ref") <(tests_at "$release_ref") | grep -c . || true)"
+      else
+        new_n="$(comm -13 <(tests_at "$base_ref") <(tests_worktree) | grep -c . || true)"
+      fi
       new_row="$(grep -m1 '^| new behavioural suites |' "$ledger" || true)"
       if [ -z "$new_row" ]; then
         gap "the ledger tally has no 'new behavioural suites' row"
@@ -244,7 +305,7 @@ else
         if [ -z "$n_claim" ]; then
           gap "the 'new behavioural suites' row carries no count"
         elif [ "$n_claim" -ne "$new_n" ]; then
-          gap "the tally claims $n_claim new suites, but $new_n exist that $base_ref did not have"
+          gap "the tally claims $n_claim new suites, but $new_n exist in $upper_src that $base_ref did not have"
         fi
       fi
     fi
