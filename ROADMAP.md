@@ -4,7 +4,7 @@ This roadmap reflects current intent, not a commitment or timeline.
 Priorities may shift as the project evolves.
 
 **Current phase: Alpha (v0.x).** The engineering pipeline is proven and
-`v0.20.0` is the published baseline; the product itself is now being validated
+`v0.21.0` is the published baseline; the product itself is now being validated
 by real users.
 The program, its evidence gates, and the Alpha → Beta → v1.0.0 promotion path
 are the [Alpha program](docs/alpha/alpha-program.md) — a stable v1.0.0 is
@@ -449,11 +449,11 @@ dogfood path.
 
 ## v0.21 — Governance as schema
 
-**Status:** Merged (awaiting release) — certification was withdrawn once, and a
-later contract review reopened the release a second time. All twenty-two repair
-cycles have since landed on `master` and every reopened issue has been
-behaviourally re-audited and reclosed. Gate #478 is open pending human review and
-Release Please PR #506 is unmerged; no tag exists.
+**Status:** Shipped (`v0.21.0`) — published 2026-08-28 at `bdbdd80`, by a human
+approving the release review and merging the Release Please PR. Certification was
+withdrawn once and a later contract review reopened the release a second time;
+all twenty-two repair cycles landed on `master` and every reopened issue was
+behaviourally re-audited and reclosed before gate #478 was closed.
 Record: [`docs/releases/v0.21.md`](docs/releases/v0.21.md).
 
 One machine-readable governance contract that can be inspected, diffed,
