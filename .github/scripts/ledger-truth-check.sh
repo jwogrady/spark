@@ -25,9 +25,16 @@
 #   repair cycle   one pass of the loop for one repair issue: operator selection,
 #                  implementation, PR, CI, merge commit.
 #
-# They are 1:1 BY DEFINITION — one cycle per issue — which is exactly why a
-# document that says "twelve cycles" and "14 repair issues" is self-refuting. The
-# script enforces that identity rather than trusting either number.
+# They are NOT 1:1. An earlier version of this script asserted they were, "by
+# definition", and it was wrong: an issue reopened twice gets two cycles. #483 is
+# the case — re-audited once after #512, and again after #530 and #524 — and this
+# check caught its own model being false when the second row was added.
+#
+# So the two numbers are derived from different things and compared to different
+# claims: CYCLES from the cycle headings and the repairs table's row count,
+# ISSUES from the distinct issue numbers in that table. A stale summary still
+# fails, which is the point; what no longer fails is an issue legitimately
+# appearing twice.
 #
 # Exit 0 when the documents agree, 1 when they do not. Read-only.
 set -uo pipefail
@@ -125,8 +132,6 @@ else
   t_n="$(printf '%s' "$tally" | sed -n 's/^| repair issues closed | *\([0-9]\{1,\}\).*/\1/p')"
   if [ -z "$t_n" ]; then
     gap "the 'repair issues closed' tally row carries no leading count"
-  elif [ "$t_n" -ne "$n_cycles" ]; then
-    gap "the tally claims $t_n repair issues, but the ledger records $n_cycles repair cycles (they are 1:1)"
   fi
   # The parenthetical breakdown must add up to the same number, or the
   # categories quietly stop covering the population.
@@ -141,8 +146,8 @@ fi
 allline="$(grep -m1 -oE 'All [0-9]+ repair issues are closed' "$ledger" || true)"
 if [ -n "$allline" ]; then
   a_n="$(printf '%s' "$allline" | grep -oE '[0-9]+')"
-  if [ "$a_n" -ne "$n_cycles" ]; then
-    gap "the result section says 'All $a_n repair issues are closed', but the ledger records $n_cycles"
+  if [ -n "${t_n:-}" ] && [ "$a_n" -ne "$t_n" ]; then
+    gap "the result section says 'All $a_n repair issues are closed', but the tally claims $t_n"
   fi
 fi
 
@@ -157,16 +162,19 @@ rec_rows="$(awk '
 if [ "$rec_rows" -eq 0 ]; then
   gap "the release record has no '**The repairs**' table rows to check"
 elif [ "$rec_rows" -ne "$n_cycles" ]; then
-  gap "the release record lists $rec_rows repairs, but the ledger records $n_cycles repair cycles"
+  gap "the release record lists $rec_rows repairs, but the ledger records $n_cycles repair cycles (one row per cycle)"
 fi
-# Every repair row must name a distinct issue, or a duplicate inflates the table
-# to match a wrong count.
-rec_dupes="$(awk '
+# DISTINCT issues in that table are what the tally counts. An issue may appear
+# twice — a second reopening is a second cycle — but an accidental duplicate row
+# still fails, because it adds a row without adding a cycle heading.
+rec_issues="$(awk '
   /^\*\*The repairs\*\*/ { inrep = 1; next }
   inrep && /^## / { exit }
   inrep && /^\| #[0-9]+ \|/ { print $2 }
-' "$record" | LC_ALL=C sort | uniq -d | tr '\n' ' ')"
-[ -z "$rec_dupes" ] || gap "the release record's repairs table names an issue twice: $rec_dupes"
+' "$record" | LC_ALL=C sort -u | grep -c . || true)"
+if [ -n "${t_n:-}" ] && [ "$rec_issues" -ne 0 ] && [ "$t_n" -ne "$rec_issues" ]; then
+  gap "the tally claims $t_n repair issues, but the release record names $rec_issues distinct ones"
+fi
 
 # --- 6. the certification denominator, everywhere it appears ---------------
 # Scoped to the certification section: the ledger is full of legitimate "N of M"
@@ -190,7 +198,7 @@ else
 fi
 
 if [ "$gaps" -eq 0 ]; then
-  echo "ledger-truth: $n_cycles repair cycle(s); the ledger, its tally and the release record agree"
+  echo "ledger-truth: $n_cycles repair cycle(s) over ${t_n:-?} repair issue(s); the ledger, its tally and the release record agree"
   exit 0
 fi
 echo "ledger-truth: $gaps contradiction(s) — the record disagrees with itself about how much work it describes"

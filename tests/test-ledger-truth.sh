@@ -95,12 +95,13 @@ assert_eq "appending a cycle without updating the summary fails" 1 "$RC"
 assert_contains "naming what the heading claims" "claims 14 repair cycles" "$OUT"
 assert_contains "and what the ledger records" "records 15" "$OUT"
 
-# ...and updating the summary but not the tally still fails, because the two
-# counts are the same fact.
-mk 15 fifteen 14 14 74 74 74
+# ...and a tally that disagrees with the distinct issues the record names still
+# fails. Cycles and issues are NOT the same number — an issue reopened twice gets
+# two cycles — so each is compared against the claim that names it.
+mk 15 fifteen 14 15 74 74 74
 run
-assert_eq "a stale tally fails even with a fresh summary" 1 "$RC"
-assert_contains "naming the 1:1 identity" "they are 1:1" "$OUT"
+assert_eq "a tally disagreeing with the record's distinct issues fails" 1 "$RC"
+assert_contains "naming both counts" "names 15 distinct" "$OUT"
 
 # ...and updating both but not the release record still fails.
 mk 15 fifteen 15 14 74 74 74
@@ -114,6 +115,7 @@ mk 15 fifteen 15 15 74 74 74
 run
 assert_eq "all three moving together passes" 0 "$RC"
 assert_contains "at the new count" "15 repair cycle(s)" "$OUT"
+assert_contains "and reports the issue count too" "over 15 repair issue(s)" "$OUT"
 
 # ============ the certification denominator, everywhere ===================
 # #546's literal reproduction: the heading and the passed-count updated, the
@@ -165,12 +167,27 @@ if [ "$RC" -eq 0 ]; then ok
 else bad "a combined heading was miscounted: $OUT"; fi
 assert_contains "and both numbers were read from it" "15 repair cycle(s)" "$OUT"
 
-# ============ a duplicated repair row ====================================
+# ============ an issue may repeat; an extra ROW may not ==================
+# A second reopening is a second cycle, so the same issue legitimately appears
+# twice in the repairs table. What must still fail is a row with no cycle behind
+# it, and a tally that no longer matches the distinct issues.
+mk 14 fourteen 13 14 74 74 74
+sed -i '0,/^| #514 | a defect |/s//| #501 | a defect |/' "$w/record.md"
+run
+assert_eq "an issue repeated with a matching tally is accepted" 0 "$RC"
+assert_contains "and the summary line reports both counts" "over 13 repair issue(s)" "$OUT"
+# Now the same duplication with the tally left at the row count: the distinct
+# issues no longer match what the tally claims.
 mk 14 fourteen 14 14 74 74 74
 sed -i '0,/^| #514 | a defect |/s//| #501 | a defect |/' "$w/record.md"
 run
-assert_eq "a repair issue named twice in the record fails" 1 "$RC"
-assert_contains "naming the duplicate" "names an issue twice" "$OUT"
+assert_eq "a duplicate that contradicts the tally fails" 1 "$RC"
+assert_contains "naming the distinct count" "distinct one" "$OUT"
+# And an EXTRA row with no cycle behind it fails on the row count.
+mk 14 fourteen 14 15 74 74 74
+run
+assert_eq "a row with no cycle behind it fails" 1 "$RC"
+assert_contains "naming one row per cycle" "one row per cycle" "$OUT"
 
 # ============ missing structure is a GAP, never a silent pass =============
 mk 14 fourteen 14 14 74 74 74
