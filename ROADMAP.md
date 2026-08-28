@@ -504,6 +504,9 @@ with an existing repository. They are entry motions, not lifecycle stages —
 ADR-0022's `new | existing | ambiguous` remain repository-classification facts.
 v0.22 delivers Triage and does not redesign Greenfield.
 
+- The v0.21 ledger truth check anchored to the release interval it certifies
+  rather than the moving tree, so v0.22 can add behavioural suites without
+  falsifying v0.21's history (#567).
 - The human-authority boundary made structural: a governance gap that needs
   project judgment reports **DECISION REQUIRED** and cannot be turned green by
   the same agent supplying the judgment (#559).
@@ -515,9 +518,18 @@ v0.22 delivers Triage and does not redesign Greenfield.
 - A coherent course derived from reconciled truth rather than session memory
   (#469).
 
-Delivery order is `#559 -> #467 -> #468 -> #469 -> #479`, recorded in #479's
-sub-issue order. Two constraints the release must hold: **unknown evidence is not
-human judgment**, and **recommendation is not authority**.
+Delivery order is `#567 -> #559 -> #467 -> #468 -> #469 -> #479`, recorded in
+#479's sub-issue order. Two constraints the release must hold: **unknown evidence
+is not human judgment**, and **recommendation is not authority**.
+
+#567 was admitted after this section was first written, as a prerequisite repair
+rather than part of the Triage outcome: implementing #559 added one behavioural
+suite, which exposed that the v0.21 ledger check compared a closed historical
+tally against the current tree. It sits first in the order because #559's
+full-suite verification needs it. That is **order, not dependency** — no
+`blocked-by` edge exists between #567 and #559, because #559's work both started
+and finished without it, and a native prerequisite records what must be true
+before work can start.
 
 ---
 
