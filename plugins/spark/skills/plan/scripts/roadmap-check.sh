@@ -5,10 +5,32 @@
 # have a release decision? Four checks feed it:
 #   A. the roadmap names a current release (some ## vX.Y with Status Shipped)
 #   B. the roadmap names a next release    (some ## vX.Y not yet Shipped)
-#   C. every open `feature` issue is milestone-assigned, explicitly
-#      backlogged, or explicitly blocked — anything else is a gap
+#   C. every open `feature` issue carries a release decision in a GOVERNED
+#      FIELD — a milestone, or a label from the model's disposition family.
+#      Anything else needs a human decision
 #   D. every unshipped ## vX.Y section links at least one issue or carries a
 #      deferred/backlog marker
+#
+# WHICH SURFACES CARRY AUTHORITY (#570)
+#
+# Exactly two, and both are structured fields a human sets deliberately:
+#
+#   milestone            the work is scheduled into a release
+#   disposition label    the decision NOT to schedule it yet, read from the
+#                        governance model's `disposition` family rather than
+#                        named here, so the member set has one authority
+#
+# An issue BODY carries none. A line reading `Backlog: …`, `Blocked pending …`
+# or `Depends on: #N` is evidence about a decision, never the decision — the
+# governance model already says so of dependencies ("a `Blocked by #N` sentence
+# explains a prerequisite; it never creates one") and the same holds for the
+# release disposition.
+#
+# This checker used to accept all three spellings, so an agent could clear
+# DECISION REQUIRED by writing one sentence into an issue body — the false green
+# the authority boundary exists to prevent, reachable by prose. Recommendation
+# text is still allowed and is still reported; it simply has no authority on its
+# own.
 #
 # Read-only by design: release decisions are human calls, so the checker only
 # reports findings and never fixes them. Two kinds, kept apart (#559):
@@ -51,6 +73,18 @@ done
 have_jq=0 have_py=0
 command -v jq >/dev/null 2>&1 && have_jq=1
 command -v python3 >/dev/null 2>&1 && have_py=1
+
+# The disposition family's members come from the resolved governance model, via
+# the sibling binary in this same plugin. Naming `backlog` here would be a
+# second authority for a set the schema owns, and a hard-coded fallback would be
+# worse still: it would take over at exactly the moment the real authority was
+# unusable. So an unresolvable family is NOT ASSESSED, never a guess.
+spark_bin="$(cd "$(dirname "$0")/../../.." 2>/dev/null && pwd)/bin/spark"
+disp_members=""
+if [ -x "$spark_bin" ]; then
+  disp_members="$("$spark_bin" governance --tsv 2>/dev/null \
+    | awk -F'\t' '$1 == "member" && $2 == "disposition" { printf "%s%s", (n++ ? " " : ""), $3 }')"
+fi
 if [ "$have_jq" -eq 0 ] && [ "$have_py" -eq 0 ]; then
   echo "not assessed (needs jq or python3)"
   exit 3
@@ -244,39 +278,49 @@ else
   echo "issues: NOT assessed — no --issues file and gh is not installed. Install gh, or pass --issues FILE."
 fi
 
-# classify_features <file> — one "number<TAB>class" line per open `feature`
-# issue. Classes, first match wins:
-#   assigned  — has a milestone
-#   backlog   — `backlog` label, or a body line *starting with* Backlog and
-#               carrying a reason (the word mid-sentence does not count)
-#               (a bare "Backlog" records no decision anyone can revisit)
-#   blocked   — "[Bb]locked by/pending …" or a "Depends on: #N" header
-#   undecided — none of the above: the gap #188 exists to catch
+# classify_features <file> — one `number<TAB>class<TAB>prose` line per open
+# `feature` issue.
+#
+#   assigned   carries a milestone
+#   backlog    carries a label from the model's disposition family
+#   undecided  neither: the release decision has not been recorded anywhere
+#              a governed field can be read from
+#
+# The third column is 0/1 for "the body contains disposition-shaped prose". It
+# is REPORTING ONLY and never changes the class — its whole purpose is to let
+# the message tell a human that a proposal exists and is not a decision.
+#
 # labels/milestone arrive either in gh's object form ({"name":…}/{"title":…})
 # or already flattened to strings; both normalize here. Prefer jq, fall back
-# to python3 — same degradation ladder as the rest of the repo.
+# to python3 — same degradation ladder as the rest of the repo, and both
+# branches now implement the same short rule rather than two copies of three
+# regexes.
 classify_features() {
   if [ "$have_jq" -eq 1 ]; then
-    jq -r '
-      .[]
+    jq -r --arg disp "$disp_members" '
+      ($disp | split(" ")) as $dm
+      | .[]
       | . as $i
       | [ ($i.labels // [])[] | if type == "object" then (.name // "") else . end ] as $labels
       | select($labels | index("feature"))
       | (($i.milestone // "") | if type == "object" then (.title // "") else . end) as $ms
       | ($i.body // "") as $body
+      | ([ $labels[] | select(. as $l | $dm | index($l)) ] | length > 0) as $hasdisp
       | (if $ms != "" then "assigned"
-         elif ($labels | index("backlog")) != null then "backlog"
-         elif ($body | test("(^|\\n)[ \\t]*backlog\\b[:\u2014 -]*[^\\n]*[a-zA-Z0-9#]"; "i")) then "backlog"
-         elif ($body | test("[Bb]locked (by|pending)"))
-              or ($body | test("(^|\\n)[Dd]epends on:[^\\n]*#[0-9]+")) then "blocked"
+         elif $hasdisp then "backlog"
          else "undecided" end) as $cls
-      | "\($i.number)\t\($cls)"
+      | (if ($body | test("(^|\\n)[ \\t]*backlog\\b"; "i"))
+            or ($body | test("[Bb]locked (by|pending)"))
+            or ($body | test("(^|\\n)[Dd]epends on:[^\\n]*#[0-9]+"))
+         then "1" else "0" end) as $prose
+      | "\($i.number)\t\($cls)\t\($prose)"
     ' "$1"
     return $?
   fi
-  python3 - "$1" <<'PY'
+  python3 - "$1" "$disp_members" <<'PY'
 import json, re, sys
 
+dm = [d for d in (sys.argv[2] if len(sys.argv) > 2 else "").split(" ") if d]
 for issue in json.load(open(sys.argv[1])):
     labels = [l.get("name", "") if isinstance(l, dict) else str(l)
               for l in (issue.get("labels") or [])]
@@ -288,31 +332,41 @@ for issue in json.load(open(sys.argv[1])):
     body = issue.get("body") or ""
     if milestone:
         cls = "assigned"
-    elif "backlog" in labels:
+    elif any(l in dm for l in labels):
         cls = "backlog"
-    elif re.search(r"(^|\n)[ \t]*backlog\b[:\u2014 -]*[^\n]*[a-zA-Z0-9#]", body, re.I):
-        cls = "backlog"
-    elif re.search(r"[Bb]locked (by|pending)", body) or \
-         re.search(r"(^|\n)[Dd]epends on:[^\n]*#[0-9]+", body):
-        cls = "blocked"
     else:
         cls = "undecided"
-    print("%s\t%s" % (issue["number"], cls))
+    prose = "1" if (
+        re.search(r"(^|\n)[ \t]*backlog\b", body, re.I)
+        or re.search(r"[Bb]locked (by|pending)", body)
+        or re.search(r"(^|\n)[Dd]epends on:[^\n]*#[0-9]+", body)
+    ) else "0"
+    print("%s\t%s\t%s" % (issue["number"], cls, prose))
 PY
 }
 
 if [ -n "$issues_source" ]; then
+  # The governed disposition family is what makes check C answerable. Without
+  # it the run is incomplete, never a pass.
+  if [ -z "$disp_members" ]; then
+    echo "roadmap-check: NOT assessed — the governed disposition family could not be resolved, so which labels record a release decision is unknown. This is NOT a clean pass (exit 3)."
+    exit 3
+  fi
   classified="$(classify_features "$issues_source")" \
     || { echo "could not parse issues JSON: $issues_source" >&2; exit 2; }
   features=0
-  while IFS=$'\t' read -r num cls; do
+  while IFS=$'\t' read -r num cls prose; do
     [ -n "$num" ] || continue
     features=$((features + 1))
     case "$cls" in
       assigned) echo "ok: feature #$num — assigned to a milestone" ;;
-      backlog)  echo "ok: feature #$num — explicitly backlogged" ;;
-      blocked)  echo "ok: feature #$num — blocked on a named dependency/decision" ;;
-      *) decision "feature #$num has no release decision — assign a milestone, record a backlog reason, or name the blocking decision. Spark reports the gap; the choice is yours, and an agent may propose one with evidence but must not persist it to clear this line." ;;
+      backlog)  echo "ok: feature #$num — carries a governed disposition label" ;;
+      *)
+        if [ "${prose:-0}" = "1" ]; then
+          decision "feature #$num has no release decision — its body proposes one in prose, which is evidence, not authority. Record it in a governed field: assign a milestone, or apply a disposition label ($disp_members)."
+        else
+          decision "feature #$num has no release decision — assign a milestone, or apply a disposition label ($disp_members). Spark reports the gap; the choice is yours, and an agent may propose one with evidence but must not persist it to clear this line."
+        fi ;;
     esac
   done <<< "$classified"
   if [ "$features" -eq 0 ]; then
