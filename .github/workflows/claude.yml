@@ -1,3 +1,10 @@
+# The coding lane. Claude is woken by a human mention, or by the reviewer
+# finishing a pass, and may push fixes to the PR's own feature branch.
+#
+# It may NOT merge. That boundary is held by the branch ruleset (a pull request,
+# an approving review, and a CODEOWNERS review from @jwogrady), not by this
+# file — a permission block is a statement of intent, and the ruleset is the
+# door. `contents: write` here buys the ability to push a branch, nothing more.
 name: Claude Code
 
 on:
@@ -9,42 +16,60 @@ on:
     types: [opened, assigned]
   pull_request_review:
     types: [submitted]
+  # The reviewer posts with GITHUB_TOKEN, and GitHub deliberately does not let
+  # one workflow's token trigger another workflow — so a review comment alone
+  # would never wake this lane. workflow_run fires regardless of the token that
+  # produced it, which is what closes the loop.
+  workflow_run:
+    workflows: ["OpenAI Review"]
+    types: [completed]
 
 jobs:
   claude:
+    # Human mentions, or a reviewer pass that has something to say. A PASS
+    # verdict deliberately does not wake the coding lane: there is nothing to fix.
     if: |
+      (github.event_name == 'workflow_run') ||
       (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
       (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
       (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
       (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-      pull-requests: read
-      issues: read
+      contents: write        # push fixes to the PR's feature branch
+      pull-requests: write   # comment and update the PR
+      issues: write          # comment on issues
       id-token: write
-      actions: read # Required for Claude to read CI results on PRs
+      actions: read          # read CI results on PRs
+      # Deliberately absent: administration, secrets, and workflow write.
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
 
       - name: Run Claude Code
         id: claude
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-
-          # This is an optional setting that allows Claude to read CI results on PRs
           additional_permissions: |
             actions: read
+          prompt: |
+            You are working inside a pull request on the Spark repository.
 
-          # Optional: Give a custom prompt to Claude. If this is not specified, Claude will perform the instructions specified in the comment that tagged it.
-          # prompt: 'Update the pull request description to include a summary of changes.'
+            If a reviewer has posted a verdict, read the most recent review on
+            this PR and act on it:
 
-          # Optional: Add claude_args to customize behavior and configuration
-          # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
-          # or https://code.claude.com/docs/en/cli-reference for available options
-          # claude_args: '--allowed-tools Bash(gh pr *)'
+            - CHANGES REQUIRED: make the smallest correct fix on THIS feature
+              branch, commit it with a Conventional Commit, and push. Do not
+              merge. Do not open a new PR.
+            - DECISION REQUIRED: do not guess and do not implement. Reply on the
+              PR naming the decision and the admissible options, and stop. A
+              recommendation is not authority.
+            - NOT ASSESSED: say what could not be assessed and why. Do not treat
+              it as a pass.
+            - PASS: nothing to do.
 
+            Never assign a milestone, priority, or backlog disposition to make a
+            check go green, and never merge.
