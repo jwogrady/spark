@@ -570,6 +570,18 @@ evidence-note	linked-pr-lookup	the linked-PR lookup for #77 failed — earlier m
 verdict	NOT ASSESSED	the linked-PR lookup for #77 failed — earlier merged evidence is unknown, never assumed absent
 ```
 
+**The linked-PR connection is exhausted, not sampled.** It is read page by page
+until `hasNextPage` is false, because "the union across every linked
+implementation PR" has to mean every one. A single `first: 50` request treated a
+successful first page as the complete answer, so an issue with 51 linked PRs
+could be graded on 50 of them — and the evidence that contradicted the
+declaration sat on the page nobody asked for.
+
+That failure is invisible without pagination: the request *succeeds*, so there is
+no error to report. A **continuation page that fails is NOT ASSESSED** at the
+`linked-pr-lookup` layer — the partial set is never graded — and a `hasNextPage`
+with no cursor is refused for the same reason rather than silently stopping.
+
 Paths come from the **paginated** REST files endpoint, not `gh pr view --json
 files`, which stops at 100 files without saying so — a documentation change at
 position 140 of a 150-file PR was invisible and the verdict came back PASS.

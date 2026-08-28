@@ -66,24 +66,64 @@ case "$1 $2" in
   "repo view")   printf '%s\n' "o/r"; exit 0 ;;
   "issue view")  printf '%s\n' "docs-impact:none"; exit 0 ;;
   "api graphql")
+    # The linked-PR query is PAGINATED, so its --jq output is a header line
+    # "hasNextPage<TAB>endCursor" followed by the qualifying PR numbers. A stub
+    # that emitted bare numbers could not express "successful but there is more",
+    # which is the whole of #530.
+    #
+    # A successful EMPTY page still emits the header: that is what keeps it
+    # distinguishable from a failed lookup, which emits nothing and exits 1.
     case "${EV_LOOKUP:-ok}" in
       fail)  exit 1 ;;
-      empty) exit 0 ;;
-      two)   printf '%s\n%s\n' 11 12; exit 0 ;;
-      *)     printf '%s\n' 9; exit 0 ;;
+      empty) printf 'false\t\n'; exit 0 ;;
+      two)   printf 'false\t\n%s\n%s\n' 11 12; exit 0 ;;
+      paged|pagefail|nocursor)
+        # Page 2 is requested with after=CUR1.
+        case "$*" in
+          *CUR1*)
+            [ "${EV_LOOKUP}" = "pagefail" ] && exit 1
+            printf 'false\t\n%s\n' 151; exit 0 ;;
+          *)
+            if [ "${EV_LOOKUP}" = "nocursor" ]; then
+              # hasNextPage true with no cursor: uncontinuable. Refusing is the
+              # only honest answer; continuing from the start would loop.
+              printf 'true\t\n'
+            else
+              printf 'true\tCUR1\n'
+            fi
+            i=101; while [ "$i" -le 150 ]; do printf '%s\n' "$i"; i=$((i + 1)); done
+            exit 0 ;;
+        esac ;;
+      *)     printf 'false\t\n%s\n' 9; exit 0 ;;
     esac ;;
   "api --paginate")
     case "${EV_FILES:-ok}" in
       fail) exit 1 ;;
       *)
-        case "$3" in
+        # Dispatch on the PR NUMBER, extracted rather than glob-matched, and
+        # emit NOTHING for a number no fixture defines.
+        #
+        # The first cut let an unrecognised number fall through to the governed
+        # path. Measuring the pre-fix implementation then "passed" for the wrong
+        # reason: it read the page header as a node number, asked for that
+        # bogus PR's files, and got the governed doc back — so the verdict was
+        # right by accident and the assertion could not fail. A fixture whose
+        # default answer is the interesting one cannot discriminate.
+        pr="${3#*/pulls/}"; pr="${pr%/files}"
+        case "$pr" in
+          9)   printf '%s\n' "$EV_PATH" ;;
+          11)  printf '%s\n' "plugins/spark/bin/spark" ;;
           # The documentation is deliberately in the LAST PR processed. Put it
           # first and a loop that stops after one PR still reaches the right
-          # verdict, so the assertions below could not fail — the union has to
-          # be broken in the direction that changes the answer.
-          *"/pulls/11/files") printf '%s\n' "plugins/spark/bin/spark" ;;
-          *"/pulls/12/files") printf '%s\n' "$EV_PATH" ;;
-          *)                  printf '%s\n' "$EV_PATH" ;;
+          # verdict, so the assertion could not fail — the union has to be
+          # broken in the direction that changes the answer.
+          12)  printf '%s\n' "$EV_PATH" ;;
+          # 101-150 are connection page one and carry CODE only; 151 is on page
+          # two and is the only governed documentation, so a single-page
+          # implementation never sees it.
+          151) printf '%s\n' "$EV_PATH" ;;
+          1[0-4][0-9]|150) printf '%s\n' "plugins/spark/bin/spark" ;;
+          *)   : ;;
         esac
         exit 0 ;;
     esac ;;
@@ -187,6 +227,64 @@ assert_contains "not just the first" "PR #12" "$a_out"
 assert_rc "the aggregate is judged, not the branch alone" 1 "$a_rc"
 assert_contains "and the governed class comes from a linked PR, not the branch" \
   "docs-impact:reference" "$a_out"
+
+# ============ the connection is EXHAUSTED, not sampled ====================
+# #483's criterion is that the evidence set "aggregates across ALL linked
+# implementation PRs". The query asked for `first: 50` and read `nodes[]` only —
+# no pageInfo, no cursor, no continuation — so a successful first page was
+# treated as the complete answer.
+#
+# Here 51 references are linked. PRs 101-150 (page one) carry code only; PR 151
+# (page two) is the only governed documentation. `docs-impact:none` is declared,
+# so the full set must FAIL and a truncated set PASSes — the verdict-changing
+# evidence exists ONLY beyond the first page, which is the one arrangement that
+# can tell the two implementations apart.
+p_rc=0
+p_out="$(cd "$repo" && env PATH="$shim" EV_LOOKUP=paged EV_FILES=ok \
+  EV_PATH="$GOVERNED_PATH" "$SPARK" docs-impact --issue 77 --branch --tsv 2>&1)" || p_rc=$?
+assert_rc "51 linked PRs are all read, so the aggregate FAILs" 1 "$p_rc"
+assert_eq "with a FAIL verdict" "FAIL" \
+  "$(printf '%s\n' "$p_out" | awk -F'\t' '$1=="verdict"{print $2}')"
+assert_contains "and the governed class comes from the second page" \
+  "docs-impact:reference" "$p_out"
+assert_contains "the second page's PR is named in the evidence" "PR #151" "$p_out"
+assert_contains "and a first-page PR too, so both pages were unioned" "PR #101" "$p_out"
+
+# ============ a continuation-page failure is NOT ASSESSED =================
+# The first page succeeded, so nothing looks wrong. Grading what did arrive is
+# exactly the partial-set failure #512 fixed one layer up, and it must not
+# reappear because the truncation is now on page two rather than in the whole
+# lookup.
+p_rc=0
+p_out="$(cd "$repo" && env PATH="$shim" EV_LOOKUP=pagefail EV_FILES=ok \
+  EV_PATH="$GOVERNED_PATH" "$SPARK" docs-impact --issue 77 --branch --tsv 2>&1)" || p_rc=$?
+assert_rc "a failed continuation page is not assessed" 3 "$p_rc"
+assert_eq "rather than graded on page one" "NOT ASSESSED" \
+  "$(printf '%s\n' "$p_out" | awk -F'\t' '$1=="verdict"{print $2}')"
+assert_eq "and it is reported at the linked-pr-lookup layer" "linked-pr-lookup" \
+  "$(printf '%s\n' "$p_out" | awk -F'\t' '$1=="evidence-note"{print $2}')"
+case "$(printf '%s\n' "$p_out" | awk -F'\t' '$1=="verdict"{print $2}')" in
+  PASS) bad "#530: a partial evidence set was graded as complete" ;;
+  *) ok ;;
+esac
+
+# ...and hasNextPage true with no cursor is uncontinuable, so it is also a
+# failure rather than a silent stop. Continuing from the start would loop.
+p_rc=0
+p_out="$(cd "$repo" && env PATH="$shim" EV_LOOKUP=nocursor EV_FILES=ok \
+  EV_PATH="$GOVERNED_PATH" "$SPARK" docs-impact --issue 77 --branch --tsv 2>&1)" || p_rc=$?
+assert_rc "an uncontinuable page is not assessed" 3 "$p_rc"
+
+# ============ single-page and empty behaviour are UNCHANGED ================
+# The pagination must not disturb the cases #512 pinned, or this fix would trade
+# one silent failure for another.
+di empty ok
+assert_rc "a successful empty connection is still graded" 0 "$DI_RC"
+assert_eq "and is still distinct from a failed lookup" "" "$(note)"
+di ok ok
+assert_rc "a single-page connection still behaves as before" 1 "$DI_RC"
+di fail ok
+assert_rc "and a failed first page is still not assessed" 3 "$DI_RC"
 
 # ============ human mode reports it ONCE ===================================
 # Every assertion above reads --tsv. The human surface is a separate renderer,
