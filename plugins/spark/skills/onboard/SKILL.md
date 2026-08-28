@@ -26,10 +26,10 @@ before the classification fact and setup never refuses over it.
 
 - **`ambiguous`** → **stop and ask.** Signals are sparse or conflicting; never
   infer authorization. Do not proceed until the human names the verdict.
-- **`existing`** → **discovery-first, never scaffold.** Inspect the repo's real
-  conventions, tooling, and constraints; adopt create-only. Skip PROFILE
-  (choosing a stack profile is a new-project act) and go to SEED — setup only
-  adds what is missing and keeps everything else.
+- **`existing`** → **truth-first, never scaffold.** Run `spark triage`: it
+  establishes what is true read-only. Resolve what it reports before SEED —
+  arming a repo whose truth is unestablished is the mistake. Skip PROFILE (a
+  new-project act); setup adds only what is missing.
 - **`new`** → proceed to PROFILE.
 
 Read orient's **Next** line before continuing: it names the recommended verb

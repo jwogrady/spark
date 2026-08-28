@@ -60,6 +60,7 @@ labels|cmd_labels|Compare this repo'\''s GitHub labels against the declared issu
 governance|cmd_governance|Render the model, or inspect/diff/apply/validate repository governance against it
 docs-impact|cmd_docs_impact|Verify the declared documentation impact of an issue against its implementation evidence
 plan|cmd_plan|Compile an approved plan artifact into GitHub state: validate, diff, apply, verify
+triage|cmd_triage|Establish what is true about an existing repository, read-only, before anything mutates it
 next|cmd_next|Select the next eligible milestone issue from live GitHub metadata
 help|usage|Show this help'
 
@@ -1551,6 +1552,106 @@ cmd_list_skills() {
 # prefers the durable work state (.spark/state.json, schema in
 # docs/reference/state.md) and falls back to repo-shape heuristics; load
 # summarizes the resolved standard bag (ADR-0010).
+# ---------------------------------------------------------------------------
+# Repository fact producers (#467).
+#
+# These four bodies were inline in cmd_brief. `spark triage` needs the same
+# facts, and the one thing it must not do is compute them again: a second
+# implementation of "which branch is this" or "what did the human record" is
+# the two-authority defect class that dominated the v0.21 dogfood. So they are
+# lifted here, named, and called by both verbs. brief's output is unchanged —
+# test-brief-resume.sh and test-latency.sh hold that.
+#
+# All four are read-only. Every one emits `key<TAB>value` lines, the shape the
+# rest of this binary already reads.
+# ---------------------------------------------------------------------------
+
+# repo_git_facts <root> — the cheap local git facts. No network: this is on
+# the SessionStart hot path through brief --short.
+repo_git_facts() {
+  local root="$1" counts
+  printf 'branch\t%s\n' "$(git -C "$root" symbolic-ref --quiet --short HEAD || echo '(detached)')"
+  printf 'dirty\t%s\n' "$(git -C "$root" status --porcelain 2>/dev/null | awk 'NF{n++} END{print n+0}')"
+  # Absent when no upstream is tracked, which is a KNOWN negative rather than
+  # an unread one — callers distinguish "" from 0.
+  if counts="$(git -C "$root" rev-list --left-right --count '@{upstream}...HEAD' 2>/dev/null)"; then
+    printf 'behind\t%s\n' "$(printf '%s' "$counts" | awk '{print $1}')"
+    printf 'ahead\t%s\n' "$(printf '%s' "$counts" | awk '{print $2}')"
+  fi
+}
+
+# repo_open_pr — the open PR for the current branch, as a display string, or
+# empty. A network call, so never on the hot path.
+repo_open_pr() {
+  command -v gh >/dev/null 2>&1 || return 0
+  gh pr view --json number,title --template 'PR #{{.number}} — {{.title}}' 2>/dev/null || true
+}
+
+# repo_recorded_intent <root> — what the human recorded in .spark/state.json:
+# the judgment no repository can answer for itself. Never treated as backlog,
+# release or product authority (ADR-0008).
+repo_recorded_intent() {
+  local root="$1" state="$root/.spark/state.json" k v
+  [ -f "$state" ] || return 0
+  while IFS=$'\t' read -r k v; do
+    case "$k" in
+      next_action|blockers|updated) printf '%s\t%s\n' "$k" "$v" ;;
+    esac
+  done < <(read_flat_json "$state")
+}
+
+# repo_classification <root> [--with-live] — the RECORDED classification fact
+# plus, when asked, the live verdict and whether the pair has drifted.
+#
+# `live` is computed lazily by default, and only for a recorded `new`, exactly
+# as brief did: the classifier walks the tree, and brief --short runs on every
+# session start under a latency budget. triage passes --with-live because it
+# reports the live verdict as evidence in its own right.
+#
+# Drift is only ever reported new -> existing, and only with content Spark did
+# not create (#399): being armed is the expected outcome of onboarding, not
+# drift. The fact is never rewritten here — reclassification is the human's
+# call (ADR-0022).
+repo_classification() {
+  local root="$1" with_live=0 recorded recorded_date live='' stale=0
+  [ "${2:-}" = "--with-live" ] && with_live=1
+  recorded="$(pref_get project.classification || true)"
+  recorded_date="$(pref_get project.classified || true)"
+  printf 'recorded\t%s\n' "$recorded"
+  printf 'recorded_date\t%s\n' "$recorded_date"
+  if [ "$with_live" -eq 1 ] || [ "$recorded" = "new" ]; then
+    live="$(classify_repo "$root" | awk -F'\t' '$1=="classification"{print $2}')"
+    printf 'live\t%s\n' "$live"
+    printf 'confidence\t%s\n' \
+      "$(classify_repo "$root" | awk -F'\t' '$1=="confidence"{print $2}')"
+  fi
+  if [ "$recorded" = "new" ] && [ "$live" = "existing" ] && classification_drifted "$root"; then
+    stale=1
+  fi
+  printf 'stale\t%s\n' "$stale"
+}
+
+# repo_trunk <root> — the local trunk ref and how it was determined.
+#
+# Deliberately LOCAL and network-free. doctor's `def_branch` asks the GitHub API
+# for the repository's default branch because it is checking a server-side
+# ruleset against it; that is a different fact with a different failure mode,
+# and collapsing the two would make an offline triage depend on the network.
+repo_trunk() {
+  local root="$1" head b
+  if head="$(git -C "$root" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null)"; then
+    printf 'trunk\t%s\nsource\torigin-head\n' "${head#origin/}"
+    return 0
+  fi
+  for b in master main; do
+    if git -C "$root" rev-parse --verify --quiet "refs/heads/$b" >/dev/null 2>&1; then
+      printf 'trunk\t%s\nsource\tlocal-ref\n' "$b"
+      return 0
+    fi
+  done
+  printf 'trunk\t\nsource\tunknown\n'
+}
+
 cmd_brief() {
   local short=0
   case "${1:-}" in
@@ -1573,15 +1674,17 @@ cmd_brief() {
   # Orient: cheap local git facts. The gh PR lookup is a network call, so it
   # is reserved for the interactive mode — a session-start hook must never
   # wait on the network.
-  local branch dirty counts ahead='' behind='' pr=''
-  branch="$(git -C "$root" symbolic-ref --quiet --short HEAD || echo '(detached)')"
-  dirty="$(git -C "$root" status --porcelain 2>/dev/null | awk 'NF{n++} END{print n+0}')"
-  if counts="$(git -C "$root" rev-list --left-right --count '@{upstream}...HEAD' 2>/dev/null)"; then
-    behind="$(printf '%s' "$counts" | awk '{print $1}')"
-    ahead="$(printf '%s' "$counts" | awk '{print $2}')"
-  fi
-  if [ "$short" -eq 0 ] && command -v gh >/dev/null 2>&1; then
-    pr="$(gh pr view --json number,title --template 'PR #{{.number}} — {{.title}}' 2>/dev/null || true)"
+  local branch dirty ahead='' behind='' pr='' bk bv
+  while IFS=$'\t' read -r bk bv; do
+    case "$bk" in
+      branch) branch="$bv" ;;
+      dirty)  dirty="$bv" ;;
+      ahead)  ahead="$bv" ;;
+      behind) behind="$bv" ;;
+    esac
+  done < <(repo_git_facts "$root")
+  if [ "$short" -eq 0 ]; then
+    pr="$(repo_open_pr)"
   fi
 
   # Locate: derived from what the repo proves about itself, never from a
@@ -1589,17 +1692,14 @@ cmd_brief() {
   # happens outside a skill close-out (#347), so brief refuses to trust one.
   # The state file contributes only the judgment the repo cannot answer: the
   # recorded next action and blockers, always shown with their recorded date.
-  local state="$root/.spark/state.json"
   local next='' blockers='' updated='' located='' k v
-  if [ -f "$state" ]; then
-    while IFS=$'\t' read -r k v; do
-      case "$k" in
-        next_action) next="$v" ;;
-        blockers)    blockers="$v" ;;
-        updated)     updated="$v" ;;
-      esac
-    done < <(read_flat_json "$state")
-  fi
+  while IFS=$'\t' read -r k v; do
+    case "$k" in
+      next_action) next="$v" ;;
+      blockers)    blockers="$v" ;;
+      updated)     updated="$v" ;;
+    esac
+  done < <(repo_recorded_intent "$root")
   # Positional evidence outranks convention (#369): an open PR or a working
   # branch says where the work IS; a missing docs/problem-statement.md only
   # means Ideate when nothing stronger contradicts it — a mature repo that
@@ -1633,22 +1733,15 @@ cmd_brief() {
   # "new" that has since grown real sources now classifies "existing". Flag
   # that for re-orientation; never silently rewrite the fact — reclassification
   # is the human's call (ADR-0022).
-  local recorded_cls recorded_date live_cls='' stale=0
-  recorded_cls="$(pref_get project.classification || true)"
-  recorded_date="$(pref_get project.classified || true)"
-  if [ "$recorded_cls" = "new" ]; then
-    live_cls="$(classify_repo "$root" | awk -F'\t' '$1=="classification"{print $2}')"
-    # Only new→existing is drift worth surfacing: sources appeared under a fact
-    # that promised none. A repo does not shrink back to "new" by growth.
-    #
-    # The live verdict alone is not enough to say so. Arming a repo is what
-    # makes it look provisioned, so the verdict flips the moment `spark setup`
-    # runs — which is why this also demands content Spark did not create
-    # (#399). Being armed is the expected outcome of onboarding, not drift.
-    if [ "$live_cls" = "existing" ] && classification_drifted "$root"; then
-      stale=1
-    fi
-  fi
+  local recorded_cls='' recorded_date='' live_cls='' stale=0 ck cv
+  while IFS=$'\t' read -r ck cv; do
+    case "$ck" in
+      recorded)      recorded_cls="$cv" ;;
+      recorded_date) recorded_date="$cv" ;;
+      live)          live_cls="$cv" ;;
+      stale)         stale="$cv" ;;
+    esac
+  done < <(repo_classification "$root")
 
   # Project-local prose standards (#182): report which of the two seeded docs
   # actually exist so the brief points at the working contract by name.
@@ -1702,7 +1795,7 @@ cmd_brief() {
   echo "  $located"
   [ -n "$next" ] && echo "  next      $next (recorded ${updated:-date unknown} — verify against the repo)"
   [ -n "$blockers" ] && echo "  blockers  $blockers"
-  if [ -f "$state" ]; then
+  if [ -f "$root/.spark/state.json" ]; then
     echo "  state     .spark/state.json holds the recorded intent — cross-checked view: spark resume"
   fi
   echo
@@ -3735,13 +3828,30 @@ EOF_ISS
 # tests/test-governance-decision.sh asserts the partition is total and that
 # every surface that actually emits `!` is classified deliberately.
 # ---------------------------------------------------------------------------
+# GOV_JUDGMENT_SURFACES — the surfaces whose `!` rows name a value only a human
+# may choose. Declared once, as data, because it is the single authority for the
+# question and every consumer reads it here.
+#
+#   metadata  a live GitHub issue's governed fields
+#   file      a surface the model says only a human provisions
+#   class     the recorded repository classification — reclassification is the
+#             human's call (ADR-0022), never Spark's
+#   intent    the recorded next action in .spark/state.json — the judgment no
+#             repository can answer for itself
+#
+# Anything else stays mechanical, deliberately: an unrecognised `!` must never
+# soften a gate into "ask the human and continue".
+GOV_JUDGMENT_SURFACES='metadata file class intent'
+
 gov_judgment_rows() {
-  printf '%s\n' "$1" | awk -F'\t' '
-    $2 == "!" && NF && ($1 == "metadata" || $1 == "file") { print }'
+  printf '%s\n' "$1" | awk -F'\t' -v fams="$GOV_JUDGMENT_SURFACES" '
+    BEGIN { n = split(fams, f, " "); for (i = 1; i <= n; i++) j[f[i]] = 1 }
+    $2 == "!" && NF && ($1 in j) { print }'
 }
 gov_mechanical_rows() {
-  printf '%s\n' "$1" | awk -F'\t' '
-    $2 == "!" && NF && !($1 == "metadata" || $1 == "file") { print }'
+  printf '%s\n' "$1" | awk -F'\t' -v fams="$GOV_JUDGMENT_SURFACES" '
+    BEGIN { n = split(fams, f, " "); for (i = 1; i <= n; i++) j[f[i]] = 1 }
+    $2 == "!" && NF && !($1 in j) { print }'
 }
 
 # gov_admissible <model> — every governed family with its cardinality,
@@ -3786,6 +3896,262 @@ gov_render() {
   echo
   # Everything that is not already correct, in full.
   printf '%s\n' "$rows" | awk -F'\t' '$2 != "=" && NF { printf "  %s  %-34s %s\n", $2, $3, $4 }'
+}
+
+# ---------------------------------------------------------------------------
+# spark triage (#467) — the existing-repository entry motion, first arrow only:
+# establish what is TRUE, read-only, and stop before mutation.
+#
+# It is an ORCHESTRATOR, not a collector. Every fact below is produced by the
+# authority that already owns it — repo_classification, repo_git_facts,
+# repo_trunk, repo_recorded_intent, gov_collect — and triage's only original
+# work is arranging them into a truth-oriented shape and rendering a verdict.
+# If a fact here is ever computed locally instead of called, this has become a
+# second authority and the defect class that dominated the v0.21 dogfood is back.
+#
+# It deliberately does NOT:
+#   - decide the coherent course (#469 owns that);
+#   - build the KEEP / REWRITE-COLLAPSE / DROP-ARCHIVE slate (#468 owns that);
+#   - run a deep assessment (spark-audit owns that, and core must not depend on
+#     an optional companion);
+#   - write anything, anywhere, ever.
+#
+# The four truth states are the row alphabet already in use, so triage and
+# governance cannot disagree about what a finding is:
+#
+#   =  KNOWN / coherent          evidence exists and agrees
+#   !  MECHANICAL PROBLEM        via gov_mechanical_rows — no decision fixes it
+#   !  HUMAN DECISION REQUIRED   via gov_judgment_rows — evidence is sufficient,
+#                                authority is not Spark's
+#   ?  UNKNOWN / NOT ASSESSED    the surface could not be read
+#
+# They may not collapse. In particular a surface Spark could not inspect is `?`
+# and never a negative fact, and a KNOWN negative ("no upstream is tracked") is
+# `=` and never `?`.
+# ---------------------------------------------------------------------------
+
+# triage_rows <root> — the truth rows. Pure: it reads, it never writes.
+triage_rows() {
+  local root="$1" k v
+  local recorded='' rec_date='' live='' conf='' stale=0
+  local branch='' dirty='' ahead='' behind=''
+  local trunk='' trunk_src=''
+  local next='' blockers='' updated=''
+
+  while IFS=$'\t' read -r k v; do
+    case "$k" in
+      recorded) recorded="$v" ;; recorded_date) rec_date="$v" ;;
+      live) live="$v" ;; confidence) conf="$v" ;; stale) stale="$v" ;;
+    esac
+  done < <(repo_classification "$root" --with-live)
+
+  while IFS=$'\t' read -r k v; do
+    case "$k" in
+      branch) branch="$v" ;; dirty) dirty="$v" ;;
+      ahead) ahead="$v" ;; behind) behind="$v" ;;
+    esac
+  done < <(repo_git_facts "$root")
+
+  while IFS=$'\t' read -r k v; do
+    case "$k" in trunk) trunk="$v" ;; source) trunk_src="$v" ;; esac
+  done < <(repo_trunk "$root")
+
+  while IFS=$'\t' read -r k v; do
+    case "$k" in
+      next_action) next="$v" ;; blockers) blockers="$v" ;; updated) updated="$v" ;;
+    esac
+  done < <(repo_recorded_intent "$root")
+
+  # --- classification -------------------------------------------------------
+  # An unrecorded classification is a DECISION: the classifier has the evidence
+  # and says so, but ADR-0022 reserves the verdict for the human. An `ambiguous`
+  # live verdict is also a decision — Spark inspected and the evidence is not
+  # decisive, which is not the same as being unable to look.
+  if [ -z "$live" ]; then
+    printf 'class\t?\tlive\tnot assessed: the classifier could not read this directory\n'
+  elif [ -z "$recorded" ]; then
+    printf 'class\t!\trecorded\tno classification is recorded; the classifier reads %s (%s confidence) and ADR-0022 reserves the verdict for you\n' \
+      "$live" "$conf"
+  elif [ "$stale" = "1" ]; then
+    printf 'class\t!\trecorded\trecorded %s but the classifier now reads existing, with content Spark did not create; reclassification is yours\n' \
+      "$recorded"
+  elif [ "$live" = "ambiguous" ]; then
+    printf 'class\t!\tlive\trecorded %s; the classifier cannot decide between new and existing on this evidence\n' "$recorded"
+  else
+    printf 'class\t=\trecorded\t%s%s, and the classifier agrees (%s confidence)\n' \
+      "$recorded" "${rec_date:+, established $rec_date}" "$conf"
+  fi
+
+  # --- worktree and trunk ---------------------------------------------------
+  # Both are KNOWN facts, reported as such. A dirty tree is not a truth
+  # conflict, and "no upstream" is a known negative, not an unread surface.
+  printf 'worktree\t=\tbranch\t%s, %s uncommitted file(s)\n' "$branch" "$dirty"
+  if [ -z "$trunk" ]; then
+    printf 'trunk\t?\tref\tnot assessed: no origin/HEAD and no local master or main\n'
+  elif [ "$branch" = "$trunk" ]; then
+    printf 'trunk\t=\tref\ton trunk (%s, via %s)\n' "$trunk" "$trunk_src"
+  else
+    printf 'trunk\t=\tref\ton %s, off trunk %s (via %s)\n' "$branch" "$trunk" "$trunk_src"
+  fi
+  if [ -z "$ahead" ]; then
+    printf 'worktree\t=\tupstream\tno upstream is tracked for %s\n' "$branch"
+  else
+    printf 'worktree\t=\tupstream\tahead %s, behind %s\n' "$ahead" "$behind"
+  fi
+
+  # --- recorded intent ------------------------------------------------------
+  # Absence is not a finding: an existing repository being adopted has no
+  # reason to carry Spark's state file yet, and demanding one would be exactly
+  # the ceremony a coherent repo must not pay. What IS a finding is a recorded
+  # intent that the repository contradicts.
+  if [ -z "$next" ]; then
+    printf 'intent\t=\trecorded\tnone recorded; triage does not require one\n'
+  else
+    local closed=0 open_seen=0 n
+    for n in $(printf '%s' "$next" | tr -cs '0-9#' ' ' | tr -d '#'); do
+      case "$n" in ''|*[!0-9]*) continue ;; esac
+      [ "${#n}" -ge 2 ] || continue
+      if command -v gh >/dev/null 2>&1; then
+        case "$(gh api "repos/{owner}/{repo}/issues/$n" --jq .state 2>/dev/null)" in
+          closed) closed=$((closed+1)) ;;
+          open)   open_seen=$((open_seen+1)) ;;
+        esac
+      fi
+    done
+    if [ "$closed" -gt 0 ] && [ "$open_seen" -eq 0 ]; then
+      printf 'intent\t!\trecorded\tevery issue the recorded next action names (%d) is closed, so the intent recorded %s is spent; the next action is yours\n' \
+        "$closed" "${updated:-at an unknown date}"
+    elif [ "$closed" -eq 0 ] && [ "$open_seen" -eq 0 ] && ! command -v gh >/dev/null 2>&1; then
+      printf 'intent\t?\trecorded\tnot assessed: an intent is recorded (%s) but gh is absent, so whether it is still live could not be read\n' \
+        "${updated:-date unknown}"
+    else
+      printf 'intent\t=\trecorded\trecorded %s and still names open work\n' "${updated:-at an unknown date}"
+    fi
+  fi
+  [ -z "$blockers" ] || printf 'intent\t=\tblockers\trecorded: %s\n' "$blockers"
+
+  # --- governance -----------------------------------------------------------
+  # Delegated wholesale to the governance engine. Its rows keep their own
+  # surfaces, so the #559 partition already classifies them and triage adds no
+  # second opinion about what a governance finding means.
+  local gmodel
+  if ! gmodel="$(resolve_governance 2>/dev/null)"; then
+    printf 'governance\t?\tmodel\tnot assessed: the governance model does not resolve\n'
+  else
+    gov_collect "$gmodel" "$root"
+  fi
+}
+
+# spark triage [--tsv]
+cmd_triage() {
+  local tsv=0 usage_line="usage: spark triage [--tsv]"
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --tsv) tsv=1 ;;
+      -h|--help)
+        echo "$usage_line"
+        echo
+        echo "  Establish what is true about an existing repository, read-only,"
+        echo "  before anything mutates it. Composes orient, brief's facts and"
+        echo "  governance inspect; writes nothing. Reconciliation is #468 and"
+        echo "  the coherent course is #469."
+        return 0 ;;
+      *) red "unknown option: $1"; echo "$usage_line"; return 1 ;;
+    esac
+    shift
+  done
+
+  local root
+  root="$(git_root)"
+  if [ -z "$root" ]; then red "not inside a git repo"; return 1; fi
+
+  local rows mech judg na nm nj nn
+  rows="$(triage_rows "$root")"
+  mech="$(gov_mechanical_rows "$rows")"
+  judg="$(gov_judgment_rows "$rows")"
+  na="$(printf '%s\n' "$rows" | awk -F'\t' '$2 == "?" && NF { print }')"
+  nm="$(printf '%s\n' "$mech" | awk 'NF' | wc -l | tr -d ' ')"
+  nj="$(printf '%s\n' "$judg" | awk 'NF' | wc -l | tr -d ' ')"
+  nn="$(printf '%s\n' "$na" | awk 'NF' | wc -l | tr -d ' ')"
+
+  # Reconciliation is required when truth is in conflict or a durable value is
+  # owed — both are things #468 must carry into its slate. It is NOT the same
+  # question as "is all future work known": an unread surface leaves the answer
+  # undetermined rather than negative.
+  local recon
+  if [ "$nm" -gt 0 ] || [ "$nj" -gt 0 ]; then recon="yes"
+  elif [ "$nn" -gt 0 ]; then recon="undetermined"
+  else recon="no"; fi
+
+  if [ "$tsv" -eq 1 ]; then
+    printf '%s\n' "$rows"
+    printf 'reconciliation\t%s\n' "$recon"
+    printf 'verdict\t%s\n' \
+      "$([ "$nm" -gt 0 ] && echo FAIL \
+         || { [ "$nj" -gt 0 ] && echo "DECISION REQUIRED" \
+              || { [ "$nn" -gt 0 ] && echo "NOT ASSESSED" || echo COHERENT; }; })"
+  else
+    echo "Spark triage — $root"
+    echo
+    echo "Read-only: nothing was created, changed, labelled, assigned or provisioned."
+    echo
+    gov_render "$rows"
+    echo
+    echo "Established — evidence exists and agrees:"
+    # Long recorded prose (a blockers paragraph) would bury the rest; the full
+    # value is always available through --tsv.
+    printf '%s\n' "$rows" | awk -F'\t' '
+      $2 == "=" && NF && ($1 == "class" || $1 == "worktree" || $1 == "trunk" || $1 == "intent") {
+        d = $4; if (length(d) > 96) d = substr(d, 1, 93) "..."
+        printf "    %-9s %s\n", $1, d }'
+    printf '%s\n' "$rows" | awk -F'\t' '
+      $2 == "=" && NF && !($1 == "class" || $1 == "worktree" || $1 == "trunk" || $1 == "intent") { n++ }
+      END { if (n) printf "    %-9s %d governed surface(s) match the model\n", "governance", n }'
+    echo
+    if [ "$nm" -gt 0 ]; then
+      red "Mechanical problems — no decision resolves these ($nm):"
+      printf '%s\n' "$mech" | awk -F'\t' 'NF { print "    " $1 "/" $3 "  " $4 }'
+      echo
+    fi
+    if [ "$nj" -gt 0 ]; then
+      yellow "Human decisions required ($nj) — evidence is sufficient, the authority is yours:"
+      printf '%s\n' "$judg" | awk -F'\t' 'NF { print "    " $1 "/" $3 "  " $4 }'
+      yellow "  Reported, never chosen. A recommendation is not authority."
+      echo
+    fi
+    if [ "$nn" -gt 0 ]; then
+      yellow "Not assessed ($nn) — Spark could not read these, so nothing is claimed:"
+      printf '%s\n' "$na" | awk -F'\t' 'NF { print "    " $1 "/" $3 "  " $4 }'
+      yellow "  An unread surface is not a negative finding."
+      echo
+    fi
+    echo "Reconciliation required before proceeding: $recon"
+    case "$recon" in
+      no)
+        green "  No truth conflict and no owed decision. This is not a claim that all"
+        green "  future work is known — only that nothing must be reconciled first." ;;
+      yes)
+        echo "  Route the findings above through reconciliation (#468). Deriving the"
+        echo "  course itself is #469, not this verb." ;;
+      *)
+        echo "  Undetermined: some surfaces could not be read, so this is not a pass." ;;
+    esac
+    echo
+    if [ "$nm" -gt 0 ]; then
+      red "FAIL — the repository holds a mechanically invalid state"
+    elif [ "$nj" -gt 0 ]; then
+      yellow "DECISION REQUIRED — nothing is mechanically wrong; $nj decision(s) await human authority"
+    elif [ "$nn" -gt 0 ]; then
+      yellow "NOT ASSESSED — some surfaces could not be read; never assumed healthy"
+    else
+      green "COHERENT — no truth conflict found; ready for reconciliation or course derivation"
+    fi
+  fi
+
+  [ "$nm" -eq 0 ] || return 1
+  [ "$nj" -eq 0 ] || return 5
+  [ "$nn" -eq 0 ] || return 3
+  return 0
 }
 
 # spark governance [--tsv] | inspect | diff | apply | validate
