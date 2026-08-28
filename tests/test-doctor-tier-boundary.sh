@@ -30,11 +30,24 @@ mk_marketplace() {
 
 # Exercise the helper directly against a fixture marketplace, so the fixture
 # does not have to satisfy every other doctor gate. Sourcing the CLI would run
-# dispatch, so extract just this function and call it.
+# dispatch, so extract just the functions under test and call them.
+#
+# issue_refs comes along because the tier check reads issue citations through
+# it rather than owning a second copy of the `#N` syntax. Extracting only
+# check_tier_boundary silently produced "command not found" on every file and
+# a clean-looking report — a check that had stopped checking.
 run_tier() {
   bash -c '
     set -uo pipefail
+    eval "$(awk "/^issue_refs\\(\\) \\{/,/^\\}$/" "$1")"
     eval "$(awk "/^check_tier_boundary\\(\\) \\{/,/^\\}$/" "$1")"
+    # A helper that fails to extract is "command not found" -> a count of zero
+    # -> a clean report. That is a check which has stopped checking while
+    # looking healthy, so make it loud instead.
+    for fn in issue_refs check_tier_boundary; do
+      command -v "$fn" >/dev/null 2>&1 || {
+        echo "EXTRACTION-FAILED: $fn was not extracted" >&2; exit 99; }
+    done
     check_tier_boundary "$2"
   ' _ "$SPARK" "$1"
 }
