@@ -1566,6 +1566,41 @@ cmd_list_skills() {
 # rest of this binary already reads.
 # ---------------------------------------------------------------------------
 
+# issue_refs <text> [min-digits] — the issue numbers a piece of text EXPLICITLY
+# references, one per line, in order of appearance.
+#
+# The one rule: a reference is `#` immediately followed by digits, with a word
+# boundary on both sides. The sigil is not decoration, it is the whole
+# distinction — without it every number in ordinary prose becomes a reference,
+# and `v0.22` silently means issue #22.
+#
+# That was not hypothetical. triage read its recorded intent by stripping
+# everything except digits, so "v0.22" and "v0.21.0" contributed 22 and 21 and
+# were looked up as issues, manufacturing evidence about a decision from a
+# version string. Dates, counts, ports and percentages all did the same.
+#
+# min-digits exists only so doctor's shipped-surface lint can keep asking its
+# narrower question (a three-digit floor, because "#1" in prose is usually not
+# this repo's tracker) without owning a second copy of the syntax.
+issue_refs() {
+  printf '%s' "$1" | awk -v minw="${2:-1}" '
+    {
+      s = $0
+      while (match(s, /#[0-9]+/)) {
+        pos = RSTART; len = RLENGTH
+        num = substr(s, pos + 1, len - 1)
+        before = (pos > 1) ? substr(s, pos - 1, 1) : ""
+        after  = substr(s, pos + len, 1)
+        # A boundary on BOTH sides: `abc#12` is not a reference and neither is
+        # `#12abc`. An empty neighbour means start/end of line, which is one.
+        if ((before == "" || before !~ /[0-9A-Za-z_]/) &&
+            (after  == "" || after  !~ /[0-9A-Za-z_]/) &&
+            length(num) >= minw) print num
+        s = substr(s, pos + len)
+      }
+    }'
+}
+
 # repo_git_facts <root> — the cheap local git facts. No network: this is on
 # the SessionStart hot path through brief --short.
 repo_git_facts() {
@@ -4007,25 +4042,42 @@ triage_rows() {
   if [ -z "$next" ]; then
     printf 'intent\t=\trecorded\tnone recorded; triage does not require one\n'
   else
-    local closed=0 open_seen=0 n
-    for n in $(printf '%s' "$next" | tr -cs '0-9#' ' ' | tr -d '#'); do
-      case "$n" in ''|*[!0-9]*) continue ;; esac
-      [ "${#n}" -ge 2 ] || continue
-      if command -v gh >/dev/null 2>&1; then
-        case "$(gh api "repos/{owner}/{repo}/issues/$n" --jq .state 2>/dev/null)" in
-          closed) closed=$((closed+1)) ;;
-          open)   open_seen=$((open_seen+1)) ;;
-        esac
-      fi
-    done
-    if [ "$closed" -gt 0 ] && [ "$open_seen" -eq 0 ]; then
-      printf 'intent\t!\trecorded\tevery issue the recorded next action names (%d) is closed, so the intent recorded %s is spent; the next action is yours\n' \
-        "$closed" "${updated:-at an unknown date}"
-    elif [ "$closed" -eq 0 ] && [ "$open_seen" -eq 0 ] && ! command -v gh >/dev/null 2>&1; then
-      printf 'intent\t?\trecorded\tnot assessed: an intent is recorded (%s) but gh is absent, so whether it is still live could not be read\n' \
-        "${updated:-date unknown}"
+    # EXPLICIT references only, through the one extractor. Deduplicated so a
+    # number repeated in prose is queried once and the query set is
+    # deterministic — the fixtures assert which issues were asked for, not just
+    # the verdict.
+    local closed=0 open_seen=0 unread=0 n refs
+    refs="$(issue_refs "$next" | awk '!seen[$0]++')"
+    if [ -z "$refs" ]; then
+      printf 'intent\t=\trecorded\trecorded %s; it references no issue explicitly, so its liveness is not judged from issue state\n' \
+        "${updated:-at an unknown date}"
     else
-      printf 'intent\t=\trecorded\trecorded %s and still names open work\n' "${updated:-at an unknown date}"
+      for n in $refs; do
+        if command -v gh >/dev/null 2>&1; then
+          case "$(gh api "repos/{owner}/{repo}/issues/$n" --jq .state 2>/dev/null)" in
+            closed) closed=$((closed+1)) ;;
+            open)   open_seen=$((open_seen+1)) ;;
+            *)      unread=$((unread+1)) ;;
+          esac
+        else
+          unread=$((unread+1))
+        fi
+      done
+      if [ "$closed" -gt 0 ] && [ "$open_seen" -eq 0 ] && [ "$unread" -eq 0 ]; then
+        printf 'intent\t!\trecorded\tevery issue the recorded next action names (%d) is closed, so the intent recorded %s is spent; the next action is yours\n' \
+          "$closed" "${updated:-at an unknown date}"
+      elif [ "$open_seen" -gt 0 ]; then
+        printf 'intent\t=\trecorded\trecorded %s and still names open work\n' "${updated:-at an unknown date}"
+      elif ! command -v gh >/dev/null 2>&1; then
+        # Two different unread reasons, kept apart: no reader at all, versus a
+        # reader that could not answer. Both are NOT ASSESSED and neither is a
+        # negative fact, but an operator fixes them differently.
+        printf 'intent\t?\trecorded\tnot assessed: an intent is recorded (%s) naming %s issue(s), but gh is absent, so whether it is still live could not be read\n' \
+          "${updated:-date unknown}" "$unread"
+      else
+        printf 'intent\t?\trecorded\tnot assessed: an intent is recorded (%s) naming %s issue(s), but their state could not be read\n' \
+          "${updated:-date unknown}" "$unread"
+      fi
     fi
   fi
   [ -z "$blockers" ] || printf 'intent\t=\tblockers\trecorded: %s\n' "$blockers"
@@ -6085,7 +6137,7 @@ EOF
   # Shipped surfaces a downstream install actually receives.
   while IFS= read -r f; do
     [ -n "$f" ] || continue
-    n="$(grep -oE '#[0-9]{3,}' "$f" 2>/dev/null | wc -l | tr -d ' ')"
+    n="$(issue_refs "$(cat "$f" 2>/dev/null)" 3 | wc -l | tr -d ' ')"
     [ "$n" -gt 0 ] && issue_files="${issue_files}    ${f#"$mroot"/} ($n)
 "
   done <<EOF
