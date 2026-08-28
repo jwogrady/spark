@@ -311,6 +311,102 @@ case "$out_j" in
   *) ok ;;
 esac
 
+# ============ explicit issue references only (#571) ========================
+# The extractor is the whole fix: a reference is `#` plus digits with a word
+# boundary either side. Without the sigil every number in prose becomes one, and
+# `v0.22` silently means issue #22 — which is what triage did, looking up 21 and
+# 22 as issues because they are fragments of v0.21.0 and v0.22.
+ir() { issue_refs "$1" | tr '\n' ' ' | sed 's/ $//'; }
+
+assert_eq "a version is not an issue reference"        "" "$(ir 'v0.22')"
+assert_eq "nor a dotted version"                       "" "$(ir 'v0.21.0 is published')"
+assert_eq "a year is not an issue reference"           "" "$(ir '2026-08-28')"
+assert_eq "a port is not an issue reference"           "" "$(ir 'listening on port 8080')"
+assert_eq "a percentage and a count are not either"    "" "$(ir '95% of 200 runs')"
+assert_eq "an explicit reference is one"           "4242" "$(ir 'finish #4242')"
+assert_eq "several explicit references, in order" "467 468" "$(ir 'complete #467 then #468')"
+assert_eq "a sigil inside a word is not a reference"   "" "$(ir 'abc#12 is not a reference')"
+assert_eq "nor digits running into a word"             "" "$(ir '#12abc is not a reference')"
+assert_eq "a trailing period does not swallow it"     "7" "$(ir 'see #7.')"
+# The exact shape that produced the defect: versions and real references mixed.
+assert_eq "versions are skipped and references kept" "467 468" \
+  "$(ir 'v0.22 sprint: finish #467 and #468, per v0.21.0')"
+# doctor's narrower question rides the same syntax with a width floor rather
+# than a second regex.
+assert_eq "the width floor filters short references" "467 4242" \
+  "$(issue_refs 'mixed #7 #467 #4242' 3 | tr '\n' ' ' | sed 's/ $//')"
+
+# --- WHICH issues were queried, not merely the verdict ---------------------
+# The previous fixture's weakness: a stub that answered `closed` to everything
+# made a wrong query set look right. These assert the query log itself.
+qbin="$WORK/qgh"
+mkdir -p "$qbin"
+for t in git awk sed grep find sort printf bash env cat wc tr head cut date mktemp rm mkdir ls dirname basename jq python3; do
+  src="$(command -v "$t" 2>/dev/null || true)"
+  [ -n "$src" ] && ln -sf "$src" "$qbin/$t" 2>/dev/null || true
+done
+cat > "$qbin/gh" <<'GHEOF'
+#!/usr/bin/env bash
+# Log every issue lookup, then answer with whatever QSTATE says.
+if [ "${1:-}" = "api" ]; then
+  case "${2:-}" in
+    */issues/*) echo "${2##*/}" >> "$QLOG"; echo "${QSTATE:-open}" ;;
+  esac
+  exit 0
+fi
+exit 0
+GHEOF
+chmod +x "$qbin/gh"
+
+qrun() { # <intent-text> <state> -> rows, with QLOG holding the queried numbers
+  local intent="$1" st="$2" d="$WORK/q$3"
+  mk_existing "$d"
+  python3 - "$d/.spark/state.json" "$intent" <<'PY'
+import json, sys
+json.dump({"next_action": sys.argv[2], "blockers": "", "updated": "2026-01-02"},
+          open(sys.argv[1], "w"))
+PY
+  : > "$WORK/qlog.$3"
+  QROWS="$(cd "$d" && env PATH="$qbin" QLOG="$WORK/qlog.$3" QSTATE="$st" \
+    bash -c '. '"$SPARK"'; triage_rows "'"$d"'"')"
+  QUERIED="$(LC_ALL=C sort -n "$WORK/qlog.$3" | tr '\n' ' ' | sed 's/ $//')"
+}
+
+# The regression case, verbatim in shape: versions alongside real references.
+qrun 'v0.22 sprint: finish #467 and #468, per v0.21.0' open a
+assert_eq "only explicit references are queried" "467 468" "$QUERIED"
+case "$QUERIED" in
+  *" 21 "*|"21 "*|*" 22 "*|"22 "*) bad "a version fragment was queried as an issue" ;;
+  *) ok ;;
+esac
+assert_eq "and open work keeps its verdict" "=" "$(row "$QROWS" intent recorded)"
+
+# All-closed keeps the spent semantics, and still only asks about real refs.
+qrun 'finish #4242 and #4243' closed b
+assert_eq "all-closed queries exactly the named issues" "4242 4243" "$QUERIED"
+assert_eq "and reports the intent spent" "!" "$(row "$QROWS" intent recorded)"
+assert_contains "naming the count it actually checked" "names (2) is closed" \
+  "$(det "$QROWS" intent recorded)"
+
+# Prose with NO explicit reference must not be called spent, must not be called
+# still-live, and must not query anything at all.
+qrun 'ship the v0.22 milestone by 2026-09-01 on port 8080' closed c
+assert_eq "prose with no reference queries nothing" "" "$QUERIED"
+assert_eq "and is a known fact, not a judgment" "=" "$(row "$QROWS" intent recorded)"
+assert_contains "reported as referencing no issue" "references no issue explicitly" \
+  "$(det "$QROWS" intent recorded)"
+case "$(det "$QROWS" intent recorded)" in
+  *"still names open work"*) bad "no-reference intent must not claim open work" ;;
+  *"is spent"*)              bad "no-reference intent must not be called spent" ;;
+  *) ok ;;
+esac
+
+# A reference whose state cannot be read stays NOT ASSESSED — never a negative.
+qrun 'finish #4242' unreadable d
+assert_eq "an unreadable state is not assessed" "?" "$(row "$QROWS" intent recorded)"
+assert_contains "and says the state could not be read" "could not be read" \
+  "$(det "$QROWS" intent recorded)"
+
 # ============ the verdict and its exit codes ==============================
 # Four outcomes, most severe wins, and DECISION REQUIRED is not FAIL.
 rc=0; out="$(cd "$unc" && env PATH="$nogh" "$SPARK" triage 2>&1)" || rc=$?
