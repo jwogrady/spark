@@ -33,6 +33,12 @@ cmd="$(extract_command)"
 
 block() {
   msg="Spark guard: $1"
+  # When a shell was invoked, quoted text and heredoc bodies are treated as
+  # commands, so a refusal may be about a pattern rather than an invocation.
+  # Saying which is the difference between an actionable message and a puzzle.
+  if [ "${guard_shell_invoked:-0}" -eq 1 ]; then
+    msg="$msg (this command invokes a shell, so quoted text and heredoc bodies are read as commands)"
+  fi
   echo "$msg" >&2
   # Log to audit trail if configured (non-blocking). The variable must be
   # expanded with a default everywhere: under set -u an unbound reference
@@ -66,13 +72,69 @@ release_please_configured() {
   return 1
 }
 
-# Substring matching is bypassable (`git -C /path push`, `HEAD:refs/heads/main`),
-# so normalize and walk the tokens instead: find each `git` invocation, skip
-# git's global options to reach the real subcommand, and for `push` classify
-# every refspec by its *destination* side. Tokenization is whitespace-naive by
-# design — a quoted argument containing spaces can only split into more tokens,
-# which can only cause an over-block, never a bypass.
-normalized="$(printf '%s' "$cmd" | tr ';|&()"'\''' '       ')"
+# QUOTED TEXT AND HEREDOC BODIES ARE DATA, not commands.
+#
+# The tokenizer used to replace quotes with spaces and walk everything, on the
+# reasoning that an over-block is harmless. It is not: `echo "do not git push
+# origin master"`, `grep -r "git push origin master" docs/` and a heredoc whose
+# body mentions a push were all refused, and `hooks.md` claims the guard
+# "tokenizes the command rather than substring-matching" — a guarantee a release
+# would otherwise ship as false (#526).
+#
+# The rule keeps the bypass-free direction. When the command invokes a SHELL,
+# quoted text and heredoc bodies may themselves be commands (`sh -c 'git push
+# origin master'`, `sh <<EOF … EOF`), so nothing is stripped and behaviour is
+# exactly as before — conservative, possibly over-blocking, never bypassable.
+# Only when no shell is invoked is quoted text treated as the data it is.
+#
+# An unquoted `git push origin master` anywhere still blocks, whatever command
+# precedes it: `xargs git push origin master` and `find … -exec git push …` are
+# real invocations and stay refused.
+guard_shell_invoked=0
+case " $(printf '%s' "$cmd" | tr -s '[:space:]' ' ') " in
+  *" sh "*|*" bash "*|*" zsh "*|*" dash "*|*" ksh "*|*"/sh "*|*"/bash "*|*"/zsh "*|*"/dash "*|*"/ksh "*)
+    guard_shell_invoked=1 ;;
+esac
+
+if [ "$guard_shell_invoked" -eq 1 ]; then
+  scan="$cmd"
+else
+  # Drop heredoc bodies, then quoted spans. awk rather than sed: the quote state
+  # has to be tracked character by character, and a line-oriented substitution
+  # cannot see a span that opens on one line and closes on another.
+  scan="$(printf '%s' "$cmd" | awk '
+    BEGIN { hd = "" }
+    {
+      line = $0
+      if (hd != "") {                      # inside a heredoc body: data
+        stripped = line
+        sub(/^[ \t]+/, "", stripped)
+        if (stripped == hd) hd = ""
+        next
+      }
+      # Does this line open a heredoc? Capture the delimiter, quoted or not.
+      probe = line
+      if (match(probe, /<<-?[ \t]*["'\'']?[A-Za-z_][A-Za-z0-9_]*["'\'']?/)) {
+        d = substr(probe, RSTART, RLENGTH)
+        gsub(/^<<-?[ \t]*/, "", d); gsub(/["'\'']/, "", d)
+        hd = d
+        sub(/<<-?[ \t]*["'\'']?[A-Za-z_][A-Za-z0-9_]*["'\'']?.*$/, "", line)
+      }
+      # Remove quoted spans, leaving a space so tokens do not fuse.
+      out = ""; i = 1; L = length(line); q = ""
+      while (i <= L) {
+        c = substr(line, i, 1)
+        if (q == "") {
+          if (c == "\"" || c == "'\''") { q = c; out = out " " }
+          else out = out c
+        } else if (c == q) { q = "" }
+        i++
+      }
+      print out
+    }')"
+fi
+
+normalized="$(printf '%s' "$scan" | tr ';|&()"'\''' '       ')"
 # shellcheck disable=SC2206 # word splitting is the tokenizer
 tokens=( $normalized )
 n=${#tokens[@]}
