@@ -1194,17 +1194,29 @@ cmd_doctor() {
       gov_model_d="$(resolve_governance 2>/dev/null)"
       green "  ✓ the resolved governance model is valid"
       local gov_files gov_live_d gov_lrows nplus nsquig nbang nfplus
+      local gov_fmech gov_fjudg nfmech
       gov_files="$(gov_file_rows "$gov_model_d" "$proj_root")"
-      nbang="$(printf '%s\n' "$gov_files" | awk -F'\t' '$2 == "!" && NF' | wc -l | tr -d ' ')"
+      # Partitioned by the verdict layer's own rule (#559) rather than a local
+      # `!` test, so doctor cannot report an owed decision as broken state — and
+      # a future mechanical `!` on this surface becomes an error, not a warning.
+      gov_fmech="$(gov_mechanical_rows "$gov_files")"
+      gov_fjudg="$(gov_judgment_rows "$gov_files")"
+      nfmech="$(printf '%s\n' "$gov_fmech" | awk 'NF' | wc -l | tr -d ' ')"
+      nbang="$(printf '%s\n' "$gov_fjudg" | awk 'NF' | wc -l | tr -d ' ')"
       # A `+` surface is MISSING. Counting only `!` let a missing
       # spark-provisions file fall straight through to the green all-clear
       # below — the "a green result never means not-looked-at" hazard, in the
       # block written to eliminate it.
       nfplus="$(printf '%s\n' "$gov_files" | awk -F'\t' '$2 == "+" && NF' | wc -l | tr -d ' ')"
+      if [ "$nfmech" -gt 0 ]; then
+        red "  ✗ $nfmech governance file surface(s) are mechanically invalid:"
+        printf '%s\n' "$gov_fmech" | awk -F'\t' 'NF { print "      " $3 " — " $4 }'
+        errors=$((errors+1))
+      fi
       if [ "$nbang" -gt 0 ] || [ "$nfplus" -gt 0 ]; then
         [ "$nbang" -gt 0 ] && {
-          yellow "  ! $nbang governance file surface(s) need a human decision:"
-          printf '%s\n' "$gov_files" | awk -F'\t' '$2 == "!" && NF { print "      " $3 " — " $4 }'; }
+          yellow "  ! $nbang governance file surface(s) await a HUMAN DECISION:"
+          printf '%s\n' "$gov_fjudg" | awk -F'\t' 'NF { print "      " $3 " — " $4 }'; }
         [ "$nfplus" -gt 0 ] && {
           yellow "  ! $nfplus governance file surface(s) are missing and provisionable:"
           printf '%s\n' "$gov_files" | awk -F'\t' '$2 == "+" && NF { print "      " $3 " — " $4 }'; }
@@ -3690,6 +3702,66 @@ EOF_ISS
   gov_file_rows "$model" "$root"
 }
 
+# ---------------------------------------------------------------------------
+# The verdict layer (#559).
+#
+# The row alphabet above is UNCHANGED — `!` still means "requires human
+# judgment — reported, NEVER guessed", and whether that alphabet should grow is
+# #535's question, deliberately left open. What #559 fixes sits one layer up:
+# `validate` rendered every `!` as "mechanically invalid governance state",
+# which is false by the legend printed directly above it, and left exactly three
+# outcomes — PASS, FAIL, NOT ASSESSED. With no outcome meaning "a human must
+# decide this", the cheapest route from a red gate to a green one was for the
+# agent to write the judgment itself. That is what happened to #558: Spark
+# correctly reported a missing release decision, and the agent supplied one.
+#
+# So `!` rows are partitioned by ONE question: what authority does clearing
+# this row need?
+#
+#   judgment    Clearing it means deciding something about the project's LIVE
+#               state — which category an issue means, which docs-impact class
+#               applies, whether work is milestoned or backlogged, what belongs
+#               in a surface the model says only a human provisions. That is the
+#               human's authority and Spark must not borrow it.
+#
+#   mechanical  Clearing it needs no authority at all. A dependency cycle is
+#               impossible whoever looks at it; an unapproved draft plan
+#               artifact that contradicts the schema is simply wrong. Anyone may
+#               correct these, so they stay a hard failure.
+#
+# The two functions partition the `!` rows exactly, so no caller can see a row
+# as both or miss one. An UNRECOGNISED surface is mechanical on purpose: an
+# unknown `!` must never soften a gate into "ask the human and continue".
+# tests/test-governance-decision.sh asserts the partition is total and that
+# every surface that actually emits `!` is classified deliberately.
+# ---------------------------------------------------------------------------
+gov_judgment_rows() {
+  printf '%s\n' "$1" | awk -F'\t' '
+    $2 == "!" && NF && ($1 == "metadata" || $1 == "file") { print }'
+}
+gov_mechanical_rows() {
+  printf '%s\n' "$1" | awk -F'\t' '
+    $2 == "!" && NF && !($1 == "metadata" || $1 == "file") { print }'
+}
+
+# gov_admissible <model> — every governed family with its cardinality,
+# requirement and declared members. This is what "present admissible choices"
+# means mechanically: the choice SET comes from the schema, and Spark stops
+# there. It never ranks the values and never picks one. Read from the model
+# rather than parsed out of a row's prose, because a grep over a detail string
+# is not evidence that the family exists.
+gov_admissible() {
+  printf '%s\n' "$1" | awk -F'\t' '
+    $1 == "family" { card[$2] = $3; req[$2] = $4; if (!($2 in seen)) { seen[$2] = 1; ord[++n] = $2 } }
+    $1 == "member" { mem[$2] = mem[$2] " " $3 }
+    END {
+      for (i = 1; i <= n; i++) {
+        f = ord[i]
+        printf "%-13s %-12s %-8s %s\n", f, card[f], req[f], (f in mem) ? substr(mem[f], 2) : "(no declared members)"
+      }
+    }'
+}
+
 # gov_render <rows> <what> — the human view. Grouped by surface, counts first,
 # because a governance report is read for its shape before its detail.
 gov_render() {
@@ -3728,7 +3800,7 @@ cmd_governance() {
       echo "  inspect    report repository state against the model (read-only)"
       echo "  diff       report the proposed reconciliation (read-only)"
       echo "  apply      create what is missing; --repair-drift also rewrites drift"
-      echo "  validate   fail closed on mechanically invalid required state"
+      echo "  validate   fail closed on invalid state; DECISION REQUIRED where judgment is owed"
       return 0 ;;
   esac
   if [ -z "$sub" ]; then gov_cmd_render "$@"; return $?; fi
@@ -3773,28 +3845,62 @@ cmd_governance() {
     validate)
       # Fails closed on mechanically invalid REQUIRED state only. What counts
       # as required is the schema's own requirement field, not a list here.
-      local bad na
-      bad="$(printf '%s\n' "$rows" | awk -F'\t' '$2 == "!" && NF { print }')"
+      #
+      # Four outcomes, not three (#559). A `!` row that names a project decision
+      # is not "mechanically invalid", and reporting it as such made writing the
+      # decision the cheapest way to a green gate. DECISION REQUIRED is its own
+      # outcome with its own exit code so an orchestrator can tell "stop and ask
+      # the human" from "something is broken and I should fix it".
+      local mech judg na njudg
+      mech="$(gov_mechanical_rows "$rows")"
+      judg="$(gov_judgment_rows "$rows")"
       na="$(printf '%s\n' "$rows" | awk -F'\t' '$2 == "?" && NF { print }')"
+      njudg="$(printf '%s\n' "$judg" | awk 'NF' | wc -l | tr -d ' ')"
       if [ "$tsv" -eq 1 ]; then
         printf '%s\n' "$rows"
         printf 'verdict\t%s\n' \
-          "$([ -n "$bad" ] && echo FAIL || { [ -n "$na" ] && echo "NOT ASSESSED" || echo PASS; })"
+          "$([ -n "$mech" ] && echo FAIL \
+             || { [ -n "$judg" ] && echo "DECISION REQUIRED" \
+                  || { [ -n "$na" ] && echo "NOT ASSESSED" || echo PASS; }; })"
       else
         echo "Spark governance — validate"
         echo
         gov_render "$rows"
         echo
-        if [ -n "$bad" ]; then
-          red "FAIL — mechanically invalid governance state above (!)"
-          [ -z "$na" ] || yellow "     and some surfaces could not be read, so the picture is partial (?)"
+        if [ -n "$mech" ]; then
+          red "Mechanically invalid — no decision resolves these:"
+          printf '%s\n' "$mech" | awk -F'\t' 'NF { print "    " $3 "  " $4 }'
+          echo
+        fi
+        if [ -n "$judg" ]; then
+          yellow "HUMAN DECISION REQUIRED — $njudg gap(s) name a value only you have the authority to choose:"
+          printf '%s\n' "$judg" | awk -F'\t' 'NF { print "    " $3 "  " $4 }'
+          echo
+          echo "  Admissible values, from the governance model — Spark reports the set and"
+          echo "  chooses nothing:"
+          gov_admissible "$model" | awk 'NF { print "    " $0 }'
+          echo
+          echo "  A recommendation is not authority. An agent may propose a value with its"
+          echo "  evidence, but this gap clears only when the governed field itself carries"
+          echo "  the decision — a comment, a report or an agent's reasoning does not clear"
+          echo "  it, and neither does this run."
+          echo
+        fi
+        if [ -n "$mech" ]; then
+          red "FAIL — mechanically invalid governance state above"
+        elif [ -n "$judg" ]; then
+          yellow "DECISION REQUIRED — nothing is mechanically wrong; $njudg decision(s) await human authority"
         elif [ -n "$na" ]; then
           yellow "NOT ASSESSED — some surfaces could not be read; never assumed healthy"
         else
           green "PASS — every required governance invariant holds"
         fi
+        if [ -n "$na" ] && { [ -n "$mech" ] || [ -n "$judg" ]; }; then
+          yellow "     and some surfaces could not be read, so the picture is partial (?)"
+        fi
       fi
-      [ -z "$bad" ] || return 1
+      [ -z "$mech" ] || return 1
+      [ -z "$judg" ] || return 5
       [ -z "$na" ] || return 3
       return 0 ;;
     apply)
@@ -4335,6 +4441,14 @@ cmd_plan() {
         if [ -z "$rows" ]; then green "  = schema: every label resolves, and every cardinality holds"
         else printf '%s\n' "$rows" | awk -F'\t' 'NF { printf "  %s %-14s %s\n", $2, $3, $4 }'
         fi
+      fi
+      # A plan artifact is an UNAPPROVED draft: correcting it needs no authority
+      # over the project's live state, so a schema violation here stays a hard
+      # failure rather than becoming DECISION REQUIRED (#559). gov_mechanical_rows
+      # is what says so, and it says so in one place.
+      if [ -n "$(gov_judgment_rows "$rows")" ]; then
+        [ "$tsv" -eq 1 ] || red "DECISION REQUIRED — the plan names live state only a human may decide"
+        return 5
       fi
       [ -z "$rows" ] || { [ "$tsv" -eq 1 ] || red "FAIL — the plan declares metadata the schema refuses"; return 1; }
       [ "$tsv" -eq 1 ] || green "PASS — read-only: nothing was contacted or written"
@@ -6443,21 +6557,35 @@ EOF_ROWS3
   # above, before any selection — so the metadata check is always performed and
   # never skipped with a warning.
   if [ -n "$sn" ]; then
-    local sel_row bad_meta
+    local sel_row meta_rows mech_meta judg_meta
     # Every issue in this sweep belongs to $ms by construction, so the
     # milestone column is known without another call. Passed with -v rather
     # than interpolated: a title carries spaces and punctuation.
     sel_row="$(printf '%s\n' "$rows" \
       | awk -F'\t' -v n="$sn" -v m="$ms" '$1 == n { print $1 "\t" $2 "\t" m; exit }')"
-    bad_meta="$(gov_issue_rows "$gov_model_n" "$sel_row" "$taxo" \
-      | awk -F'\t' '$2 == "!" && NF { print }')"
-    if [ -n "$bad_meta" ]; then
+    meta_rows="$(gov_issue_rows "$gov_model_n" "$sel_row" "$taxo")"
+    mech_meta="$(gov_mechanical_rows "$meta_rows")"
+    judg_meta="$(gov_judgment_rows "$meta_rows")"
+    # Routed through the same partition the verdict layer uses (#559) rather
+    # than a local `!` test, so selection and validation cannot disagree about
+    # whether a gap is broken state or an owed decision.
+    if [ -n "$mech_meta" ]; then
       echo
       red "not ready: #$sn has mechanically invalid execution metadata"
-      printf '%s\n' "$bad_meta" | awk -F'\t' 'NF { print "    ! " $4 }'
-      red "  Fix the metadata before starting. Spark reports the problem; which"
-      red "  category or disposition is meant is a human decision, never a default."
+      printf '%s\n' "$mech_meta" | awk -F'\t' 'NF { print "    ! " $4 }'
+      red "  No decision resolves this — the state itself is impossible."
       return 4
+    fi
+    if [ -n "$judg_meta" ]; then
+      echo
+      yellow "not ready: #$sn awaits a human decision before work can start"
+      printf '%s\n' "$judg_meta" | awk -F'\t' 'NF { print "    ! " $4 }'
+      yellow "  Spark reports the gap and stops. Which category, disposition or"
+      yellow "  documentation impact is meant is yours to decide, never a default —"
+      yellow "  and an agent filling it in to make this check pass is the defect"
+      yellow "  this stop exists to prevent (#559). Admissible values:"
+      gov_admissible "$gov_model_n" | awk 'NF { print "      " $0 }'
+      return 5
     fi
   fi
 
