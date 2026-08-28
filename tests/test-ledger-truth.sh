@@ -32,7 +32,12 @@ assert_eq() {
 
 # A minimal but structurally complete pair of documents. Kept small so each
 # fixture changes exactly one thing.
-mk() { # <cycles> <summary-word> <tally> <record-rows> <cert-heading> <cert-passed> <cert-of>
+# The suite rows need a tests/ directory of the FIXTURE's own, and a baseline the
+# checker cannot resolve — so the fixtures exercise the current-total half, which
+# is the half that catches an added suite, and the checker's shallow-clone limit
+# is exercised at the same time.
+FIXTURE_BASE="0000000000000000000000000000000000000000"
+mk() { # <cycles> <word> <tally> <rows> <cert-h> <cert-p> <cert-of> [new] [base] [total]
   local cycles="$1" word="$2" tally="$3" rows="$4" ch="$5" cp="$6" co="$7" i
   { echo "# Ledger"
     echo
@@ -54,7 +59,8 @@ mk() { # <cycles> <summary-word> <tally> <record-rows> <cert-heading> <cert-pass
     echo "| | |"
     echo "| --- | --- |"
     echo "| repair issues closed | $tally (${tally} code defects) |"
-    echo "| new behavioural suites | 6 |"
+    echo "| new behavioural suites | ${8:-0} |"
+    echo "| suites total | ${9:-0} → ${10:-0} (baseline \`$FIXTURE_BASE\`) |"
   } > "$w/ledger.md"
   { echo "# Release record"
     echo
@@ -77,7 +83,15 @@ mk() { # <cycles> <summary-word> <tally> <record-rows> <cert-heading> <cert-pass
     echo "prose"
   } > "$w/record.md"
 }
-run() { RC=0; OUT="$(bash "$CHECK" --ledger "$w/ledger.md" --record "$w/record.md" 2>&1)" || RC=$?; }
+# The checker counts suites under its repository root. Pointed at the fixture
+# directory, `find "$root/tests"` sees the fixture's own tests/ — which is what
+# makes the suite-count assertions below about the fixture rather than about this
+# repository.
+mkdir -p "$w/tests"
+run() {
+  RC=0
+  OUT="$(cd "$w" && bash "$CHECK" --ledger "$w/ledger.md" --record "$w/record.md" 2>&1)" || RC=$?
+}
 
 # ============ a consistent pair passes ====================================
 # First, because every fixture below is a difference from this one.
@@ -116,6 +130,71 @@ run
 assert_eq "all three moving together passes" 0 "$RC"
 assert_contains "at the new count" "15 repair cycle(s)" "$OUT"
 assert_contains "and reports the issue count too" "over 15 repair issue(s)" "$OUT"
+
+# ============ the suite counts are derived from the tree =================
+# The ledger said "6 new" and "47 → 56" while the tree held 57, and this check
+# reported "record agrees" — because it derived cycles, the repairs table and the
+# denominator, and did not look at these rows. A guard that emits a success beside
+# a stale figure teaches its reader to trust a signal that does not cover the
+# claim (#549).
+rm -f "$w/tests"/test-*.sh
+: > "$w/tests/test-alpha.sh"; : > "$w/tests/test-beta.sh"
+mk 14 fourteen 14 14 74 74 74 0 0 2
+run
+assert_eq "a suite total matching the tree passes" 0 "$RC"
+assert_contains "and the summary reports it" "2 suite(s)" "$OUT"
+
+# ADD A SUITE without updating the row: the derived count moves, the claim does
+# not. This is #549's own fixture.
+: > "$w/tests/test-gamma.sh"
+run
+assert_eq "adding a suite without updating the row fails" 1 "$RC"
+assert_contains "naming what the tally claims" "claims 2 suites" "$OUT"
+assert_contains "and what the tree holds" "tree holds 3" "$OUT"
+
+# Updating it passes again.
+mk 14 fourteen 14 14 74 74 74 0 0 3
+run
+assert_eq "updating the row passes" 0 "$RC"
+
+# A row that is not "A → B (baseline REF)" is refused rather than skipped.
+mk 14 fourteen 14 14 74 74 74 0 0 3
+sed -i 's/^| suites total |.*/| suites total | lots |/' "$w/ledger.md"
+run
+assert_eq "an unparseable suites row fails" 1 "$RC"
+assert_contains "and says what shape it wants" "A → B (baseline" "$OUT"
+
+# A missing baseline commit is a GAP: without it the starting figure cannot be
+# reproduced, which is the whole complaint about the original hand-counted rows.
+mk 14 fourteen 14 14 74 74 74 0 0 3
+sed -i 's/ (baseline `[^`]*`)//' "$w/ledger.md"
+run
+assert_eq "a suites row with no baseline commit fails" 1 "$RC"
+assert_contains "and says why" "cannot be reproduced" "$OUT"
+
+# An unresolvable baseline is a stated LIMIT, not a silent pass — and the
+# current total is still checked, so an added suite still fails.
+mk 14 fourteen 14 14 74 74 74 0 0 3
+run
+assert_eq "an unresolvable baseline still passes on the checkable half" 0 "$RC"
+assert_contains "and says which half it could not verify" "not in this clone" "$OUT"
+: > "$w/tests/test-delta.sh"
+run
+assert_eq "while an added suite still fails with an unresolvable baseline" 1 "$RC"
+rm -f "$w/tests/test-delta.sh"
+
+# A missing 'new behavioural suites' row is only reachable when the baseline
+# resolves; with an unresolvable one the checker says so instead of inventing a
+# verdict. Asserted so the degradation is deliberate rather than accidental.
+mk 14 fourteen 14 14 74 74 74 0 0 3
+sed -i '/^| new behavioural suites |/d' "$w/ledger.md"
+run
+assert_eq "a missing new-suites row is not invented around" 0 "$RC"
+assert_contains "because the baseline could not be resolved" "not in this clone" "$OUT"
+
+# Leave the fixture tree empty again: every other fixture calls mk with seven
+# arguments, so its suite rows default to 0 → 0 and must match an empty tests/.
+rm -f "$w/tests"/test-*.sh
 
 # ============ the certification denominator, everywhere ===================
 # #546's literal reproduction: the heading and the passed-count updated, the
@@ -213,9 +292,18 @@ assert_contains "saying nothing could be cross-checked" "nothing can be cross-ch
 mk 14 14 14 14 74 74 74
 run
 assert_eq "a numeral in the summary heading is accepted" 0 "$RC"
-mk 14 "twenty-nine" 14 14 74 74 74
+# A hyphenated compound resolves: the tens and units are added, so prose does not
+# have to stop at twenty. "twenty-one" was rejected by the first version of this
+# check, which is how the gap was found.
+mk 21 "twenty-one" 21 21 74 74 74
+run
+assert_eq "a hyphenated number word is accepted" 0 "$RC"
+mk 14 "twenty-flurb" 14 14 74 74 74
 run
 assert_eq "an unparseable count fails rather than being ignored" 1 "$RC"
+mk 14 "flurbteen" 14 14 74 74 74
+run
+assert_eq "and a single unparseable word fails too" 1 "$RC"
 
 # ============ the REAL documents ==========================================
 # Last, and separately: the fixtures prove the check works, this proves the
