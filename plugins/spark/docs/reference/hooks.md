@@ -28,6 +28,28 @@ compound commands (`… && git push …`), and full refspecs. Push options that
 take a value (`-o`, `--push-option`, `--repo`, `--receive-pack`, `--exec`)
 are skipped so their arguments are not misread as refspecs.
 
+**Quoted text and heredoc bodies are data, not commands.** Writing about a push —
+`echo "do not git push origin master"`, `grep -r "git push origin master" docs/`,
+a heredoc that documents the rule — runs no push and is not refused. The same
+words **unquoted** are a real invocation and still are.
+
+There is one deliberate exception, and it is the bypass-free direction: **when the
+command invokes a shell**, quoted text and heredoc bodies may themselves be
+commands — `sh -c 'git push origin master'`, `sh <<EOF … EOF` — so nothing is
+treated as data and the whole string is scanned. That can over-block a shell
+invocation that merely quotes the words, and the refusal says so rather than
+leaving the reader to guess:
+
+```text
+Spark guard: pushing to master/main is blocked. … (this command invokes a shell,
+so quoted text and heredoc bodies are read as commands)
+```
+
+An unquoted `git push` still refuses whatever precedes it, so `xargs git push
+origin master`, `find … -exec git push …`, `env FOO=1 git push …` and a leading
+assignment are all still blocked. The rule narrows *where* the guard looks, never
+*what* it forbids.
+
 One destination is exempt from the trunk rule: a **GitHub wiki** repository
 (`<owner>/<repo>.wiki.git`). A wiki has exactly one branch, renders only from
 `master`, and has no pull request mechanism, so "push a feature branch and open

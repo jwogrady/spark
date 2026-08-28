@@ -25,6 +25,51 @@ check() { check_in "$PWD" "$@"; }
 allow() { check 0 "$1" "$2"; }
 deny()  { check 2 "$1" "$2"; }
 
+# --- QUOTED TEXT AND HEREDOC BODIES ARE DATA (#526) -------------------------
+#
+# The tokenizer replaced quotes with spaces and walked everything, on the
+# reasoning that an over-block is harmless. It is not: these were all refused,
+# and `hooks.md` claims the guard "tokenizes the command rather than
+# substring-matching" — a guarantee a release would otherwise ship as false.
+#
+# The bypass-free direction is preserved by scope, not by trust: when the command
+# invokes a SHELL, quoted text and heredoc bodies may themselves be commands, so
+# nothing is stripped and behaviour is exactly as before.
+allow "a quoted push inside echo"          'echo "do not git push origin master"'
+allow "a single-quoted push inside echo"   "echo 'git push origin master'"
+allow "a quoted push as a grep pattern"    'grep -r "git push origin master" docs/'
+allow "a quoted push in a sed script"      'sed -i "s/git push origin master//" f.txt'
+allow "a push mentioned in a heredoc"      'cat > doc.md <<EOF
+Never git push origin master.
+EOF'
+allow "a python -c printing a push"        'python3 -c "print(\"git push origin master\")"'
+allow "a python heredoc mentioning it"     'python3 - <<PY
+print("git push origin master")
+PY'
+allow "a quoted force-push in prose"       'echo "we never use git push --force here"'
+allow "a quoted tag command"               'echo "do not run git tag v1.2.3"'
+
+# ...and the same text UNQUOTED is a real invocation, so it still refuses. This
+# pair is the whole distinction: data versus command, not absence versus
+# presence of the words.
+deny  "an unquoted push after echo"        'echo git push origin master'
+
+# --- the shell cases must NOT weaken (#526) ---------------------------------
+# A shell's -c argument, and a heredoc fed to a shell, ARE commands.
+deny  "sh -c carrying a push"              'sh -c "git push origin master"'
+deny  "sh -c single-quoted"                "sh -c 'git push origin master'"
+deny  "bash -c carrying a push"            'bash -c "git push origin master"'
+deny  "a heredoc fed to sh"                'sh <<EOF
+git push origin master
+EOF'
+deny  "a shell -c carrying a force-push"   'bash -c "git push --force origin feat"'
+
+# --- and every other route to a real push still refuses ---------------------
+deny  "xargs git push"                     'echo x | xargs git push origin master'
+deny  "find -exec git push"                'find . -name x -exec git push origin master \;'
+deny  "env then git push"                  'env FOO=1 git push origin master'
+deny  "a leading assignment then push"     'FOO=1 git push origin master'
+
 # --- non-git and plain commands pass through
 allow "non-git command"                    "ls -la"
 allow "git status"                         "git status"
