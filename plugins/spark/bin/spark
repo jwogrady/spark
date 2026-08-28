@@ -1551,6 +1551,106 @@ cmd_list_skills() {
 # prefers the durable work state (.spark/state.json, schema in
 # docs/reference/state.md) and falls back to repo-shape heuristics; load
 # summarizes the resolved standard bag (ADR-0010).
+# ---------------------------------------------------------------------------
+# Repository fact producers (#467).
+#
+# These four bodies were inline in cmd_brief. `spark triage` needs the same
+# facts, and the one thing it must not do is compute them again: a second
+# implementation of "which branch is this" or "what did the human record" is
+# the two-authority defect class that dominated the v0.21 dogfood. So they are
+# lifted here, named, and called by both verbs. brief's output is unchanged —
+# test-brief-resume.sh and test-latency.sh hold that.
+#
+# All four are read-only. Every one emits `key<TAB>value` lines, the shape the
+# rest of this binary already reads.
+# ---------------------------------------------------------------------------
+
+# repo_git_facts <root> — the cheap local git facts. No network: this is on
+# the SessionStart hot path through brief --short.
+repo_git_facts() {
+  local root="$1" counts
+  printf 'branch\t%s\n' "$(git -C "$root" symbolic-ref --quiet --short HEAD || echo '(detached)')"
+  printf 'dirty\t%s\n' "$(git -C "$root" status --porcelain 2>/dev/null | awk 'NF{n++} END{print n+0}')"
+  # Absent when no upstream is tracked, which is a KNOWN negative rather than
+  # an unread one — callers distinguish "" from 0.
+  if counts="$(git -C "$root" rev-list --left-right --count '@{upstream}...HEAD' 2>/dev/null)"; then
+    printf 'behind\t%s\n' "$(printf '%s' "$counts" | awk '{print $1}')"
+    printf 'ahead\t%s\n' "$(printf '%s' "$counts" | awk '{print $2}')"
+  fi
+}
+
+# repo_open_pr — the open PR for the current branch, as a display string, or
+# empty. A network call, so never on the hot path.
+repo_open_pr() {
+  command -v gh >/dev/null 2>&1 || return 0
+  gh pr view --json number,title --template 'PR #{{.number}} — {{.title}}' 2>/dev/null || true
+}
+
+# repo_recorded_intent <root> — what the human recorded in .spark/state.json:
+# the judgment no repository can answer for itself. Never treated as backlog,
+# release or product authority (ADR-0008).
+repo_recorded_intent() {
+  local root="$1" state="$root/.spark/state.json" k v
+  [ -f "$state" ] || return 0
+  while IFS=$'\t' read -r k v; do
+    case "$k" in
+      next_action|blockers|updated) printf '%s\t%s\n' "$k" "$v" ;;
+    esac
+  done < <(read_flat_json "$state")
+}
+
+# repo_classification <root> [--with-live] — the RECORDED classification fact
+# plus, when asked, the live verdict and whether the pair has drifted.
+#
+# `live` is computed lazily by default, and only for a recorded `new`, exactly
+# as brief did: the classifier walks the tree, and brief --short runs on every
+# session start under a latency budget. triage passes --with-live because it
+# reports the live verdict as evidence in its own right.
+#
+# Drift is only ever reported new -> existing, and only with content Spark did
+# not create (#399): being armed is the expected outcome of onboarding, not
+# drift. The fact is never rewritten here — reclassification is the human's
+# call (ADR-0022).
+repo_classification() {
+  local root="$1" with_live=0 recorded recorded_date live='' stale=0
+  [ "${2:-}" = "--with-live" ] && with_live=1
+  recorded="$(pref_get project.classification || true)"
+  recorded_date="$(pref_get project.classified || true)"
+  printf 'recorded\t%s\n' "$recorded"
+  printf 'recorded_date\t%s\n' "$recorded_date"
+  if [ "$with_live" -eq 1 ] || [ "$recorded" = "new" ]; then
+    live="$(classify_repo "$root" | awk -F'\t' '$1=="classification"{print $2}')"
+    printf 'live\t%s\n' "$live"
+    printf 'confidence\t%s\n' \
+      "$(classify_repo "$root" | awk -F'\t' '$1=="confidence"{print $2}')"
+  fi
+  if [ "$recorded" = "new" ] && [ "$live" = "existing" ] && classification_drifted "$root"; then
+    stale=1
+  fi
+  printf 'stale\t%s\n' "$stale"
+}
+
+# repo_trunk <root> — the local trunk ref and how it was determined.
+#
+# Deliberately LOCAL and network-free. doctor's `def_branch` asks the GitHub API
+# for the repository's default branch because it is checking a server-side
+# ruleset against it; that is a different fact with a different failure mode,
+# and collapsing the two would make an offline triage depend on the network.
+repo_trunk() {
+  local root="$1" head b
+  if head="$(git -C "$root" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null)"; then
+    printf 'trunk\t%s\nsource\torigin-head\n' "${head#origin/}"
+    return 0
+  fi
+  for b in master main; do
+    if git -C "$root" rev-parse --verify --quiet "refs/heads/$b" >/dev/null 2>&1; then
+      printf 'trunk\t%s\nsource\tlocal-ref\n' "$b"
+      return 0
+    fi
+  done
+  printf 'trunk\t\nsource\tunknown\n'
+}
+
 cmd_brief() {
   local short=0
   case "${1:-}" in
@@ -1573,15 +1673,17 @@ cmd_brief() {
   # Orient: cheap local git facts. The gh PR lookup is a network call, so it
   # is reserved for the interactive mode — a session-start hook must never
   # wait on the network.
-  local branch dirty counts ahead='' behind='' pr=''
-  branch="$(git -C "$root" symbolic-ref --quiet --short HEAD || echo '(detached)')"
-  dirty="$(git -C "$root" status --porcelain 2>/dev/null | awk 'NF{n++} END{print n+0}')"
-  if counts="$(git -C "$root" rev-list --left-right --count '@{upstream}...HEAD' 2>/dev/null)"; then
-    behind="$(printf '%s' "$counts" | awk '{print $1}')"
-    ahead="$(printf '%s' "$counts" | awk '{print $2}')"
-  fi
-  if [ "$short" -eq 0 ] && command -v gh >/dev/null 2>&1; then
-    pr="$(gh pr view --json number,title --template 'PR #{{.number}} — {{.title}}' 2>/dev/null || true)"
+  local branch dirty ahead='' behind='' pr='' bk bv
+  while IFS=$'\t' read -r bk bv; do
+    case "$bk" in
+      branch) branch="$bv" ;;
+      dirty)  dirty="$bv" ;;
+      ahead)  ahead="$bv" ;;
+      behind) behind="$bv" ;;
+    esac
+  done < <(repo_git_facts "$root")
+  if [ "$short" -eq 0 ]; then
+    pr="$(repo_open_pr)"
   fi
 
   # Locate: derived from what the repo proves about itself, never from a
@@ -1589,17 +1691,14 @@ cmd_brief() {
   # happens outside a skill close-out (#347), so brief refuses to trust one.
   # The state file contributes only the judgment the repo cannot answer: the
   # recorded next action and blockers, always shown with their recorded date.
-  local state="$root/.spark/state.json"
   local next='' blockers='' updated='' located='' k v
-  if [ -f "$state" ]; then
-    while IFS=$'\t' read -r k v; do
-      case "$k" in
-        next_action) next="$v" ;;
-        blockers)    blockers="$v" ;;
-        updated)     updated="$v" ;;
-      esac
-    done < <(read_flat_json "$state")
-  fi
+  while IFS=$'\t' read -r k v; do
+    case "$k" in
+      next_action) next="$v" ;;
+      blockers)    blockers="$v" ;;
+      updated)     updated="$v" ;;
+    esac
+  done < <(repo_recorded_intent "$root")
   # Positional evidence outranks convention (#369): an open PR or a working
   # branch says where the work IS; a missing docs/problem-statement.md only
   # means Ideate when nothing stronger contradicts it — a mature repo that
@@ -1633,22 +1732,15 @@ cmd_brief() {
   # "new" that has since grown real sources now classifies "existing". Flag
   # that for re-orientation; never silently rewrite the fact — reclassification
   # is the human's call (ADR-0022).
-  local recorded_cls recorded_date live_cls='' stale=0
-  recorded_cls="$(pref_get project.classification || true)"
-  recorded_date="$(pref_get project.classified || true)"
-  if [ "$recorded_cls" = "new" ]; then
-    live_cls="$(classify_repo "$root" | awk -F'\t' '$1=="classification"{print $2}')"
-    # Only new→existing is drift worth surfacing: sources appeared under a fact
-    # that promised none. A repo does not shrink back to "new" by growth.
-    #
-    # The live verdict alone is not enough to say so. Arming a repo is what
-    # makes it look provisioned, so the verdict flips the moment `spark setup`
-    # runs — which is why this also demands content Spark did not create
-    # (#399). Being armed is the expected outcome of onboarding, not drift.
-    if [ "$live_cls" = "existing" ] && classification_drifted "$root"; then
-      stale=1
-    fi
-  fi
+  local recorded_cls='' recorded_date='' live_cls='' stale=0 ck cv
+  while IFS=$'\t' read -r ck cv; do
+    case "$ck" in
+      recorded)      recorded_cls="$cv" ;;
+      recorded_date) recorded_date="$cv" ;;
+      live)          live_cls="$cv" ;;
+      stale)         stale="$cv" ;;
+    esac
+  done < <(repo_classification "$root")
 
   # Project-local prose standards (#182): report which of the two seeded docs
   # actually exist so the brief points at the working contract by name.
@@ -1702,7 +1794,7 @@ cmd_brief() {
   echo "  $located"
   [ -n "$next" ] && echo "  next      $next (recorded ${updated:-date unknown} — verify against the repo)"
   [ -n "$blockers" ] && echo "  blockers  $blockers"
-  if [ -f "$state" ]; then
+  if [ -f "$root/.spark/state.json" ]; then
     echo "  state     .spark/state.json holds the recorded intent — cross-checked view: spark resume"
   fi
   echo
