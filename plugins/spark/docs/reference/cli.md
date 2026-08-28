@@ -151,6 +151,103 @@ treated as the explicit human re-set the flag names. Without `jq` or `python3`,
 merging into an existing file prints the keys to add by hand. An `ambiguous`
 inspection is never recorded automatically — the `--set` is the human's call.
 
+## `spark triage [--tsv]`
+
+The existing-repository entry motion, first arrow only: **establish what is true,
+read-only, and stop before anything mutates.**
+
+```
+existing repository
+  → establish truth read-only
+  → sort it into known / mechanically wrong / judgment-bearing / unknown
+  → stop
+```
+
+Reconciling what it finds, and deciding the resulting course, are separate
+capabilities. `triage` does neither, and says so in its own output.
+
+### An orchestrator, not a collector
+
+Every fact in the report is produced by the authority that already owns it.
+`triage` arranges and renders; it derives nothing itself.
+
+| Fact | Authority it calls |
+| --- | --- |
+| recorded classification, live verdict, drift | `repo_classification` — the same producer `brief` reads, over `classify_repo` |
+| branch, dirty count, ahead/behind | `repo_git_facts` — shared with `brief` |
+| local trunk and how it was determined | `repo_trunk` |
+| recorded next action and blockers | `repo_recorded_intent` — `.spark/state.json`, as recorded intent only |
+| governed labels, issue metadata, dependency graph, file surfaces, ruleset | `gov_collect` — the governance engine, unchanged |
+| what kind of finding a `!` is | the governance verdict partition, unchanged |
+
+Those first four were inline in `brief` before this verb existed; they were
+lifted into named producers so both verbs read one authority rather than two
+implementations of "which branch is this". `brief`'s output is unchanged.
+
+It is **not** `audit assess`. It runs no deep assessment, and the core plugin
+does not depend on the optional `spark-audit` companion — `triage` works with
+only the core installed. Audit may later deepen Triage's evidence; Triage stands
+alone.
+
+### The four truth states
+
+Reported with the same row alphabet the governance engine uses, so the two
+cannot disagree about what a finding is:
+
+| Status | State | Meaning |
+| --- | --- | --- |
+| `=` | **KNOWN / coherent** | evidence exists and agrees |
+| `!` | **MECHANICAL PROBLEM** | a contradiction no decision resolves |
+| `!` | **HUMAN DECISION REQUIRED** | evidence is sufficient; the authority is not Spark's |
+| `?` | **UNKNOWN / NOT ASSESSED** | the surface could not be read |
+
+They never collapse into each other. Two consequences worth stating plainly:
+
+- **An unread surface is not a negative fact.** If `gh` is absent, the report
+  says the issue graph was not assessed — never that there are no issues.
+- **A known negative is not unknown.** "No upstream is tracked" and "no intent
+  is recorded" are established facts, reported `=`.
+
+Which `!` rows are judgment is decided by `GOV_JUDGMENT_SURFACES`, the single
+list the governance verdict partition reads. `triage` adds two surfaces to it:
+`class`, because reclassification is the human's call under ADR-0022, and
+`intent`, because the next action is the judgment no repository can answer for
+itself.
+
+### Read-only, and mechanically so
+
+`triage` creates and modifies nothing: no files, no labels, no priority, no
+milestone, no backlog disposition, no issues or PRs, no dependency edges, no
+governance provisioning, no `.spark/state.json` write. It never invokes
+`governance apply`. Remote state is read through read-only APIs only.
+`tests/test-triage-truth.sh` snapshots the tree, the git object store, `.spark/`
+and the remote-facing surfaces before and after a run and asserts nothing moved.
+
+### Exit codes
+
+| Exit | Verdict | Meaning |
+| --- | --- | --- |
+| `0` | `COHERENT` | no truth conflict; ready for reconciliation or course derivation |
+| `1` | `FAIL` | a mechanically invalid state — no decision resolves it |
+| `5` | `DECISION REQUIRED` | a durable value is owed and only a human may supply it |
+| `3` | `NOT ASSESSED` | a surface could not be read; never assumed healthy |
+
+The most severe present state wins, and every lesser one is still named.
+
+### Reconciliation required
+
+One field answers whether anything must be reconciled *before* proceeding:
+
+- **no** — no mechanical problem and no owed decision. This is deliberately not
+  a claim that all future work is known; it means Triage found nothing that must
+  be resolved first.
+- **yes** — findings exist; route them through reconciliation.
+- **undetermined** — a surface could not be read, so the answer is not negative
+  and not a pass.
+
+`--tsv` emits the rows plus a `reconciliation` and a `verdict` line for
+mechanical consumption.
+
 ## `spark hub [--set <owner/repo|url|none>]`
 
 Reports the memory hub this project declares — the one repository designated
