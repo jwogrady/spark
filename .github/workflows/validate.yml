@@ -20,5 +20,11 @@ jobs:
   tests:
     runs-on: ubuntu-latest
     steps:
+      # Full history, because test-ledger-truth.sh verifies a release INTERVAL:
+      # it derives the v0.21 tally from the baseline commit and the v0.21.0
+      # release boundary (#567). At the default depth 1 neither ref is present,
+      # so the check would honestly report "not verified" and guard nothing.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - run: bash tests/run.sh
