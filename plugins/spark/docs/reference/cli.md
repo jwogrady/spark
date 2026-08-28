@@ -970,6 +970,26 @@ Among the standard's artifacts are two repo-root docs — `CONVENTIONS.md` and
 and reported in the same lanes; an existing copy is the project's own and is
 kept.
 
+### What setup provisions, and what it deliberately does not
+
+The governance model marks every surface with **who provisions it**, and `setup`
+acts on exactly one of those classes:
+
+| Class | Who acts | After `setup` |
+| --- | --- | --- |
+| `spark-provisions` | Spark, create-only | present, or reported as provisionable |
+| `human-provisions` — issue forms, pull-request templates | a human, deliberately | **absent, and reported explicitly** |
+
+**A freshly set-up repository therefore reports its missing issue forms and
+pull-request template, and `spark governance validate` does not pass while they
+are absent.** That is the intended signal, not a defect: Spark defines and
+validates the *shape* of those surfaces and refuses to invent project-specific
+content for them, so the honest thing it can do is name what is still needed.
+
+`setup` is also offline and create-only, and labels live on GitHub — so the label
+families are reconciled by [`spark labels`](#spark-labels---apply---prune-deprecated)
+rather than by `setup`.
+
 `--profile <name>` commits a [setup profile](#spark-profiles)'s facts to
 `.spark/preferences.json` before anything materializes, so the standard that
 applies is the selected one. Selection is all-or-nothing: an unknown profile,

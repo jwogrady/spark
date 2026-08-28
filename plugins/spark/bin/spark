@@ -3532,9 +3532,18 @@ gov_file_rows() {
 $paths
 EOF_PATHS
     if [ -n "$found" ]; then
-      printf 'file\t=\t%s\t%s: present\n' "$found" "$kind"
+      # Every branch names the provisioner, present or absent. Who owns a surface
+      # stays relevant after it exists — it decides who is chased if it later
+      # disappears — and naming it only on the absent rows made the classes
+      # distinguishable to a reader and not to a check.
+      printf 'file\t=\t%s\t%s: present; %s\n' "$found" "$kind" "$prov"
     elif [ "$prov" = "spark-provisions" ]; then
-      printf 'file\t+\t%s\t%s: missing; Spark can provision it\n' \
+      # The provisioner token appears in BOTH branches, so a reader — or a check —
+      # can tell the two classes apart uniformly. It used to say "Spark can
+      # provision it" in prose here while the other branch printed the raw
+      # `human-provisions`, which distinguished them to a human and not to a
+      # machine (#473's narrowed contract asks for exactly that distinction).
+      printf 'file\t+\t%s\t%s: missing; spark-provisions — Spark can provision it\n' \
         "$(printf '%s' "$paths" | head -n1)" "$kind"
     else
       printf 'file\t!\t%s\t%s: none of its declared paths exists; %s\n' \
