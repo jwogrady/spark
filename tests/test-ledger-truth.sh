@@ -305,6 +305,158 @@ mk 14 "flurbteen" 14 14 74 74 74
 run
 assert_eq "and a single unparseable word fails too" 1 "$RC"
 
+# ============ the release INTERVAL, not the moving tree (#567) =============
+# Every fixture above runs in a non-git directory, so the checker falls back to
+# the working tree and the release-interval path is never entered. That gap is
+# how the defect survived: the ledger's "48 -> 58" is a closed claim about what
+# the v0.21 run produced, but it was compared against a tree that keeps growing,
+# so any later suite falsified a truthful record — and the only mechanical route
+# to green was to rewrite the history.
+#
+# This block builds a real repo with a real baseline and a real tagged release,
+# so the interval is exercised for what it is.
+ri="$WORK/ri"
+mkdir -p "$ri/tests"
+git -C "$ri" init -q
+git -C "$ri" config user.email "test@example.invalid"
+git -C "$ri" config user.name "Spark Tests"
+
+# --- the baseline commit: two suites
+: > "$ri/tests/test-one.sh"; : > "$ri/tests/test-two.sh"
+git -C "$ri" add -A; git -C "$ri" commit -qm "baseline"
+RI_BASE="$(git -C "$ri" rev-parse HEAD)"
+
+# --- the release commit: one more suite, then tagged
+: > "$ri/tests/test-three.sh"
+git -C "$ri" add -A; git -C "$ri" commit -qm "release"
+git -C "$ri" tag v9.9.9
+RI_REL="$(git -C "$ri" rev-parse HEAD)"
+
+# ri_docs <total-from> <total-to> <new> [release-ref-line]
+# Writes a structurally complete pair into the interval repo. The record's
+# disposition line is the durable release evidence the checker reads.
+ri_docs() {
+  local from="$1" to="$2" new="$3" relline="${4-yes}" i
+  { echo "# Ledger"
+    echo
+    for i in $(seq 1 14); do echo "### Repair cycle $i — #$((500 + i)), a defect"; done
+    echo
+    echo "### What the fourteen repair cycles cost, and what they bought"
+    echo
+    echo "| | |"
+    echo "| --- | --- |"
+    echo "| repair issues closed | 14 |"
+    echo "| new behavioural suites | $new |"
+    echo "| suites total | $from → $to (baseline \`$RI_BASE\`) |"
+    echo
+    echo "### Certification — 74 checks, 0 failures"
+    echo
+    echo "74 of 74 checks passed."
+  } > "$ri/ledger.md"
+  { echo "# Release record"
+    echo
+    if [ "$relline" = "yes" ]; then
+      echo "> **Disposition: \`Shipped\`.** \`v9.9.9\` was published 2026-08-28T00:00:00Z at"
+      echo "> \`$RI_REL\`, by a human approving the release review."
+    elif [ "$relline" = "unresolvable" ]; then
+      # BOTH candidates must be unresolvable, or the checker legitimately falls
+      # through to the one that works: an earlier version of this fixture named
+      # the real v9.9.9 tag and so never entered the limit path at all.
+      echo "> **Disposition: \`Shipped\`.** \`v9.9.8\` was published 2026-08-28T00:00:00Z at"
+      echo "> \`0000000000000000000000000000000000000000\`, by a human."
+    else
+      echo "> **Disposition: \`Shipped\`.** Published."
+    fi
+    echo
+    echo "## Scope"
+    echo
+    echo "| Issue | Outcome | Merge |"
+    echo "| --- | --- | --- |"
+    echo "| #470 | the original scope | \`aaa\` |"
+    echo
+    echo "**The repairs**, each with measured discrimination:"
+    echo
+    echo "| Issue | Defect | Merge |"
+    echo "| --- | --- | --- |"
+    for i in $(seq 1 14); do printf '| #%s | a defect | `abc%s` |\n' "$((500 + i))" "$i"; done
+  } > "$ri/record.md"
+}
+
+ri_run() {
+  RC=0
+  OUT="$(cd "$ri" && bash "$CHECK" --ledger "$ri/ledger.md" --record "$ri/record.md" 2>&1)" || RC=$?
+}
+
+# --- a truthful tally over the interval passes, and reports the release count
+ri_docs 2 3 1
+ri_run
+assert_eq "a truthful tally over the release interval passes" 0 "$RC"
+assert_contains "and reports the release count, not the tree" "3 suite(s)" "$OUT"
+
+# The commit is the preferred boundary and must parse on its own, across the
+# blockquote wrap the real record uses. Proven by removing the tag: if the
+# commit path were broken, this would degrade to the stated limit instead.
+git -C "$ri" tag -d v9.9.9 >/dev/null 2>&1
+ri_run
+assert_eq "the commit boundary resolves without the tag" 0 "$RC"
+assert_contains "and is still measured at the release" "3 suite(s)" "$OUT"
+case "$OUT" in
+  *"not in this clone"*) bad "the commit boundary did not parse; only the tag worked" ;;
+  *) ok ;;
+esac
+git -C "$ri" tag v9.9.9 "$RI_REL" >/dev/null 2>&1
+
+# --- THE POINT OF #567: a suite added after the release does not falsify the
+# historical record. Before this fix the count moved to 4 and the check failed,
+# demanding that the ledger be rewritten to describe work it never did.
+: > "$ri/tests/test-four-added-later.sh"
+ri_run
+assert_eq "a suite added after the release leaves the record intact" 0 "$RC"
+assert_contains "because the upper bound is the release tree" "3 suite(s)" "$OUT"
+# ...and it is genuinely in the tree, so the fixture is not vacuous.
+if [ -f "$ri/tests/test-four-added-later.sh" ]; then ok; else bad "the added suite is missing, so the case proves nothing"; fi
+
+# --- NEGATIVE CONTROL 1: a false total still fails, with the suite present.
+# If this passed, the fix would have bought its green by removing the guard.
+ri_docs 2 4 1
+ri_run
+assert_eq "a falsified suites total still fails" 1 "$RC"
+assert_contains "naming the claim" "claims 4 suites" "$OUT"
+assert_contains "and the release tree it was measured against" "release tree holds 3" "$OUT"
+
+# --- NEGATIVE CONTROL 2: a false new-suite count still fails.
+ri_docs 2 3 2
+ri_run
+assert_eq "a falsified new-suite count still fails" 1 "$RC"
+assert_contains "naming the derived figure" "1 exist in" "$OUT"
+
+# --- NEGATIVE CONTROL 3: a false baseline still fails.
+ri_docs 1 3 1
+ri_run
+assert_eq "a falsified baseline still fails" 1 "$RC"
+assert_contains "naming what the baseline holds" "baseline says 1 suites, but" "$OUT"
+
+# --- a record naming a boundary that does NOT resolve is a stated LIMIT, never
+# a silent fall back to the tree — substituting the tree there would resurrect
+# the defect inside a shallow clone, which is exactly where CI runs.
+ri_docs 2 3 1 unresolvable
+ri_run
+assert_contains "an unresolvable release boundary is stated, not assumed" \
+  "not in this clone, so the suite totals were not verified" "$OUT"
+case "$OUT" in
+  *"tree holds"*) bad "an unresolvable boundary must not fall back to the working tree" ;;
+  *) ok ;;
+esac
+
+# --- a record naming NO boundary keeps the pre-#567 behaviour, so a repository
+# whose record predates the convention still gets the added-suite guard.
+ri_docs 2 3 1 no
+ri_run
+assert_eq "with no boundary in the record the tree still guards the total" 1 "$RC"
+assert_contains "and it is the tree that is named" "the tree holds 4" "$OUT"
+
+rm -f "$ri/tests/test-four-added-later.sh"
+
 # ============ the REAL documents ==========================================
 # Last, and separately: the fixtures prove the check works, this proves the
 # repository is consistent right now.
