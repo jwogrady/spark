@@ -101,8 +101,8 @@ EOF
 cat > "$work/issues-complete.json" <<'EOF'
 [
   {"number": 179, "title": "Assigned", "labels": ["feature", "P2"], "milestone": "v0.10 — Next train", "body": "Acceptance criteria here."},
-  {"number": 180, "title": "Backlogged", "labels": ["feature"], "milestone": null, "body": "Backlog: waiting on #188 policy"},
-  {"number": 181, "title": "Blocked", "labels": ["feature"], "milestone": null, "body": "Blocked by #185"},
+  {"number": 180, "title": "Backlogged", "labels": ["feature", "backlog"], "milestone": null, "body": "Backlog: waiting on #188 policy"},
+  {"number": 181, "title": "Blocked", "labels": ["feature"], "milestone": "v0.10 — Next train", "body": "Blocked by #185"},
   {"number": 182, "title": "Labelled backlog", "labels": ["feature", "backlog"], "milestone": null, "body": "Someday."},
   {"number": 183, "title": "A bug", "labels": ["bug"], "milestone": null, "body": "Not a feature; needs no release decision."}
 ]
@@ -166,19 +166,83 @@ check 5 "unassigned feature awaits a human decision" \
   "DECISION REQUIRED: feature #190" "0 gap(s), 1 decision(s)" \
   "a recommendation is not authority"
 
-# --- explicit blockers and backlog reasons are decisions, not gaps
-check 0 "Blocked-by body classifies as blocked" \
+# --- PROSE IS NOT AUTHORITY (#570). Each of these three spellings used to clear
+# the gate on its own, so an agent could record a release decision by writing one
+# sentence into an issue body. They are evidence now, and the message says so.
+check 5 "a Blocked-by body is evidence, not a decision" \
   "$work/complete.md" "$work/issues-blocked.json" \
-  "ok: feature #191" "roadmap-check: 0 gap(s)"
-check 0 "Depends-on header classifies as blocked" \
+  "DECISION REQUIRED: feature #191" "proposes one in prose, which is evidence, not authority"
+check 5 "a Depends-on header is evidence, not a decision" \
   "$work/complete.md" "$work/issues-depends.json" \
-  "ok: feature #192" "roadmap-check: 0 gap(s)"
-check 0 "backlog line with rationale is a decision" \
+  "DECISION REQUIRED: feature #192" "evidence, not authority"
+check 5 "a Backlog line with a rationale is evidence, not a decision" \
   "$work/complete.md" "$work/issues-backlog-reason.json" \
-  "ok: feature #193" "roadmap-check: 0 gap(s)"
+  "DECISION REQUIRED: feature #193" "evidence, not authority"
+# ...and the message names the governed fields that WOULD record it, read from
+# the model rather than spelled out here.
+check 5 "and names the structured surfaces that carry authority" \
+  "$work/complete.md" "$work/issues-backlog-reason.json" \
+  "assign a milestone, or apply a disposition label (backlog)"
 check 5 "bare Backlog line without rationale is still undecided" \
   "$work/complete.md" "$work/issues-backlog-bare.json" \
   "DECISION REQUIRED: feature #194"
+
+# --- STRUCTURED POSITIVE CONTROLS: the two surfaces that DO carry authority.
+# Without these the change could have been "reject everything", which would pass
+# the negative cases and be useless.
+cat > "$work/issues-lbl.json" <<'EOF'
+[
+  {"number": 900, "title": "Deferred", "labels": ["feature", "backlog"], "milestone": null, "body": "Deferred deliberately; revisit before v1."}
+]
+EOF
+check 0 "a governed disposition label records the decision" \
+  "$work/complete.md" "$work/issues-lbl.json" \
+  "ok: feature #900 — carries a governed disposition label"
+
+cat > "$work/issues-ms.json" <<'EOF'
+[
+  {"number": 901, "title": "Scheduled", "labels": ["feature"], "milestone": "v0.10 — Next train", "body": "No prose about disposition at all."}
+]
+EOF
+check 0 "a milestone records the decision" \
+  "$work/complete.md" "$work/issues-ms.json" \
+  "ok: feature #901 — assigned to a milestone"
+
+# A structured field wins even when the prose contradicts it: the prose was
+# never consulted for the class, only for the message.
+cat > "$work/issues-both.json" <<'EOF'
+[
+  {"number": 902, "title": "Both", "labels": ["feature", "backlog"], "milestone": null, "body": "Blocked pending a human decision about the next release."}
+]
+EOF
+check 0 "a governed label clears it despite contradicting prose" \
+  "$work/complete.md" "$work/issues-both.json" \
+  "ok: feature #902"
+
+# --- the exact reproductions from the report, verbatim
+cat > "$work/issues-repro-backlog.json" <<'EOF'
+[
+  {"number": 999, "title": "Fixture", "labels": ["feature"], "milestone": null, "body": "Backlog: automated recommendation only; pending human approval."}
+]
+EOF
+check 5 "the reported Backlog: recommendation no longer clears the gate" \
+  "$work/complete.md" "$work/issues-repro-backlog.json" \
+  "DECISION REQUIRED: feature #999"
+
+cat > "$work/issues-repro-blocked.json" <<'EOF'
+[
+  {"number": 999, "title": "Fixture", "labels": ["feature"], "milestone": null, "body": "Blocked pending a human decision about the next release."}
+]
+EOF
+check 5 "the reported Blocked-pending wording no longer clears the gate" \
+  "$work/complete.md" "$work/issues-repro-blocked.json" \
+  "DECISION REQUIRED: feature #999"
+
+# A mechanical roadmap gap stays FAIL, not DECISION REQUIRED — the softer
+# outcome must not swallow a contradiction anyone could correct.
+check 1 "a mechanical roadmap gap is still exit 1" \
+  "$work/no-links.md" "$work/issues-lbl.json" \
+  'GAP: roadmap section "v0.10'
 
 # --- roadmap shape gaps
 check 1 "roadmap with only shipped sections lacks a next release" \
@@ -253,6 +317,56 @@ check 1 "a roadmap gap outranks an owed decision" \
   "$work/no-links.md" "$work/issues-unassigned.json" \
   'GAP: roadmap section "v0.10' "DECISION REQUIRED: feature #190" \
   "1 gap(s), 1 decision(s)"
+
+# --- jq and python3 must agree, because they are two implementations of one
+# rule. Only one runs on any given machine, so a divergence hides until the
+# other reader is the one installed — the failure mode is invisible by
+# construction unless it is asserted directly.
+nojq="$work/nojq"; mkdir -p "$nojq"
+for t in bash env git awk sed grep find sort printf cat wc tr head cut date mktemp rm mkdir ls dirname basename python3; do
+  src="$(command -v "$t" 2>/dev/null || true)"
+  [ -n "$src" ] && ln -sf "$src" "$nojq/$t" 2>/dev/null || true
+done
+parity() {
+  local desc="$1" issues="$2" a b ra=0 rb=0
+  a="$(bash "$script" --roadmap "$work/complete.md" --issues "$issues" 2>&1)" || ra=$?
+  b="$(env PATH="$nojq" bash "$script" --roadmap "$work/complete.md" --issues "$issues" 2>&1)" || rb=$?
+  if [ "$ra" = "$rb" ] && [ "$a" = "$b" ]; then
+    pass=$((pass + 1))
+  else
+    fail=$((fail + 1)); echo "  ✖ $desc — jq exit $ra vs python exit $rb"
+    diff <(echo "$a") <(echo "$b") | head -6 || true
+  fi
+}
+if command -v python3 >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
+  parity "jq and python agree on a prose backlog line"  "$work/issues-repro-backlog.json"
+  parity "jq and python agree on blocked-pending prose" "$work/issues-repro-blocked.json"
+  parity "jq and python agree on a governed label"      "$work/issues-lbl.json"
+  parity "jq and python agree on a milestone"           "$work/issues-ms.json"
+  parity "jq and python agree on the complete fixture"  "$work/issues-complete.json"
+else
+  pass=$((pass + 1))   # one reader present: parity is not observable here
+fi
+
+# --- the governed disposition family is what makes check C answerable. If it
+# cannot be resolved, the run is NOT ASSESSED — never a guess, and never a pass.
+# A hard-coded fallback would take over at exactly the moment the real authority
+# was unusable, which is the substitution this codebase keeps finding.
+lonely="$work/lonely/skills/plan/scripts"
+mkdir -p "$lonely"
+cp "$script" "$lonely/roadmap-check.sh"
+rc=0; out="$(bash "$lonely/roadmap-check.sh" --roadmap "$work/complete.md" \
+  --issues "$work/issues-lbl.json" 2>&1)" || rc=$?
+if [ "$rc" -eq 3 ]; then pass=$((pass + 1)); else
+  fail=$((fail + 1)); echo "  ✖ an unresolvable disposition family must exit 3, got $rc"; fi
+case "$out" in
+  *"disposition family could not be resolved"*) pass=$((pass + 1)) ;;
+  *) fail=$((fail + 1)); echo "  ✖ and must say why it could not be assessed" ;;
+esac
+case "$out" in
+  *"ok: feature"*) fail=$((fail + 1)); echo "  ✖ it must not clear an issue it could not classify" ;;
+  *) pass=$((pass + 1)) ;;
+esac
 
 # --- corrupt issues JSON is a tool error (exit 2), never a clean pass
 printf 'not json' > "$work/issues-corrupt.json"
