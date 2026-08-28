@@ -93,6 +93,14 @@ assert_eq_s() {
 }
 assert_eq_s "a live-issue metadata gap is judgment" judgment \
   "$(cls "$(printf 'metadata\t!\t#1\tdocs-impact is required and none is declared')")"
+# Priority is named by #559's criteria in its own right. The shipped model
+# declares it `optional`, so a missing priority produces no row at all — but a
+# project tier may make it required, and when it does the gap is a judgment,
+# never a default. Asserted directly rather than inferred from the family list.
+assert_eq_s "a missing priority is judgment, not a default" judgment \
+  "$(cls "$(printf 'metadata\t!\t#12\tpriority is required and none is declared')")"
+assert_eq_s "an ambiguous category is judgment, not a guess" judgment \
+  "$(cls "$(printf 'metadata\t!\t#12\tcategory allows exactly-one but 2 are set: bug infrastructure')")"
 assert_eq_s "an absent human-provisioned surface is judgment" judgment \
   "$(cls "$(printf 'file\t!\t.github/ISSUE_TEMPLATE\thuman-provisions')")"
 assert_eq_s "a dependency cycle is mechanical" mechanical \
