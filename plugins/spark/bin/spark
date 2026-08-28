@@ -2861,16 +2861,62 @@ di_repo_nwo() { gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/nul
 # "this issue has no linked PR yet" is a complete answer, while "the query did
 # not come back" is no answer at all, and every caller that collapsed the two
 # into an empty string graded incomplete evidence as if it were complete (#512).
+#
+# THE CONNECTION IS PAGINATED. It used to make one `first: 50` request and read
+# `nodes[]` only — no `pageInfo`, no cursor, no continuation. A successful first
+# page was therefore treated as the complete answer, so an issue with 51 linked
+# PRs could be graded on 50 of them and return PASS while the evidence that
+# contradicted the declaration sat on the page nobody asked for (#530).
+#
+# That is a different failure from #512: the request succeeds, so nothing is
+# there to report. "Aggregates across ALL linked implementation PRs" is #483's
+# acceptance criterion, and `first: 50` is not "all" — the criterion describes
+# the capability being shipped, not the size of today's data.
 di_linked_prs() {
-  gh api graphql -F owner="$1" -F name="$2" -F number="$3" -f query='
-    query($owner: String!, $name: String!, $number: Int!) {
+  local owner="$1" name="$2" number="$3"
+  local cursor="" page out nodes has next n=0
+  local q='
+    query($owner: String!, $name: String!, $number: Int!, $after: String) {
       repository(owner: $owner, name: $name) {
         issue(number: $number) {
-          closedByPullRequestsReferences(first: 50, includeClosedPrs: true) {
+          closedByPullRequestsReferences(first: 50, after: $after, includeClosedPrs: true) {
+            pageInfo { hasNextPage endCursor }
             nodes { number state }
-          } } } }' \
-    --jq '.data.repository.issue.closedByPullRequestsReferences.nodes[]
-          | select(.state == "MERGED" or .state == "OPEN") | .number' 2>/dev/null
+          } } } }'
+  while :; do
+    # One page. `-F after=` cannot express GraphQL null, so the first request
+    # omits the argument entirely and later ones pass the cursor.
+    if [ -z "$cursor" ]; then
+      page="$(gh api graphql -F owner="$owner" -F name="$name" -F number="$number" \
+        -f query="$q" --jq '
+          .data.repository.issue.closedByPullRequestsReferences
+          | (.pageInfo.hasNextPage | tostring) + "\t" + (.pageInfo.endCursor // "")
+            + "\n" + ([.nodes[] | select(.state == "MERGED" or .state == "OPEN")
+                        | (.number | tostring)] | join("\n"))' 2>/dev/null)" || return 1
+    else
+      page="$(gh api graphql -F owner="$owner" -F name="$name" -F number="$number" \
+        -F after="$cursor" -f query="$q" --jq '
+          .data.repository.issue.closedByPullRequestsReferences
+          | (.pageInfo.hasNextPage | tostring) + "\t" + (.pageInfo.endCursor // "")
+            + "\n" + ([.nodes[] | select(.state == "MERGED" or .state == "OPEN")
+                        | (.number | tostring)] | join("\n"))' 2>/dev/null)" || return 1
+    fi
+    # A page that came back unreadable is a FAILED lookup, not an empty one: the
+    # caller turns a non-zero return into NOT ASSESSED, and a partial set must
+    # never be graded (#530).
+    [ -n "$page" ] || return 1
+    has="$(printf '%s' "$page" | head -n1 | cut -f1)"
+    next="$(printf '%s' "$page" | head -n1 | cut -f2)"
+    case "$has" in true|false) ;; *) return 1 ;; esac
+    nodes="$(printf '%s\n' "$page" | tail -n +2 | awk 'NF')"
+    [ -z "$nodes" ] || { printf '%s\n' "$nodes"; n=$((n + 1)); }
+    [ "$has" = "true" ] || break
+    # hasNextPage true with no cursor cannot be continued, and continuing from
+    # the start would loop forever: refuse rather than silently truncate.
+    [ -n "$next" ] || return 1
+    cursor="$next"
+  done
+  return 0
 }
 
 # di_pr_paths <owner> <name> <pr> — every path a PR touches.

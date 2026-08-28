@@ -449,11 +449,11 @@ dogfood path.
 
 ## v0.21 — Governance as schema
 
-**Status:** Merged (awaiting release) — certification was withdrawn once, after
-empirical review proved five gate criteria false and four scope issues closed
-with unmet criteria. All twelve repairs have since landed on `master` and every
-reopened issue has been behaviourally re-audited and reclosed. Gate #478 is open
-pending human review and Release Please PR #506 is unmerged; no tag exists.
+**Status:** Blocked — certification was withdrawn once, and a later contract
+review reopened the release: #530 and #524 falsify #483's evidence-set criterion
+and #473 overpromises what new-repo setup provisions. Most implementation is
+merged to `master`; #483 and #473 are reopened, repairs are in progress, gate #478
+remains open and Release Please PR #506 remains unmerged. No tag exists.
 Record: [`docs/releases/v0.21.md`](docs/releases/v0.21.md).
 
 One machine-readable governance contract that can be inspected, diffed,
