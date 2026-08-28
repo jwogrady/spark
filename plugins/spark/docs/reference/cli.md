@@ -214,6 +214,37 @@ list the governance verdict partition reads. `triage` adds two surfaces to it:
 `intent`, because the next action is the judgment no repository can answer for
 itself.
 
+### Issue references in recorded intent are explicit
+
+Triage reads `.spark/state.json`'s recorded next action to ask whether it is
+still live, which means finding the issues it names. A reference is `#`
+immediately followed by digits, with a word boundary on both sides — the sigil
+is the whole distinction, and one extractor owns that syntax for the CLI.
+
+| Text | Reads as |
+| --- | --- |
+| `v0.22`, `v0.21.0` | nothing — a version, not a reference |
+| `2026-09-01`, `port 8080`, `95%` | nothing — dates, ports and counts are numbers |
+| `abc#12`, `#12abc` | nothing — no word boundary |
+| `finish #42` | issue 42 |
+
+Without the sigil requirement every number in ordinary prose became a
+reference: a recorded intent mentioning `v0.22` and `v0.21.0` had `22` and `21`
+looked up as issues, manufacturing evidence about a decision out of a version
+string.
+
+Three outcomes, kept apart:
+
+- **references, at least one open** — the intent still names live work;
+- **references, all closed** — the intent is spent, and choosing the next action
+  is a human decision;
+- **no references at all** — reported as exactly that. It is neither spent nor
+  still-live, because issue state cannot speak to it either way.
+
+A reference whose state cannot be read stays **not assessed** — an absent `gh`
+and an unanswered API are reported differently, since an operator fixes them
+differently, but neither becomes a negative fact.
+
 ### Read-only, and mechanically so
 
 `triage` creates and modifies nothing: no files, no labels, no priority, no
