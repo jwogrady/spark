@@ -513,14 +513,28 @@ v0.22 delivers Triage and does not redesign Greenfield.
 - `spark triage` — a read-only truth pass before Spark writes anything, composing
   `orient`, `brief`, and `governance inspect/diff` rather than collecting
   evidence again, then approval-gated governance provisioning (#467).
+- Two guarantees repaired where dogfooding falsified them: issue-body prose can
+  no longer stand in for a governed decision (#570), and recorded intent no
+  longer mistakes ordinary numeric prose for issue references (#571).
 - Findings turned into a KEEP / REWRITE-COLLAPSE / DROP-ARCHIVE /
   DECISION-REQUIRED reconciliation slate, owned by the core plugin (#468).
 - A coherent course derived from reconciled truth rather than session memory
   (#469).
 
-Delivery order is `#567 -> #559 -> #467 -> #468 -> #469 -> #479`, recorded in
-#479's sub-issue order. Two constraints the release must hold: **unknown evidence
-is not human judgment**, and **recommendation is not authority**.
+Delivery order is `#567 -> #559 -> #467 -> #570 -> #571 -> #468 -> #469 ->
+#479`, recorded in #479's sub-issue order. Two constraints the release must
+hold: **unknown evidence is not human judgment**, and **recommendation is not
+authority**.
+
+#570 and #571 were admitted after #467 shipped, because each falsifies a
+guarantee this release had already claimed. #570: an agent can still clear
+DECISION REQUIRED by writing a disposition sentence into an issue body, which is
+the false green #559 exists to prevent. #571: the truth pass reads ordinary
+numeric prose such as `v0.22` as an issue reference, manufacturing a decision
+that no evidence supports. A release cannot hold a guarantee its own tooling
+contradicts, so both are repairs to v0.22's outcome rather than new scope. They
+precede #468 because reconciliation consumes both the authority boundary and the
+truth output. No `blocked-by` edge encodes that — it is order.
 
 #567 was admitted after this section was first written, as a prerequisite repair
 rather than part of the Triage outcome: implementing #559 added one behavioural
