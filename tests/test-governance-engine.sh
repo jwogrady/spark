@@ -191,13 +191,25 @@ assert_contains "and that a judgment row is never applied" "never applied" "$out
 after="$(git -C "$repo" status --porcelain)"
 assert_eq "inspect and diff write nothing" "$before" "$after"
 
-# validate must never report PASS from surfaces it could not read. A real `!`
-# is a definite finding and still FAILs — but the report has to admit the
-# picture is partial rather than implying it looked everywhere.
+# validate must never report PASS from surfaces it could not read. The finding
+# here is an ABSENT HUMAN-PROVISIONED file surface, which is an owed decision
+# rather than broken state, so the verdict is DECISION REQUIRED (exit 5) — and
+# the report still has to admit the picture is partial rather than implying it
+# looked everywhere. Before #559 this reported "mechanically invalid", which is
+# false by the row alphabet's own legend and made writing the judgment the
+# cheapest route to green.
 rc=0; out="$("$SPARK" governance validate 2>&1)" || rc=$?
-assert_rc "a real finding fails even with unread surfaces" 1 "$rc"
+assert_rc "an owed decision is DECISION REQUIRED even with unread surfaces" 5 "$rc"
+assert_contains "and says which outcome it is" "DECISION REQUIRED" "$out"
 assert_contains "and admits the picture is partial" "could not be read" "$out"
+assert_contains "and never claims the state is mechanically invalid" \
+  "nothing is mechanically wrong" "$out"
 case "$out" in *PASS*) bad "validate must never PASS on unread surfaces" ;; *) ok ;; esac
+# The ROW status is unchanged — `!`, not `+`. #535 owns whether that alphabet
+# should grow; #559 moved only the verdict. If this flips, the two issues have
+# been conflated.
+assert_contains "the row stays judgment, not a create" \
+  "$(printf 'file\t!\t')" "$("$SPARK" governance inspect --tsv 2>&1)"
 
 # With no findings left but surfaces still unread, the verdict is NOT ASSESSED
 # — never PASS by assumption.

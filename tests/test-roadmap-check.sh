@@ -161,9 +161,10 @@ check 0 "complete roadmap + decided features" \
   "roadmap-check: 0 gap(s)"
 
 # --- feature with no milestone and no marker is the core gap
-check 1 "unassigned feature is a gap" \
+check 5 "unassigned feature awaits a human decision" \
   "$work/complete.md" "$work/issues-unassigned.json" \
-  "GAP: feature #190" "roadmap-check: 1 gap(s)"
+  "DECISION REQUIRED: feature #190" "0 gap(s), 1 decision(s)" \
+  "a recommendation is not authority"
 
 # --- explicit blockers and backlog reasons are decisions, not gaps
 check 0 "Blocked-by body classifies as blocked" \
@@ -175,9 +176,9 @@ check 0 "Depends-on header classifies as blocked" \
 check 0 "backlog line with rationale is a decision" \
   "$work/complete.md" "$work/issues-backlog-reason.json" \
   "ok: feature #193" "roadmap-check: 0 gap(s)"
-check 1 "bare Backlog line without rationale is a gap" \
+check 5 "bare Backlog line without rationale is still undecided" \
   "$work/complete.md" "$work/issues-backlog-bare.json" \
-  "GAP: feature #194"
+  "DECISION REQUIRED: feature #194"
 
 # --- roadmap shape gaps
 check 1 "roadmap with only shipped sections lacks a next release" \
@@ -240,9 +241,18 @@ cat > "$work/issues-backlog-midsentence.json" <<'EOF'
   {"number": 197, "title": "Drifting", "labels": ["feature"], "milestone": null, "body": "Someone said do not let this rot in the backlog forever."}
 ]
 EOF
-check 1 "mid-sentence 'backlog' is not a decision" \
+check 5 "mid-sentence 'backlog' is not a decision" \
   "$work/complete.md" "$work/issues-backlog-midsentence.json" \
-  "GAP: feature #197"
+  "DECISION REQUIRED: feature #197"
+
+# --- precedence: a mechanical gap outranks an owed decision (#559). A gap is
+# correctable by anyone; a decision is not. If exit 5 won here, a real roadmap
+# contradiction would be reported under the softer outcome and read as "waiting
+# on the human" rather than "fix this".
+check 1 "a roadmap gap outranks an owed decision" \
+  "$work/no-links.md" "$work/issues-unassigned.json" \
+  'GAP: roadmap section "v0.10' "DECISION REQUIRED: feature #190" \
+  "1 gap(s), 1 decision(s)"
 
 # --- corrupt issues JSON is a tool error (exit 2), never a clean pass
 printf 'not json' > "$work/issues-corrupt.json"
@@ -253,9 +263,9 @@ check 2 "corrupt issues JSON exits 2" \
 check 0 "gh object-form labels/milestone parse as assigned" \
   "$work/complete.md" "$work/issues-gh-form.json" \
   "ok: feature #179" "roadmap-check: 0 gap(s)"
-check 1 "gh object-form unassigned feature is a gap" \
+check 5 "gh object-form unassigned feature awaits a decision" \
   "$work/complete.md" "$work/issues-gh-form-unassigned.json" \
-  "GAP: feature #195"
+  "DECISION REQUIRED: feature #195"
 
 # --- assessed with zero open features is a clean pass (distinct from #224's
 # "not assessed"): the inventory WAS evaluated and found no features.
