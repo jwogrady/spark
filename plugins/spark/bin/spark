@@ -61,6 +61,7 @@ governance|cmd_governance|Render the model, or inspect/diff/apply/validate repos
 docs-impact|cmd_docs_impact|Verify the declared documentation impact of an issue against its implementation evidence
 plan|cmd_plan|Compile an approved plan artifact into GitHub state: validate, diff, apply, verify
 triage|cmd_triage|Establish what is true about an existing repository, read-only, before anything mutates it
+reconcile|cmd_reconcile|Turn the Triage evidence into an approval-gated reconciliation slate; proposes, never applies
 next|cmd_next|Select the next eligible milestone issue from live GitHub metadata
 help|usage|Show this help'
 
@@ -4092,6 +4093,274 @@ triage_rows() {
   else
     gov_collect "$gmodel" "$root"
   fi
+}
+
+# ---------------------------------------------------------------------------
+# spark reconcile (#468) — the reconciliation slice of Triage.
+#
+# Triage establishes what is true (#467). This turns that evidence into a
+# reviewable SLATE: for each material finding, what it is, how good the evidence
+# is, what disposition is proposed, what action would carry it out, what it
+# risks, how to validate it, and — the load-bearing column — whose authority is
+# needed.
+#
+# TWO AXES, DELIBERATELY SEPARATE. The v0.21 dogfood's sharpest lesson was that
+# `unknown` is an EVIDENCE state and `decision required` is an AUTHORITY state,
+# and collapsing them is how missing evidence becomes a guessed decision. So a
+# finding carries both, and a row whose evidence is `unread` gets NO disposition
+# at all — not DECISION-REQUIRED, not KEEP. The column is literally empty,
+# because proposing a disposition for something Spark could not read would be
+# the collapse this design exists to prevent.
+#
+#   evidence      known | unread
+#   disposition   KEEP | REWRITE-COLLAPSE | DROP-ARCHIVE | DECISION-REQUIRED | -
+#   authority     deterministic | human
+#
+# `deterministic` means an already-approved policy supplies the value and Spark
+# may act under its normal mutation contract. `human` means it may not, and
+# DECISION-REQUIRED narrows that further: not merely "a person must act" but
+# "a person must CHOOSE", which is the boundary #559 made structural.
+#
+# The vocabulary is core Spark's (D3). spark-audit may consume and extend it;
+# core must never depend on that companion, and nothing here does.
+# ---------------------------------------------------------------------------
+
+# rec_row <area> <evidence> <disposition> <id> <finding> <action> <risk> <validation> <authority>
+rec_row() {
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    "$1" "$2" "$3" "$4" "$5" "$6" "$7" "$8" "$9"
+}
+
+# rec_protected_branch <name> — branches a slate must never propose dropping.
+# Trunk and release lines are not residue, and a generated or vendored path is
+# not product residue either; naming them once keeps a scan from mistaking
+# either for cleanup.
+rec_protected_branch() {
+  case "$1" in
+    master|main|develop|release|release/*|gh-pages|HEAD) return 0 ;;
+  esac
+  return 1
+}
+
+# rec_rows <root> — the slate. Read-only: it reads the authorities #467 already
+# composes and proposes; it writes nothing and applies nothing.
+rec_rows() {
+  local root="$1" k v
+
+  # --- recorded intent, through triage's own producers ---------------------
+  local next='' updated='' refs closed=0 open_seen=0 unread=0 n
+  while IFS=$'\t' read -r k v; do
+    case "$k" in next_action) next="$v" ;; updated) updated="$v" ;; esac
+  done < <(repo_recorded_intent "$root")
+  if [ -n "$next" ]; then
+    refs="$(issue_refs "$next" | awk '!seen[$0]++')"
+    if [ -z "$refs" ]; then
+      rec_row intent known KEEP state.json \
+        "recorded intent references no issue explicitly" \
+        "none — its liveness cannot be judged from issue state" \
+        none "spark triage" deterministic
+    else
+      for n in $refs; do
+        if command -v gh >/dev/null 2>&1; then
+          case "$(gh api "repos/{owner}/{repo}/issues/$n" --jq .state 2>/dev/null)" in
+            closed) closed=$((closed+1)) ;;
+            open)   open_seen=$((open_seen+1)) ;;
+            *)      unread=$((unread+1)) ;;
+          esac
+        else
+          unread=$((unread+1))
+        fi
+      done
+      if [ "$unread" -gt 0 ]; then
+        rec_row intent unread - state.json \
+          "recorded intent names $unread issue(s) whose state could not be read" \
+          "none — evidence is incomplete" none "spark triage" human
+      elif [ "$closed" -gt 0 ] && [ "$open_seen" -eq 0 ]; then
+        rec_row intent known DECISION-REQUIRED state.json \
+          "every issue the recorded intent names ($closed) is closed; recorded $updated" \
+          "record the next action with: spark state --set next_action=..." \
+          low "spark triage" human
+      else
+        rec_row intent known KEEP state.json \
+          "recorded intent still names open work" "none" none "spark triage" deterministic
+      fi
+    fi
+  fi
+
+  # --- governance, delegated wholesale -------------------------------------
+  # The engine's rows keep their own meaning; this only maps each to a
+  # disposition and an authority. No second opinion about what a finding is.
+  local gmodel grows
+  if ! gmodel="$(resolve_governance 2>/dev/null)"; then
+    rec_row governance unread - model \
+      "the governance model does not resolve" "none — evidence is unreadable" \
+      none "spark governance inspect" human
+  else
+    grows="$(gov_collect "$gmodel" "$root")"
+    while IFS=$'\t' read -r gsurf gst gid gdet; do
+      [ -n "$gsurf" ] || continue
+      case "$gst" in
+        '=') : ;;
+        '>') : ;;
+        '?') rec_row "governance" unread - "$gid" "$gdet" \
+               "none — the surface could not be read" none "spark governance validate" human ;;
+        '+') rec_row "governance" known REWRITE-COLLAPSE "$gid" \
+               "declared by the model and absent here: $gdet" \
+               "spark governance apply --yes" low "spark governance validate" deterministic ;;
+        '~') rec_row "governance" known REWRITE-COLLAPSE "$gid" \
+               "drifted from the model: $gdet" \
+               "spark governance apply --yes --repair-drift" \
+               "overwrites a value the project already chose" \
+               "spark governance validate" deterministic ;;
+        '!')
+          if [ -n "$(gov_judgment_rows "$(printf '%s\t%s\t%s\t%s\n' "$gsurf" "$gst" "$gid" "$gdet")")" ]; then
+            rec_row "governance" known DECISION-REQUIRED "$gid" "$gdet" \
+              "record the decision in the governed field" low \
+              "spark governance validate" human
+          else
+            rec_row "governance" known REWRITE-COLLAPSE "$gid" "$gdet" \
+              "repair the invalid state by hand" \
+              "the state is impossible as it stands" \
+              "spark governance validate" human
+          fi ;;
+      esac
+    done <<EOF
+$grows
+EOF
+  fi
+
+  # --- branch residue -------------------------------------------------------
+  # Merged into trunk means the work is IN trunk: the branch is a pointer, and
+  # dropping it erases no history. Protected lines are never proposed.
+  local trunk='' b
+  while IFS=$'\t' read -r k v; do
+    case "$k" in trunk) trunk="$v" ;; esac
+  done < <(repo_trunk "$root")
+  if [ -z "$trunk" ]; then
+    rec_row branch unread - all \
+      "no trunk could be determined, so merged-branch residue was not assessed" \
+      "none — evidence is unreadable" none "git branch --merged" human
+  else
+    while IFS= read -r b; do
+      [ -n "$b" ] || continue
+      b="${b# }"; b="${b#\*}"; b="${b# }"
+      [ -n "$b" ] || continue
+      rec_protected_branch "$b" && continue
+      [ "$b" = "$trunk" ] && continue
+      rec_row branch known DROP-ARCHIVE "$b" \
+        "local branch fully merged into $trunk; its commits are in trunk" \
+        "git branch -d $b" "removes a pointer; no history is lost" \
+        "git log $trunk --oneline | head" human
+    done <<EOF
+$(git -C "$root" branch --merged "$trunk" --format='%(refname:short)' 2>/dev/null)
+EOF
+  fi
+
+  # --- release residue ------------------------------------------------------
+  # A milestone with no open issues has done its job. Closing it is a remote
+  # act and stays the human's.
+  if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+    local mline mnum mtitle mopen
+    while IFS=$'\t' read -r mnum mtitle mopen; do
+      [ -n "$mnum" ] || continue
+      [ "$mopen" = "0" ] || continue
+      rec_row milestone known DROP-ARCHIVE "#$mnum" \
+        "milestone \"$mtitle\" is open with 0 open issues" \
+        "close it on GitHub" "a remote mutation" \
+        "gh api repos/{owner}/{repo}/milestones" human
+    done <<EOF
+$(gh api 'repos/{owner}/{repo}/milestones?state=open' --jq '.[] | [.number, .title, .open_issues] | @tsv' 2>/dev/null)
+EOF
+  else
+    rec_row milestone unread - all \
+      "milestone state needs an authenticated gh, which is unavailable" \
+      "none — evidence is unreadable" none "gh auth status" human
+  fi
+}
+
+# spark reconcile [--tsv]
+cmd_reconcile() {
+  local tsv=0 usage_line="usage: spark reconcile [--tsv]"
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --tsv) tsv=1 ;;
+      -h|--help)
+        echo "$usage_line"
+        echo
+        echo "  Turn Triage's evidence into a reviewable reconciliation slate."
+        echo "  Read-only: it proposes, and applies nothing. Evidence state and"
+        echo "  proposed disposition are separate columns on purpose."
+        return 0 ;;
+      *) red "unknown option: $1"; echo "$usage_line"; return 1 ;;
+    esac
+    shift
+  done
+
+  local root; root="$(git_root)"
+  if [ -z "$root" ]; then red "not inside a git repo"; return 1; fi
+
+  local rows ndec nunread nprop
+  rows="$(rec_rows "$root")"
+  ndec="$(printf '%s\n' "$rows" | awk -F'\t' '$3 == "DECISION-REQUIRED" && NF' | wc -l | tr -d ' ')"
+  nunread="$(printf '%s\n' "$rows" | awk -F'\t' '$2 == "unread" && NF' | wc -l | tr -d ' ')"
+  nprop="$(printf '%s\n' "$rows" | awk -F'\t' '($3 == "REWRITE-COLLAPSE" || $3 == "DROP-ARCHIVE") && NF' | wc -l | tr -d ' ')"
+
+  if [ "$tsv" -eq 1 ]; then
+    printf 'area\tevidence\tdisposition\tid\tfinding\taction\trisk\tvalidation\tauthority\n'
+    printf '%s\n' "$rows" | awk 'NF'
+    printf 'summary\tproposed\t%s\tdecisions\t%s\tunread\t%s\t-\t-\n' "$nprop" "$ndec" "$nunread"
+    [ "$ndec" -eq 0 ] || return 5
+    [ "$nunread" -eq 0 ] || return 3
+    return 0
+  fi
+
+  echo "Spark reconcile — $root"
+  echo
+  echo "Read-only: this proposes a slate. Nothing was deleted, closed, relabelled,"
+  echo "assigned, provisioned or committed."
+  echo
+  local d
+  for d in DECISION-REQUIRED REWRITE-COLLAPSE DROP-ARCHIVE KEEP; do
+    printf '%s\n' "$rows" | awk -F'\t' -v want="$d" '
+      $3 == want && NF { n++ } END { if (n) printf "%s (%d)\n", want, n }'
+    # Capped: a repository with sixty merged branches would bury the two rows
+    # that need a person. --tsv carries every row for a machine.
+    printf '%s\n' "$rows" | awk -F'\t' -v want="$d" '
+      $3 == want && NF {
+        n++
+        if (n <= 10) {
+          printf "    %-11s %s\n", $1 "/" $4, $5
+          if ($6 != "none" && $6 != "") printf "    %-11s action:     %s\n", "", $6
+          if ($7 != "none" && $7 != "") printf "    %-11s risk:       %s\n", "", $7
+          printf "    %-11s validate:   %s\n", "", $8
+          printf "    %-11s authority:  %s\n", "", $9
+        }
+      }
+      END { if (n > 10) printf "    ... and %d more; see spark reconcile --tsv\n", n - 10 }'
+    printf '%s\n' "$rows" | awk -F'\t' -v want="$d" '$3 == want && NF { f=1 } END { if (f) print "" }'
+  done
+  if [ "$nunread" -gt 0 ]; then
+    echo "UNKNOWN / NOT ASSESSED ($nunread) — evidence, not a disposition:"
+    printf '%s\n' "$rows" | awk -F'\t' '$2 == "unread" && NF { printf "    %-11s %s\n", $1 "/" $4, $5 }'
+    echo "    No disposition is proposed for these. An unread surface is not a finding"
+    echo "    against the repository, and it is not a decision awaiting you either."
+    echo
+  fi
+
+  if [ "$ndec" -gt 0 ]; then
+    yellow "DECISION REQUIRED — $ndec item(s) need your authority, not Spark's."
+    yellow "  A recommendation is not authority: nothing above is recorded until you"
+    yellow "  record it in the governed field."
+  fi
+  if [ "$nprop" -gt 0 ]; then
+    echo "  $nprop proposed action(s) above are reversible and cite their evidence."
+    echo "  Each is applied by the command shown, one coherent group at a time,"
+    echo "  and validated before the next."
+  fi
+  [ "$ndec" -eq 0 ] || return 5
+  [ "$nunread" -eq 0 ] || return 3
+  green "COHERENT — nothing requires reconciliation before proceeding"
+  return 0
 }
 
 # spark triage [--tsv]
