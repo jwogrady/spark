@@ -1,1 +1,8 @@
+# Code owners for the whole tree.
+#
+# INERT TODAY: the trunk ruleset does not require a code-owner review, so this
+# file records intent and changes nothing yet. It becomes a door only when the
+# ruleset requires code-owner approval — which waits on Claude holding a GitHub
+# identity distinct from the repository owner's, since an approval rule cannot
+# separate an author from a reviewer who are the same account.
 * @jwogrady

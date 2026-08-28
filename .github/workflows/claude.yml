@@ -1,10 +1,22 @@
 # The coding lane. Claude is woken by a human mention, or by the reviewer
 # finishing a pass, and may push fixes to the PR's own feature branch.
 #
-# It may NOT merge. That boundary is held by the branch ruleset (a pull request,
-# an approving review, and a CODEOWNERS review from @jwogrady), not by this
-# file — a permission block is a statement of intent, and the ruleset is the
-# door. `contents: write` here buys the ability to push a branch, nothing more.
+# It may NOT merge, and it is worth being exact about why, because the reason is
+# weaker than it looks.
+#
+# TODAY the trunk ruleset requires a pull request and the doctor and tests
+# checks, and ZERO approving reviews. There is no code-owner rule. So nothing
+# structural stops an automated merge — what stops it is that this job is not
+# given the capability, plus the standing convention that merging is the
+# owner's act.
+#
+# That is a convention, not a door. The door needs Claude to hold a GitHub
+# identity distinct from the repository owner's, because an approval-count rule
+# cannot separate an author from a reviewer who are the same account. Until then
+# a required-approval rule would lock the owner out of their own pull requests
+# rather than constrain this lane.
+#
+# `contents: write` here buys the ability to push a branch, nothing more.
 name: Claude Code
 
 on:
