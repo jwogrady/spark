@@ -402,13 +402,41 @@ nothing carries it first.
 Idempotent by construction: every create is guarded by what already exists, so
 a second run is a no-op rather than a duplicate-label error.
 
-#### `validate` — fails closed
+#### `validate` — fails closed, and separates broken state from owed decisions
 
-Exits `1` when any `!` row is present, `3` when a surface could not be read, `0`
-only when every required invariant holds. **It never reports PASS from a surface
-it could not read**, and when a real finding coexists with an unread surface it
-says both — a definite finding still fails, but the report admits the picture is
-partial.
+Four outcomes, because three were not enough:
+
+| Exit | Verdict | Meaning |
+| --- | --- | --- |
+| `0` | `PASS` | every required invariant holds |
+| `1` | `FAIL` | **mechanically invalid** — no decision resolves it. A cycle in the native blocked-by graph is the case: whichever issue you start, the graph forbids it |
+| `5` | `DECISION REQUIRED` | a `!` row names a value **only a human has the authority to choose** — which category an issue means, which `docs-impact` class applies, whether work is milestoned or backlogged, what belongs in a surface the model says only a human provisions |
+| `3` | `NOT ASSESSED` | a surface could not be read; never assumed healthy |
+
+The most severe present outcome wins, and every lesser state that coexists is
+still named. **It never reports PASS from a surface it could not read**, and when
+a real finding coexists with an unread surface it says both — a definite finding
+still fails, but the report admits the picture is partial.
+
+The split matters because of what an orchestrator does with the exit code. When
+every `!` collapsed into `FAIL`, the only mechanical route from a red gate to a
+green one was to write the missing judgment — and an autonomous run took exactly
+that route, assigning a priority and a release disposition so a certification
+could continue. `DECISION REQUIRED` is the outcome that says *stop and ask*,
+distinct from *something is broken and you should fix it*.
+
+Under `DECISION REQUIRED`, `validate` prints the admissible values for every
+governed family, read from the model. It reports the choice **set** and chooses
+nothing: it never ranks the values and never marks one as a default.
+
+**A recommendation is not authority.** An agent may propose a value with its
+evidence, but the gap clears only when the governed field itself carries the
+decision. A comment, a report, an agent's reasoning, or a sentence in the issue
+body does not clear it. Once a human records the decision, deterministic checks
+consume it normally on the next run.
+
+The row alphabet is unchanged by this: `!` still means *requires human judgment
+— reported, never guessed*. What changed is the verdict that reads it.
 
 What counts as *required* is the schema's own `requirement` field, not a list in
 the code. Adding a governed family as data brings it under validation with no
@@ -881,18 +909,28 @@ there is no fallback priority set: a hard-coded `P0`–`P3` would be a second co
 of a rule the schema owns, taking over at exactly the moment the schema was
 unusable.
 
-Four outcomes, and the middle two matter:
+Five outcomes, and the middle three matter:
 
 | Outcome | Exit | Meaning |
 |---|---|---|
 | a selection | 0 | this issue is next, with the reason |
 | no eligible issue | 1 | **a known answer** — every candidate is genuinely blocked, or the milestone has no open leaf |
 | not assessed | 3 | the slate could not be read, **or the governance model does not resolve**; nothing is claimed and nothing is routed |
-| selected but not ready | 4 | an issue was selected and its **execution metadata is mechanically invalid** — reported before the route, never routed |
+| selected but not ready | 4 | an issue was selected and its **execution metadata is mechanically invalid** — no decision resolves it. Reported before the route, never routed |
+| selected but awaiting a decision | 5 | an issue was selected and its metadata has a gap **only a human may fill** — reported with the admissible values, before the route, never routed |
 
 Exit 4 is separate from exit 1 on purpose: "everything is blocked" and "this one
 was chosen but contradicts itself" are different facts, and a caller has to be
 able to act differently on them.
+
+Exit 5 is separate from exit 4 for the same reason, one level up. "This metadata
+is impossible" invites a fix; "this metadata is missing a judgment" invites a
+question. Collapsing them is what let an autonomous run answer the question
+itself in order to clear the gate. `next` prints the admissible values from the
+model and stops — proposing one is allowed, persisting one to make this check
+pass is the defect the stop exists to prevent. Both 4 and 5 are decided by the
+same partition `spark governance validate` uses, so selection and validation
+cannot disagree about which kind of gap they are looking at.
 
 "Everything is blocked" is a determinate result and is reported as one. It is
 never folded into "could not tell" — a known negative and an unknown are
@@ -998,9 +1036,15 @@ acts on exactly one of those classes:
 
 **A freshly set-up repository therefore reports its missing issue forms and
 pull-request template, and `spark governance validate` does not pass while they
-are absent.** That is the intended signal, not a defect: Spark defines and
-validates the *shape* of those surfaces and refuses to invent project-specific
-content for them, so the honest thing it can do is name what is still needed.
+are absent** — it reports `DECISION REQUIRED` (exit `5`), because only a human
+provisions those surfaces. That is the intended signal, not a defect: Spark
+defines and validates the *shape* of those surfaces and refuses to invent
+project-specific content for them, so the honest thing it can do is name what is
+still needed.
+
+Whether an absent human-provisioned surface should carry a *row status* of its
+own — distinct from both "missing" and "needs judgment" — is a separate open
+question about the schema's alphabet, not settled here.
 
 `setup` is also offline and create-only, and labels live on GitHub — so the label
 families are reconciled by [`spark labels`](#spark-labels---apply---prune-deprecated)

@@ -188,6 +188,39 @@ release decision; a cardinality violation is reported regardless.
 It is a report, not an auto-fix: gaps are handed to the human with the smallest
 decision that resolves each.
 
+### Broken state and owed decisions are different results
+
+`validate` separates the two rather than reporting both as failure:
+
+- **mechanically invalid** (exit `1`) — no decision resolves it. A cycle in the
+  native blocked-by graph is the case: whichever issue you start, the graph
+  forbids it. Anyone may correct it.
+- **decision required** (exit `5`) — the gap names a value only a human has the
+  authority to choose: which category an issue means, which `docs-impact` class
+  applies, whether work is milestoned or backlogged, what belongs in a surface
+  the model says only a human provisions.
+
+The distinction is not cosmetic. A gate that reports an owed decision as broken
+state leaves an autonomous run exactly one mechanical route to green — write the
+decision — and that route gets taken. The same partition drives `spark next`, so
+selection and validation cannot disagree about which kind of gap they see.
+
+**A recommendation is not authority.** An agent may propose a value together
+with its evidence; the check clears only when the governed field itself carries
+the decision. A comment, a report, or a sentence in the issue body is not a
+recorded decision, and neither is the run that noticed the gap. Once a human
+records it, deterministic checks consume the value normally.
+
+Two states that must not be collapsed, either:
+
+| | |
+| --- | --- |
+| **unknown / not assessed** | an *evidence* state — the surface could not be read, so nothing is claimed |
+| **decision required** | an *authority* state — the evidence is complete and a human must choose |
+
+Missing evidence is not a missing decision, and neither is a licence to supply
+one.
+
 Every **active** issue should have:
 
 - [ ] one `issue.taxonomy` category label;
