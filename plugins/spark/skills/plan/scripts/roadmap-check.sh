@@ -11,12 +11,20 @@
 #      deferred/backlog marker
 #
 # Read-only by design: release decisions are human calls, so the checker only
-# reports gaps (one `GAP: …` line each, exit 1) and never fixes them.
+# reports findings and never fixes them. Two kinds, kept apart (#559):
+#   `GAP: …`               a mechanical gap — the roadmap contradicts itself or
+#                          cannot be read. Anyone may correct it.
+#   `DECISION REQUIRED: …` an open issue has no release decision. Only the human
+#                          may supply one, and an agent writing a milestone or a
+#                          backlog label to make this check pass is the defect
+#                          #559 exists to prevent. Reported, never chosen.
 #
 # Exit codes: 0 complete, 1 gaps, 2 usage/input error, 3 not assessed —
 # neither jq nor python3 is available, OR the open-feature inventory could not
-# be retrieved (no --issues and gh missing/failing). Exit 3 is never a clean
-# pass: an unassessed inventory must not read as "complete" (#224).
+# be retrieved (no --issues and gh missing/failing) — 5 decision required.
+# Exit 3 is never a clean pass: an unassessed inventory must not read as
+# "complete" (#224). Exit 5 is never a clean pass either, and it must not be
+# cleared by the same run that reported it.
 
 set -euo pipefail
 
@@ -54,6 +62,11 @@ fi
 
 gaps=0
 gap() { echo "GAP: $1"; gaps=$((gaps + 1)); }
+# A missing release decision is not a gap in the roadmap; it is an absent human
+# judgment. Counting the two together is what let the #558 incident resolve
+# itself: the only route from exit 1 to exit 0 was to write the decision.
+decisions=0
+decision() { echo "DECISION REQUIRED: $1"; decisions=$((decisions + 1)); }
 
 # --- roadmap (checks A, B, D) ----------------------------------------------
 # One record per ## vX.Y section: "heading<TAB>status<TAB>has-ref<TAB>has-marker".
@@ -299,7 +312,7 @@ if [ -n "$issues_source" ]; then
       assigned) echo "ok: feature #$num — assigned to a milestone" ;;
       backlog)  echo "ok: feature #$num — explicitly backlogged" ;;
       blocked)  echo "ok: feature #$num — blocked on a named dependency/decision" ;;
-      *) gap "feature #$num has no release decision (assign a milestone, record a backlog reason, or name the blocking decision)" ;;
+      *) decision "feature #$num has no release decision — assign a milestone, record a backlog reason, or name the blocking decision. Spark reports the gap; the choice is yours, and an agent may propose one with evidence but must not persist it to clear this line." ;;
     esac
   done <<< "$classified"
   if [ "$features" -eq 0 ]; then
@@ -307,12 +320,19 @@ if [ -n "$issues_source" ]; then
   fi
 fi
 
-echo "roadmap-check: $gaps gap(s)"
-# Definitive gaps always fail. Otherwise, a run that could not assess the open
-# feature inventory is incomplete — exit 3 (not assessed), never a clean 0
-# (#224); only a fully-assessed, gap-free run passes.
+echo "roadmap-check: $gaps gap(s), $decisions decision(s) requiring human authority"
+# Definitive gaps always fail — they are correctable without authority, so they
+# outrank an owed decision. Then owed decisions (exit 5). Then a run that could
+# not assess the open feature inventory is incomplete — exit 3 (not assessed),
+# never a clean 0 (#224); only a fully-assessed, gap-free, decision-free run
+# passes.
 if [ "$gaps" -gt 0 ]; then
   exit 1
+fi
+if [ "$decisions" -gt 0 ]; then
+  echo "roadmap-check: $decisions release decision(s) await human authority, so this is NOT a clean pass (exit 5)."
+  echo "roadmap-check: a recommendation is not authority — this check clears when the issue itself carries the decision."
+  exit 5
 fi
 if [ "$issues_assessed" -eq 0 ]; then
   echo "roadmap-check: incomplete — the open-feature inventory was not assessed, so this is NOT a clean pass (exit 3)."
