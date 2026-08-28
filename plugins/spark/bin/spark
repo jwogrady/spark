@@ -2857,6 +2857,35 @@ di_split_linked() {
   printf '%s\n' "$1" | awk -F'\t' -v k="$2" '$1 == k && NF == 2 { print $2 }'
 }
 
+# di_release_labels <root> — the label(s) Release Please puts on its own PRs, as
+# a newline list. Empty when release automation is not configured.
+#
+# THE CORROBORATING SIGNAL. A branch prefix describes a NAME, not provenance:
+# branch names are user-controlled and `release-please--branches--` is not
+# reserved, so a human PR called `release-please--branches--manual-doc-fix` was
+# classified as automation and its evidence silently dropped (#554).
+#
+# Author is not usable here: Release Please is commonly run with a PAT, so its PRs
+# are authored by a human account — this repository's own release PR is. What it
+# does always carry is its `label`, a key in `release-please-config.json`
+# defaulting to `autorelease: pending`, which the tool applies and re-applies. A
+# human branch collision does not carry it.
+#
+# `autorelease: tagged` is included because that is the same PR after release.
+di_release_labels() {
+  local root="$1"
+  local cfg="$root/release-please-config.json"
+  local lab=""
+  if [ ! -f "$cfg" ] && ! ls "$root"/.github/workflows/*release-please* >/dev/null 2>&1; then
+    return 0
+  fi
+  if [ -f "$cfg" ]; then
+    lab="$(sed -n 's/.*"label"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$cfg" | head -n1)"
+  fi
+  if [ -n "$lab" ]; then printf '%s\n' "$lab"; else printf 'autorelease: pending\n'; fi
+  printf 'autorelease: tagged\n'
+}
+
 # di_release_branch_prefix <root> — the head-branch prefix Release Please uses in
 # this repository, or empty when release automation is not configured.
 #
@@ -2909,7 +2938,7 @@ di_release_branch_prefix() {
 # acceptance criterion, and `first: 50` is not "all" — the criterion describes
 # the capability being shipped, not the size of today's data.
 di_linked_prs() {
-  local owner="$1" name="$2" number="$3" prefix="${4:-}"
+  local owner="$1" name="$2" number="$3" prefix="${4:-}" rlabels="${5:-}"
   local cursor="" page out nodes has next n=0
   local q='
     query($owner: String!, $name: String!, $number: Int!, $after: String) {
@@ -2917,7 +2946,7 @@ di_linked_prs() {
         issue(number: $number) {
           closedByPullRequestsReferences(first: 50, after: $after, includeClosedPrs: true) {
             pageInfo { hasNextPage endCursor }
-            nodes { number state headRefName }
+            nodes { number state headRefName labels(first: 20) { nodes { name } } }
           } } } }'
   while :; do
     # One page. `-F after=` cannot express GraphQL null, so the first request
@@ -2928,7 +2957,8 @@ di_linked_prs() {
           .data.repository.issue.closedByPullRequestsReferences
           | (.pageInfo.hasNextPage | tostring) + "\t" + (.pageInfo.endCursor // "")
             + "\n" + ([.nodes[] | select(.state == "MERGED" or .state == "OPEN")
-                        | (.number | tostring) + "\t" + (.headRefName // "")]
+                        | (.number | tostring) + "\t" + (.headRefName // "")
+                          + "\t" + ([.labels.nodes[].name] | join("\u001f"))]
                        | join("\n"))' 2>/dev/null)" || return 1
     else
       page="$(gh api graphql -F owner="$owner" -F name="$name" -F number="$number" \
@@ -2936,7 +2966,8 @@ di_linked_prs() {
           .data.repository.issue.closedByPullRequestsReferences
           | (.pageInfo.hasNextPage | tostring) + "\t" + (.pageInfo.endCursor // "")
             + "\n" + ([.nodes[] | select(.state == "MERGED" or .state == "OPEN")
-                        | (.number | tostring) + "\t" + (.headRefName // "")]
+                        | (.number | tostring) + "\t" + (.headRefName // "")
+                          + "\t" + ([.labels.nodes[].name] | join("\u001f"))]
                        | join("\n"))' 2>/dev/null)" || return 1
     fi
     # A page that came back unreadable is a FAILED lookup, not an empty one: the
@@ -2951,10 +2982,20 @@ di_linked_prs() {
     # exclusion nobody can see is indistinguishable from a PR never linked.
     nodes="$(printf '%s\n' "$page" | tail -n +2 | awk 'NF')"
     if [ -n "$nodes" ]; then
-      printf '%s\n' "$nodes" | awk -F'\t' -v pfx="$prefix" '
+      printf '%s\n' "$nodes" | awk -F'\t' -v pfx="$prefix" -v labs="$rlabels" '
+        BEGIN { nl = split(labs, L, "\n") }
         NF {
+          # BOTH signals, never the prefix alone. The prefix says where the branch
+          # was cut; the label says the release tool made it. A human PR whose
+          # branch happens to start with the prefix keeps its evidence (#554).
           kind = "impl"
-          if (pfx != "" && index($2, pfx) == 1) kind = "release"
+          if (pfx != "" && index($2, pfx) == 1) {
+            for (i = 1; i <= nl; i++) {
+              if (L[i] == "") continue
+              n = split($3, PL, "\037")
+              for (j = 1; j <= n; j++) if (PL[j] == L[i]) kind = "release"
+            }
+          }
           printf "%s\t%s\n", kind, $1
         }'
       n=$((n + 1))
@@ -3153,7 +3194,7 @@ cmd_docs_impact() {
         return 3
       fi
       owner="${nwo%%/*}"; name="${nwo##*/}"
-      if ! rows="$(di_linked_prs "$owner" "$name" "$issue" "$(di_release_branch_prefix "$root")")"; then
+      if ! rows="$(di_linked_prs "$owner" "$name" "$issue" "$(di_release_branch_prefix "$root")" "$(di_release_labels "$root")")"; then
         di_evidence_failed "$tsv" linked-pr-lookup \
           "the linked-PR lookup for #$issue failed — earlier merged evidence is unknown, never assumed absent"
         return 3
@@ -3206,7 +3247,7 @@ ${pr_files}"
       # author to open one, while "the lookup failed" tells them to retry.
       # Reporting the first when the second happened sent people to fix work
       # that was already done.
-      if ! rows="$(di_linked_prs "$owner" "$name" "$issue" "$(di_release_branch_prefix "$root")")"; then
+      if ! rows="$(di_linked_prs "$owner" "$name" "$issue" "$(di_release_branch_prefix "$root")" "$(di_release_labels "$root")")"; then
         di_evidence_failed "$tsv" linked-pr-lookup \
           "the linked-PR lookup for #$issue failed — whether an implementation PR exists is unknown"
         return 3
