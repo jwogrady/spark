@@ -64,13 +64,28 @@ done
 # --- number words, so the prose can stay prose --------------------------------
 # A summary heading reads better as "the fourteen repair cycles" than as a
 # numeral, and a check that forced numerals would be a check dictating style.
+# One word, or a hyphenated compound like "twenty-one": the tens and the units are
+# resolved separately and added, so prose does not have to stop at twenty.
 num_of() { # <token> -> integer, or empty
+  local t="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+  case "$t" in
+    *-*)
+      local tens units
+      tens="$(num_word "${t%%-*}")"; units="$(num_word "${t#*-}")"
+      if [ -n "$tens" ] && [ -n "$units" ]; then echo "$((tens + units))"; else echo ""; fi
+      return 0 ;;
+  esac
+  num_word "$t"
+}
+
+num_word() { # <single word or digits> -> integer, or empty
   case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" in
     one) echo 1 ;; two) echo 2 ;; three) echo 3 ;; four) echo 4 ;; five) echo 5 ;;
     six) echo 6 ;; seven) echo 7 ;; eight) echo 8 ;; nine) echo 9 ;; ten) echo 10 ;;
     eleven) echo 11 ;; twelve) echo 12 ;; thirteen) echo 13 ;; fourteen) echo 14 ;;
     fifteen) echo 15 ;; sixteen) echo 16 ;; seventeen) echo 17 ;; eighteen) echo 18 ;;
     nineteen) echo 19 ;; twenty) echo 20 ;;
+    thirty) echo 30 ;; forty) echo 40 ;; fifty) echo 50 ;;
     ''|*[!0-9]*) echo "" ;;
     *) printf '%s' "$1" ;;
   esac
@@ -176,6 +191,66 @@ if [ -n "${t_n:-}" ] && [ "$rec_issues" -ne 0 ] && [ "$t_n" -ne "$rec_issues" ];
   gap "the tally claims $t_n repair issues, but the release record names $rec_issues distinct ones"
 fi
 
+# --- 5b. the suite counts ---------------------------------------------------
+# The ledger summarised "new behavioural suites | 6" and "suites total | 47 → 56"
+# while the tree held 57, and this check said the record agreed — because it
+# derived cycles, the repairs table and the denominator, and simply did not look
+# at these two rows. A guard that emits "record agrees" beside a stale figure
+# teaches its reader to trust a signal that does not cover the claim (#549).
+#
+# Both rows are derived. The definition is stated in the row itself so the count
+# is reproducible: a "behavioural suite" is a `tests/test-*.sh` file, and the
+# baseline is a named commit.
+suites_now="$(find "$root/tests" -maxdepth 1 -name 'test-*.sh' 2>/dev/null | grep -c . || true)"
+tot_row="$(grep -m1 '^| suites total |' "$ledger" || true)"
+if [ -z "$tot_row" ]; then
+  gap "the ledger tally has no 'suites total' row"
+else
+  claim_from="$(printf '%s' "$tot_row" | sed -n 's/^| suites total | *\([0-9]\{1,\}\) *→.*/\1/p')"
+  claim_to="$(printf '%s' "$tot_row" | sed -n 's/^| suites total |.*→ *\([0-9]\{1,\}\).*/\1/p')"
+  base_ref="$(printf '%s' "$tot_row" | sed -n 's/.*baseline `\([^`]*\)`.*/\1/p')"
+  if [ -z "$claim_from" ] || [ -z "$claim_to" ]; then
+    gap "the 'suites total' row is not of the form 'A → B (baseline \`REF\`)'"
+  else
+    # The CURRENT total is always checkable: it needs only the working tree.
+    if [ "$claim_to" -ne "$suites_now" ]; then
+      gap "the tally claims $claim_to suites, but the tree holds $suites_now"
+    fi
+    if [ -z "$base_ref" ]; then
+      gap "the 'suites total' row names no baseline commit, so its starting figure cannot be reproduced"
+    elif ! git -C "$root" rev-parse --verify --quiet "$base_ref^{commit}" >/dev/null 2>&1; then
+      # A shallow clone — CI checks out at depth 1 — genuinely cannot see it.
+      # Stated as a limit rather than passed over, and the current total above is
+      # still checked, so a new suite with a stale row still fails here.
+      echo "note: baseline $base_ref is not in this clone, so the starting figure and the new-suite count were not verified"
+    else
+      base_n="$(git -C "$root" ls-tree "$base_ref" tests/ --name-only 2>/dev/null \
+        | grep -c '^tests/test-.*\.sh$' || true)"
+      [ "$claim_from" -eq "$base_n" ] || \
+        gap "the tally's baseline says $claim_from suites, but $base_ref holds $base_n"
+      # "New" is the set difference, not the arithmetic difference: a suite
+      # removed and another added would leave the total unchanged while the new
+      # count moved.
+      new_n="$(comm -13 \
+        <(git -C "$root" ls-tree "$base_ref" tests/ --name-only 2>/dev/null \
+          | sed -n 's|^tests/\(test-.*\.sh\)$|\1|p' | LC_ALL=C sort) \
+        <(find "$root/tests" -maxdepth 1 -name 'test-*.sh' -printf '%f\n' 2>/dev/null \
+          | LC_ALL=C sort) | grep -c . || true)"
+      new_row="$(grep -m1 '^| new behavioural suites |' "$ledger" || true)"
+      if [ -z "$new_row" ]; then
+        gap "the ledger tally has no 'new behavioural suites' row"
+      else
+        n_claim="$(printf '%s' "$new_row" | sed -n 's/^| new behavioural suites | *\([0-9]\{1,\}\).*/\1/p')"
+        if [ -z "$n_claim" ]; then
+          gap "the 'new behavioural suites' row carries no count"
+        elif [ "$n_claim" -ne "$new_n" ]; then
+          gap "the tally claims $n_claim new suites, but $new_n exist that $base_ref did not have"
+        fi
+      fi
+    fi
+  fi
+fi
+
 # --- 6. the certification denominator, everywhere it appears ---------------
 # Scoped to the certification section: the ledger is full of legitimate "N of M"
 # figures from individual cycles, and comparing those would be noise.
@@ -198,7 +273,7 @@ else
 fi
 
 if [ "$gaps" -eq 0 ]; then
-  echo "ledger-truth: $n_cycles repair cycle(s) over ${t_n:-?} repair issue(s); the ledger, its tally and the release record agree"
+  echo "ledger-truth: $n_cycles repair cycle(s) over ${t_n:-?} repair issue(s), ${suites_now:-?} suite(s); the ledger, its tally and the release record agree"
   exit 0
 fi
 echo "ledger-truth: $gaps contradiction(s) — the record disagrees with itself about how much work it describes"
