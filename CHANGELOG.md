@@ -20,6 +20,90 @@ Keep a Changelog format. Do not hand-edit released sections.
 
 ---
 
+## [0.21.0](https://github.com/jwogrady/spark/compare/v0.20.0...v0.21.0) (2026-08-28)
+
+
+### Features
+
+* add governance inspect, diff, apply, and validate ([e87ead0](https://github.com/jwogrady/spark/commit/e87ead013596138ca054e06b3d4aaa2dcdd28e5c)), closes [#471](https://github.com/jwogrady/spark/issues/471)
+* add spark plan validate, diff, apply, and verify ([f778f57](https://github.com/jwogrady/spark/commit/f778f57b216f573bc5f2552a96d63a094112f7a2)), closes [#472](https://github.com/jwogrady/spark/issues/472)
+* carry milestones, updates, order, and decisions in a plan ([b54488b](https://github.com/jwogrady/spark/commit/b54488b2734514b05ae1228591a2b407ef33dd06)), closes [#472](https://github.com/jwogrady/spark/issues/472)
+* declare docs-impact as a governed label family ([31f664b](https://github.com/jwogrady/spark/commit/31f664b438fe31b92f0a8d8ff02b3af474480144)), closes [#483](https://github.com/jwogrady/spark/issues/483)
+* declare the canonical governance model as a versioned artifact ([4fa51c3](https://github.com/jwogrady/spark/commit/4fa51c30325108de5410e227e2aa9821e8843f33)), closes [#470](https://github.com/jwogrady/spark/issues/470)
+* integrate governance into doctor, selection, and the brief ([a153810](https://github.com/jwogrady/spark/commit/a1538108869cf1347ff3d1b0a9c77cc2b89b9ffb)), closes [#473](https://github.com/jwogrady/spark/issues/473)
+* **plan:** check the roadmap headline against the newest Shipped tag ([ab85822](https://github.com/jwogrady/spark/commit/ab85822ad773146fb34f57ae95488889fdd52620)), closes [#521](https://github.com/jwogrady/spark/issues/521)
+* resolve, validate, and render the governance model ([679cbdc](https://github.com/jwogrady/spark/commit/679cbdc605752082df762be8a45ff5ea324c6202)), closes [#470](https://github.com/jwogrady/spark/issues/470)
+* verify a declared docs-impact against its implementation evidence ([060512d](https://github.com/jwogrady/spark/commit/060512d83acbaa57d32271f2a6b81fbe9724a659)), closes [#483](https://github.com/jwogrady/spark/issues/483)
+
+
+### Bug Fixes
+
+* a deferred surface is not an unread one ([eabff38](https://github.com/jwogrady/spark/commit/eabff38deffde913f2be37e5e41c5b5be3a31ecc)), closes [#478](https://github.com/jwogrady/spark/issues/478)
+* align the fallback description, the docs, and the disposition test ([4304077](https://github.com/jwogrady/spark/commit/4304077aa63efaee2aa32bd87faa8d5c9c71d63d)), closes [#471](https://github.com/jwogrady/spark/issues/471)
+* count correct issues, so the summary describes the population ([2d93660](https://github.com/jwogrady/spark/commit/2d93660813c9014cbe6f7f0aa090de5475cf3478)), closes [#471](https://github.com/jwogrady/spark/issues/471)
+* declare surfaces the way repositories actually spell them ([c832fe3](https://github.com/jwogrady/spark/commit/c832fe308d219a9a9ede751b37785ea348ceae30)), closes [#471](https://github.com/jwogrady/spark/issues/471)
+* **docs-impact:** corroborate a release PR, not just its branch name ([4e042c1](https://github.com/jwogrady/spark/commit/4e042c171d8590e76ec842c1386c26d7073e2854)), closes [#554](https://github.com/jwogrady/spark/issues/554)
+* **docs-impact:** exhaust the linked-PR connection, not its first page ([95ff218](https://github.com/jwogrady/spark/commit/95ff21840399913299d38eb320a7b7322230ac62)), closes [#530](https://github.com/jwogrady/spark/issues/530)
+* **docs-impact:** keep release automation out of implementation evidence ([1c417f8](https://github.com/jwogrady/spark/commit/1c417f8743d2918dc6c5ea6d7d5f2d953475b020)), closes [#524](https://github.com/jwogrady/spark/issues/524)
+* **docs-impact:** report an evidence failure once in each renderer ([31e711b](https://github.com/jwogrady/spark/commit/31e711b2cb058b070793e78ccae6c2b9d5b03a10))
+* **docs-impact:** treat a failed evidence lookup as unknown, not empty ([96ca0cb](https://github.com/jwogrady/spark/commit/96ca0cbee07778dbc6be6709bf988a217a1962f7)), closes [#512](https://github.com/jwogrady/spark/issues/512)
+* gather complete, merged-only, rename-aware evidence ([6e4b0cf](https://github.com/jwogrady/spark/commit/6e4b0cf3e5c5112f68cc01b1b0376b661e0e1924)), closes [#483](https://github.com/jwogrady/spark/issues/483)
+* **governance:** name the provisioner on every surface row ([de2c960](https://github.com/jwogrady/spark/commit/de2c960e755e9c1c235ff88d71f1a47d3f2ae508)), closes [#473](https://github.com/jwogrady/spark/issues/473)
+* **governance:** read exclusivity by membership, from one implementation ([a91d59e](https://github.com/jwogrady/spark/commit/a91d59e1266f9ec4d2d60cbfc81fcdee38db7e2f)), closes [#511](https://github.com/jwogrady/spark/issues/511)
+* **hooks:** treat quoted text and heredoc bodies as data, not commands ([7dd0273](https://github.com/jwogrady/spark/commit/7dd02731a606df8540a57a3eb93cfe8fde685d3f)), closes [#526](https://github.com/jwogrady/spark/issues/526)
+* keep a resumed run resumable, and actually apply order records ([689d9c5](https://github.com/jwogrady/spark/commit/689d9c55ef9dd55eff5899bd5888feac032b1824)), closes [#472](https://github.com/jwogrady/spark/issues/472)
+* let a tier narrow a family instead of bricking the model ([29ade8e](https://github.com/jwogrady/spark/commit/29ade8ec26ddb0736209ff454b242cf8ea6ef2dd)), closes [#483](https://github.com/jwogrady/spark/issues/483)
+* let the roadmap vocabulary express a blocked release ([f757ca0](https://github.com/jwogrady/spark/commit/f757ca07fb015bd2dd79131624009c948eeeaaec)), closes [#478](https://github.com/jwogrady/spark/issues/478)
+* never report a governance surface that was not read ([6b5a308](https://github.com/jwogrady/spark/commit/6b5a308b8c5f3901466f01e5247299189bc54252)), closes [#471](https://github.com/jwogrady/spark/issues/471)
+* **next:** stop before selecting when governance does not resolve ([e2536d2](https://github.com/jwogrady/spark/commit/e2536d20a88a26eec2ea8616b2f0e8f689e40533)), closes [#520](https://github.com/jwogrady/spark/issues/520)
+* **plan:** make the order-reason refusal list stems throughout ([91d3f31](https://github.com/jwogrady/spark/commit/91d3f312992a3364334efa3d45b60d5b652ff494)), closes [#472](https://github.com/jwogrady/spark/issues/472)
+* **plan:** preserve empty fields when reading a created-issue record ([fd578d5](https://github.com/jwogrady/spark/commit/fd578d568ccfa8cf792e31efcfc2603cc3abba94)), closes [#540](https://github.com/jwogrady/spark/issues/540)
+* **plan:** read the published-baseline claim only from the headline ([4a3279a](https://github.com/jwogrady/spark/commit/4a3279a24896b274e9074e7ad9abf615c8161698)), closes [#541](https://github.com/jwogrady/spark/issues/541)
+* **plan:** refuse an unresolved decision before requiring gh ([72674a2](https://github.com/jwogrady/spark/commit/72674a27d9bb20db3aec67b8e63c5e5d2ad155b6)), closes [#516](https://github.com/jwogrady/spark/issues/516)
+* **plan:** scope preferred order to its sub-issue parent ([b615fae](https://github.com/jwogrady/spark/commit/b615fae956eef4f6a8090c060c8dd681825ab895)), closes [#518](https://github.com/jwogrady/spark/issues/518)
+* **plan:** validate update targets by the canonical issue-ref rule ([1582bfe](https://github.com/jwogrady/spark/commit/1582bfea0607f4c66ac9c964045e208545334cf2)), closes [#515](https://github.com/jwogrady/spark/issues/515)
+* **plan:** verify every mutation-bearing record, not title and labels ([5864d83](https://github.com/jwogrady/spark/commit/5864d83bd5ed52b66b8dec77e73d052b133d74cc)), closes [#517](https://github.com/jwogrady/spark/issues/517)
+* provision every governed label family, not only the categories ([5178206](https://github.com/jwogrady/spark/commit/5178206e5057227e178c11e62e77c4f485014208)), closes [#483](https://github.com/jwogrady/spark/issues/483)
+* refuse to create labels from an unresolvable governance model ([a91535b](https://github.com/jwogrady/spark/commit/a91535bd40dfef5e7f2c7dab2d27084dbaf4708e)), closes [#470](https://github.com/jwogrady/spark/issues/470)
+* refuse to label from a model that contradicts the taxonomy ([12ef587](https://github.com/jwogrady/spark/commit/12ef587235e9bf4c6589b97f70ffff6d634a03ce)), closes [#470](https://github.com/jwogrady/spark/issues/470)
+* refuse what enforcement refuses, and never verify nothing ([fa0b167](https://github.com/jwogrady/spark/commit/fa0b1674818beb2c1661ec2f3bfce85dc8ea02a2)), closes [#472](https://github.com/jwogrady/spark/issues/472)
+* reject a second exclusive member, and keep --tsv parseable ([3ba552d](https://github.com/jwogrady/spark/commit/3ba552d53683a4ce41b8328c4a6b54b1bfc72984)), closes [#483](https://github.com/jwogrady/spark/issues/483)
+* render a multi-PR evidence list without a doubled hash ([d4ba2ba](https://github.com/jwogrady/spark/commit/d4ba2ba42f62d0949ee4f6076c4d838641ba6e5f)), closes [#483](https://github.com/jwogrady/spark/issues/483)
+* render the exclusivity and path rules in the human governance view ([cc9f8cf](https://github.com/jwogrady/spark/commit/cc9f8cf036909e0fd125bd514c03fe034779303a)), closes [#483](https://github.com/jwogrady/spark/issues/483)
+* resolve exclusivity as one fact per family ([5d3228c](https://github.com/jwogrady/spark/commit/5d3228c4d78fab7f3ab62b878b3c553aefdd634c)), closes [#511](https://github.com/jwogrady/spark/issues/511)
+* resolve owner and repo for the linked-PR evidence query ([54a1293](https://github.com/jwogrady/spark/commit/54a129393e2be0a3954c90da110806d3252750f0)), closes [#483](https://github.com/jwogrady/spark/issues/483)
+* stop doctor and selection disagreeing about the taxonomy ([a4c1ecb](https://github.com/jwogrady/spark/commit/a4c1ecb649b004c33d7b6fff9421bfeab795723f)), closes [#473](https://github.com/jwogrady/spark/issues/473)
+
+
+### Documentation
+
+* annotate the capability claims the findings falsify ([6ca3137](https://github.com/jwogrady/spark/commit/6ca3137b57224780f56a377a3352338fa44fd066)), closes [#478](https://github.com/jwogrady/spark/issues/478)
+* certify v0.21 at 99 checks after the contract review ([6775d5a](https://github.com/jwogrady/spark/commit/6775d5a859ad3987a0ef63eb6853cbce080712c2)), closes [#478](https://github.com/jwogrady/spark/issues/478)
+* correct four untruths in the truth-repair itself ([d59758e](https://github.com/jwogrady/spark/commit/d59758e419b947ec44d57bd5a31f935a3d0d9ebe)), closes [#521](https://github.com/jwogrady/spark/issues/521) [#478](https://github.com/jwogrady/spark/issues/478)
+* correct the records that still claimed v0.21 was ready ([c828ecd](https://github.com/jwogrady/spark/commit/c828ecda2f6187b2acc0e3296458231a69b8a9c7)), closes [#521](https://github.com/jwogrady/spark/issues/521) [#478](https://github.com/jwogrady/spark/issues/478)
+* define Blocked where the vocabulary is actually authoritative ([de7d2b2](https://github.com/jwogrady/spark/commit/de7d2b22494e02c333111f4355bd2a4bf1b9f22b)), closes [#478](https://github.com/jwogrady/spark/issues/478)
+* document the compiler and route plan through it ([afd14e7](https://github.com/jwogrady/spark/commit/afd14e750c4ca1ea995f3be3c4cd8db64d2b1a89)), closes [#472](https://github.com/jwogrady/spark/issues/472)
+* document the four governance responsibilities and their boundary ([229d182](https://github.com/jwogrady/spark/commit/229d18258c27463b58e76654e2307174d669431e)), closes [#471](https://github.com/jwogrady/spark/issues/471)
+* drop a capability overclaim the phrase sweep could not catch ([260fb00](https://github.com/jwogrady/spark/commit/260fb0098dd4b968a6ed3e373ca44446b792a468)), closes [#478](https://github.com/jwogrady/spark/issues/478)
+* **ops:** derive the suite counts, not just report agreement ([a5cabf0](https://github.com/jwogrady/spark/commit/a5cabf040641a673bc7dfc41f5b3b31b3624d636)), closes [#549](https://github.com/jwogrady/spark/issues/549)
+* **ops:** make the record's own counts checkable, and fix the stale two ([8b04485](https://github.com/jwogrady/spark/commit/8b0448543cc202d31b755bafc8dc8ef27850091c)), closes [#546](https://github.com/jwogrady/spark/issues/546)
+* **ops:** re-audit [#483](https://github.com/jwogrady/spark/issues/483), proving pagination rather than iteration ([1c4d72d](https://github.com/jwogrady/spark/commit/1c4d72d7a7cd23b63d297dee036c40ca41d61620))
+* **ops:** re-certify at 77 checks, with the scope derived not listed ([e282d1f](https://github.com/jwogrady/spark/commit/e282d1fc6de19f191fcef034a02a01e588492d59)), closes [#478](https://github.com/jwogrady/spark/issues/478)
+* **ops:** record cycles 13 and 14, and re-certify the gate ([8f4ed42](https://github.com/jwogrady/spark/commit/8f4ed4247e081984bc42a0d9084ddc6b97ef5355)), closes [#478](https://github.com/jwogrady/spark/issues/478)
+* **ops:** record the [#473](https://github.com/jwogrady/spark/issues/473) re-audit and the decision it surfaced ([8f8002a](https://github.com/jwogrady/spark/commit/8f8002a11b0e0cfa7045b076af7ed50f0ee83876))
+* **ops:** record the release-PR evidence defect found verifying [#470](https://github.com/jwogrady/spark/issues/470) ([800d08a](https://github.com/jwogrady/spark/commit/800d08ab7ab07fc9050a79dc896d5600f1a7621b))
+* **ops:** record the v0.21 certification and what it found ([d177acb](https://github.com/jwogrady/spark/commit/d177acbf50279508650eb4d2d89447f12c399b06)), closes [#478](https://github.com/jwogrady/spark/issues/478)
+* reconcile the v0.21 records with the completed repair run ([b1576b9](https://github.com/jwogrady/spark/commit/b1576b9844e534b1096387bcaf3bf93da098df6f)), closes [#478](https://github.com/jwogrady/spark/issues/478)
+* record the governance model and why it is not JSON ([4bd529e](https://github.com/jwogrady/spark/commit/4bd529e95565ab369eb7d184e0e9c209b2bef06e)), closes [#470](https://github.com/jwogrady/spark/issues/470)
+* record the operator/under-test boundary and repair cycle 1 ([8f390ae](https://github.com/jwogrady/spark/commit/8f390aeb51a3a0970a8cec2a26c1f399bccda515)), closes [#511](https://github.com/jwogrady/spark/issues/511) [#478](https://github.com/jwogrady/spark/issues/478)
+* record the readiness states and the stated deferral ([2e1fa55](https://github.com/jwogrady/spark/commit/2e1fa55e02c49fb4f077348326beda9f6a7573dd)), closes [#473](https://github.com/jwogrady/spark/issues/473)
+* record the v0.21 dogfood evaluation ledger ([0779759](https://github.com/jwogrady/spark/commit/07797596426748ec53982334aef7b56799b2af9e)), closes [#478](https://github.com/jwogrady/spark/issues/478)
+* record v0.21, and correct v0.20's shipped status ([4b22b6b](https://github.com/jwogrady/spark/commit/4b22b6be8734d8612b29472c65487be992323765)), closes [#478](https://github.com/jwogrady/spark/issues/478)
+* record why parity is needed at two levels, not one ([7a43973](https://github.com/jwogrady/spark/commit/7a43973884f88a6fc9875a2b2013f472f2f64017)), closes [#470](https://github.com/jwogrady/spark/issues/470)
+* run docs-impact in the lifecycle, and document the grammar ([b567dc8](https://github.com/jwogrady/spark/commit/b567dc81c78c1717d0b4186ca419a7026fc1798f)), closes [#483](https://github.com/jwogrady/spark/issues/483)
+* state how exclusivity resolves across tiers ([1316ea9](https://github.com/jwogrady/spark/commit/1316ea9aad0901ebbaf504a3bd97f4e27e8df2ff)), closes [#511](https://github.com/jwogrady/spark/issues/511)
+* stop calling a superseded tally final ([22574e1](https://github.com/jwogrady/spark/commit/22574e1835847738b149857f354d29bcd790fa0d)), closes [#478](https://github.com/jwogrady/spark/issues/478)
+
 ## [0.20.0](https://github.com/jwogrady/spark/compare/v0.19.0...v0.20.0) (2026-08-27)
 
 
