@@ -2850,6 +2850,42 @@ di_grade() {
 # resolved before the query rather than interpolated into it.
 di_repo_nwo() { gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null; }
 
+# di_split_linked <rows> <kind> — the numbers of one kind from di_linked_prs's
+# classified output. Both callers use it, so "which PRs are implementation
+# evidence" cannot be answered two ways.
+di_split_linked() {
+  printf '%s\n' "$1" | awk -F'\t' -v k="$2" '$1 == k && NF == 2 { print $2 }'
+}
+
+# di_release_branch_prefix <root> — the head-branch prefix Release Please uses in
+# this repository, or empty when release automation is not configured.
+#
+# DURABLE CONFIGURATION, not a title match. Release Please opens its PR from
+# `<branch-prefix>--branches--<base>`, and `branch-prefix` is a key in
+# `release-please-config.json` defaulting to `release-please`. A title pattern
+# would be the wrong signal twice over: `group-pull-request-title-pattern` is free
+# text a human can edit, and an implementation PR is free to mention a release in
+# its own title.
+#
+# Empty when release automation is not configured, so a repository that does not
+# use it excludes nothing and behaves exactly as before.
+di_release_branch_prefix() {
+  # Declared separately: referencing an earlier name inside the same `local`
+  # statement is not dependable, and under `set -u` it fails loudly rather than
+  # quietly — which is how this was caught, in a probe rather than in the verb.
+  local root="$1"
+  local cfg="$root/release-please-config.json"
+  local pfx=""
+  if [ ! -f "$cfg" ] && ! ls "$root"/.github/workflows/*release-please* >/dev/null 2>&1; then
+    return 0
+  fi
+  if [ -f "$cfg" ]; then
+    pfx="$(sed -n 's/.*"branch-prefix"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$cfg" | head -n1)"
+  fi
+  [ -n "$pfx" ] || pfx="release-please"
+  printf '%s--branches--' "$pfx"
+}
+
 # di_linked_prs <owner> <name> <issue> — the PRs linked to the issue as closers
 # that could actually have delivered something: MERGED, plus OPEN for work in
 # flight. A CLOSED-unmerged PR is deliberately excluded — its paths never
@@ -2873,7 +2909,7 @@ di_repo_nwo() { gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/nul
 # acceptance criterion, and `first: 50` is not "all" — the criterion describes
 # the capability being shipped, not the size of today's data.
 di_linked_prs() {
-  local owner="$1" name="$2" number="$3"
+  local owner="$1" name="$2" number="$3" prefix="${4:-}"
   local cursor="" page out nodes has next n=0
   local q='
     query($owner: String!, $name: String!, $number: Int!, $after: String) {
@@ -2881,7 +2917,7 @@ di_linked_prs() {
         issue(number: $number) {
           closedByPullRequestsReferences(first: 50, after: $after, includeClosedPrs: true) {
             pageInfo { hasNextPage endCursor }
-            nodes { number state }
+            nodes { number state headRefName }
           } } } }'
   while :; do
     # One page. `-F after=` cannot express GraphQL null, so the first request
@@ -2892,14 +2928,16 @@ di_linked_prs() {
           .data.repository.issue.closedByPullRequestsReferences
           | (.pageInfo.hasNextPage | tostring) + "\t" + (.pageInfo.endCursor // "")
             + "\n" + ([.nodes[] | select(.state == "MERGED" or .state == "OPEN")
-                        | (.number | tostring)] | join("\n"))' 2>/dev/null)" || return 1
+                        | (.number | tostring) + "\t" + (.headRefName // "")]
+                       | join("\n"))' 2>/dev/null)" || return 1
     else
       page="$(gh api graphql -F owner="$owner" -F name="$name" -F number="$number" \
         -F after="$cursor" -f query="$q" --jq '
           .data.repository.issue.closedByPullRequestsReferences
           | (.pageInfo.hasNextPage | tostring) + "\t" + (.pageInfo.endCursor // "")
             + "\n" + ([.nodes[] | select(.state == "MERGED" or .state == "OPEN")
-                        | (.number | tostring)] | join("\n"))' 2>/dev/null)" || return 1
+                        | (.number | tostring) + "\t" + (.headRefName // "")]
+                       | join("\n"))' 2>/dev/null)" || return 1
     fi
     # A page that came back unreadable is a FAILED lookup, not an empty one: the
     # caller turns a non-zero return into NOT ASSESSED, and a partial set must
@@ -2908,8 +2946,19 @@ di_linked_prs() {
     has="$(printf '%s' "$page" | head -n1 | cut -f1)"
     next="$(printf '%s' "$page" | head -n1 | cut -f2)"
     case "$has" in true|false) ;; *) return 1 ;; esac
+    # Each row becomes "impl<TAB>N" or "release<TAB>N". The caller needs both:
+    # a release-automation PR is not implementation evidence (#524), and an
+    # exclusion nobody can see is indistinguishable from a PR never linked.
     nodes="$(printf '%s\n' "$page" | tail -n +2 | awk 'NF')"
-    [ -z "$nodes" ] || { printf '%s\n' "$nodes"; n=$((n + 1)); }
+    if [ -n "$nodes" ]; then
+      printf '%s\n' "$nodes" | awk -F'\t' -v pfx="$prefix" '
+        NF {
+          kind = "impl"
+          if (pfx != "" && index($2, pfx) == 1) kind = "release"
+          printf "%s\t%s\n", kind, $1
+        }'
+      n=$((n + 1))
+    fi
     [ "$has" = "true" ] || break
     # hasNextPage true with no cursor cannot be continued, and continuing from
     # the start would loop forever: refuse rather than silently truncate.
@@ -3064,7 +3113,7 @@ cmd_docs_impact() {
   # Aggregated across EVERY linked implementation PR, then judged. A single
   # closing PR is the common case, not the model: documentation that landed in
   # an earlier PR of the same issue must not false-fail.
-  local evidence="" ev_desc="" trunk pr prs nwo owner name pr_files
+  local evidence="" ev_desc="" trunk pr prs rows excl nwo owner name pr_files
   case "$mode" in
     paths)
       if [ ! -f "$paths_file" ]; then
@@ -3104,14 +3153,36 @@ cmd_docs_impact() {
         return 3
       fi
       owner="${nwo%%/*}"; name="${nwo##*/}"
-      if ! prs="$(di_linked_prs "$owner" "$name" "$issue")"; then
+      if ! rows="$(di_linked_prs "$owner" "$name" "$issue" "$(di_release_branch_prefix "$root")")"; then
         di_evidence_failed "$tsv" linked-pr-lookup \
           "the linked-PR lookup for #$issue failed — earlier merged evidence is unknown, never assumed absent"
         return 3
       fi
+      prs="$(di_split_linked "$rows" impl | awk 'NF')"
+      excl="$(di_split_linked "$rows" release | awk 'NF')"
+      # The exclusion is VISIBLE. #483 defines an *implementation*-evidence set,
+      # and a generated release PR is not an implementation PR — but an exclusion
+      # nobody can see is indistinguishable from a PR that was never linked
+      # (#524).
+      if [ -n "$excl" ]; then
+        if [ "$tsv" -eq 1 ]; then
+          printf 'evidence-excluded\trelease-automation\t%s\n' \
+            "$(printf '%s\n' "$excl" | awk 'NF { printf "%s%s", s, $1; s = " " }')"
+        else
+          yellow "  ! not implementation evidence (release automation): $(printf '%s\n' "$excl" | awk 'NF { printf "%s#%s", s, $1; s = " " }')"
+        fi
+      fi
       # An empty result here is an ANSWER: no PR is linked yet, so the branch
       # diff is the whole evidence set and grading it is correct. That is the
       # case the failure above must stay distinguishable from.
+      #
+      # But "linked PRs existed and every one was excluded" is NOT that answer:
+      # nothing is known about implementation evidence, so it cannot be graded.
+      if [ -z "$prs" ] && [ -n "$excl" ]; then
+        di_evidence_failed "$tsv" linked-pr-lookup \
+          "every PR linked to #$issue is release automation, so no implementation evidence could be read"
+        return 3
+      fi
       for pr in $prs; do
         if pr_files="$(di_pr_paths "$owner" "$name" "$pr")"; then
           evidence="${evidence}
@@ -3135,9 +3206,26 @@ ${pr_files}"
       # author to open one, while "the lookup failed" tells them to retry.
       # Reporting the first when the second happened sent people to fix work
       # that was already done.
-      if ! prs="$(di_linked_prs "$owner" "$name" "$issue")"; then
+      if ! rows="$(di_linked_prs "$owner" "$name" "$issue" "$(di_release_branch_prefix "$root")")"; then
         di_evidence_failed "$tsv" linked-pr-lookup \
           "the linked-PR lookup for #$issue failed — whether an implementation PR exists is unknown"
+        return 3
+      fi
+      prs="$(di_split_linked "$rows" impl | awk 'NF')"
+      excl="$(di_split_linked "$rows" release | awk 'NF')"
+      if [ -n "$excl" ]; then
+        if [ "$tsv" -eq 1 ]; then
+          printf 'evidence-excluded\trelease-automation\t%s\n' \
+            "$(printf '%s\n' "$excl" | awk 'NF { printf "%s%s", s, $1; s = " " }')"
+        else
+          yellow "  ! not implementation evidence (release automation): $(printf '%s\n' "$excl" | awk 'NF { printf "%s#%s", s, $1; s = " " }')"
+        fi
+      fi
+      # Every linked PR excluded is not "no PR is linked": it is "no
+      # implementation evidence could be read", which is never a pass.
+      if [ -z "$prs" ] && [ -n "$excl" ]; then
+        di_evidence_failed "$tsv" linked-pr-lookup \
+          "every PR linked to #$issue is release automation, so no implementation evidence could be read"
         return 3
       fi
       if [ -z "$prs" ]; then

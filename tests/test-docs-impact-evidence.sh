@@ -77,6 +77,23 @@ case "$1 $2" in
       fail)  exit 1 ;;
       empty) printf 'false\t\n'; exit 0 ;;
       two)   printf 'false\t\n%s\n%s\n' 11 12; exit 0 ;;
+      release)
+        # One implementation PR carrying CODE only, and one release-automation PR
+        # carrying a GOVERNED release document. Including it flips the verdict —
+        # the only arrangement that can tell the two implementations apart.
+        printf 'false\t\n'
+        printf '%s\t%s\n' 11 'feat/11-implementation'
+        printf '%s\t%s\n' 900 'release-please--branches--master'
+        exit 0 ;;
+      onlyrelease)
+        printf 'false\t\n'
+        printf '%s\t%s\n' 900 'release-please--branches--master'
+        exit 0 ;;
+      custompfx)
+        printf 'false\t\n'
+        printf '%s\t%s\n' 11 'feat/11-implementation'
+        printf '%s\t%s\n' 900 'shipit--branches--master'
+        exit 0 ;;
       paged|pagefail|nocursor)
         # Page 2 is requested with after=CUR1.
         case "$*" in
@@ -122,6 +139,10 @@ case "$1 $2" in
           # two and is the only governed documentation, so a single-page
           # implementation never sees it.
           151) printf '%s\n' "$EV_PATH" ;;
+          # The release-automation PR touches a governed RELEASE document. Real
+          # release PRs need not, but they may, and the contract is about what
+          # counts as implementation evidence rather than about today's file set.
+          900) printf '%s\n' "docs/releases/v9.9.md" ;;
           1[0-4][0-9]|150) printf '%s\n' "plugins/spark/bin/spark" ;;
           *)   : ;;
         esac
@@ -285,6 +306,93 @@ di ok ok
 assert_rc "a single-page connection still behaves as before" 1 "$DI_RC"
 di fail ok
 assert_rc "and a failed first page is still not assessed" 3 "$DI_RC"
+
+# ============ a release-automation PR is not implementation evidence ======
+# #483 defines an *implementation*-evidence set: "the closing implementation PR",
+# "multiple explicitly linked implementation PRs". GitHub reports the Release
+# Please PR as a closing reference because its generated body repeats each
+# `Closes #NNN`, so it entered the set and was graded as if a human had written
+# it (#524).
+#
+# The signal is DURABLE CONFIGURATION — Release Please's `branch-prefix`, which
+# it opens its PR from — not a title match. A title pattern is free text a human
+# can edit, and an implementation PR may mention a release in its own title.
+printf '{ "release-type": "simple" }\n' > "$repo/release-please-config.json"
+
+r_rc=0
+r_out="$(cd "$repo" && env PATH="$shim" EV_LOOKUP=release EV_FILES=ok \
+  EV_PATH="$GOVERNED_PATH" "$SPARK" docs-impact --issue 77 --branch --tsv 2>&1)" || r_rc=$?
+assert_rc "the release PR is excluded, so code-only evidence PASSes" 0 "$r_rc"
+assert_eq "with a PASS verdict" "PASS" \
+  "$(printf '%s\n' "$r_out" | awk -F'\t' '$1=="verdict"{print $2}')"
+# The exclusion is VISIBLE: one nobody can see is indistinguishable from a PR
+# that was never linked.
+assert_eq "and the exclusion is reported, naming the PR" "900" \
+  "$(printf '%s\n' "$r_out" | awk -F'\t' '$1=="evidence-excluded"{print $3}')"
+assert_contains "as release automation" "release-automation" "$r_out"
+# The implementation PR is still used — the exclusion must not throw the
+# legitimate evidence away with it.
+assert_contains "while the implementation PR remains evidence" "PR #11" "$r_out"
+case "$r_out" in
+  *"PR #900"*) bad "#524: the release PR was still counted as evidence" ;;
+  *) ok ;;
+esac
+
+# The description must name EVERY implementation PR, not just the first. Making
+# the impl list space-separated (to render the exclusion) left `ev_desc`'s awk
+# seeing one record, so the union was right and the report under-named it — a
+# verdict nobody could audit from its own output. Two impl PRs is the smallest
+# fixture that can catch it.
+# DEFAULT mode, deliberately: branch mode appends "+ PR #N" per iteration and
+# would name them all whatever the list separator is, so it cannot catch this.
+# The first version of this assertion used --branch and passed both ways.
+r_rc=0
+r_out="$(cd "$repo" && env PATH="$shim" EV_LOOKUP=two EV_FILES=ok \
+  EV_PATH="$GOVERNED_PATH" "$SPARK" docs-impact --issue 77 --tsv 2>&1)" || r_rc=$?
+assert_contains "the evidence description names the first implementation PR" "#11" "$r_out"
+assert_contains "and the second one too" "#12" "$r_out"
+
+# ============ every linked reference excluded is NOT ASSESSED =============
+# Not "no PR is linked" — that is a complete answer graded on the branch. This is
+# "no implementation evidence could be read", which is never a pass.
+r_rc=0
+r_out="$(cd "$repo" && env PATH="$shim" EV_LOOKUP=onlyrelease EV_FILES=ok \
+  EV_PATH="$GOVERNED_PATH" "$SPARK" docs-impact --issue 77 --branch --tsv 2>&1)" || r_rc=$?
+assert_rc "only release automation linked is not assessed" 3 "$r_rc"
+assert_eq "rather than graded on the branch alone" "NOT ASSESSED" \
+  "$(printf '%s\n' "$r_out" | awk -F'\t' '$1=="verdict"{print $2}')"
+assert_contains "and says why" "every PR linked to #77 is release automation" "$r_out"
+
+# ============ the prefix comes from CONFIGURATION ========================
+# A project that renames the branch prefix must still have its release PR
+# excluded, which a hard-coded string could not do.
+printf '{ "release-type": "simple", "branch-prefix": "shipit" }\n' \
+  > "$repo/release-please-config.json"
+r_rc=0
+r_out="$(cd "$repo" && env PATH="$shim" EV_LOOKUP=custompfx EV_FILES=ok \
+  EV_PATH="$GOVERNED_PATH" "$SPARK" docs-impact --issue 77 --branch --tsv 2>&1)" || r_rc=$?
+assert_rc "a configured branch-prefix is honoured" 0 "$r_rc"
+assert_eq "and that PR is the excluded one" "900" \
+  "$(printf '%s\n' "$r_out" | awk -F'\t' '$1=="evidence-excluded"{print $3}')"
+# ...and the DEFAULT prefix no longer matches, so the same rows with the default
+# config would include it. Proven by switching the config back.
+printf '{ "release-type": "simple" }\n' > "$repo/release-please-config.json"
+r_rc=0
+r_out="$(cd "$repo" && env PATH="$shim" EV_LOOKUP=custompfx EV_FILES=ok \
+  EV_PATH="$GOVERNED_PATH" "$SPARK" docs-impact --issue 77 --branch --tsv 2>&1)" || r_rc=$?
+assert_eq "while a shipit branch is NOT excluded under the default prefix" "" \
+  "$(printf '%s\n' "$r_out" | awk -F'\t' '$1=="evidence-excluded"{print $3}')"
+
+# ============ no release automation configured: nothing is excluded =======
+# A repository that does not use Release Please must behave exactly as before.
+rm -f "$repo/release-please-config.json"
+r_rc=0
+r_out="$(cd "$repo" && env PATH="$shim" EV_LOOKUP=release EV_FILES=ok \
+  EV_PATH="$GOVERNED_PATH" "$SPARK" docs-impact --issue 77 --branch --tsv 2>&1)" || r_rc=$?
+assert_eq "with no release config, nothing is excluded" "" \
+  "$(printf '%s\n' "$r_out" | awk -F'\t' '$1=="evidence-excluded"{print $3}')"
+assert_rc "and the release document counts, so none FAILs" 1 "$r_rc"
+printf '{ "release-type": "simple" }\n' > "$repo/release-please-config.json"
 
 # ============ human mode reports it ONCE ===================================
 # Every assertion above reads --tsv. The human surface is a separate renderer,

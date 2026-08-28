@@ -542,6 +542,32 @@ issue does not false-fail.
 A **closed-unmerged** PR is deliberately excluded: its paths never reached the
 trunk, so counting them would pass a declaration that nothing satisfies.
 
+**Release-automation PRs are excluded too**, because this is an *implementation*-
+evidence set. GitHub reports the Release Please PR as a closing reference for
+every issue in the release — its generated body repeats each `Closes #NNN` — so it
+entered the set and was graded as though a human had written it. Its file list is
+decided by the release tool, carries no author intent about documentation, and
+changes with release timing.
+
+The signal is **durable configuration, not a title match**: Release Please opens
+its PR from `<branch-prefix>--branches--<base>`, and `branch-prefix` is a key in
+`release-please-config.json` (default `release-please`). A title pattern would be
+free text a human can edit, and an implementation PR may mention a release in its
+own title. Where release automation is not configured, nothing is excluded.
+
+The exclusion is **reported, not silent** — an exclusion nobody can see is
+indistinguishable from a PR that was never linked:
+
+```text
+evidence-excluded	release-automation	<release-pr>
+evidence	PR(s) #<a> #<b>	10
+```
+
+And if **every** linked reference is release automation, the verdict is
+**NOT ASSESSED**: that is not "no PR is linked yet" — which is a complete answer
+graded on the branch — it is "no implementation evidence could be read", which is
+never a pass.
+
 `--branch` unions rather than judging the branch alone because the evidence set
 is **per issue, not per branch** — the documentation for an issue may already
 have merged in an earlier PR while this branch carries only code.
