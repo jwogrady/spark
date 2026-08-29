@@ -85,7 +85,7 @@ assert_contains "doctor agrees once they are present" \
 # ======================== selection refuses invalid metadata ================
 # The rule is schema-driven, so it is drivable without GitHub. Two categories on
 # a milestone-assigned issue is mechanically invalid.
-bad_row="$(printf '77\tfeature,bug,docs-impact:none\tv1.0\n')"
+bad_row="$(gov_iss 77 "v1.0" "feature" "bug" "docs-impact:none")"
 findings="$(gov_issue_rows "$model" "$bad_row" | awk -F'\t' '$2 == "!"')"
 assert_contains "two categories is a finding selection can refuse on" \
   "exactly-one but 2 are set" "$findings"
@@ -96,7 +96,7 @@ case "$findings" in
 esac
 # A clean active issue raises nothing, so selection proceeds.
 assert_eq "a clean active issue does not block selection" "" \
-  "$(gov_issue_rows "$model" "$(printf '78\tfeature,P1,docs-impact:none\tv1.0\n')" \
+  "$(gov_issue_rows "$model" "$(gov_iss 78 "v1.0" "feature" "P1" "docs-impact:none")" \
      | awk -F'\t' '$2 == "!"')"
 
 # The priority set comes from the model, not a hard-coded case: a project that
@@ -148,14 +148,14 @@ esac
 # as "category is required and none is declared" — and selection then refused
 # every issue, unfixably.
 assert_eq "a project category satisfies the requirement" "" \
-  "$(gov_issue_rows "$model" "$(printf '78\talpha,P1,docs-impact:none\tv1.0\n')" "alpha beta" \
+  "$(gov_issue_rows "$model" "$(gov_iss 78 "v1.0" "alpha" "P1" "docs-impact:none")" "alpha beta" \
      | awk -F'\t' '$2 == "!"')"
 assert_contains "and a category it does NOT declare is reported" \
   "category is required and none is declared" \
-  "$(gov_issue_rows "$model" "$(printf '79\tfeature,P1,docs-impact:none\tv1.0\n')" "alpha beta")"
+  "$(gov_issue_rows "$model" "$(gov_iss 79 "v1.0" "feature" "P1" "docs-impact:none")" "alpha beta")"
 assert_contains "two project categories are still invalid" \
   "exactly-one but 2 are set" \
-  "$(gov_issue_rows "$model" "$(printf '80\talpha,beta,docs-impact:none\tv1.0\n')" "alpha beta")"
+  "$(gov_issue_rows "$model" "$(gov_iss 80 "v1.0" "alpha" "beta" "docs-impact:none")" "alpha beta")"
 
 # ======================== reruns are idempotent =============================
 before="$(cd "$proj" && env PATH="$shim" "$SPARK" doctor 2>&1 | grep -c 'Governance readiness')"

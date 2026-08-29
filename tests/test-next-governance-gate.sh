@@ -47,8 +47,14 @@ args="$*"
 case "$1 $2" in "auth status") exit 0 ;; esac
 case "$args" in
   *"issue list"*)
-    printf '%s\t%s\t%s\n' 10 "chore,P1,docs-impact:none" "Release readiness gate"
-    printf '%s\t%s\t%s\n' 11 "feature,P1,docs-impact:none" "The work"
+    printf 'issue\t%s\t%s\n' 10 "Release readiness gate"
+    printf 'label\t%s\t%s\n' 10 "chore"
+    printf 'label\t%s\t%s\n' 10 "P1"
+    printf 'label\t%s\t%s\n' 10 "docs-impact:none"
+    printf 'issue\t%s\t%s\n' 11 "The work"
+    printf 'label\t%s\t%s\n' 11 "feature"
+    printf 'label\t%s\t%s\n' 11 "P1"
+    printf 'label\t%s\t%s\n' 11 "docs-impact:none"
     exit 0 ;;
   *"/issues/10/sub_issues"*) printf '%s\n' 11; exit 0 ;;
   *"/issues/11/sub_issues"*) exit 0 ;;
@@ -138,8 +144,14 @@ args="$*"
 case "$1 $2" in "auth status") exit 0 ;; esac
 case "$args" in
   *"issue list"*)
-    printf '%s\t%s\t%s\n' 10 "chore,sev1,docs-impact:none" "Release readiness gate"
-    printf '%s\t%s\t%s\n' 11 "feature,sev1,docs-impact:none" "The work"
+    printf 'issue\t%s\t%s\n' 10 "Release readiness gate"
+    printf 'label\t%s\t%s\n' 10 "chore"
+    printf 'label\t%s\t%s\n' 10 "sev1"
+    printf 'label\t%s\t%s\n' 10 "docs-impact:none"
+    printf 'issue\t%s\t%s\n' 11 "The work"
+    printf 'label\t%s\t%s\n' 11 "feature"
+    printf 'label\t%s\t%s\n' 11 "sev1"
+    printf 'label\t%s\t%s\n' 11 "docs-impact:none"
     exit 0 ;;
   *"/issues/10/sub_issues"*) printf '%s\n' 11; exit 0 ;;
   *"/issues/11/sub_issues"*) exit 0 ;;

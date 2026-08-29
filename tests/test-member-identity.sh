@@ -41,7 +41,7 @@ iss() { GOV_ISS="$1" gov_issue_rows "$model" "$1" "$TAXO"; }
 det() { printf '%s\n' "$1" | awk -F'\t' -v i="$2" '$3 == i { print $4 }'; }
 
 # ============ 1. one multi-word member counts as ONE ======================
-one="$(printf '900\tnot planned\tv1.0\n')"
+one="$(gov_iss 900 "v1.0" "not planned")"
 out="$(iss "$one")"
 assert_eq "one multi-word member is one member" "=" \
   "$(printf '%s\n' "$out" | awk -F'\t' '$3 == "#900" { print $2; exit }')"
@@ -53,7 +53,7 @@ esac
 # ============ 2. two distinct multi-word members count as TWO =============
 # The fix must not simply stop counting: a real cardinality violation built
 # from two multi-word names still has to be caught.
-two="$(printf '901\tnot planned,in progress\tv1.0\n')"
+two="$(gov_iss 901 "v1.0" "not planned" "in progress")"
 out="$(iss "$two")"
 assert_eq "two multi-word members are two members" "!" \
   "$(printf '%s\n' "$out" | awk -F'\t' '$3 == "#901" { print $2; exit }')"
@@ -65,30 +65,30 @@ assert_contains "and the second whole" "in progress" "$(det "$out" '#901')"
 assert_contains "separated unambiguously" "not planned, in progress" "$(det "$out" '#901')"
 
 # ============ 3. exclusivity compares whole names =========================
-excl="$(printf '902\tno impact,wide impact\tv1.0\n')"
+excl="$(gov_iss 902 "v1.0" "no impact" "wide impact")"
 out="$(iss "$excl")"
 assert_contains "an exclusive member combined with another is caught" \
   "is exclusive but is combined" "$(det "$out" '#902')"
 # The exclusive member alone is fine — and must not trip on the fact that its
 # name shares a word with the other member.
-solo="$(printf '903\tno impact\tv1.0\n')"
+solo="$(gov_iss 903 "v1.0" "no impact")"
 out="$(iss "$solo")"
 assert_eq "the exclusive member alone is valid" "=" \
   "$(printf '%s\n' "$out" | awk -F'\t' '$3 == "#903" { print $2; exit }')"
 # A member that merely CONTAINS the exclusive name as a word must not satisfy
 # the membership test: `wide impact` shares "impact" with `no impact`.
-shared="$(printf '904\twide impact\tv1.0\n')"
+shared="$(gov_iss 904 "v1.0" "wide impact")"
 out="$(iss "$shared")"
 assert_eq "a member sharing a word is not the exclusive member" "=" \
   "$(printf '%s\n' "$out" | awk -F'\t' '$3 == "#904" { print $2; exit }')"
 
 # ============ 4. single-word behaviour is retained ========================
 shipped="$(resolve_governance)"
-sone="$(printf '905\tfeature,docs-impact:none\tv1.0\n')"
+sone="$(gov_iss 905 "v1.0" "feature" "docs-impact:none")"
 out="$(GOV_ISS="$sone" gov_issue_rows "$shipped" "$sone" "$TAXO")"
 assert_eq "one category and one docs-impact still validate" "=" \
   "$(printf '%s\n' "$out" | awk -F'\t' '$3 == "#905" { print $2; exit }')"
-stwo="$(printf '906\tfeature,bug,docs-impact:none\tv1.0\n')"
+stwo="$(gov_iss 906 "v1.0" "feature" "bug" "docs-impact:none")"
 out="$(GOV_ISS="$stwo" gov_issue_rows "$shipped" "$stwo" "$TAXO")"
 assert_contains "two single-word categories are still caught" \
   "category allows exactly-one but 2 are set" "$(det "$out" '#906')"
@@ -148,8 +148,8 @@ cat > "$rc/iss.json" <<'EOF'
 EOF
 pmodel="$(cd "$rc" && resolve_governance)"
 # consumer 1 — the per-issue validator
-c1="$(cd "$rc" && GOV_ISS="$(printf '900\tfeature,not planned\t\n')" \
-  gov_issue_rows "$pmodel" "$(printf '900\tfeature,not planned\t\n')" "$TAXO" \
+c1="$(cd "$rc" && GOV_ISS="$(gov_iss 900 "" "feature" "not planned")" \
+  gov_issue_rows "$pmodel" "$(gov_iss 900 "" "feature" "not planned")" "$TAXO" \
   | awk -F'\t' '$3 == "#900" { print $2; exit }')"
 # consumer 2 — the plan compiler
 printf 'issue\tk1\tA title\tfeature,not planned\tbody\n' > "$rc/plan.tsv"
@@ -187,33 +187,43 @@ for t in git awk sed grep find sort printf bash env cat wc tr head tail cut date
   src="$(command -v "$t" 2>/dev/null || true)"
   [ -n "$src" ] && ln -sf "$src" "$nxbin/$t" 2>/dev/null || true
 done
-# ISSUEROWS is the TSV `gh issue list` would emit: number, label CSV, title.
+# ISSUES is the JSON `gh issue list --json number,title,labels` returns. The
+# stub applies the --jq program the BINARY passes, so the read's own shaping is
+# under test — printing pre-shaped TSV here would leave the read unexercised,
+# and re-flattening the labels at that boundary would pass unnoticed.
 cat > "$nxbin/gh" <<'GHEOF'
 #!/usr/bin/env bash
 case "${1:-}" in
   auth) exit 0 ;;
-  issue) printf '%s
-' "$ISSUEROWS"; exit 0 ;;
+  issue)
+    jqx=""; prev=""
+    for a in "$@"; do [ "$prev" = "--jq" ] && jqx="$a"; prev="$a"; done
+    if [ -n "$jqx" ]; then printf '%s' "$ISSUES" | jq -r "$jqx"; else printf '%s' "$ISSUES"; fi
+    exit 0 ;;
 esac
 for a in "$@"; do
   case "$a" in
-    *sub_issues*)   printf '900
-901
-'; exit 0 ;;
-    *dependencies*) printf '0
-'; exit 0 ;;
+    *sub_issues*)   printf '900\n901\n'; exit 0 ;;
+    *dependencies*) printf '0\n'; exit 0 ;;
   esac
 done
 exit 0
 GHEOF
 chmod +x "$nxbin/gh"
 
-nx() { ( cd "$nextrepo" && env PATH="$nxbin" ISSUEROWS="$1" \
+# js <label>... — the JSON for a gate issue 900 plus issue 901 carrying labels.
+js() {
+  local labs="" l
+  for l in "$@"; do labs="${labs:+$labs,}$(printf '{"name":%s}' "$(printf '%s' "$l" | jq -R .)")"; done
+  printf '[{"number":900,"title":"Gate","labels":[{"name":"feature"}]},{"number":901,"title":"Real work","labels":[%s]}]' "$labs"
+}
+
+nx() { ( cd "$nextrepo" && env PATH="$nxbin" ISSUES="$1" \
   "$SPARK" next --milestone "v0.9" 2>&1 ); }
 
 # ONE multi-word priority label must count as ONE. The gate carries sub-issues,
 # so 900 is the gate and 901 is the selectable issue.
-out4="$(nx "$(printf '900\tfeature\tGate\n901\tfeature,top urgent\tReal work\n')")" || true
+out4="$(nx "$(js feature 'top urgent')")" || true
 case "$out4" in
   *"carries 2"*) c4="!" ;;
   *"selected  #901"*) c4="=" ;;
@@ -227,7 +237,7 @@ esac
 
 # NEGATIVE CONTROL: two DISTINCT multi-word priority labels must count as two
 # and fail cardinality honestly. Without this the fix could be "stop counting".
-out4b="$(nx "$(printf '900\tfeature\tGate\n901\tfeature,top urgent,later on\tReal work\n')")" || true
+out4b="$(nx "$(js feature 'top urgent' 'later on')")" || true
 assert_contains "two distinct multi-word priorities are counted as two" "carries 2" "$out4b"
 case "$out4b" in
   *"selected  #901"*) bad "an issue carrying two priorities was selected anyway" ;;
@@ -241,6 +251,49 @@ case "$out4b" in
 esac
 assert_contains "the diagnostic names the resolved family" "priority" "$out4b"
 assert_contains "and its declared members" "top urgent, later on" "$out4b"
+
+# --- a member carrying BOTH whitespace AND the old delimiter ---------------
+# `top, urgent` is a legal GitHub label. It defeats whitespace splitting AND
+# comma splitting, so it is the value that proves the transport is structural
+# rather than merely using a different separator. It must arrive as ONE label,
+# count as ONE priority, rank correctly, and be judged the same way by
+# governance validation.
+printf 'version\t1\nfamily\tpriority\texactly-one\toptional\tStage\nmember\tpriority\ttop, urgent\tb60205\tUrgent\nmember\tpriority\tlater, on\tc2e0c6\tLater\n' \
+  > "$nextrepo/.spark/governance.tsv"
+
+outc="$(nx "$(js feature 'top, urgent')")" || true
+assert_contains "a comma-bearing member arrives as one label and selects" \
+  "selected  #901" "$outc"
+case "$outc" in
+  *"carries 2"*) bad "a comma-bearing member was counted as two priorities" ;;
+  *) ok ;;
+esac
+assert_contains "and ranks as that member" "top, urgent" "$outc"
+
+# Two distinct comma-bearing members must still count as two.
+outc2="$(nx "$(js feature 'top, urgent' 'later, on')")" || true
+assert_contains "two comma-bearing members count as two" "carries 2" "$outc2"
+case "$outc2" in
+  *"selected  #901"*) bad "an issue carrying two priorities was selected anyway" ;;
+  *) ok ;;
+esac
+
+# GOVERNANCE VALIDATION AGREES on the same value. This is the half that would
+# still have split it: gov_issue_rows received the labels joined with commas.
+cmodel="$(printf '%s\n' 'version	1' 'family	priority	exactly-one	optional	Stage' \
+  'member	priority	top, urgent	b60205	Urgent' 'member	priority	later, on	c2e0c6	Later')"
+crow="$(gov_iss 901 v1 "top, urgent")"
+cgov="$(GOV_ISS="$crow" gov_issue_rows "$cmodel" "$crow" "feature" \
+  | awk -F'\t' '$3 == "#901" { print $2; exit }')"
+assert_eq "governance validation counts it as one member too" "=" "$cgov"
+crow2="$(gov_iss 902 v1 "top, urgent" "later, on")"
+cgov2="$(GOV_ISS="$crow2" gov_issue_rows "$cmodel" "$crow2" "feature" \
+  | awk -F'\t' '$3 == "#902" { print $2; exit }')"
+assert_eq "and still catches two of them" "!" "$cgov2"
+
+# Restore the whitespace-only model for the assertions below.
+printf 'version\t1\nfamily\tpriority\texactly-one\toptional\tStage\nmember\tpriority\ttop urgent\tb60205\tUrgent\nmember\tpriority\tlater on\tc2e0c6\tLater\n' \
+  > "$nextrepo/.spark/governance.tsv"
 
 assert_eq "the per-issue validator accepts it" "=" "$c1"
 assert_eq "the plan compiler accepts it" "=" "$c2"
