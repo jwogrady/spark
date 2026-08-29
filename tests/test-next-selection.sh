@@ -89,15 +89,27 @@ sel 3 "two categories are not assessed" \
 " \
   "carries 2 taxonomy category labels"
 
+# The diagnostic names the family, not a hard-coded set. With no priofamily
+# record it falls back to the generic word rather than inventing P0-P3, which
+# would be a second copy of a rule the schema owns.
 sel 3 "a missing priority is not assessed" \
 "issue	52	0	1	0	-	0	no priority
 " \
-  "carries 0 P0-P3 labels"
+  "carries 0 priority labels"
 
 sel 3 "two priorities are not assessed" \
 "issue	53	0	1	2	P1	0	two priorities
 " \
-  "carries 2 P0-P3 labels"
+  "carries 2 priority labels"
+
+# ...and when the evidence carries the resolved family, the diagnostic uses it.
+# A project that renames or extends the family is told what IT declared, not
+# what the shipped default happens to be.
+sel 3 "the diagnostic names the resolved family and its members" \
+"priofamily	stage	top urgent, later on
+issue	54	0	1	2	top urgent	0	two priorities
+" \
+  "carries 2 stage (top urgent, later on) labels"
 
 # --- one uninterpretable issue poisons the whole slate: selecting around it
 # would be picking from a set we cannot fully read.

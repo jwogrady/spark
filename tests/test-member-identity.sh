@@ -162,27 +162,85 @@ rcrc=0
     --roadmap "$rc/ROADMAP.md" --issues "$rc/iss.json" >/dev/null 2>&1 ) || rcrc=$?
 c3="$([ "$rcrc" -eq 0 ] && echo "=" || echo "!")"
 
-# consumer 4 — cmd_next, through the CSV it actually receives. The loop counts
-# governed members out of a comma-separated label list; one multi-word member
-# must arrive as one.
-c4="$(bash -c '
-  labelcsv="feature,not planned"
-  prio_members="$(printf "not planned\n")"
-  taxo="feature bug"
-  prios=0
-  while IFS= read -r l; do
-    [ -n "$l" ] || continue
-    while IFS= read -r t; do
-      [ -n "$t" ] || continue
-      [ "$l" = "$t" ] && prios=$((prios+1))
-    done <<PRIOEOF
-$prio_members
-PRIOEOF
-  done <<LABELEOF
-$(printf "%s" "$labelcsv" | tr "," "\n")
-LABELEOF
-  [ "$prios" -eq 1 ] && echo "=" || echo "!"
-')"
+# consumer 4 — cmd_next, INVOKED FOR REAL.
+#
+# The previous version of this check reimplemented the loop in the test. That is
+# the failure mode the whole suite exists to kill: reverting the real gathering
+# path to whitespace splitting left the replica passing. The fixture below runs
+# `spark next --milestone` against a stubbed GitHub whose issue row carries a
+# multi-word priority label, so the production path is the thing under test.
+nextrepo="$WORK/nx"; mkdir -p "$nextrepo/.spark" "$nextrepo/.github/ISSUE_TEMPLATE"
+git -C "$nextrepo" init -q
+git -C "$nextrepo" config user.email t@e.invalid
+git -C "$nextrepo" config user.name T
+echo 'n: B' > "$nextrepo/.github/ISSUE_TEMPLATE/b.yml"
+echo '## W' > "$nextrepo/.github/pull_request_template.md"
+echo '{}' > "$nextrepo/release-please-config.json"
+# A project model whose PRIORITY family is multi-word, and whose category set is
+# the default. This is the shape a downstream project may legitimately declare.
+printf 'version\t1\nfamily\tpriority\texactly-one\toptional\tStage\nmember\tpriority\ttop urgent\tb60205\tUrgent\nmember\tpriority\tlater on\tc2e0c6\tLater\n' \
+  > "$nextrepo/.spark/governance.tsv"
+git -C "$nextrepo" add -A; git -C "$nextrepo" commit -qm seed
+
+nxbin="$WORK/nxbin"; mkdir -p "$nxbin"
+for t in git awk sed grep find sort printf bash env cat wc tr head tail cut date mktemp rm mkdir ls dirname basename jq python3 xargs cksum comm; do
+  src="$(command -v "$t" 2>/dev/null || true)"
+  [ -n "$src" ] && ln -sf "$src" "$nxbin/$t" 2>/dev/null || true
+done
+# ISSUEROWS is the TSV `gh issue list` would emit: number, label CSV, title.
+cat > "$nxbin/gh" <<'GHEOF'
+#!/usr/bin/env bash
+case "${1:-}" in
+  auth) exit 0 ;;
+  issue) printf '%s
+' "$ISSUEROWS"; exit 0 ;;
+esac
+for a in "$@"; do
+  case "$a" in
+    *sub_issues*)   printf '900
+901
+'; exit 0 ;;
+    *dependencies*) printf '0
+'; exit 0 ;;
+  esac
+done
+exit 0
+GHEOF
+chmod +x "$nxbin/gh"
+
+nx() { ( cd "$nextrepo" && env PATH="$nxbin" ISSUEROWS="$1" \
+  "$SPARK" next --milestone "v0.9" 2>&1 ); }
+
+# ONE multi-word priority label must count as ONE. The gate carries sub-issues,
+# so 900 is the gate and 901 is the selectable issue.
+out4="$(nx "$(printf '900\tfeature\tGate\n901\tfeature,top urgent\tReal work\n')")" || true
+case "$out4" in
+  *"carries 2"*) c4="!" ;;
+  *"selected  #901"*) c4="=" ;;
+  *) c4="?" ;;
+esac
+assert_contains "cmd_next selects an issue carrying a multi-word priority" "selected  #901" "$out4"
+case "$out4" in
+  *"carries 2"*) bad "cmd_next counted one multi-word priority label as two" ;;
+  *) ok ;;
+esac
+
+# NEGATIVE CONTROL: two DISTINCT multi-word priority labels must count as two
+# and fail cardinality honestly. Without this the fix could be "stop counting".
+out4b="$(nx "$(printf '900\tfeature\tGate\n901\tfeature,top urgent,later on\tReal work\n')")" || true
+assert_contains "two distinct multi-word priorities are counted as two" "carries 2" "$out4b"
+case "$out4b" in
+  *"selected  #901"*) bad "an issue carrying two priorities was selected anyway" ;;
+  *) ok ;;
+esac
+
+# ...and the diagnostic must name the RESOLVED family, not a hard-coded P0-P3.
+case "$out4b" in
+  *"P0-P3"*) bad "the diagnostic still hard-codes P0-P3 instead of reading the model" ;;
+  *) ok ;;
+esac
+assert_contains "the diagnostic names the resolved family" "priority" "$out4b"
+assert_contains "and its declared members" "top urgent, later on" "$out4b"
 
 assert_eq "the per-issue validator accepts it" "=" "$c1"
 assert_eq "the plan compiler accepts it" "=" "$c2"
