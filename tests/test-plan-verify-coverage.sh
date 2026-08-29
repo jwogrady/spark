@@ -64,6 +64,21 @@ args="$*"
 case "$1 $2" in
   "auth status") exit 0 ;;
 esac
+GH_JQ=""; __prev=""
+for __a in "$@"; do [ "$__prev" = "--jq" ] && GH_JQ="$__a"; __prev="$__a"; done
+# gh_issue_json <title> <label-csv> <milestone> — emit the JSON `gh issue view`
+# returns, then apply the --jq the CALLER passed. A stub that returns
+# pre-shaped rows leaves the binary's own shaping untested, which is exactly how
+# a label-set collision survives: both sides join, so both sides agree.
+gh_issue_json() {
+  local t="$1" labs="$2" ms="$3" json
+  json="$(jq -n --arg t "$t" --arg m "$ms" --arg l "$labs" \
+    '{title: $t,
+      milestone: (if $m == "" then null else {title: $m} end),
+      labels: ($l | split(",") | map(select(. != "") | {name: .}))}')"
+  if [ -n "$GH_JQ" ]; then printf '%s' "$json" | jq -r "$GH_JQ"; else printf '%s' "$json"; fi
+}
+
 if [ "$1" = "issue" ] && [ "$2" = "view" ]; then
   n="$3"
   case "$args" in
@@ -76,15 +91,15 @@ if [ "$1" = "issue" ] && [ "$2" = "view" ]; then
         102) cat "$BODY_D" ;;
       esac
       exit 0 ;;
-    *"--json title,labels,milestone"*)
+    *"--json labels"*|*"--json title,labels,milestone"*)
       [ "$sc" = "unread:issue" ] && exit 1
       ms="v9.9 — audit probe"
       [ "$sc" = "bad-milestone" ] && ms="some other milestone"
       [ "$sc" = "no-milestone" ] && ms=""
       case "$n" in
-        100) printf '%s\t%s\t%s\n' "Audit parent" "P1,docs-impact:none,feature" "$ms" ;;
-        101) printf '%s\t%s\t%s\n' "Audit child"  "P1,docs-impact:none,feature" "$ms" ;;
-        102) printf '%s\t%s\t%s\n' "Audit second child" "P1,docs-impact:none,feature" "$ms" ;;
+        100) gh_issue_json "Audit parent"       "P1,docs-impact:none,feature" "$ms" ;;
+        101) gh_issue_json "Audit child"        "P1,docs-impact:none,feature" "$ms" ;;
+        102) gh_issue_json "Audit second child" "P1,docs-impact:none,feature" "$ms" ;;
       esac
       exit 0 ;;
   esac
@@ -201,12 +216,27 @@ cat > "$stub/gh" <<'STUB3'
 #!/usr/bin/env bash
 args="$*"
 case "$1 $2" in "auth status") exit 0 ;; esac
+GH_JQ=""; __prev=""
+for __a in "$@"; do [ "$__prev" = "--jq" ] && GH_JQ="$__a"; __prev="$__a"; done
+# gh_issue_json <title> <label-csv> <milestone> — emit the JSON `gh issue view`
+# returns, then apply the --jq the CALLER passed. A stub that returns
+# pre-shaped rows leaves the binary's own shaping untested, which is exactly how
+# a label-set collision survives: both sides join, so both sides agree.
+gh_issue_json() {
+  local t="$1" labs="$2" ms="$3" json
+  json="$(jq -n --arg t "$t" --arg m "$ms" --arg l "$labs" \
+    '{title: $t,
+      milestone: (if $m == "" then null else {title: $m} end),
+      labels: ($l | split(",") | map(select(. != "") | {name: .}))}')"
+  if [ -n "$GH_JQ" ]; then printf '%s' "$json" | jq -r "$GH_JQ"; else printf '%s' "$json"; fi
+}
+
 if [ "$1" = "issue" ] && [ "$2" = "view" ]; then
   case "$args" in
     *"--json body"*)                  cat "$BODY_U"; exit 0 ;;
-    *"--json title,labels,milestone"*)
+    *"--json labels"*|*"--json title,labels,milestone"*)
       # No milestone, exactly as the artifact asks.
-      printf '%s\t%s\t%s\n' "Unmilestoned" "P1,docs-impact:none,feature" ""
+      gh_issue_json "Unmilestoned" "P1,docs-impact:none,feature" ""
       exit 0 ;;
   esac
   exit 1
@@ -248,12 +278,27 @@ cat > "$stub/gh" <<'STUB4'
 #!/usr/bin/env bash
 args="$*"
 case "$1 $2" in "auth status") exit 0 ;; esac
+GH_JQ=""; __prev=""
+for __a in "$@"; do [ "$__prev" = "--jq" ] && GH_JQ="$__a"; __prev="$__a"; done
+# gh_issue_json <title> <label-csv> <milestone> — emit the JSON `gh issue view`
+# returns, then apply the --jq the CALLER passed. A stub that returns
+# pre-shaped rows leaves the binary's own shaping untested, which is exactly how
+# a label-set collision survives: both sides join, so both sides agree.
+gh_issue_json() {
+  local t="$1" labs="$2" ms="$3" json
+  json="$(jq -n --arg t "$t" --arg m "$ms" --arg l "$labs" \
+    '{title: $t,
+      milestone: (if $m == "" then null else {title: $m} end),
+      labels: ($l | split(",") | map(select(. != "") | {name: .}))}')"
+  if [ -n "$GH_JQ" ]; then printf '%s' "$json" | jq -r "$GH_JQ"; else printf '%s' "$json"; fi
+}
+
 if [ "$1" = "issue" ] && [ "$2" = "view" ]; then
   case "$args" in
     *"--json body"*)                  cat "$BODY_U"; exit 0 ;;
-    *"--json title,labels,milestone"*)
+    *"--json labels"*|*"--json title,labels,milestone"*)
       # GitHub carries a milestone the artifact never asked for.
-      printf '%s\t%s\t%s\n' "Unmilestoned" "P1,docs-impact:none,feature" "v9.9 — added later"
+      gh_issue_json "Unmilestoned" "P1,docs-impact:none,feature" "v9.9 — added later"
       exit 0 ;;
   esac
   exit 1
@@ -279,10 +324,25 @@ cat > "$stub/gh" <<'STUB2'
 #!/usr/bin/env bash
 args="$*"
 case "$1 $2" in "auth status") exit 0 ;; esac
+GH_JQ=""; __prev=""
+for __a in "$@"; do [ "$__prev" = "--jq" ] && GH_JQ="$__a"; __prev="$__a"; done
+# gh_issue_json <title> <label-csv> <milestone> — emit the JSON `gh issue view`
+# returns, then apply the --jq the CALLER passed. A stub that returns
+# pre-shaped rows leaves the binary's own shaping untested, which is exactly how
+# a label-set collision survives: both sides join, so both sides agree.
+gh_issue_json() {
+  local t="$1" labs="$2" ms="$3" json
+  json="$(jq -n --arg t "$t" --arg m "$ms" --arg l "$labs" \
+    '{title: $t,
+      milestone: (if $m == "" then null else {title: $m} end),
+      labels: ($l | split(",") | map(select(. != "") | {name: .}))}')"
+  if [ -n "$GH_JQ" ]; then printf '%s' "$json" | jq -r "$GH_JQ"; else printf '%s' "$json"; fi
+}
+
 if [ "$1" = "issue" ] && [ "$2" = "view" ]; then
   case "$args" in
     *"--json body"*) printf 'deliberately wrong body\n'; exit 0 ;;
-    *"--json title,labels,milestone"*)
+    *"--json labels"*|*"--json title,labels,milestone"*)
       case "$3" in
         100) printf '%s\t%s\t%s\n' "Audit parent" "P1,docs-impact:none,feature" "wrong milestone" ;;
         101) printf '%s\t%s\t%s\n' "Audit child"  "P1,docs-impact:none,feature" "wrong milestone" ;;
@@ -311,5 +371,151 @@ case "$o" in
   *) ok ;;
 esac
 if [ "$r" -ne 0 ]; then ok; else bad "#517: verify exited 0 for that repository"; fi
+
+
+# ============ label SETS, compared as sets (#599) =========================
+# `[.labels[].name] | sort | join(",")` on the live side against a joined
+# artifact list collapsed two distinct GitHub states into one string: the two
+# labels `a` and `b`, and the single label named `a,b`, both became `a,b`. The
+# comparison was symmetric, so it agreed with itself and `verify` reported that
+# labels matched the artifact when GitHub did not match it.
+#
+# Both verification paths are exercised through the production `--jq`, and the
+# stub is handed JSON rather than pre-shaped rows — a pre-shaped stub is how a
+# flattening defect survives, because the shaping under test never runs.
+
+lsrepo="$WORK/ls"; mkdir -p "$lsrepo"
+lsbin="$WORK/lsbin"; mkdir -p "$lsbin"
+for t in git awk sed grep find sort printf bash env cat wc tr head tail cut date mktemp rm mkdir ls dirname basename jq python3 paste; do
+  src="$(command -v "$t" 2>/dev/null || true)"
+  [ -n "$src" ] && ln -sf "$src" "$lsbin/$t" 2>/dev/null || true
+done
+cat > "$lsbin/gh" <<'LSEOF'
+#!/usr/bin/env bash
+case "$1 $2" in "auth status") exit 0 ;; esac
+GH_JQ=""; prev=""
+for a in "$@"; do [ "$prev" = "--jq" ] && GH_JQ="$a"; prev="$a"; done
+if [ "$1" = "issue" ] && [ "$2" = "view" ]; then
+  # LIVE_LABELS is a JSON array of names — the real shape, applied through the
+  # --jq the binary passes.
+  json="$(jq -n --argjson l "$LIVE_LABELS" \
+    '{title: "T", milestone: null, labels: ($l | map({name: .}))}')"
+  if [ -n "$GH_JQ" ]; then printf '%s' "$json" | jq -r "$GH_JQ"; else printf '%s' "$json"; fi
+  exit 0
+fi
+exit 0
+LSEOF
+chmod +x "$lsbin/gh"
+
+# --- existing-issue verification (plan_live_rows)
+lsart="$WORK/ls.tsv"
+printf 'update\t#100\tlabels\ta,b\n' > "$lsart"
+lslive() { ( cd "$lsrepo" && env PATH="$lsbin" LIVE_LABELS="$1" \
+  bash -c '. '"$SPARK"'; plan_live_rows "'"$lsart"'"' 2>&1 ); }
+
+case "$(lslive '["a","b"]')" in
+  *$'live\t=\t#100'*) pass=$((pass+1)) ;;
+  *) fail=$((fail+1)); echo "  ✖ live [a,b] as two labels must match desired a,b" ;;
+esac
+case "$(lslive '["b","a"]')" in
+  *$'live\t=\t#100'*) pass=$((pass+1)) ;;
+  *) fail=$((fail+1)); echo "  ✖ label set equality must be order-insensitive" ;;
+esac
+# THE COLLISION: one label literally named `a,b` is NOT the two labels a and b.
+case "$(lslive '["a,b"]')" in
+  *$'live\t~\t#100'*) pass=$((pass+1)) ;;
+  *) fail=$((fail+1)); echo "  ✖ a single label named 'a,b' must NOT match desired a,b" ;;
+esac
+case "$(lslive '["a","b","c"]')" in
+  *$'live\t~\t#100'*) pass=$((pass+1)) ;;
+  *) fail=$((fail+1)); echo "  ✖ an extra live label must be drift" ;;
+esac
+case "$(lslive '["a"]')" in
+  *$'live\t~\t#100'*) pass=$((pass+1)) ;;
+  *) fail=$((fail+1)); echo "  ✖ a missing live label must be drift" ;;
+esac
+
+# --- created-issue verification (plan_created_rows), independently
+lsart2="$WORK/ls2.tsv"; : > "$WORK/ls2body.md"; echo body > "$WORK/ls2body.md"
+printf 'issue\tK\tT\ta,b\t\t%s\n' "$WORK/ls2body.md" > "$lsart2"
+lsstate="$WORK/ls2.state"
+printf 'created\tK\t200\n' > "$lsstate"
+lscreated() { ( cd "$lsrepo" && env PATH="$lsbin" LIVE_LABELS="$1" \
+  bash -c '. '"$SPARK"'; plan_created_rows "'"$lsart2"'" "'"$lsstate"'"' 2>&1 ); }
+
+case "$(lscreated '["a","b"]')" in
+  *"labels match the artifact"*) pass=$((pass+1)) ;;
+  *) fail=$((fail+1)); echo "  ✖ created: two live labels must match desired a,b" ;;
+esac
+case "$(lscreated '["b","a"]')" in
+  *"labels match the artifact"*) pass=$((pass+1)) ;;
+  *) fail=$((fail+1)); echo "  ✖ created: equality must be order-insensitive" ;;
+esac
+case "$(lscreated '["a,b"]')" in
+  *"labels match the artifact"*) fail=$((fail+1)); echo "  ✖ created: label 'a,b' must NOT match desired a,b" ;;
+  *) pass=$((pass+1)) ;;
+esac
+case "$(lscreated '["a","b","c"]')" in
+  *"labels match the artifact"*) fail=$((fail+1)); echo "  ✖ created: an extra label must be drift" ;;
+  *) pass=$((pass+1)) ;;
+esac
+
+# --- a label name must survive the transport BYTE FOR BYTE ----------------
+# @tsv is not transparent: it escapes backslash, tab, CR and LF. A label named
+# `foo\bar` therefore arrived at the comparison as `foo\\bar` and compared
+# unequal to the artifact's own `foo\bar` — while the live path, which reads the
+# name raw, compared it equal. One legal value, two paths, two answers.
+#
+# Structural transport means the bytes survive, not merely that the records are
+# separate.
+bsart="$WORK/bs.tsv"; echo body > "$WORK/bsbody.md"
+printf 'issue\tK\tT\tfoo\\bar\t\t%s\n' "$WORK/bsbody.md" > "$bsart"
+bsstate="$WORK/bs.state"; printf 'created\tK\t300\n' > "$bsstate"
+bscreated() { ( cd "$lsrepo" && env PATH="$lsbin" LIVE_LABELS="$1" \
+  bash -c '. '"$SPARK"'; plan_created_rows "'"$bsart"'" "'"$bsstate"'"' 2>&1 ); }
+
+case "$(bscreated '["foo\\bar"]')" in
+  *"labels match the artifact"*) pass=$((pass+1)) ;;
+  *) fail=$((fail+1)); echo "  ✖ created: a backslash-bearing label must survive the transport intact" ;;
+esac
+# ...and a DIFFERENT backslash-bearing name must still be drift, so the case
+# above cannot be passing because both sides were mangled the same way.
+case "$(bscreated '["foo\\baz"]')" in
+  *"labels match the artifact"*) fail=$((fail+1)); echo "  ✖ created: a different backslash label must not match" ;;
+  *) pass=$((pass+1)) ;;
+esac
+# The live path already read names raw; asserted here so the two paths are
+# known to agree about the same legal value rather than assumed to.
+bslive_art="$WORK/bslive.tsv"
+printf 'update\t#300\tlabels\tfoo\\bar\n' > "$bslive_art"
+bslive() { ( cd "$lsrepo" && env PATH="$lsbin" LIVE_LABELS="$1" \
+  bash -c '. '"$SPARK"'; plan_live_rows "'"$bslive_art"'"' 2>&1 ); }
+case "$(bslive '["foo\\bar"]')" in
+  *$'live\t=\t#300'*) pass=$((pass+1)) ;;
+  *) fail=$((fail+1)); echo "  ✖ live: a backslash-bearing label must compare equal too" ;;
+esac
+case "$(bslive '["foo\\baz"]')" in
+  *$'live\t~\t#300'*) pass=$((pass+1)) ;;
+  *) fail=$((fail+1)); echo "  ✖ live: a different backslash label must be drift" ;;
+esac
+
+# --- unread live labels are NOT ASSESSED, never equality
+failbin="$WORK/lsfail"; mkdir -p "$failbin"
+for t in git awk sed grep find sort printf bash env cat wc tr head tail cut date mktemp rm mkdir ls dirname basename jq python3 paste; do
+  src="$(command -v "$t" 2>/dev/null || true)"
+  [ -n "$src" ] && ln -sf "$src" "$failbin/$t" 2>/dev/null || true
+done
+printf '#!/usr/bin/env bash\ncase "$1 $2" in "auth status") exit 0 ;; esac\nexit 1\n' > "$failbin/gh"
+chmod +x "$failbin/gh"
+unread_out="$( cd "$lsrepo" && env PATH="$failbin" \
+  bash -c '. '"$SPARK"'; plan_live_rows "'"$lsart"'"' 2>&1 )"
+case "$unread_out" in
+  *$'live\t?\t#100'*) pass=$((pass+1)) ;;
+  *) fail=$((fail+1)); echo "  ✖ unreadable live labels must be NOT ASSESSED, not equality" ;;
+esac
+case "$unread_out" in
+  *$'live\t=\t#100'*) fail=$((fail+1)); echo "  ✖ unreadable labels must never report a match" ;;
+  *) pass=$((pass+1)) ;;
+esac
 
 finish

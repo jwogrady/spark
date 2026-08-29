@@ -5302,6 +5302,38 @@ plan_schema_rows() {
   ' "$artifact"
 }
 
+# Label SET comparison, for both verification paths.
+#
+# Both used to compare `[.labels[].name] | sort | join(",")` against a joined
+# artifact list. That collapses two distinct GitHub states — the two labels `a`
+# and `b`, and the single label named `a,b` — into the same string `a,b`, so
+# `verify` could report that labels match the artifact when GitHub did not match
+# it. The comparison was symmetric, which is why it looked right.
+#
+# A set is compared as a set: one name per line, sorted, never joined. These
+# live in one place because two implementations of "do these labels match" is
+# how the two paths would drift apart while both looking correct.
+
+# artifact_labels <csv> — the artifact grammar's label list, one per line. The
+# grammar is unchanged: a comma separates labels in the ARTIFACT, which is a
+# file a human writes. What changed is that a name read back from GitHub is
+# never re-encoded into that grammar to be compared.
+artifact_labels() {
+  printf '%s' "$1" | tr ',' '\n' | awk 'NF'
+}
+
+# label_set_equal <lines-a> <lines-b> — set equality, order-insensitive.
+label_set_equal() {
+  [ "$(printf '%s\n' "$1" | awk 'NF' | LC_ALL=C sort)" \
+    = "$(printf '%s\n' "$2" | awk 'NF' | LC_ALL=C sort)" ]
+}
+
+# label_set_show <lines> — a readable rendering for a message. Never fed back
+# into a comparison; that round trip is the defect.
+label_set_show() {
+  printf '%s\n' "$1" | awk 'NF { printf "%s%s", (n++ ? ", " : ""), $0 }'
+}
+
 # plan_ref_num <ref> <state> — the issue NUMBER a manifest ref denotes: a
 # literal #N, or the number a KEY became, which only the state file records.
 # Empty when unknowable, and callers must report that rather than skip it.
@@ -5498,8 +5530,8 @@ plan_live_rows() {
         title)     live="$(gh issue view "${n#'#'}" --json title --jq .title 2>/dev/null)" || live="__unreadable__" ;;
         milestone) live="$(gh issue view "${n#'#'}" --json milestone --jq '.milestone.title // ""' 2>/dev/null)" || live="__unreadable__" ;;
         labels)    live="$(gh issue view "${n#'#'}" --json labels \
-                     --jq '[.labels[].name] | sort | join(",")' 2>/dev/null)" || live="__unreadable__"
-                   want="$(printf '%s' "$want" | tr ',' '\n' | awk 'NF' | LC_ALL=C sort | paste -sd, -)" ;;
+                     --jq '.labels[].name' 2>/dev/null)" || live="__unreadable__"
+                   want="$(artifact_labels "$want")" ;;
         body-file)
           # Skipped before, so an applied body update was indistinguishable
           # from one that never ran — and `verify` said PASS either way.
@@ -5523,6 +5555,16 @@ plan_live_rows() {
       esac
       if [ "$live" = "__unreadable__" ]; then
         printf 'live\t?\t%s\t%s could not be read — never assumed to match\n' "$n" "$field"
+      elif [ "$field" = "labels" ]; then
+        # A SET, compared as one. Title and milestone are single scalar facts
+        # and compare as strings; labels are not, and joining them to pretend
+        # otherwise is what let two labels `a` and `b` match one label `a,b`.
+        if label_set_equal "$live" "$want"; then
+          printf 'live\t=\t%s\tlabels already match the plan\n' "$n"
+        else
+          printf 'live\t~\t%s\tlabels are "%s"; the plan says "%s"\n' \
+            "$n" "$(label_set_show "$live")" "$(label_set_show "$want")"
+        fi
       elif [ "$live" = "$want" ]; then
         printf 'live\t=\t%s\t%s already matches the plan\n' "$n" "$field"
       else
@@ -5567,12 +5609,39 @@ plan_created_rows() {
       # One read for the three scalar facts, so they cannot be mutually
       # inconsistent and the call count does not grow with the checks. The body
       # is a second read only when the artifact declares one.
+      # STILL ONE READ, so the three facts cannot be mutually inconsistent —
+      # but the labels are their own lines inside it rather than a joined
+      # scalar. Title and milestone are single facts and stay scalar; a label
+      # set is not one fact, and flattening it is what made `["a","b"]` and
+      # `["a,b"]` indistinguishable.
+      #
+      # A LABEL NAME NEVER PASSES THROUGH @tsv. @tsv is not transparent: it
+      # escapes backslash, tab, CR and LF, so a label named `foo\bar` arrived as
+      # `foo\\bar` and compared unequal to the artifact's own `foo\bar` — while
+      # the live path, which reads the name raw, compared it equal. One legal
+      # value, two verification paths, two answers. Structural transport means
+      # the bytes survive, not merely that the records are separate.
+      #
+      # The metadata record stays TSV-encoded, so it is the first line; every
+      # later line is one label name, exactly as GitHub spells it.
       live="$(gh issue view "$num" --json title,labels,milestone \
-        --jq '[.title, ([.labels[].name] | sort | join(",")), (.milestone.title // "")] | @tsv' 2>/dev/null)" || {
+        --jq '([ "meta", .title, (.milestone.title // "") ] | @tsv),
+              (.labels[]?.name)' 2>/dev/null)" || {
         printf 'created\t?\t#%s\t%s could not be read — never assumed to match\n' "$num" "$key"
         continue; }
-      local l_title l_labels l_ms
-      IFS=$'\t' read -r l_title l_labels l_ms <<EOF_LIVE
+      local l_title="" l_labels="" l_ms="" lfirst=1 lline lmk
+      while IFS= read -r lline; do
+        if [ "$lfirst" -eq 1 ]; then
+          lfirst=0
+          IFS=$'\t' read -r lmk l_title l_ms <<EOF_META
+$lline
+EOF_META
+          [ "$lmk" = "meta" ] || { l_title=""; l_ms=""; }
+        else
+          [ -n "$lline" ] && l_labels="${l_labels}${lline}
+"
+        fi
+      done <<EOF_LIVE
 $live
 EOF_LIVE
       if [ "$l_title" = "$title" ]; then
@@ -5581,11 +5650,12 @@ EOF_LIVE
         printf 'created\t~\t#%s\ttitle is "%s"; the artifact says "%s"\n' "$num" "$l_title" "$title"
       fi
       if [ -n "$labels" ]; then
-        want="$(printf '%s' "$labels" | tr ',' '\n' | awk 'NF' | LC_ALL=C sort | paste -sd, -)"
-        if [ "$l_labels" = "$want" ]; then
+        want="$(artifact_labels "$labels")"
+        if label_set_equal "$l_labels" "$want"; then
           printf 'created\t=\t#%s\tlabels match the artifact\n' "$num"
         else
-          printf 'created\t~\t#%s\tlabels are "%s"; the artifact says "%s"\n' "$num" "$l_labels" "$want"
+          printf 'created\t~\t#%s\tlabels are "%s"; the artifact says "%s"\n' \
+            "$num" "$(label_set_show "$l_labels")" "$(label_set_show "$want")"
         fi
       fi
       # The milestone field was READ and then discarded. An issue created into
