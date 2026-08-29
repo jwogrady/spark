@@ -38,7 +38,7 @@ assert_eq() {
 # feature,P1,docs-impact:none, no open blockers. Exactly the issue's fixture.
 stub="$WORK/stub"; mkdir -p "$stub"
 for t in bash sh git grep sed awk cat cut tr sort head tail wc env printf mktemp \
-         rm mkdir basename dirname date ls chmod touch find readlink uname paste comm; do
+         rm mkdir basename dirname date ls chmod touch find readlink uname paste comm jq; do
   src="$(command -v "$t" 2>/dev/null || true)"; [ -n "$src" ] && ln -sf "$src" "$stub/$t"
 done
 cat > "$stub/gh" <<'STUB'
@@ -60,8 +60,6 @@ case "$args" in
     printf 'label\t%s\t%s\n' 11 "P1"
     printf 'label\t%s\t%s\n' 11 "docs-impact:none"
     exit 0 ;;
-  *"/issues/10/sub_issues"*) printf '%s\n' 11; exit 0 ;;
-  *"/issues/11/sub_issues"*) exit 0 ;;
   *"dependencies/blocked_by"*) exit 0 ;;
   *"milestones?state=open"*) printf '%s\n' "v1.0"; exit 0 ;;
   # The release-gate capture, in the shape the binary's --jq produces. #10
@@ -169,8 +167,6 @@ case "$args" in
     printf 'label\t%s\t%s\n' 11 "sev1"
     printf 'label\t%s\t%s\n' 11 "docs-impact:none"
     exit 0 ;;
-  *"/issues/10/sub_issues"*) printf '%s\n' 11; exit 0 ;;
-  *"/issues/11/sub_issues"*) exit 0 ;;
   *"dependencies/blocked_by"*) exit 0 ;;
   *"milestones?state=open"*) printf '%s\n' "v1.0"; exit 0 ;;
   # The same repository as above: the renamed family is a PRIORITY question,

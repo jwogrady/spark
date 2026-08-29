@@ -22,9 +22,48 @@ assert_eq() {
 }
 tools="git awk sed grep find sort printf bash env cat wc tr head tail cut date mktemp rm mkdir ls dirname basename jq python3 xargs cksum comm"
 
-# stub_path <dir> <milestones-json> — a PATH whose gh answers the milestone
-# query with the given JSON and nothing else. Milestone state is the fact that
-# decides a course, so each outcome below is driven by it directly.
+# --- the snapshot fixtures -------------------------------------------------
+#
+# A milestone's work state is now read WITH its issue hierarchy in one request,
+# because GitHub's raw `open_issues` counts the release gate itself: a milestone
+# whose every leaf is closed still counts 1 while its gate waits for
+# certification, so the finished state was indistinguishable from the working
+# one (#602).
+#
+# These builders emit the JSON the real query returns, and the stub applies the
+# --jq the BINARY passes. Handing back pre-shaped rows would leave the
+# production shaping untested — which is exactly how a fixture ends up asserting
+# a state the repository cannot actually reach.
+
+# lf <n> — an open issue carrying no sub-issues: actionable leaf work.
+lf() {
+  printf '{"number":%s,"subIssues":{"totalCount":0,"pageInfo":{"hasNextPage":false},"nodes":[]}}' "$1"
+}
+# ct <n> <sub-csv> [subs-truncated] — an open issue carrying sub-issues: a
+# release-readiness container. Its sub-issue order is the delivery authority.
+ct() {
+  local n="$1" subs="$2" trunc="${3:-false}" nodes="" x cnt=0
+  for x in ${subs//,/ }; do nodes="${nodes:+$nodes,}{\"number\":$x}"; cnt=$((cnt+1)); done
+  printf '{"number":%s,"subIssues":{"totalCount":%s,"pageInfo":{"hasNextPage":%s},"nodes":[%s]}}' \
+    "$n" "$cnt" "$trunc" "$nodes"
+}
+# mnode <title> <issue-nodes> [issues-truncated] — one open milestone.
+mnode() {
+  printf '{"title":%s,"issues":{"pageInfo":{"hasNextPage":%s},"nodes":[%s]}}' \
+    "$(printf '%s' "$1" | jq -R .)" "${3:-false}" "$2"
+}
+# msnap <milestone-nodes> [milestones-truncated] — the whole response.
+#
+# NOT `snap`: section 8 defines a `snap` of its own for the read-only
+# fingerprint, and the later definition would silently take over here.
+msnap() {
+  printf '{"data":{"repository":{"milestones":{"pageInfo":{"hasNextPage":%s},"nodes":[%s]}}}}' \
+    "${2:-false}" "$1"
+}
+
+# stub_path <dir> <snapshot-json> — a PATH whose gh answers the hierarchy
+# snapshot with the given JSON and nothing else. Milestone state is the fact
+# that decides a course, so each outcome below is driven by it directly.
 stub_path() {
   local d="$1" ms="$2" t
   mkdir -p "$d"
@@ -32,23 +71,24 @@ stub_path() {
     src="$(command -v "$t" 2>/dev/null || true)"
     [ -n "$src" ] && ln -sf "$src" "$d/$t" 2>/dev/null || true
   done
-  printf '%s' "$ms" > "$d/milestones.json"
+  printf '%s' "$ms" > "$d/snap.json"
   cat > "$d/gh" <<'GHEOF'
 #!/usr/bin/env bash
-case "${1:-}" in auth) exit 0 ;; esac
-jqexpr=""; prev=""
+case "${1:-}" in
+  auth) exit 0 ;;
+  repo) printf 'o/r\n'; exit 0 ;;
+esac
+isq=0; jqexpr=""; prev=""
 for a in "$@"; do
+  [ "$a" = "graphql" ] && isq=1
   [ "$prev" = "--jq" ] && jqexpr="$a"
   prev="$a"
 done
-for a in "$@"; do
-  case "$a" in
-    *milestones*)
-      if [ -n "$jqexpr" ]; then jq -r "$jqexpr" "$(dirname "$0")/milestones.json"
-      else cat "$(dirname "$0")/milestones.json"; fi
-      exit 0 ;;
-  esac
-done
+if [ "$isq" = 1 ]; then
+  if [ -n "$jqexpr" ]; then jq -r "$jqexpr" "$(dirname "$0")/snap.json"
+  else cat "$(dirname "$0")/snap.json"; fi
+  exit 0
+fi
 exit 0
 GHEOF
   chmod +x "$d/gh"
@@ -68,12 +108,25 @@ printf '{\n  "project.classification": "existing",\n  "project.classified": "202
 git -C "$r" add -A
 git -C "$r" commit -qm "chore: seed"
 
-# The milestone query is answered with the raw array; gh's --jq does the rest,
-# so the stub returns objects rather than pre-filtered titles.
-ACTIVE='[{"title":"v0.9 — Now","open_issues":3},{"title":"v1.0 — Later","open_issues":0}]'
-ONLY_ACTIVE='[{"title":"v0.9 — Now","open_issues":3}]'
-ONLY_DONE='[{"title":"v0.9 — Now","open_issues":0}]'
-NONE='[]'
+# The snapshot is answered whole; gh's --jq does the rest, so the stub returns
+# the response shape rather than pre-filtered rows.
+#
+# v0.9 holds a gate (#900) and one open leaf (#901): work to do.
+ONLY_ACTIVE="$(msnap "$(mnode 'v0.9 — Now' "$(ct 900 901,902),$(lf 901)")")"
+# v0.9 holds work; v1.0 is open with nothing left at all. Two directions.
+ACTIVE="$(msnap "$(mnode 'v0.9 — Now' "$(lf 901)"),$(mnode 'v1.0 — Later' '')")"
+# v0.9 is open with nothing left at all — no work, and no gate either.
+ONLY_DONE="$(msnap "$(mnode 'v0.9 — Now' '')")"
+NONE="$(msnap '')"
+# THE REAL END-OF-RELEASE SHAPE: the milestone is open, its release gate #900 is
+# open, every one of the gate's sub-issues is closed, and GitHub's raw
+# open_issues is therefore 1. This is the state every Spark milestone ends in,
+# and the one the old fixture could not express.
+END_OF_RELEASE="$(msnap "$(mnode 'v0.9 — Now' "$(ct 900 901,902)")")"
+# The same milestone one issue earlier: the gate plus a single open leaf.
+END_MINUS_ONE="$(msnap "$(mnode 'v0.9 — Now' "$(ct 900 901,902),$(lf 901)")")"
+# An ordinary milestone that runs no release gate at all.
+NO_GATE="$(msnap "$(mnode 'v0.9 — Now' "$(lf 901),$(lf 902)")")"
 
 run_course() { # <milestones-json> -> OUT / RC
   local ms="$1" d="$WORK/p$RANDOM"
@@ -190,22 +243,26 @@ for t in $tools; do
   src="$(command -v "$t" 2>/dev/null || true)"
   [ -n "$src" ] && ln -sf "$src" "$chggh/$t" 2>/dev/null || true
 done
-printf '[{"title":"v0.9","open_issues":3},{"title":"v1.0","open_issues":0}]' > "$chggh/first.json"
-printf '[{"title":"v0.9","open_issues":3}]' > "$chggh/rest.json"
+printf '%s' "$ACTIVE" > "$chggh/first.json"
+printf '%s' "$ONLY_ACTIVE" > "$chggh/rest.json"
 cat > "$chggh/gh" <<'GHEOF'
 #!/usr/bin/env bash
-case "${1:-}" in auth) exit 0 ;; esac
-jqx=""; prev=""
-for a in "$@"; do [ "$prev" = "--jq" ] && jqx="$a"; prev="$a"; done
+case "${1:-}" in
+  auth) exit 0 ;;
+  repo) printf 'o/r\n'; exit 0 ;;
+esac
+isq=0; jqx=""; prev=""
 for a in "$@"; do
-  case "$a" in
-    *milestones*)
-      d="$(dirname "$0")"
-      if [ -f "$MSFLAG" ]; then f="$d/rest.json"; else f="$d/first.json"; : > "$MSFLAG"; fi
-      if [ -n "$jqx" ]; then jq -r "$jqx" "$f"; else cat "$f"; fi
-      exit 0 ;;
-  esac
+  [ "$a" = "graphql" ] && isq=1
+  [ "$prev" = "--jq" ] && jqx="$a"
+  prev="$a"
 done
+if [ "$isq" = 1 ]; then
+  d="$(dirname "$0")"
+  if [ -f "$MSFLAG" ]; then f="$d/rest.json"; else f="$d/first.json"; : > "$MSFLAG"; fi
+  if [ -n "$jqx" ]; then jq -r "$jqx" "$f"; else cat "$f"; fi
+  exit 0
+fi
 exit 0
 GHEOF
 chmod +x "$chggh/gh"
@@ -228,18 +285,23 @@ dclosed="$WORK/pclosed"
 stub_path "$dclosed" "$ONLY_ACTIVE"
 cat > "$dclosed/gh" <<'GHEOF'
 #!/usr/bin/env bash
-case "${1:-}" in auth) exit 0 ;; esac
-jqexpr=""; prev=""
+case "${1:-}" in
+  auth) exit 0 ;;
+  repo) printf 'o/r\n'; exit 0 ;;
+esac
+isq=0; jqexpr=""; prev=""
 for a in "$@"; do
+  [ "$a" = "graphql" ] && isq=1
   [ "$prev" = "--jq" ] && jqexpr="$a"
   prev="$a"
 done
+if [ "$isq" = 1 ]; then
+  if [ -n "$jqexpr" ]; then jq -r "$jqexpr" "$(dirname "$0")/snap.json"
+  else cat "$(dirname "$0")/snap.json"; fi
+  exit 0
+fi
 for a in "$@"; do
   case "$a" in
-    *milestones*)
-      if [ -n "$jqexpr" ]; then jq -r "$jqexpr" "$(dirname "$0")/milestones.json"
-      else cat "$(dirname "$0")/milestones.json"; fi
-      exit 0 ;;
     */issues/*) echo closed; exit 0 ;;
   esac
 done
@@ -327,5 +389,139 @@ sel="$(cd "$r" && env PATH="$d10" bash -c '. '"$SPARK"'; current_milestone' 2>/d
 assert_eq "current_milestone names the active milestone" "v0.9 — Now" "$sel"
 tsv10="$(cd "$r" && env PATH="$d10" "$SPARK" course --tsv 2>&1)" || true
 assert_contains "and course reports the same one" "$(printf 'active\tv0.9 — Now')" "$tsv10"
+
+# ============ 11. the real end-of-release shape (#602) ====================
+# Every Spark milestone ends here: implementation finished, release gate still
+# open, and GitHub's raw open_issues therefore 1. Reading that count as "work
+# remains" made the finished state indistinguishable from the working one —
+# `course` said CONTINUE and routed to `spark next`, which then reported there
+# was no leaf to select.
+run_course "$END_OF_RELEASE"
+assert_rc "a finished-but-unreleased milestone derives a course at exit 0" 0 "$RC"
+assert_contains "and it is the closure course" "Course: CLOSE / RELEASE COMPLETED COURSE" "$OUT"
+assert_contains "naming the gate as what remains" "release gate #900" "$OUT"
+assert_contains "routed to certification, not new work" "not new feature work" "$OUT"
+# The specific inversion: it must not send the reader after work that is not there.
+case "$OUT" in
+  *"CONTINUE CURRENT COURSE"*) bad "an open release gate was counted as open work" ;;
+  *) ok ;;
+esac
+case "$OUT" in
+  *"next: spark next"*) bad "a finished milestone routed to the issue selector" ;;
+  *) ok ;;
+esac
+
+# One open leaf changes the answer, so the case above cannot be passing because
+# the verb stopped distinguishing states.
+run_course "$END_MINUS_ONE"
+assert_rc "the same milestone with one leaf left continues" 0 "$RC"
+assert_contains "named as such" "Course: CONTINUE CURRENT COURSE" "$OUT"
+assert_contains "and routed to the selector" "next: spark next" "$OUT"
+
+# An ordinary milestone that runs no gate is untouched by any of this.
+run_course "$NO_GATE"
+assert_rc "a milestone with no gate is unaffected" 0 "$RC"
+assert_contains "and still continues" "Course: CONTINUE CURRENT COURSE" "$OUT"
+
+# ============ 12. an unread hierarchy is never "no work left" =============
+# A truncated page and an empty one are different answers. Reading the second
+# from the first is how a partial read would become a release recommendation.
+for trunc in ms issues subs; do
+  case "$trunc" in
+    ms)     j="$(msnap "$(mnode 'v0.9 — Now' "$(ct 900 901,902)")" true)" ;;
+    issues) j="$(msnap "$(mnode 'v0.9 — Now' "$(ct 900 901,902)" true)")" ;;
+    subs)   j="$(msnap "$(mnode 'v0.9 — Now' "$(ct 900 901,902 true)")")" ;;
+  esac
+  run_course "$j"
+  assert_rc "a truncated $trunc surface is not assessed" 3 "$RC"
+  assert_contains "named as such ($trunc)" "Course: NOT ASSESSED" "$OUT"
+  case "$OUT" in
+    *"CLOSE / RELEASE"*) bad "an unread $trunc surface was reported as a finished milestone" ;;
+    *) ok ;;
+  esac
+  case "$OUT" in
+    *"CONTINUE CURRENT COURSE"*) bad "an unread $trunc surface was reported as active work" ;;
+    *) ok ;;
+  esac
+done
+
+# ============ 13. course and next cannot disagree about work =============
+# The whole defect was two implementations of one question. This asserts the
+# property directly: for ONE snapshot, both verbs are run and their answers must
+# describe the same repository.
+agree="$WORK/agree"; mkdir -p "$agree/.spark" "$agree/.github/ISSUE_TEMPLATE"
+git -C "$agree" init -q
+git -C "$agree" config user.email t@e.invalid
+git -C "$agree" config user.name T
+echo 'name: Bug' > "$agree/.github/ISSUE_TEMPLATE/bug.yml"
+echo '## What' > "$agree/.github/pull_request_template.md"
+echo '{}' > "$agree/release-please-config.json"
+git -C "$agree" add -A; git -C "$agree" commit -qm seed
+
+abin="$WORK/abin"; mkdir -p "$abin"
+for t in $tools; do
+  src="$(command -v "$t" 2>/dev/null || true)"
+  [ -n "$src" ] && ln -sf "$src" "$abin/$t" 2>/dev/null || true
+done
+# ISSUES is what `gh issue list` returns; SNAP is the hierarchy snapshot. Both
+# are answered through the --jq the BINARY passes.
+cat > "$abin/gh" <<'AGEOF'
+#!/usr/bin/env bash
+case "${1:-}" in
+  auth) exit 0 ;;
+  repo) printf 'o/r\n'; exit 0 ;;
+esac
+isq=0; jqx=""; prev=""
+for a in "$@"; do
+  [ "$a" = "graphql" ] && isq=1
+  [ "$prev" = "--jq" ] && jqx="$a"
+  prev="$a"
+done
+if [ "$isq" = 1 ]; then
+  if [ -n "$jqx" ]; then printf '%s' "$SNAP" | jq -r "$jqx"; else printf '%s' "$SNAP"; fi
+  exit 0
+fi
+if [ "${1:-}" = "issue" ]; then
+  if [ -n "$jqx" ]; then printf '%s' "$ISSUES" | jq -r "$jqx"; else printf '%s' "$ISSUES"; fi
+  exit 0
+fi
+for a in "$@"; do
+  case "$a" in *dependencies*) printf '0\n'; exit 0 ;; esac
+done
+exit 0
+AGEOF
+chmod +x "$abin/gh"
+
+# Both carry a COMPLETE governed slate, so the selection turns on the hierarchy
+# rather than on missing metadata: an issue lacking `docs-impact` stops `next`
+# at exit 5 with a decision to make, before it ever reaches the question here.
+di='{"name":"docs-impact:none"}'
+ISS_GATE_ONLY="[{\"number\":900,\"title\":\"Gate\",\"labels\":[{\"name\":\"chore\"},{\"name\":\"P1\"},$di]}]"
+ISS_WITH_LEAF="[{\"number\":900,\"title\":\"Gate\",\"labels\":[{\"name\":\"chore\"},{\"name\":\"P1\"},$di]},{\"number\":901,\"title\":\"Real work\",\"labels\":[{\"name\":\"bug\"},{\"name\":\"P1\"},$di]}]"
+
+ag() { # <snap> <issues> <verb...> -> OUT / RC
+  local sn="$1" iss="$2"; shift 2
+  RC=0
+  OUT="$(cd "$agree" && env PATH="$abin" SNAP="$sn" ISSUES="$iss" "$SPARK" "$@" 2>&1)" || RC=$?
+}
+
+# The finished shape: course says close it, and next agrees there is no leaf.
+ag "$END_OF_RELEASE" "$ISS_GATE_ONLY" course
+assert_contains "course closes the finished milestone" "CLOSE / RELEASE COMPLETED COURSE" "$OUT"
+ag "$END_OF_RELEASE" "$ISS_GATE_ONLY" next
+assert_rc "and next reports the known answer: nothing to select" 1 "$RC"
+assert_contains "naming why" "no open leaf issues" "$OUT"
+
+# One leaf later: course continues, and next selects that very leaf.
+ag "$END_MINUS_ONE" "$ISS_WITH_LEAF" course
+assert_contains "course continues while a leaf is open" "CONTINUE CURRENT COURSE" "$OUT"
+ag "$END_MINUS_ONE" "$ISS_WITH_LEAF" next
+assert_rc "and next selects it" 0 "$RC"
+assert_contains "naming the leaf" "selected  #901" "$OUT"
+# The gate is a container and closes last; it is never the selection.
+case "$OUT" in
+  *"selected  #900"*) bad "next selected the release gate" ;;
+  *) ok ;;
+esac
 
 finish
