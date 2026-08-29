@@ -7,6 +7,7 @@
 set -euo pipefail
 
 script="$(cd "$(dirname "$0")/.." && pwd)/plugins/spark/skills/plan/scripts/roadmap-check.sh"
+sparkbin="$(cd "$(dirname "$0")/.." && pwd)/plugins/spark/bin/spark"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 pass=0 fail=0
@@ -367,6 +368,74 @@ case "$out" in
   *"ok: feature"*) fail=$((fail + 1)); echo "  ✖ it must not clear an issue it could not classify" ;;
   *) pass=$((pass + 1)) ;;
 esac
+
+# --- MULTI-WORD DISPOSITION MEMBERS (#587) --------------------------------
+# A GitHub label may contain spaces, and the model accepts one: `not planned` is
+# an ordinary deferred disposition. Serialising the member list space-delimited
+# split it in two, so an issue carrying exactly that governed label was still
+# reported as having no release decision — the governed value resolved, could be
+# provisioned, and still produced a false DECISION REQUIRED.
+#
+# This runs in its own repository because the member has to come from a real
+# project-tier model rather than from a fixture the checker never reads.
+mw="$work/multiword"
+mkdir -p "$mw/.spark"
+git -C "$mw" init -q
+printf 'version\t1\nmember\tdisposition\tnot planned\tabcdef\tA valid multi-word deferred disposition\n' \
+  > "$mw/.spark/governance.tsv"
+cp "$work/complete.md" "$mw/ROADMAP.md"
+cat > "$mw/carries.json" <<'EOF'
+[
+  {"number": 900, "title": "Deferred", "labels": ["feature", "not planned"], "milestone": null, "body": "Deliberately not planned."}
+]
+EOF
+cat > "$mw/without.json" <<'EOF'
+[
+  {"number": 901, "title": "Undecided", "labels": ["feature"], "milestone": null, "body": "No decision recorded."}
+]
+EOF
+
+# The fixture is only meaningful if the member really resolved with its space
+# intact. Asserted before anything is concluded from it.
+members="$(cd "$mw" && "$sparkbin" governance --tsv 2>/dev/null \
+  | awk -F'\t' '$1 == "member" && $2 == "disposition" { print $3 }')"
+case "$members" in
+  *"not planned"*) pass=$((pass + 1)) ;;
+  *) fail=$((fail + 1)); echo "  ✖ the multi-word member did not resolve; the case proves nothing" ;;
+esac
+
+mwcheck() { # <want-exit> <desc> <issues> <needle>
+  local want="$1" desc="$2" issues="$3" needle="$4" out rc=0
+  out="$(cd "$mw" && bash "$script" --roadmap "$mw/ROADMAP.md" --issues "$issues" 2>&1)" || rc=$?
+  if [ "$rc" -ne "$want" ]; then
+    fail=$((fail + 1)); echo "  ✖ $desc — want exit $want, got $rc"; return 0
+  fi
+  case "$out" in
+    *"$needle"*) pass=$((pass + 1)) ;;
+    *) fail=$((fail + 1)); echo "  ✖ $desc — output lacks '$needle'" ;;
+  esac
+}
+mwcheck 0 "an issue carrying a multi-word governed label is decided" \
+  "$mw/carries.json" "ok: feature #900 — carries a governed disposition label"
+mwcheck 5 "and one without it still owes a decision" \
+  "$mw/without.json" "DECISION REQUIRED: feature #901"
+# The member is offered back to the human whole, not shredded into two words.
+mwcheck 5 "the message names the member intact" \
+  "$mw/without.json" "disposition label (not planned)"
+
+# Both readers must agree on the boundary: the defect lived in two independent
+# split() calls, so fixing one would have left the other wrong on whichever
+# machine had the other reader.
+if command -v python3 >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
+  a="$(cd "$mw" && bash "$script" --roadmap "$mw/ROADMAP.md" --issues "$mw/carries.json" 2>&1)" || true
+  b="$(cd "$mw" && env PATH="$nojq" bash "$script" --roadmap "$mw/ROADMAP.md" --issues "$mw/carries.json" 2>&1)" || true
+  if [ "$a" = "$b" ]; then pass=$((pass + 1)); else
+    fail=$((fail + 1)); echo "  ✖ jq and python disagree on a multi-word member"
+    diff <(echo "$a") <(echo "$b") | head -4 || true
+  fi
+else
+  pass=$((pass + 1))
+fi
 
 # --- corrupt issues JSON is a tool error (exit 2), never a clean pass
 printf 'not json' > "$work/issues-corrupt.json"

@@ -99,6 +99,13 @@ Exactly two, and both are structured fields a human sets deliberately:
 
 The `disposition` members come from the resolved model, so the set has one
 authority and adding a member is schema data rather than a code change.
+
+**A member name may contain spaces.** `not planned` is an ordinary disposition,
+and the check carries member names whole — one per line, since a line-oriented
+TSV cannot declare a label containing a newline in the first place. A member is
+never split on whitespace: a governed value that resolves and can be provisioned
+must not then produce a false `DECISION REQUIRED` because of how the set was
+serialised on its way to the reader.
 `roadmap-check` reads them from the model rather than naming them, and reports
 **not assessed** if the family cannot be resolved — a hard-coded fallback would
 take over at exactly the moment the real authority was unusable.

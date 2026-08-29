@@ -82,9 +82,21 @@ command -v python3 >/dev/null 2>&1 && have_py=1
 spark_bin="$(cd "$(dirname "$0")/../../.." 2>/dev/null && pwd)/bin/spark"
 disp_members=""
 if [ -x "$spark_bin" ]; then
+  # ONE MEMBER PER LINE. A GitHub label may contain spaces — `not planned` is a
+  # perfectly ordinary disposition — so a space-delimited list silently split a
+  # valid member in two and reported the issue carrying it as undecided. The
+  # governed value resolved, provisioned, and still produced a false DECISION
+  # REQUIRED.
+  #
+  # A newline is the one character a member cannot contain: this model is a
+  # line-oriented TSV, so a label with a newline in it could not be declared in
+  # the first place. That makes the boundary lossless rather than merely wider,
+  # which a rarer delimiter would not.
   disp_members="$("$spark_bin" governance --tsv 2>/dev/null \
-    | awk -F'\t' '$1 == "member" && $2 == "disposition" { printf "%s%s", (n++ ? " " : ""), $3 }')"
+    | awk -F'\t' '$1 == "member" && $2 == "disposition" { print $3 }')"
 fi
+# A comma-joined form for prose only. Never parsed back.
+disp_display="$(printf '%s' "$disp_members" | awk 'NF { printf "%s%s", (n++ ? ", " : ""), $0 }')"
 if [ "$have_jq" -eq 0 ] && [ "$have_py" -eq 0 ]; then
   echo "not assessed (needs jq or python3)"
   exit 3
@@ -298,7 +310,7 @@ fi
 classify_features() {
   if [ "$have_jq" -eq 1 ]; then
     jq -r --arg disp "$disp_members" '
-      ($disp | split(" ")) as $dm
+      ($disp | split("\n") | map(select(. != ""))) as $dm
       | .[]
       | . as $i
       | [ ($i.labels // [])[] | if type == "object" then (.name // "") else . end ] as $labels
@@ -320,7 +332,7 @@ classify_features() {
   python3 - "$1" "$disp_members" <<'PY'
 import json, re, sys
 
-dm = [d for d in (sys.argv[2] if len(sys.argv) > 2 else "").split(" ") if d]
+dm = [d for d in (sys.argv[2] if len(sys.argv) > 2 else "").split("\n") if d]
 for issue in json.load(open(sys.argv[1])):
     labels = [l.get("name", "") if isinstance(l, dict) else str(l)
               for l in (issue.get("labels") or [])]
@@ -363,9 +375,9 @@ if [ -n "$issues_source" ]; then
       backlog)  echo "ok: feature #$num — carries a governed disposition label" ;;
       *)
         if [ "${prose:-0}" = "1" ]; then
-          decision "feature #$num has no release decision — its body proposes one in prose, which is evidence, not authority. Record it in a governed field: assign a milestone, or apply a disposition label ($disp_members)."
+          decision "feature #$num has no release decision — its body proposes one in prose, which is evidence, not authority. Record it in a governed field: assign a milestone, or apply a disposition label ($disp_display)."
         else
-          decision "feature #$num has no release decision — assign a milestone, or apply a disposition label ($disp_members). Spark reports the gap; the choice is yours, and an agent may propose one with evidence but must not persist it to clear this line."
+          decision "feature #$num has no release decision — assign a milestone, or apply a disposition label ($disp_display). Spark reports the gap; the choice is yours, and an agent may propose one with evidence but must not persist it to clear this line."
         fi ;;
     esac
   done <<< "$classified"
