@@ -4399,11 +4399,29 @@ rec_apply() {
   while IFS= read -r sel; do
     [ -n "$sel" ] || continue
     area="${sel%%:*}"; id="${sel#*:}"
+
+    # RESOLVE AGAINST A FRESH SLATE, immediately before acting.
+    #
+    # The snapshot taken before the run is stale the moment the first group
+    # lands. Resolving a later selector against it let an already-cleared
+    # finding authorise a second "application": the edit rewrote a value to
+    # itself, produced no commit, passed validation because the finding was
+    # already gone, and still counted. One commit, two groups reported.
+    #
+    # Re-deriving costs another pass, and that is the price of the guarantee:
+    # a stale row must never authorise a mutation. This also covers the general
+    # case, not just exact duplicates — an earlier group that happens to clear a
+    # later selected finding refuses it the same way.
+    if [ "$yes" -eq 1 ]; then
+      rows="$(rec_rows "$root")"
+    fi
     line="$(printf '%s\n' "$rows" | awk -F'\t' -v a="$area" -v i="$id" '$1 == a && $4 == i { print; exit }')"
     if [ -z "$line" ]; then
       red "  $sel — no such finding in the current slate"
-      red "    The slate is re-derived every run: a finding that has gone is not"
-      red "    approved by an id that once named it."
+      red "    The slate is re-derived before every group, so this covers both the"
+      red "    case where you approved it twice and the case where an earlier group"
+      red "    cleared it. A finding that has gone is not approved by an id that"
+      red "    once named it."
       refused=$((refused+1)); rc=1; continue
     fi
     disp="$(printf '%s' "$line" | cut -f3)"
@@ -4441,7 +4459,9 @@ rec_apply() {
       return 1
     fi
 
-    # One commit per group, and only when the group touched the tree.
+    # One commit per group. A `tree` group that changed nothing is not a group
+    # that was applied: counting it would make "Applied N" and the number of
+    # revertible commits disagree, which is the whole contract.
     if [ -n "$(git -C "$root" status --porcelain 2>/dev/null | awk 'NF')" ]; then
       git -C "$root" add -A >/dev/null 2>&1
       git -C "$root" commit -q -m "chore: reconcile $area/$id
@@ -4450,6 +4470,10 @@ Applied from the reconciliation slate as one approved group, so it reverts on
 its own without disturbing the others." >/dev/null 2>&1 || {
         red "    could not commit the group"; return 1; }
       echo "    committed $(git -C "$root" rev-parse --short HEAD)"
+    else
+      red "    the finding was present but applying it changed nothing."
+      red "    Not counted: every applied group must have exactly one commit."
+      refused=$((refused+1)); rc=1; continue
     fi
 
     # Validation after every group: re-derive the slate and confirm the finding
