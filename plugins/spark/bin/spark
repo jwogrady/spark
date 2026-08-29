@@ -3564,7 +3564,17 @@ gov_label_rows() {
 # `category` or `docs-impact` is special-cased here; a family added as data is
 # checked the same way.
 #
-# <issues-tsv>: "<number><TAB><comma-joined labels><TAB><milestone or empty>"
+# <issues-tsv>: two record kinds, so a label name is never joined into a
+# delimited scalar it would then have to be split back out of:
+#
+#   issue<TAB><number><TAB><milestone or empty>
+#   label<TAB><number><TAB><name>
+#
+# One label record per label. A GitHub label may contain a comma as easily as a
+# space, so any in-field separator loses identity for some legal name; tab and
+# newline are the two characters a record cannot carry and a label cannot
+# contain, which is what makes this shape lossless rather than merely wider.
+# `tests/lib.sh:gov_iss` builds the pair, so no caller hand-writes it.
 gov_issue_rows() {
   GOV_MODEL="$1" GOV_ISS="$2" GOV_CATS="${3:-}" awk '
     BEGIN {
@@ -7651,7 +7661,6 @@ cmd_next() {
     fi
   fi
 
-  # One call, gh's embedded jq: number, comma-joined labels, title.
   local rows
   # ONE RECORD PER LABEL. Joining the names into a delimited scalar and
   # splitting them back is not lossless whatever the delimiter: a GitHub label
