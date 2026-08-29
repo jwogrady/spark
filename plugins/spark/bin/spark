@@ -4256,6 +4256,28 @@ $(git -C "$root" branch --merged "$trunk" --format='%(refname:short)' 2>/dev/nul
 EOF
   fi
 
+  # --- release record residue ----------------------------------------------
+  # A record whose stated disposition contradicts a published tag. The tag is
+  # the fact and the record is the claim, so this is deterministic: no judgment
+  # is needed to see that a line saying Blocked sits beside a published release.
+  # Only the CURRENT-STATE claim is touched; the record's history stays, which
+  # is the difference between correcting a presentation and erasing provenance.
+  local rf rbase rver rtag rdisp
+  for rf in "$root"/docs/releases/v*.md; do
+    [ -e "$rf" ] || continue
+    rbase="${rf##*/}"; rver="${rbase%.md}"
+    rtag="$(git -C "$root" tag --list "${rver}.*" 2>/dev/null | sort -V | tail -1)"
+    [ -n "$rtag" ] || continue
+    rdisp="$(sed -n 's/.*Disposition: `\([A-Za-z][A-Za-z]*\)`.*/\1/p' "$rf" 2>/dev/null | head -1)"
+    [ -n "$rdisp" ] || continue
+    [ "$rdisp" = "Shipped" ] && continue
+    rec_row release known REWRITE-COLLAPSE "$rbase" \
+      "states disposition $rdisp while tag $rtag is published" \
+      "set the current-state disposition to Shipped, keeping the record's history" \
+      "rewrites one current-state line; history is untouched" \
+      "spark reconcile --tsv" deterministic
+  done
+
   # --- release residue ------------------------------------------------------
   # A milestone with no open issues has done its job. Closing it is a remote
   # act and stays the human's.
@@ -4278,18 +4300,206 @@ EOF
   fi
 }
 
+# rec_kind <area> <disposition> — how a finding would be carried out.
+#
+#   tree    edits files. This is the ONLY kind reconcile applies automatically,
+#           because it is the only kind that can honour the guarantee the whole
+#           design rests on: one approved group is exactly one commit, revertible
+#           on its own.
+#   manual  the action is real and named, but reconcile does not perform it. A
+#           deleted ref, a closed milestone and a provisioned label are not
+#           commits; nothing about them reverts with `git revert`, so automating
+#           them would mean quietly weakening the one-group/one-commit contract
+#           to fit operations that cannot satisfy it.
+#   none    nothing to carry out. KEEP is already correct, and DECISION-REQUIRED
+#           is not Spark's to carry out at all.
+#
+# There is deliberately no flag that promotes `manual` to `tree`. Automating an
+# irreversible operation needs a compensating contract this release does not
+# have, and a flag would be a way of pretending otherwise.
+rec_kind() {
+  case "$2" in
+    DECISION-REQUIRED|KEEP|-) printf 'none';  return 0 ;;
+  esac
+  case "$1" in
+    release)                       printf 'tree' ;;
+    branch|milestone|governance)   printf 'manual' ;;
+    *)                             printf 'none' ;;
+  esac
+}
+
+# rec_apply_one <root> <area> <id> — carry out one finding. Prints what it did.
+# Returns 0 applied, 1 failed, 2 nothing to do.
+rec_apply_one() {
+  local root="$1" area="$2" id="$3" f
+  case "$area" in
+    release)
+      f="$root/docs/releases/$id"
+      [ -f "$f" ] || { echo "    the record is gone; nothing to do"; return 2; }
+      # Only the disposition claim, and only the first one: the record's later
+      # history deliberately keeps its own earlier dispositions.
+      python3 - "$f" <<'PYEOF' || return 1
+import re, sys
+p = sys.argv[1]
+s = open(p).read()
+new, n = re.subn(r'(Disposition: `)[A-Za-z]+(`)', r'\1Shipped\2', s, count=1)
+open(p, "w").write(new)
+sys.exit(0 if n == 1 else 1)
+PYEOF
+      echo "    set the current-state disposition to Shipped"
+      return 0 ;;
+    # No branch, milestone or governance case, on purpose.
+    #
+    # Governance in particular: a single approved finding once called
+    # `governance apply --yes`, which is a FAMILY-WIDE operation. It could
+    # provision labels the operator never approved, and re-deriving the slate
+    # would not notice — the approved finding would be gone and so would the
+    # others, which looks like success. One approved finding must mean one
+    # mutation and nothing else, so reconciliation delegates to the governance
+    # command rather than invoking it, until that command can act on exactly
+    # one finding.
+  esac
+  return 2
+}
+
+# rec_still_present <root> <area> <id> — is the finding still there? This is the
+# validation after every group, and it is deliberately the producer itself
+# rather than a stored expectation: re-deriving the slate is the only check that
+# cannot pass because someone wrote the right sentence.
+rec_still_present() {
+  rec_rows "$1" | awk -F'\t' -v a="$2" -v i="$3" '$1 == a && $4 == i { found = 1 } END { exit found ? 0 : 1 }'
+}
+
+# rec_apply <root> <rows> <approved> <yes> <destructive>
+#
+# One approved finding is one group, and one group is one commit. That is what
+# makes a mistake recoverable: reverting the middle of a run leaves the rest
+# applied, because nothing was batched into a single opaque change.
+rec_apply() {
+  local root="$1" rows="$2" approved="$3" yes="$4"
+  local sel area id line disp kind rc=0 applied=0 refused=0 dirty
+
+  # A dirty tree would make "exactly one commit per group" a lie: unrelated
+  # changes would ride along and the revert would take them with it.
+  dirty="$(git -C "$root" status --porcelain 2>/dev/null | awk 'NF' | wc -l | tr -d ' ')"
+  if [ "$dirty" -ne 0 ] && [ "$yes" -eq 1 ]; then
+    red "the working tree has $dirty uncommitted change(s)."
+    red "  Each approved group must land as one commit that reverts on its own;"
+    red "  committing on top of unrelated work would take that work with it."
+    red "  Commit or set aside the changes first."
+    return 1
+  fi
+
+  echo "Spark reconcile — apply"
+  echo
+  [ "$yes" -eq 1 ] || echo "Preview only. Nothing is applied without --yes."
+  echo
+
+  while IFS= read -r sel; do
+    [ -n "$sel" ] || continue
+    area="${sel%%:*}"; id="${sel#*:}"
+    line="$(printf '%s\n' "$rows" | awk -F'\t' -v a="$area" -v i="$id" '$1 == a && $4 == i { print; exit }')"
+    if [ -z "$line" ]; then
+      red "  $sel — no such finding in the current slate"
+      red "    The slate is re-derived every run: a finding that has gone is not"
+      red "    approved by an id that once named it."
+      refused=$((refused+1)); rc=1; continue
+    fi
+    disp="$(printf '%s' "$line" | cut -f3)"
+    kind="$(rec_kind "$area" "$disp")"
+
+    case "$kind" in
+      none)
+        if [ "$disp" = "DECISION-REQUIRED" ]; then
+          yellow "  $sel — DECISION REQUIRED, so it is not Spark's to carry out."
+          yellow "    No flag makes it applicable. Record the decision yourself and the"
+          yellow "    finding clears on the next run."
+        else
+          echo "  $sel — $disp, nothing to apply"
+        fi
+        refused=$((refused+1)); continue ;;
+      manual)
+        # Reported in full, and not performed. The action column already names
+        # the exact command; running it is the operator's act because it cannot
+        # be undone by reverting a commit.
+        yellow "  $sel — $disp, and reconcile does not carry this out."
+        printf '%s' "$line" | awk -F'\t' '{ printf "    run yourself: %s\n", $6 }'
+        yellow "    It deletes a ref or changes remote state, so it cannot land as"
+        yellow "    one revertible commit. No flag changes that."
+        refused=$((refused+1)); continue ;;
+    esac
+
+    echo "  $sel — $disp ($kind)"
+    if [ "$yes" -eq 0 ]; then
+      printf '%s' "$line" | awk -F'\t' '{ printf "    would: %s\n", $6 }'
+      continue
+    fi
+
+    if ! rec_apply_one "$root" "$area" "$id"; then
+      red "    failed; stopping with earlier groups applied"
+      return 1
+    fi
+
+    # One commit per group, and only when the group touched the tree.
+    if [ -n "$(git -C "$root" status --porcelain 2>/dev/null | awk 'NF')" ]; then
+      git -C "$root" add -A >/dev/null 2>&1
+      git -C "$root" commit -q -m "chore: reconcile $area/$id
+
+Applied from the reconciliation slate as one approved group, so it reverts on
+its own without disturbing the others." >/dev/null 2>&1 || {
+        red "    could not commit the group"; return 1; }
+      echo "    committed $(git -C "$root" rev-parse --short HEAD)"
+    fi
+
+    # Validation after every group: re-derive the slate and confirm the finding
+    # is gone. A stored expectation could be satisfied by writing the right
+    # sentence; re-deriving cannot.
+    if rec_still_present "$root" "$area" "$id"; then
+      red "    validation failed: the finding is still present after applying it"
+      return 1
+    fi
+    echo "    validated: the finding is gone from a freshly derived slate"
+    applied=$((applied+1))
+  done <<EOF
+$approved
+EOF
+
+  echo
+  if [ "$yes" -eq 0 ]; then
+    echo "Nothing was applied. Re-run with --yes to carry out the approved findings."
+    return 0
+  fi
+  echo "Applied $applied group(s); $refused refused."
+  [ "$refused" -eq 0 ] || return 5
+  return "$rc"
+}
+
 # spark reconcile [--tsv]
 cmd_reconcile() {
-  local tsv=0 usage_line="usage: spark reconcile [--tsv]"
+  local tsv=0 yes=0 approved=""
+  local usage_line="usage: spark reconcile [--tsv] [--approve <area>:<id>]... [--yes]"
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --tsv) tsv=1 ;;
+      --yes) yes=1 ;;
+      --approve) shift; approved="${approved}${1:-}
+" ;;
+      --approve=*) approved="${approved}${1#--approve=}
+" ;;
       -h|--help)
         echo "$usage_line"
         echo
-        echo "  Turn Triage's evidence into a reviewable reconciliation slate."
-        echo "  Read-only: it proposes, and applies nothing. Evidence state and"
-        echo "  proposed disposition are separate columns on purpose."
+        echo "  Turn the Triage evidence into a reviewable reconciliation slate."
+        echo "  With no --approve it proposes and applies nothing. Evidence state"
+        echo "  and proposed disposition are separate columns on purpose."
+        echo
+        echo "  --approve <area>:<id>   carry out ONE finding; repeatable"
+        echo "  --yes                   actually apply the approved findings"
+        echo
+        echo "  Only file edits are applied automatically, because only they land"
+        echo "  as one revertible commit. Ref deletion, milestone closure and"
+        echo "  governance provisioning are reported with the exact command to run"
+        echo "  yourself. A DECISION-REQUIRED finding is never carried out at all."
         return 0 ;;
       *) red "unknown option: $1"; echo "$usage_line"; return 1 ;;
     esac
@@ -4301,6 +4511,12 @@ cmd_reconcile() {
 
   local rows ndec nunread nprop
   rows="$(rec_rows "$root")"
+
+  # --- the approval path ---------------------------------------------------
+  if [ -n "$approved" ]; then
+    rec_apply "$root" "$rows" "$approved" "$yes"
+    return $?
+  fi
   ndec="$(printf '%s\n' "$rows" | awk -F'\t' '$3 == "DECISION-REQUIRED" && NF' | wc -l | tr -d ' ')"
   nunread="$(printf '%s\n' "$rows" | awk -F'\t' '$2 == "unread" && NF' | wc -l | tr -d ' ')"
   nprop="$(printf '%s\n' "$rows" | awk -F'\t' '($3 == "REWRITE-COLLAPSE" || $3 == "DROP-ARCHIVE") && NF' | wc -l | tr -d ' ')"
