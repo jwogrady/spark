@@ -4983,7 +4983,8 @@ cmd_reconcile() {
   return 0
 }
 
-# milestone_inventory — every open milestone as `title <TAB> open_issues`.
+# milestone_snapshot — every open milestone WITH its issue hierarchy, read in
+# ONE request so it describes ONE moment.
 #
 # ONE CAPTURE, and it FAILS LOUDLY. Reading the milestones twice — once for the
 # active one, once for the completed ones — meant a request that failed between
@@ -4992,9 +4993,137 @@ cmd_reconcile() {
 # empty, so `course` reported PLAN A NEW COURSE at exit 0 after the read had
 # failed: a confident strategic recommendation built on evidence that was never
 # read. Returning non-zero is what lets a caller tell those apart.
+#
+# THE HIERARCHY IS PART OF THAT ONE MOMENT. GitHub's milestone `open_issues` is
+# a count of open issues, and the release-readiness container is one of them —
+# so a milestone whose every leaf is closed still counts 1 while its gate waits
+# for certification. Answering "does this milestone hold work" from that number
+# made the finished state indistinguishable from the working one: `course` said
+# CONTINUE and routed to `spark next`, which then reported there was no leaf to
+# select. Two authorities, one question, two answers (#602).
+#
+# Reading the counts and the hierarchy in separate requests would rebuild the
+# same defect out of two moments instead of two rules, so they arrive together.
+#
+# Emits, and every row is a fact rather than a judgment:
+#
+#   ms        <title> <open-issue-count>
+#   container <title> <number>          an open issue that carries sub-issues
+#   sub       <title> <parent> <number> a sub-issue of it, in declared order
+#   leaf      <title> <number>          an open issue that carries none
+#   unread    <reason>                  a surface that could not be read whole
+#
+# `unread` exists because a truncated page and an empty one are different
+# answers, and reading the second as "no work left" is how an unread hierarchy
+# would become a release recommendation.
+milestone_snapshot() {
+  local nwo owner repo
+  nwo="$(gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null)" || return 1
+  [ -n "$nwo" ] || return 1
+  owner="${nwo%%/*}"; repo="${nwo##*/}"
+  gh api graphql -F owner="$owner" -F name="$repo" -f query='
+    query($owner:String!,$name:String!){
+      repository(owner:$owner,name:$name){
+        milestones(first:25, states:OPEN){
+          pageInfo{ hasNextPage }
+          nodes{
+            title
+            issues(first:100, states:OPEN){
+              pageInfo{ hasNextPage }
+              nodes{
+                number
+                subIssues(first:50){
+                  totalCount
+                  pageInfo{ hasNextPage }
+                  nodes{ number }
+                }
+              }
+            }
+          }
+        }
+      }
+    }' --jq '
+    .data.repository.milestones as $m
+    | (if $m.pageInfo.hasNextPage
+       then ["unread", "the open milestone list was truncated"] | @tsv else empty end),
+      ( $m.nodes[] | .title as $t
+        | (if .issues.pageInfo.hasNextPage
+           then ["unread", ("the open issues of \"" + $t + "\" were truncated")] | @tsv
+           else empty end),
+          (["ms", $t, (.issues.nodes | length | tostring)] | @tsv),
+          ( .issues.nodes[] | .number as $n
+            | if .subIssues.totalCount > 0
+              then (["container", $t, ($n|tostring)] | @tsv),
+                   (if .subIssues.pageInfo.hasNextPage
+                    then ["unread", ("the sub-issues of #" + ($n|tostring) + " were truncated")] | @tsv
+                    else empty end),
+                   (.subIssues.nodes[] | ["sub", $t, ($n|tostring), (.number|tostring)] | @tsv)
+              else ["leaf", $t, ($n|tostring)] | @tsv
+              end ) )' 2>/dev/null
+}
+
+# The PURE PROJECTIONS over a snapshot. One rule, one place, whoever asks — the
+# capture may fail, a projection cannot.
+
+# ms_inventory_of <snapshot> — `title <TAB> actionable-leaf-count <TAB> gate`.
+#
+# The count is LEAF WORK, not GitHub's raw open-issue count, because the
+# question every caller is really asking is "is there anything here to do".
+# A release gate is not something to do; it is what remains once everything is
+# done — so it is carried as its own column rather than folded into the count,
+# and the three states stay tellable apart:
+#
+#   leaves > 0              work to do            an active course
+#   leaves = 0, gate open   done, not released    a certification course
+#   leaves = 0, no gate     nothing left at all   a closed-out course
+ms_inventory_of() {
+  printf '%s\n' "$1" | awk -F'\t' '
+    $1 == "ms"        { seen[$2] = 1 }
+    $1 == "leaf"      { n[$2]++ }
+    $1 == "container" { if (!(($2) in g)) g[$2] = $3 }
+    END { for (t in seen) printf "%s\t%d\t%s\n", t, n[t], (t in g ? g[t] : "") }'
+}
+
+# ms_open_count_of <snapshot> <title> — GitHub'"'"'s raw open-issue count, kept as a
+# separate fact so a caller can tell "no work left" from "nothing here at all".
+ms_open_count_of() {
+  printf '%s\n' "$1" | awk -F'\t' -v t="$2" '$1 == "ms" && $2 == t { print $3; found = 1 }
+                                             END { if (!found) print "" }'
+}
+
+# leaves_of <snapshot> <title> — the actionable open issues, one per line.
+leaves_of() {
+  printf '%s\n' "$1" | awk -F'\t' -v t="$2" '$1 == "leaf" && $2 == t { print $3 }'
+}
+
+# gate_of <snapshot> <title> — the milestone'"'"'s release-readiness container.
+#
+# The evidence is structural and already the repository'"'"'s own rule: it is the
+# open issue that carries sub-issues, it is never itself selectable, and its
+# sub-issue order IS the delivery-order authority. A milestone with no such
+# issue simply has no gate, and behaves as it always did.
+gate_of() {
+  printf '%s\n' "$1" | awk -F'\t' -v t="$2" '$1 == "container" && $2 == t { print $3; exit }'
+}
+
+# suborder_of <snapshot> <title> — the gate'"'"'s sub-issues, in declared order.
+suborder_of() {
+  local g; g="$(gate_of "$1" "$2")"
+  [ -n "$g" ] || return 0
+  printf '%s\n' "$1" | awk -F'\t' -v t="$2" -v g="$g" '$1 == "sub" && $2 == t && $3 == g { print $4 }'
+}
+
+# snapshot_unread <snapshot> — the surfaces that could not be read whole.
+snapshot_unread() {
+  printf '%s\n' "$1" | awk -F'\t' '$1 == "unread" { print $2 }'
+}
+
+# milestone_inventory — the inventory projection over a fresh capture. Kept so
+# callers that want only the inventory do not each learn the snapshot'"'"'s shape.
 milestone_inventory() {
-  gh api --paginate 'repos/{owner}/{repo}/milestones?state=open' \
-    --jq '.[] | [.title, .open_issues] | @tsv' 2>/dev/null
+  local snap
+  snap="$(milestone_snapshot)" || return 1
+  ms_inventory_of "$snap"
 }
 
 # priority_members <model> — the priority family's members, ONE PER LINE, in
@@ -5018,17 +5147,36 @@ priority_members() {
 # projection are separate concerns and are separate functions: the capture may
 # fail, the projection cannot.
 
-# active_in_inventory <inventory> — the open milestone with open issues whose
-# title sorts first by version.
+# active_in_inventory <inventory> — THE RUNNING COURSE: the open milestone that
+# still has something outstanding, earliest by version.
+#
+# "Outstanding" is leaf work OR an open release gate, because a milestone whose
+# every leaf is closed is still the course being run until its release boundary
+# is closed. Reading it as finished the moment the last leaf closed would hand
+# the running course to the NEXT milestone and invite work on a version that
+# cannot ship until this one does.
 active_in_inventory() {
-  printf '%s\n' "$1" | awk -F'\t' 'NF && $2 + 0 > 0 { print $1 }' | LC_ALL=C sort -V | head -n1
+  printf '%s\n' "$1" | awk -F'\t' 'NF && ($2 + 0 > 0 || $3 != "") { print $1 }' \
+    | LC_ALL=C sort -V | head -n1
 }
 
-# completed_in_inventory <inventory> — open milestones with no open issues left.
-# The work is done and the release boundary is not closed, which is a course in
-# its own right rather than a defect.
+# completed_in_inventory <inventory> — open milestones with nothing left at all:
+# no leaf work and no gate awaiting certification. The work is done and the
+# release boundary is not closed, which is a course in its own right rather
+# than a defect.
 completed_in_inventory() {
-  printf '%s\n' "$1" | awk -F'\t' 'NF && $2 + 0 == 0 { print $1 }' | LC_ALL=C sort -V
+  printf '%s\n' "$1" | awk -F'\t' 'NF && $2 + 0 == 0 && $3 == "" { print $1 }' | LC_ALL=C sort -V
+}
+
+# leaves_in_inventory <inventory> <title> — how much actionable work it holds.
+leaves_in_inventory() {
+  printf '%s\n' "$1" | awk -F'\t' -v t="$2" '$1 == t { print $2 + 0; found = 1 }
+                                             END { if (!found) print 0 }'
+}
+
+# gate_in_inventory <inventory> <title> — its release gate, or empty.
+gate_in_inventory() {
+  printf '%s\n' "$1" | awk -F'\t' -v t="$2" '$1 == t { print $3; exit }'
 }
 
 # current_milestone [inventory] — the one answer to "which course is currently
@@ -5086,19 +5234,36 @@ course_evidence() {
     printf 'readable\tno\treason\tcourse derivation reads live milestone state and needs an authenticated gh\n'
     return 0
   fi
-  # Captured ONCE. Both facts are derived from the same successful read, so they
-  # describe one moment; and a failed read is reported as unreadable rather than
-  # as a repository with no milestones.
-  local inv
-  if ! inv="$(milestone_inventory)"; then
+  # Captured ONCE, and the hierarchy comes with it. Every fact below is derived
+  # from the same successful read, so they describe one moment; a failed read is
+  # reported as unreadable rather than as a repository with no milestones.
+  local snap inv unread
+  if ! snap="$(milestone_snapshot)"; then
     printf 'readable\tno\treason\tthe milestone inventory could not be read, so no course rests on it\n'
     return 0
   fi
+  # A surface that came back truncated is UNREAD, and an unread hierarchy is
+  # never read as "no work left" — that reading is what would turn a partial
+  # answer into a release recommendation.
+  unread="$(snapshot_unread "$snap")"
+  if [ -n "$unread" ]; then
+    printf 'readable\tno\treason\t%s, so no course rests on it\n' \
+      "$(printf '%s\n' "$unread" | awk 'NF { printf "%s%s", (n++ ? "; " : ""), $0 }')"
+    return 0
+  fi
+  inv="$(ms_inventory_of "$snap")"
   printf 'readable\tyes\n'
   # The SHARED projections, on the inventory captured above. Not a local copy of
   # the selection rules — `next` and `course` must give one answer, and they do
   # that by running the same code, not by agreeing to.
-  printf 'active\t%s\n' "$(current_milestone "$inv")"
+  local act
+  act="$(current_milestone "$inv")"
+  printf 'active\t%s\n' "$act"
+  # The running course's WORK STATE, from the same snapshot: how much is left to
+  # do, and whether a release gate is waiting. These are what separate "keep
+  # going" from "this is finished and unreleased".
+  printf 'active_leaves\t%s\n' "$(leaves_in_inventory "$inv" "$act")"
+  printf 'active_gate\t%s\n' "$(gate_in_inventory "$inv" "$act")"
   printf 'completed\t%s\n' \
     "$(completed_milestones "$inv" | awk 'NF { printf "%s%s", (n++ ? ", " : ""), $0 }')"
 
@@ -5146,12 +5311,14 @@ cmd_course() {
   local ev
   ev="$(course_evidence "$root")"
 
-  local k v readable=no reason='' active='' completed=''
-  local mech=0 tdec=0 tunread=0 spent=0 sdec=0 sunread=0
+  local k v readable=no reason='' active='' completed='' agate=''
+  local mech=0 tdec=0 tunread=0 spent=0 sdec=0 sunread=0 aleaves=0
   while IFS=$'\t' read -r k v _; do
     case "$k" in
       readable) readable="$v" ;;
       active) active="$v" ;;
+      active_leaves) aleaves="$v" ;;
+      active_gate) agate="$v" ;;
       completed) completed="$v" ;;
       truth_mechanical) mech="$v" ;;
       truth_decisions) tdec="$v" ;;
@@ -5186,6 +5353,17 @@ EOF
     course="REPAIR CURRENT COURSE"
     why="\"$active\" is active, but the recorded intent names only closed work, so what the course is pursuing is contradicted"
     route="spark reconcile, then re-run"
+  elif [ -n "$active" ] && [ "$aleaves" -eq 0 ] && [ -n "$agate" ]; then
+    # Implementation is finished and the release boundary is still open. This is
+    # the state every Spark milestone ends in, because the release-readiness
+    # gate closes last — and it was previously indistinguishable from active
+    # work, since GitHub counts the gate itself as an open issue. `course` said
+    # CONTINUE and routed to `spark next`, which then reported there was no leaf
+    # to select: a confident recommendation contradicted by the authority named
+    # in its own route line (#602).
+    course="CLOSE / RELEASE COMPLETED COURSE"
+    why="\"$active\" has no open work left; only its release gate #$agate remains, and that is the certification boundary"
+    route="release certification, not new feature work"
   elif [ -n "$active" ]; then
     course="CONTINUE CURRENT COURSE"
     why="\"$active\" is open with open issues and nothing contradicts it"
