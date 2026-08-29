@@ -342,14 +342,58 @@ priority, milestone or disposition, provisions nothing and commits nothing. The
 behavioural suite snapshots the working tree, every ref and the git object store
 across a real run, and separately proves no write-shaped GitHub call is made.
 
+### Approving part of the slate
+
+An approval names one finding, `area:id`, and one approved finding is one group:
+
+```
+spark reconcile --approve release:v0.20.md            # preview; changes nothing
+spark reconcile --approve release:v0.20.md --yes      # apply it
+spark reconcile --approve branch:spent --allow-destructive --yes
+```
+
+| Flag | Effect |
+| --- | --- |
+| *(none)* | preview — reports what each approved finding would do |
+| `--yes` | apply findings that edit files |
+| `--allow-destructive` | additionally allow ref deletion and remote state changes |
+
+**A `DECISION-REQUIRED` finding is never applicable.** Not with `--yes`, not with
+`--allow-destructive`, not with both. A judgment is not one permission away from
+being Spark's to make — record the decision in the governed field yourself and
+the finding clears on the next run.
+
+Per approved group, in the order given: the change is made; if it touched the
+tree it lands as **exactly one commit**; then the slate is **re-derived** and the
+finding must be gone. That last step is the validation, and it re-runs the
+producer rather than trusting an exit code — a check that asks "did the command
+succeed?" passes when the command succeeded and did the wrong thing.
+
+A failing group **stops the run**, leaving earlier groups applied and validated
+and attempting nothing later.
+
+One group being one commit is what makes an approval recoverable: `git revert` on
+a group in the middle of a run leaves the others applied, and the next
+`reconcile` shows the reverted finding back on the slate because the slate is
+derived from the repository rather than remembered.
+
+`--yes` refuses on a dirty working tree. "One commit per group" would be untrue
+if unrelated work rode along, and reverting the group would then take that work
+with it.
+
+The operator procedure — reading a slate, approving part of it, and recovering
+from a failure mid-run — is the
+[reconciliation runbook](https://github.com/jwogrady/spark/blob/master/docs/ops/reconciliation-runbook.md)
+(developer-only).
+
 ### Exit codes
 
 | Exit | Meaning |
 | --- | --- |
 | `0` | nothing requires reconciliation |
-| `5` | at least one `DECISION-REQUIRED` item awaits human authority |
+| `5` | at least one `DECISION-REQUIRED` item awaits human authority, or an approval was refused |
 | `3` | some evidence could not be read; never a pass |
-| `1` | not inside a git repository |
+| `1` | not inside a git repository, or a group failed while applying |
 
 `--tsv` emits the header, every row, and a summary line that counts proposals
 and decisions **apart** — they are different asks.
