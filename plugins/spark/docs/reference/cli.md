@@ -279,6 +279,88 @@ One field answers whether anything must be reconciled *before* proceeding:
 `--tsv` emits the rows plus a `reconciliation` and a `verdict` line for
 mechanical consumption.
 
+## `spark reconcile [--tsv]`
+
+The reconciliation slice of Triage: turn the evidence `triage` established into a
+**reviewable slate**. It proposes, and applies nothing.
+
+```
+observe → classify → propose → [ approve → mutate ]
+                              ^ this verb stops here
+```
+
+### Two axes, deliberately separate
+
+Every finding carries an **evidence** state and a **disposition**, and they are
+different questions:
+
+| Column | Values | Asks |
+| --- | --- | --- |
+| `evidence` | `known`, `unread` | what could Spark actually read? |
+| `disposition` | `KEEP`, `REWRITE-COLLAPSE`, `DROP-ARCHIVE`, `DECISION-REQUIRED`, `-` | what is proposed? |
+| `authority` | `deterministic`, `human` | whose call is it? |
+
+**A row whose evidence is `unread` carries no disposition at all** — the column
+is `-`. Not `DECISION-REQUIRED`, which is a claim about authority; not `KEEP`,
+which is a claim about the artifact. Proposing a disposition for something Spark
+could not read is exactly the collapse this design exists to prevent: unknown is
+an evidence state, decision required is an authority state, and turning the
+first into the second is how missing evidence becomes a guessed decision.
+
+`deterministic` means an already-approved policy supplies the value, so Spark may
+act under its normal mutation contract. `human` means it may not.
+`DECISION-REQUIRED` narrows that further: not merely "a person must act" but
+"a person must **choose**".
+
+### What the slate reports
+
+`area | evidence | disposition | id | finding | action | risk | validation | authority`
+
+Findings are drawn from the authorities that already own them — the recorded
+intent, the governance engine's own rows, the merge graph, and milestone state.
+Nothing is re-derived here.
+
+- **recorded intent** — still names open work (`KEEP`), names only closed issues
+  (`DECISION-REQUIRED`: what comes next is yours), or names none explicitly.
+- **governance** — drift and missing declared surfaces are `REWRITE-COLLAPSE`
+  under `deterministic` authority, carried by the existing governance path
+  rather than reimplemented; judgment gaps are `DECISION-REQUIRED`.
+- **branch residue** — a branch **fully merged into trunk** is `DROP-ARCHIVE`:
+  its commits are in trunk, so the branch is a pointer and dropping it erases no
+  history. Unmerged work is never proposed, and trunk, release lines and
+  `gh-pages` are never proposed whatever the merge graph says.
+- **milestone residue** — an open milestone with no open issues.
+
+Every proposed removal or rewrite cites its evidence and names how to validate
+the result. **Cleanup never erases history merely because it is no longer
+current**, which is why a merged branch is proposed and an unmerged one is not.
+
+### Read-only
+
+`reconcile` deletes nothing, closes nothing, relabels nothing, assigns no
+priority, milestone or disposition, provisions nothing and commits nothing. The
+behavioural suite snapshots the working tree, every ref and the git object store
+across a real run, and separately proves no write-shaped GitHub call is made.
+
+### Exit codes
+
+| Exit | Meaning |
+| --- | --- |
+| `0` | nothing requires reconciliation |
+| `5` | at least one `DECISION-REQUIRED` item awaits human authority |
+| `3` | some evidence could not be read; never a pass |
+| `1` | not inside a git repository |
+
+`--tsv` emits the header, every row, and a summary line that counts proposals
+and decisions **apart** — they are different asks.
+
+### Where the vocabulary lives
+
+The four dispositions, the unread evidence state and the approval boundary are
+**core Spark's**. The audit companion may consume and extend them; core never
+depends on it, and a repository with only the core plugin installed produces a
+slate.
+
 ## `spark hub [--set <owner/repo|url|none>]`
 
 Reports the memory hub this project declares — the one repository designated
