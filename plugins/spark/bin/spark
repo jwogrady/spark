@@ -3564,7 +3564,17 @@ gov_label_rows() {
 # `category` or `docs-impact` is special-cased here; a family added as data is
 # checked the same way.
 #
-# <issues-tsv>: "<number><TAB><comma-joined labels><TAB><milestone or empty>"
+# <issues-tsv>: two record kinds, so a label name is never joined into a
+# delimited scalar it would then have to be split back out of:
+#
+#   issue<TAB><number><TAB><milestone or empty>
+#   label<TAB><number><TAB><name>
+#
+# One label record per label. A GitHub label may contain a comma as easily as a
+# space, so any in-field separator loses identity for some legal name; tab and
+# newline are the two characters a record cannot carry and a label cannot
+# contain, which is what makes this shape lossless rather than merely wider.
+# `tests/lib.sh:gov_iss` builds the pair, so no caller hand-writes it.
 gov_issue_rows() {
   GOV_MODEL="$1" GOV_ISS="$2" GOV_CATS="${3:-}" awk '
     BEGIN {
@@ -3586,10 +3596,28 @@ gov_issue_rows() {
         for (i in memof) if (memof[i] == "category") delete memof[i]
         for (i = 1; i <= nc; i++) if (cats[i] != "") memof[cats[i]] = "category"
       }
+      # TWO RECORD KINDS, so a label name never rides inside a delimited
+      # scalar:
+      #   issue <TAB> <num> <TAB> <milestone>
+      #   label <TAB> <num> <TAB> <name>
+      # A GitHub label may contain a comma as easily as a space, so joining the
+      # names and splitting them back was lossy whatever the separator. Tab and
+      # newline are the two characters a record cannot carry and a label cannot
+      # contain, which is what makes this shape lossless rather than merely
+      # wider.
       n = split(ENVIRON["GOV_ISS"], il, "\n")
       for (i = 1; i <= n; i++) {
+        split(il[i], lf, "\t")
+        if (lf[1] == "label" && lf[2] != "" && lf[3] != "") {
+          isslab[lf[2]] = isslab[lf[2]] SUBSEP lf[3]
+        }
+      }
+      for (i = 1; i <= n; i++) {
         split(il[i], f, "\t")
-        num = f[1]; if (num == "") continue
+        if (f[1] != "issue") continue
+        num = f[2]; if (num == "") continue
+        # The milestone moves to field 3 with the record kind in field 1.
+        f[3] = f[3]
         # MEMBER IDENTITY IS THE RECORD, not a token in a joined string. A
         # label may contain spaces, so accumulating matches into one
         # space-separated value and splitting it back counted `not planned` as
@@ -3597,7 +3625,7 @@ gov_issue_rows() {
         # violation. Three parallel structures instead, all keyed by the member
         # name itself: how many, which ones (for the message), and membership.
         delete cntn; delete cntv; delete hasv
-        nl = split(f[2], lab, ",")
+        nl = split(isslab[num], lab, SUBSEP)
         for (j = 1; j <= nl; j++) {
           if (lab[j] == "") continue
           if (lab[j] in memof) {
@@ -3613,7 +3641,7 @@ gov_issue_rows() {
         # decided the work happens would report every idea as a defect. A
         # CARDINALITY violation is reported either way — two categories is
         # wrong whether or not the work is scheduled.
-        active = (f[3] != "")
+        active = (f[3] != "")   # milestone, field 3 of the issue record
         buf = ""
         for (fi = 1; fi <= nf; fi++) {
           fm = order[fi]
@@ -3638,7 +3666,7 @@ gov_issue_rows() {
         # no disposition member at all. Every other family test here goes
         # through memof, and so does this one.
         has_disp = 0
-        nl2 = split(f[2], lab2, ",")
+        nl2 = split(isslab[num], lab2, SUBSEP)
         for (j = 1; j <= nl2; j++)
           if (lab2[j] != "" && (lab2[j] in memof) && memof[lab2[j]] == "disposition") has_disp = 1
         if (f[3] == "" && !has_disp)
@@ -3774,9 +3802,10 @@ gov_collect() {
   # prerequisite — so the edge probe below runs only for those, instead of once
   # per open issue whether or not it has one.
   if issues="$(gh api --paginate 'repos/{owner}/{repo}/issues?state=open&per_page=100' \
-      --jq '.[] | select(.pull_request == null)
-            | [.number, ([.labels[].name] | join(",")), (.milestone.title // ""),
-               (.issue_dependencies_summary.blocked_by // 0)] | @tsv' 2>/dev/null)"; then
+      --jq '.[] | select(.pull_request == null) | . as $i
+            | ([ "issue", ($i.number | tostring), ($i.milestone.title // ""),
+                 ($i.issue_dependencies_summary.blocked_by // 0 | tostring) ] | @tsv),
+              ( $i.labels[]? | [ "label", ($i.number | tostring), .name ] | @tsv )' 2>/dev/null)"; then
     issue_rows="$(printf '%s\n' "$issues" | awk -F'\t' 'NF { print $1 "\t" $2 "\t" $3 }')"
     gov_issue_rows "$model" "$issue_rows" "$taxo"
   else
@@ -3791,7 +3820,10 @@ gov_collect() {
   if [ -n "$issues" ]; then
     local blk probe_failed=0 nwo=""
     nwo="$(di_repo_nwo)" || nwo=""
-    while IFS=$'\t' read -r n labelcsv ms blk_n; do
+    while IFS=$'\t' read -r kind n ms blk_n; do
+      # Only issue records carry a blocked-by count; label records are the other
+      # half of the same stream.
+      [ "$kind" = "issue" ] || continue
       [ -n "$n" ] || continue
       case "$blk_n" in ''|0) continue ;; esac
       # Blockers may live in ANOTHER repository, and a bare number cannot tell
@@ -4612,23 +4644,68 @@ cmd_reconcile() {
   return 0
 }
 
-# current_milestone — the open milestone with open issues whose title sorts
-# first by version. This is the one answer to "which course is currently
-# running", and it was inline in `next`. `course` needs the same answer, and a
-# second implementation of it would be a second opinion about what the project
-# is currently doing.
-current_milestone() {
+# milestone_inventory — every open milestone as `title <TAB> open_issues`.
+#
+# ONE CAPTURE, and it FAILS LOUDLY. Reading the milestones twice — once for the
+# active one, once for the completed ones — meant a request that failed between
+# the two produced a coherent-looking answer assembled from different moments.
+# Worse, a failed request and a repository with no milestones both came back
+# empty, so `course` reported PLAN A NEW COURSE at exit 0 after the read had
+# failed: a confident strategic recommendation built on evidence that was never
+# read. Returning non-zero is what lets a caller tell those apart.
+milestone_inventory() {
   gh api --paginate 'repos/{owner}/{repo}/milestones?state=open' \
-    --jq '.[] | select(.open_issues > 0) | .title' 2>/dev/null \
-    | LC_ALL=C sort -V | head -n1
+    --jq '.[] | [.title, .open_issues] | @tsv' 2>/dev/null
 }
 
-# completed_milestones — open milestones with no open issues left. The work is
-# done and the release boundary is not closed, which is a course in its own
-# right rather than a defect.
+# priority_members <model> — the priority family's members, ONE PER LINE, in
+# declaration order.
+#
+# A named function rather than an inline pipeline, because the serialisation is
+# the thing that broke: space-joining them and iterating on whitespace split a
+# multi-word member in two, so a valid governed slate was rejected here after it
+# had passed every other consumer. Inline, it could only be tested by a replica
+# of itself — and a replica passes while the original is wrong, which is exactly
+# how the defect survived a suite that claimed the consumers agreed.
+priority_members() {
+  printf '%s\n' "$1" | awk -F'\t' '$1 == "member" && $2 == "priority" { print $3 }'
+}
+
+# The two PURE PROJECTIONS over an inventory. One rule, one place, whoever asks.
+#
+# Capturing once and then re-deriving the selection inline was how `course`
+# ended up with its own copy of "which milestone is running" — the second
+# implementation `current_milestone` was factored out to prevent. Capture and
+# projection are separate concerns and are separate functions: the capture may
+# fail, the projection cannot.
+
+# active_in_inventory <inventory> — the open milestone with open issues whose
+# title sorts first by version.
+active_in_inventory() {
+  printf '%s\n' "$1" | awk -F'\t' 'NF && $2 + 0 > 0 { print $1 }' | LC_ALL=C sort -V | head -n1
+}
+
+# completed_in_inventory <inventory> — open milestones with no open issues left.
+# The work is done and the release boundary is not closed, which is a course in
+# its own right rather than a defect.
+completed_in_inventory() {
+  printf '%s\n' "$1" | awk -F'\t' 'NF && $2 + 0 == 0 { print $1 }' | LC_ALL=C sort -V
+}
+
+# current_milestone [inventory] — the one answer to "which course is currently
+# running". Captures only when a caller has not already done so, so a caller
+# holding one inventory never triggers a second read of a moving surface.
+current_milestone() {
+  local inv="${1-}"
+  if [ "$#" -eq 0 ]; then inv="$(milestone_inventory)" || return 1; fi
+  active_in_inventory "$inv"
+}
+
+# completed_milestones [inventory] — same contract, other projection.
 completed_milestones() {
-  gh api --paginate 'repos/{owner}/{repo}/milestones?state=open' \
-    --jq '.[] | select(.open_issues == 0) | .title' 2>/dev/null | LC_ALL=C sort -V
+  local inv="${1-}"
+  if [ "$#" -eq 0 ]; then inv="$(milestone_inventory)" || return 1; fi
+  completed_in_inventory "$inv"
 }
 
 # ---------------------------------------------------------------------------
@@ -4670,9 +4747,21 @@ course_evidence() {
     printf 'readable\tno\treason\tcourse derivation reads live milestone state and needs an authenticated gh\n'
     return 0
   fi
+  # Captured ONCE. Both facts are derived from the same successful read, so they
+  # describe one moment; and a failed read is reported as unreadable rather than
+  # as a repository with no milestones.
+  local inv
+  if ! inv="$(milestone_inventory)"; then
+    printf 'readable\tno\treason\tthe milestone inventory could not be read, so no course rests on it\n'
+    return 0
+  fi
   printf 'readable\tyes\n'
-  printf 'active\t%s\n' "$(current_milestone)"
-  printf 'completed\t%s\n' "$(completed_milestones | awk 'NF { printf "%s%s", (n++ ? ", " : ""), $0 }')"
+  # The SHARED projections, on the inventory captured above. Not a local copy of
+  # the selection rules — `next` and `course` must give one answer, and they do
+  # that by running the same code, not by agreeing to.
+  printf 'active\t%s\n' "$(current_milestone "$inv")"
+  printf 'completed\t%s\n' \
+    "$(completed_milestones "$inv" | awk 'NF { printf "%s%s", (n++ ? ", " : ""), $0 }')"
 
   # Consumed, not rediscovered.
   trows="$(triage_rows "$root")"
@@ -7315,12 +7404,16 @@ cmd_state() {
 #   issue <TAB> n <TAB> order <TAB> cats <TAB> prios <TAB> prio <TAB> blocked <TAB> title
 #       order   0-based index in the gate's sub-issue list, or "-" when absent
 #       cats    count of issue.taxonomy category labels carried
-#       prios   count of P0-P3 labels carried
+#       prios   count of PRIORITY-FAMILY labels carried, whatever the model
+#               declares them to be
 #       prio    the priority token, or "-"
 #       blocked count of OPEN native blockers, or "?" when unreadable
 #   cycle <TAB> <n> <TAB> <path>
 #   orderdrift <TAB> <kind> <TAB> <detail>
 #   ordercount <TAB> <n>   how many issues the order record holds
+#   priofamily <TAB> <name> <TAB> <members>
+#       the resolved priority family, so a diagnostic names what the model
+#       declares rather than a hard-coded P0-P3
 #
 # Exits: 0 a selection was made / 1 nothing is eligible (a DETERMINATE answer —
 # every candidate is genuinely blocked) / 3 not assessed (the slate is not
@@ -7328,6 +7421,10 @@ cmd_state() {
 # reported as "could not tell", and an uninterpretable slate never yields a
 # pick.
 next_select() {
+  # The priority family is model data, so the diagnostic names what the model
+  # actually declares. Saying "P0-P3" was a second copy of a rule the schema
+  # owns, and it lied to any project that renamed or extended the family.
+  local priolabel=""
   local kind a b c d e f g
   local gaps="" gapn=0 cand="" cands=0 blocked_lines="" blockedn=0 ordertotal=""
   local n order cats prios prio blocked title
@@ -7342,6 +7439,9 @@ next_select() {
         gap "not assessed: the delivery-order record $a — $b" ;;
       ordercount)
         case "$a" in ''|*[!0-9]*) ;; *) ordertotal="$a" ;; esac ;;
+      priofamily)
+        # What the resolved model calls this family, and what it declares in it.
+        priolabel="$a${b:+ ($b)}" ;;
       issue)
         n="$a" order="$b" cats="$c" prios="$d" prio="$e" blocked="$f" title="$g"
         if [ "$cats" != "1" ]; then
@@ -7349,7 +7449,7 @@ next_select() {
           continue
         fi
         if [ "$prios" != "1" ]; then
-          gap "not assessed: #$n carries $prios P0-P3 labels — exactly one is required"
+          gap "not assessed: #$n carries $prios ${priolabel:-priority} labels — exactly one is required"
           continue
         fi
         case "$blocked" in
@@ -7561,11 +7661,23 @@ cmd_next() {
     fi
   fi
 
-  # One call, gh's embedded jq: number, comma-joined labels, title.
   local rows
+  # ONE RECORD PER LABEL. Joining the names into a delimited scalar and
+  # splitting them back is not lossless whatever the delimiter: a GitHub label
+  # may contain a comma as easily as a space, so the identity was already
+  # flattened before the loop that reads it ever ran. Changing the delimiter
+  # only moves which names break.
+  #
+  #   issue <TAB> <n> <TAB> <title>
+  #   label <TAB> <n> <TAB> <name>
+  #
+  # Tab and newline are the two characters a row cannot carry, and a GitHub
+  # label cannot contain either — so this shape is lossless for every name that
+  # can exist, rather than for every name we happened to think of.
   if ! rows="$(gh issue list --milestone "$ms" --state open --limit 200 \
       --json number,title,labels \
-      --jq '.[] | [.number, ([.labels[].name] | join(",")), .title] | @tsv' 2>/dev/null)"; then
+      --jq '.[] | . as $i | ([ "issue", ($i.number | tostring), $i.title ] | @tsv),
+                            ( $i.labels[]? | [ "label", ($i.number | tostring), .name ] | @tsv )' 2>/dev/null)"; then
     yellow "not assessed: this milestone's issues could not be read — never assumed empty"
     return 3
   fi
@@ -7601,8 +7713,10 @@ cmd_next() {
     return 3
   fi
   gov_model_n="$(resolve_governance 2>/dev/null)"
-  prio_members="$(printf '%s\n' "$gov_model_n" \
-    | awk -F'\t' '$1 == "member" && $2 == "priority" { printf "%s%s", s, $3; s = " " }')"
+  # ONE MEMBER PER LINE. Space-joining them and iterating on whitespace split a
+  # multi-word member in two, exactly as it did in the validators, so a valid
+  # governed slate was rejected here after it passed everywhere else.
+  prio_members="$(priority_members "$gov_model_n")"
   # No hard-coded fallback. `P0 P1 P2 P3` here was a second copy of the same rule
   # and it silently took over whenever the model was unusable — the identical
   # defect one level down.
@@ -7619,11 +7733,19 @@ cmd_next() {
     return 3
   fi
 
+  # The priority family is MODEL data and has nothing to do with whether a
+  # delivery-order gate exists. Emitting it inside the gate branch meant a
+  # milestone with no gate lost the family name and its diagnostic fell back to
+  # a generic word — a coupling between two unrelated facts.
+  ev="${ev}priofamily	priority	$(printf '%s\n' "$prio_members" | awk 'NF { printf "%s%s", (n++ ? ", " : ""), $0 }')
+"
+
   # The gate is the milestone's release-readiness container: the open issue
   # carrying sub-issues. It is never itself selectable (a parent closes last),
   # and its sub-issue order IS the delivery-order authority.
   gate=""; order_list=""
-  while IFS=$'\t' read -r n labelcsv title; do
+  while IFS=$'\t' read -r kind n title; do
+    [ "$kind" = "issue" ] || continue
     [ -n "$n" ] || continue
     local subs
     subs="$(gh api "repos/{owner}/{repo}/issues/$n/sub_issues" --jq '.[].number' 2>/dev/null)" || subs=""
@@ -7639,20 +7761,34 @@ EOF_ROWS
 "
   fi
 
-  while IFS=$'\t' read -r n labelcsv title; do
+  while IFS=$'\t' read -r kind n title; do
+    [ "$kind" = "issue" ] || continue
     [ -n "$n" ] || continue
     [ "$n" = "$gate" ] && continue
-    local cats=0 prios=0 prio="-" order blockers l t prank=99
-    for l in $(printf '%s' "$labelcsv" | tr ',' ' '); do
+    local cats=0 prios=0 prio="-" order blockers l t prank=99 lkind ln
+    # This issue's labels, each still whole because each arrived as its own
+    # record. Nothing is split here, so nothing depends on what a name contains.
+    while IFS=$'\t' read -r lkind ln l; do
+      [ "$lkind" = "label" ] || continue
+      [ "$ln" = "$n" ] || continue
+      [ -n "$l" ] || continue
+      # Categories come from the space-separated `issue.taxonomy` scalar, which
+      # cannot express a member containing a space; priorities come from the
+      # model, which can.
       for t in $taxo; do [ "$l" = "$t" ] && cats=$((cats+1)); done
       # The rank is the member's position in the family's declaration order,
       # which is what the schema calls the ordering semantics.
       local pi=0
-      for t in $prio_members; do
+      while IFS= read -r t; do
+        [ -n "$t" ] || continue
         pi=$((pi+1))
         [ "$l" = "$t" ] && { prios=$((prios+1)); prio="$l"; prank="$pi"; }
-      done
-    done
+      done <<PRIOEOF
+$prio_members
+PRIOEOF
+    done <<LABELEOF
+$rows
+LABELEOF
     order="$(printf '%s\n' "$order_list" | grep -nx -- "$n" 2>/dev/null | cut -d: -f1)" || order=""
     if [ -n "$order" ]; then order=$((order - 1)); else order="-"; fi
     if blockers="$(gh api "repos/{owner}/{repo}/issues/$n/dependencies/blocked_by" \
@@ -7677,13 +7813,15 @@ EOF_ROWS2
   local sn scat sthemes l t
   sn="$(printf '%s' "$sel_out" | awk '/^selected/{print $2}' | tr -d '#')"
   scat=""; sthemes=""
-  while IFS=$'\t' read -r n labelcsv title; do
+  # The selected issue's label records, each whole. Routing reads the same
+  # structural stream selection does, so a label name never has to survive a
+  # round trip through a delimited scalar.
+  while IFS=$'\t' read -r kind n l; do
+    [ "$kind" = "label" ] || continue
     [ "$n" = "$sn" ] || continue
-    for l in $(printf '%s' "$labelcsv" | tr ',' ' '); do
-      for t in $taxo; do [ "$l" = "$t" ] && scat="$l"; done
-      case "$l" in decision|human-approval) sthemes="${sthemes:+$sthemes,}$l" ;; esac
-    done
-    break
+    [ -n "$l" ] || continue
+    for t in $taxo; do [ "$l" = "$t" ] && scat="$l"; done
+    case "$l" in decision|human-approval) sthemes="${sthemes:+$sthemes,}$l" ;; esac
   done <<EOF_ROWS3
 $rows
 EOF_ROWS3
@@ -7703,8 +7841,14 @@ EOF_ROWS3
     # Every issue in this sweep belongs to $ms by construction, so the
     # milestone column is known without another call. Passed with -v rather
     # than interpolated: a title carries spaces and punctuation.
+    # The selected issue's records, in the same structural shape gov_issue_rows
+    # consumes: one issue record carrying the milestone, plus its label records
+    # unchanged. Rebuilding a delimited label scalar here would reintroduce the
+    # flattening the read was restructured to remove.
     sel_row="$(printf '%s\n' "$rows" \
-      | awk -F'\t' -v n="$sn" -v m="$ms" '$1 == n { print $1 "\t" $2 "\t" m; exit }')"
+      | awk -F'\t' -v n="$sn" -v m="$ms" '
+          $1 == "issue" && $2 == n { print "issue\t" n "\t" m }
+          $1 == "label" && $2 == n { print }')"
     meta_rows="$(gov_issue_rows "$gov_model_n" "$sel_row" "$taxo")"
     mech_meta="$(gov_mechanical_rows "$meta_rows")"
     judg_meta="$(gov_judgment_rows "$meta_rows")"

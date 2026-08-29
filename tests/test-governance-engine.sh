@@ -75,14 +75,14 @@ iss() { gov_issue_rows "$model" "$1"; }
 # A clean, fully-declared active issue reports itself CORRECT rather than
 # reporting nothing: emitting no row made the summary say "=0", which reads as
 # "not one issue is correct" instead of "every issue is".
-clean="$(printf '10\tfeature,P1,docs-impact:none\tv0.21 — Governance as schema\n')"
+clean="$(gov_iss 10 "v0.21 — Governance as schema" "feature" "P1" "docs-impact:none")"
 out="$(iss "$clean")"
 assert_eq "a fully-declared active issue is reported correct" "=" "$(row "$out" "#10")"
 assert_eq "and raises no finding" "" \
   "$(printf '%s\n' "$out" | awk -F'\t' '$2 == "!"')"
 
 # Two categories is invalid whether or not the work is scheduled.
-two="$(printf '11\tfeature,bug,docs-impact:none\tv0.21 — Governance as schema\n')"
+two="$(gov_iss 11 "v0.21 — Governance as schema" "feature" "bug" "docs-impact:none")"
 out="$(iss "$two")"
 assert_contains "two categories is reported" "category allows exactly-one but 2 are set" "$out"
 # Comma-separated, not space-separated: a space-joined list cannot be read back
@@ -94,16 +94,16 @@ case "$out" in
   *"should be"*|*"use feature"*|*"correct label is"*) bad "Spark must not choose which category is meant" ;;
   *) ok ;;
 esac
-two_backlog="$(printf '12\tfeature,bug,backlog\t\n')"
+two_backlog="$(gov_iss 12 "" "feature" "bug" "backlog")"
 assert_contains "two categories is invalid in the backlog too" \
   "exactly-one but 2 are set" "$(iss "$two_backlog")"
 
 # A required family is demanded of ACTIVE work — work with a release decision.
-noimpact_active="$(printf '13\tfeature,P1\tv0.21 — Governance as schema\n')"
+noimpact_active="$(gov_iss 13 "v0.21 — Governance as schema" "feature" "P1")"
 assert_contains "an active issue must declare a required family" \
   "docs-impact is required and none is declared" "$(iss "$noimpact_active")"
 # ...but not of an idea nobody has scheduled yet.
-noimpact_backlog="$(printf '14\tfeature,backlog\t\n')"
+noimpact_backlog="$(gov_iss 14 "" "feature" "backlog")"
 out="$(iss "$noimpact_backlog")"
 case "$out" in
   *"docs-impact is required"*) bad "a backlog issue must not be failed for an undecided disposition" ;;
@@ -111,24 +111,24 @@ case "$out" in
 esac
 
 # The exclusive member is honoured generically.
-excl="$(printf '15\tfeature,docs-impact:none,docs-impact:reference\tv0.21 — Governance as schema\n')"
+excl="$(gov_iss 15 "v0.21 — Governance as schema" "feature" "docs-impact:none" "docs-impact:reference")"
 assert_contains "an exclusive value combined with another is reported" \
   "is exclusive but is combined with another" "$(iss "$excl")"
 
 # Every issue needs a release disposition: a milestone, or an explicit backlog.
-nodisp="$(printf '16\tfeature,docs-impact:none\t\n')"
+nodisp="$(gov_iss 16 "" "feature" "docs-impact:none")"
 assert_contains "no release decision is reported" \
   "no release disposition" "$(iss "$nodisp")"
 assert_eq "a backlog label is a release decision" "" \
-  "$(iss "$(printf '17\tfeature,backlog\t\n')" | grep 'release disposition' || true)"
+  "$(iss "$(gov_iss 17 "" "feature" "backlog")" | grep 'release disposition' || true)"
 # Membership, not a substring: a label that merely CONTAINS the word must not
 # satisfy the decision on an issue carrying no disposition member at all.
 assert_contains "a backlog-like label does not satisfy the disposition" \
-  "no release disposition" "$(iss "$(printf '19\tfeature,needs-backlog\t\n')")"
+  "no release disposition" "$(iss "$(gov_iss 19 "" "feature" "needs-backlog")")"
 
 # An optional family missing is never a finding.
 assert_eq "an optional family may be absent" "" \
-  "$(iss "$(printf '18\tfeature,docs-impact:none\tv0.21 — Governance as schema\n')" \
+  "$(iss "$(gov_iss 18 "v0.21 — Governance as schema" "feature" "docs-impact:none")" \
     | awk -F'\t' '$2 == "!"')"
 
 # The fallback description for a member the model does not declare has ONE

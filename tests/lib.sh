@@ -146,3 +146,15 @@ assert_no_constellation_names() {
     ok
   fi
 }
+
+# gov_iss <num> <milestone> <label>... — the issue/label record pair
+# gov_issue_rows consumes. A label name is never joined into a delimited
+# scalar: it may contain a comma as easily as a space, so each one is its own
+# record. Tests build rows through this rather than hand-writing the shape,
+# which is what keeps the shape in one place.
+gov_iss() {
+  local num="$1" ms="$2"; shift 2
+  printf 'issue\t%s\t%s\n' "$num" "$ms"
+  local l
+  for l in "$@"; do printf 'label\t%s\t%s\n' "$num" "$l"; done
+}

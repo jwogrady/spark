@@ -123,11 +123,11 @@ clean
 model="$(resolve_governance)"
 assert_contains "required is enforced for a data-only family" \
   "surface-risk is required" \
-  "$(gov_issue_rows "$model" "$(printf '9\tfeature,docs-impact:none\tv1\n')" "$CATS")"
+  "$(gov_issue_rows "$model" "$(gov_iss 9 "v1" "feature" "docs-impact:none")" "$CATS")"
 assert_contains "so is its cardinality" "surface-risk allows exactly-one" \
-  "$(gov_issue_rows "$model" "$(printf '9\tfeature,risk:low,risk:high,docs-impact:none\tv1\n')" "$CATS")"
+  "$(gov_issue_rows "$model" "$(gov_iss 9 "v1" "feature" "risk:low" "risk:high" "docs-impact:none")" "$CATS")"
 assert_contains "and so is its exclusivity" "risk:none is exclusive" \
-  "$(gov_issue_rows "$model" "$(printf '9\tfeature,risk:none,risk:low,docs-impact:none\tv1\n')" "$CATS")"
+  "$(gov_issue_rows "$model" "$(gov_iss 9 "v1" "feature" "risk:none" "risk:low" "docs-impact:none")" "$CATS")"
 clean
 
 # ============ the falsification does not reproduce ==========================
@@ -148,7 +148,7 @@ assert_eq "and the override is what is in force" docs-impact:companion "$first"
 combo="docs-impact:companion,docs-impact:reference"
 assert_contains "gov_issue_rows judges the resolved rule" \
   "docs-impact:companion is exclusive" \
-  "$(gov_issue_rows "$model" "$(printf '9\tfeature,%s\tv1\n' "$combo")" "$CATS")"
+  "$(gov_issue_rows "$model" "$(gov_iss 9 v1 feature docs-impact:companion docs-impact:reference)" "$CATS")"
 mkdir -p "$WORK/pb"; echo body > "$WORK/pb/a.md"
 printf 'issue\tA\tOne\tfeature,%s\t\t%s\n' "$combo" "$WORK/pb/a.md" > "$WORK/pl.tsv"
 assert_contains "plan_schema_rows judges the same one" \

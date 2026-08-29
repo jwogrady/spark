@@ -140,14 +140,14 @@ clean
 } > .spark/governance.tsv
 pmodel="$(resolve_governance)"
 
-prefix_rows="$(gov_issue_rows "$pmodel" "$(printf '9\tmine:noneish,mine:other\tv1.0\n')" "")"
+prefix_rows="$(gov_issue_rows "$pmodel" "$(gov_iss 9 "v1.0" "mine:noneish" "mine:other")" "")"
 case "$prefix_rows" in
   *"is exclusive but is combined"*) bad "a prefix of the exclusive member is not the member" ;;
   *) ok ;;
 esac
 assert_contains "and a genuine violation is still caught" \
   "mine:none is exclusive but is combined" \
-  "$(gov_issue_rows "$pmodel" "$(printf '10\tmine:none,mine:other\tv1.0\n')" "")"
+  "$(gov_issue_rows "$pmodel" "$(gov_iss 10 "v1.0" "mine:none" "mine:other")" "")"
 
 mkdir -p "$WORK/pb"; echo body > "$WORK/pb/a.md"
 printf 'issue\tA\tOne\tmine:noneish,mine:other\t\t%s\n' "$WORK/pb/a.md" > "$WORK/pp.tsv"
@@ -190,7 +190,7 @@ assert_eq "and it is the resolved winner" "docs-impact:companion" "$first"
 combo="docs-impact:companion,docs-impact:reference"
 assert_contains "gov_issue_rows enforces the resolved member" \
   "docs-impact:companion is exclusive" \
-  "$(gov_issue_rows "$model" "$(printf '9\tfeature,%s\tv1.0\n' "$combo")" "feature")"
+  "$(gov_issue_rows "$model" "$(gov_iss 9 v1.0 feature docs-impact:companion docs-impact:reference)" "feature")"
 
 art="$WORK/plan.tsv"; mkdir -p "$WORK/bodies"; echo body > "$WORK/bodies/a.md"
 printf 'issue\tA\tOne\tfeature,%s\t\t%s\n' "$combo" "$WORK/bodies/a.md" > "$art"

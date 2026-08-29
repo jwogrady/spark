@@ -120,6 +120,13 @@ case "$OUT" in
 esac
 
 # ============ 5. NOT ASSESSED is an evidence state, not an outcome ========
+# UNREADABILITY HAS MORE THAN ONE SHAPE, and the earlier version of this section
+# only tested the easy one. Removing gh from PATH takes an early branch; an
+# authenticated gh whose requests FAIL takes the ordinary path with empty
+# results, and that shape reported PLAN A NEW COURSE at exit 0 — a confident
+# strategic recommendation built on evidence that was never read.
+#
+# Both shapes are exercised below, and each must reach NOT ASSESSED.
 nogh="$WORK/nogh"; mkdir -p "$nogh"
 for t in $tools; do
   src="$(command -v "$t" 2>/dev/null || true)"
@@ -137,6 +144,77 @@ esac
 # ...nor as a negative fact about the repository.
 case "$OUT" in
   *"PLAN A NEW COURSE"*) bad "an unreadable milestone surface was read as having none" ;;
+  *) ok ;;
+esac
+
+# --- shape two: gh present and authenticated, every request failing.
+failgh="$WORK/failgh"; mkdir -p "$failgh"
+for t in $tools; do
+  src="$(command -v "$t" 2>/dev/null || true)"
+  [ -n "$src" ] && ln -sf "$src" "$failgh/$t" 2>/dev/null || true
+done
+cat > "$failgh/gh" <<'GHEOF'
+#!/usr/bin/env bash
+case "${1:-}" in auth) exit 0 ;; esac
+echo "API rate limit exceeded" >&2
+exit 1
+GHEOF
+chmod +x "$failgh/gh"
+RC=0; OUT="$(cd "$r" && env PATH="$failgh" "$SPARK" course 2>&1)" || RC=$?
+assert_rc "an authenticated reader whose requests fail is NOT ASSESSED" 3 "$RC"
+assert_contains "named as such" "Course: NOT ASSESSED" "$OUT"
+# The specific inversion #594 reported: a failed read must never become the
+# claim that the repository has no milestones.
+case "$OUT" in
+  *"PLAN A NEW COURSE"*) bad "a failed milestone read was reported as having no milestones" ;;
+  *) ok ;;
+esac
+case "$OUT" in
+  *"HUMAN DECISION REQUIRED"*) bad "a failed read was reported as an owed decision" ;;
+  *) ok ;;
+esac
+# ...and no course may be asserted at exit 0 on evidence that was not read.
+if [ "$RC" -eq 0 ]; then bad "a course was asserted at exit 0 after the read failed"; else ok; fi
+
+# --- the two milestone facts come from ONE captured inventory.
+#
+# Counting reads would be wrong: the reconciliation slate legitimately reads
+# milestones for its own residue finding. The PROPERTY is that course's active
+# and completed facts describe ONE moment, so the stub below answers differently
+# on each call. Derived from a single capture, both facts come from the first
+# answer and the verdict is the ambiguity. Derived from separate reads, the
+# completed fact would come from the second answer, the ambiguity would vanish,
+# and the run would report a confident CONTINUE assembled from two moments.
+chggh="$WORK/chggh"; mkdir -p "$chggh"
+for t in $tools; do
+  src="$(command -v "$t" 2>/dev/null || true)"
+  [ -n "$src" ] && ln -sf "$src" "$chggh/$t" 2>/dev/null || true
+done
+printf '[{"title":"v0.9","open_issues":3},{"title":"v1.0","open_issues":0}]' > "$chggh/first.json"
+printf '[{"title":"v0.9","open_issues":3}]' > "$chggh/rest.json"
+cat > "$chggh/gh" <<'GHEOF'
+#!/usr/bin/env bash
+case "${1:-}" in auth) exit 0 ;; esac
+jqx=""; prev=""
+for a in "$@"; do [ "$prev" = "--jq" ] && jqx="$a"; prev="$a"; done
+for a in "$@"; do
+  case "$a" in
+    *milestones*)
+      d="$(dirname "$0")"
+      if [ -f "$MSFLAG" ]; then f="$d/rest.json"; else f="$d/first.json"; : > "$MSFLAG"; fi
+      if [ -n "$jqx" ]; then jq -r "$jqx" "$f"; else cat "$f"; fi
+      exit 0 ;;
+  esac
+done
+exit 0
+GHEOF
+chmod +x "$chggh/gh"
+export MSFLAG="$WORK/ms.flag"; rm -f "$MSFLAG"
+RC=0; OUT="$(cd "$r" && env PATH="$chggh" MSFLAG="$MSFLAG" "$SPARK" course 2>&1)" || RC=$?
+assert_contains "both milestone facts come from one captured moment" \
+  "HUMAN DECISION REQUIRED" "$OUT"
+case "$OUT" in
+  *"CONTINUE CURRENT COURSE"*) bad "the completed fact came from a later read than the active one" ;;
   *) ok ;;
 esac
 
