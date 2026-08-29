@@ -4612,14 +4612,41 @@ cmd_reconcile() {
   return 0
 }
 
-# current_milestone — the open milestone with open issues whose title sorts
-# first by version. This is the one answer to "which course is currently
-# running", and it was inline in `next`. `course` needs the same answer, and a
-# second implementation of it would be a second opinion about what the project
-# is currently doing.
-current_milestone() {
+# milestone_inventory — every open milestone as `title <TAB> open_issues`.
+#
+# ONE CAPTURE, and it FAILS LOUDLY. Reading the milestones twice — once for the
+# active one, once for the completed ones — meant a request that failed between
+# the two produced a coherent-looking answer assembled from different moments.
+# Worse, a failed request and a repository with no milestones both came back
+# empty, so `course` reported PLAN A NEW COURSE at exit 0 after the read had
+# failed: a confident strategic recommendation built on evidence that was never
+# read. Returning non-zero is what lets a caller tell those apart.
+milestone_inventory() {
   gh api --paginate 'repos/{owner}/{repo}/milestones?state=open' \
-    --jq '.[] | select(.open_issues > 0) | .title' 2>/dev/null \
+    --jq '.[] | [.title, .open_issues] | @tsv' 2>/dev/null
+}
+
+# priority_members <model> — the priority family's members, ONE PER LINE, in
+# declaration order.
+#
+# A named function rather than an inline pipeline, because the serialisation is
+# the thing that broke: space-joining them and iterating on whitespace split a
+# multi-word member in two, so a valid governed slate was rejected here after it
+# had passed every other consumer. Inline, it could only be tested by a replica
+# of itself — and a replica passes while the original is wrong, which is exactly
+# how the defect survived a suite that claimed the consumers agreed.
+priority_members() {
+  printf '%s\n' "$1" | awk -F'\t' '$1 == "member" && $2 == "priority" { print $3 }'
+}
+
+# current_milestone — the open milestone with open issues whose title sorts
+# first by version. The one answer to "which course is currently running",
+# derived from the captured inventory so `next` and `course` cannot disagree.
+# Propagates the read failure rather than flattening it to "none".
+current_milestone() {
+  local inv
+  inv="$(milestone_inventory)" || return 1
+  printf '%s\n' "$inv" | awk -F'\t' 'NF && $2 + 0 > 0 { print $1 }' \
     | LC_ALL=C sort -V | head -n1
 }
 
@@ -4627,8 +4654,9 @@ current_milestone() {
 # done and the release boundary is not closed, which is a course in its own
 # right rather than a defect.
 completed_milestones() {
-  gh api --paginate 'repos/{owner}/{repo}/milestones?state=open' \
-    --jq '.[] | select(.open_issues == 0) | .title' 2>/dev/null | LC_ALL=C sort -V
+  local inv
+  inv="$(milestone_inventory)" || return 1
+  printf '%s\n' "$inv" | awk -F'\t' 'NF && $2 + 0 == 0 { print $1 }' | LC_ALL=C sort -V
 }
 
 # ---------------------------------------------------------------------------
@@ -4670,9 +4698,20 @@ course_evidence() {
     printf 'readable\tno\treason\tcourse derivation reads live milestone state and needs an authenticated gh\n'
     return 0
   fi
+  # Captured ONCE. Both facts are derived from the same successful read, so they
+  # describe one moment; and a failed read is reported as unreadable rather than
+  # as a repository with no milestones.
+  local inv
+  if ! inv="$(milestone_inventory)"; then
+    printf 'readable\tno\treason\tthe milestone inventory could not be read, so no course rests on it\n'
+    return 0
+  fi
   printf 'readable\tyes\n'
-  printf 'active\t%s\n' "$(current_milestone)"
-  printf 'completed\t%s\n' "$(completed_milestones | awk 'NF { printf "%s%s", (n++ ? ", " : ""), $0 }')"
+  printf 'active\t%s\n' \
+    "$(printf '%s\n' "$inv" | awk -F'\t' 'NF && $2 + 0 > 0 { print $1 }' | LC_ALL=C sort -V | head -n1)"
+  printf 'completed\t%s\n' \
+    "$(printf '%s\n' "$inv" | awk -F'\t' 'NF && $2 + 0 == 0 { print $1 }' | LC_ALL=C sort -V \
+       | awk 'NF { printf "%s%s", (n++ ? ", " : ""), $0 }')"
 
   # Consumed, not rediscovered.
   trows="$(triage_rows "$root")"
@@ -7601,8 +7640,10 @@ cmd_next() {
     return 3
   fi
   gov_model_n="$(resolve_governance 2>/dev/null)"
-  prio_members="$(printf '%s\n' "$gov_model_n" \
-    | awk -F'\t' '$1 == "member" && $2 == "priority" { printf "%s%s", s, $3; s = " " }')"
+  # ONE MEMBER PER LINE. Space-joining them and iterating on whitespace split a
+  # multi-word member in two, exactly as it did in the validators, so a valid
+  # governed slate was rejected here after it passed everywhere else.
+  prio_members="$(priority_members "$gov_model_n")"
   # No hard-coded fallback. `P0 P1 P2 P3` here was a second copy of the same rule
   # and it silently took over whenever the model was unusable — the identical
   # defect one level down.
@@ -7643,16 +7684,28 @@ EOF_ROWS
     [ -n "$n" ] || continue
     [ "$n" = "$gate" ] && continue
     local cats=0 prios=0 prio="-" order blockers l t prank=99
-    for l in $(printf '%s' "$labelcsv" | tr ',' ' '); do
+    # Split on the COMMA boundary only. `tr ',' ' '` followed by word splitting
+    # turned one label named `top urgent` into two, so a single governed member
+    # was counted twice and a valid issue reported as carrying two priorities.
+    while IFS= read -r l; do
+      [ -n "$l" ] || continue
+      # Categories come from the space-separated `issue.taxonomy` scalar, which
+      # cannot express a member containing a space; priorities come from the
+      # model, which can.
       for t in $taxo; do [ "$l" = "$t" ] && cats=$((cats+1)); done
       # The rank is the member's position in the family's declaration order,
       # which is what the schema calls the ordering semantics.
       local pi=0
-      for t in $prio_members; do
+      while IFS= read -r t; do
+        [ -n "$t" ] || continue
         pi=$((pi+1))
         [ "$l" = "$t" ] && { prios=$((prios+1)); prio="$l"; prank="$pi"; }
-      done
-    done
+      done <<PRIOEOF
+$prio_members
+PRIOEOF
+    done <<LABELEOF
+$(printf '%s' "$labelcsv" | tr ',' '\n')
+LABELEOF
     order="$(printf '%s\n' "$order_list" | grep -nx -- "$n" 2>/dev/null | cut -d: -f1)" || order=""
     if [ -n "$order" ]; then order=$((order - 1)); else order="-"; fi
     if blockers="$(gh api "repos/{owner}/{repo}/issues/$n/dependencies/blocked_by" \
