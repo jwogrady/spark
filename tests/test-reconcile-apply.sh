@@ -81,11 +81,21 @@ done
 printf '#!/usr/bin/env bash\ncase "${1:-}" in auth) exit 1 ;; esac\necho closed\n' > "$cgh/gh"
 chmod +x "$cgh/gh"
 head_before="$(git -C "$r" rev-parse HEAD)"
-out="$(cd "$r" && env PATH="$cgh" "$SPARK" reconcile --approve intent:state.json --yes --allow-destructive 2>&1)" || true
-assert_contains "a decision is refused however it is approved" "not Spark's to carry out" "$out"
+out="$(cd "$r" && env PATH="$cgh" "$SPARK" reconcile --approve intent:state.json --yes 2>&1)" || true
+assert_contains "a decision is refused when approved" "not Spark's to carry out" "$out"
 assert_contains "and says no flag changes that" "No flag makes it applicable" "$out"
 assert_eq "and nothing was committed for it" "$head_before" "$(git -C "$r" rev-parse HEAD)"
 assert_contains "the recorded intent is unchanged" "finish #4242" "$(cat "$r/.spark/state.json")"
+
+# NO FLAG COMBINATION promotes a non-revertible finding into an applied group.
+# The escape hatch that used to exist is gone, and an invented one is rejected
+# rather than ignored — an unknown flag that is silently dropped is how a
+# caller comes to believe it did something.
+for flag in --allow-destructive --force --allow-remote; do
+  out="$(cd "$r" && env PATH="$cgh" "$SPARK" reconcile --approve intent:state.json --yes "$flag" 2>&1)" || true
+  assert_contains "$flag is rejected, not ignored" "unknown option" "$out"
+done
+assert_eq "and still nothing was committed" "$head_before" "$(git -C "$r" rev-parse HEAD)"
 
 # ============ 4. destructive work needs saying so twice ===================
 git -C "$r" checkout -q -b merged-thing
@@ -93,9 +103,73 @@ echo x > "$r/x.txt"; git -C "$r" add -A; git -C "$r" commit -qm "feat: x"
 git -C "$r" checkout -q master
 git -C "$r" merge -q --no-ff -m merge merged-thing
 out="$(R "$r" --approve branch:merged-thing --yes)" || true
-assert_contains "a ref deletion is refused without the flag" "needs --allow-destructive" "$out"
+assert_contains "a ref deletion is reported, not performed" "reconcile does not carry this out" "$out"
+assert_contains "and names the command to run yourself" "run yourself: git branch -d merged-thing" "$out"
+assert_contains "and says why it is not automated" "one revertible commit" "$out"
 if git -C "$r" rev-parse --verify --quiet merged-thing >/dev/null; then ok
-else bad "the branch was deleted without --allow-destructive"; fi
+else bad "the branch was deleted despite being a manual finding"; fi
+# --yes is not a licence: a finding that cannot land as one revertible commit
+# is not applied by any means this verb offers.
+h_ref="$(git -C "$r" rev-parse HEAD)"
+R "$r" --approve branch:merged-thing --yes >/dev/null 2>&1 || true
+assert_eq "and no commit was manufactured for it" "$h_ref" "$(git -C "$r" rev-parse HEAD)"
+
+# ============ 4b. one governance approval cannot mutate another ===========
+# Approving a single governance finding once called `governance apply --yes`,
+# which provisions the whole family. It could create labels the operator never
+# approved, and re-deriving the slate would not notice: the approved finding
+# would be gone and so would the others, which reads as success.
+#
+# The guard is that reconciliation never invokes that command at all. Proven by
+# giving it a gh that RECORDS every call: approving a governance finding must
+# leave the log empty.
+ggh="$WORK/ggh"; mkdir -p "$ggh"
+for t in git awk sed grep find sort printf bash env cat wc tr head tail cut date mktemp rm mkdir ls dirname basename jq python3 xargs cksum comm; do
+  src="$(command -v "$t" 2>/dev/null || true)"
+  [ -n "$src" ] && ln -sf "$src" "$ggh/$t" 2>/dev/null || true
+done
+# The stub answers the LABEL surface with one real label, so the rest of the
+# governed families resolve as missing and the slate carries actual governance
+# findings. An earlier version of this fixture let gh answer nothing: every
+# governance surface came back unread, no finding had a disposition, and the
+# assertions below silently skipped — they passed while the defect they exist
+# for was reintroduced.
+cat > "$ggh/gh" <<'GHEOF'
+#!/usr/bin/env bash
+echo "CALL $*" >> "$GLOG"
+case "${1:-}" in auth) exit 0 ;; esac
+for a in "$@"; do
+  case "$a" in
+    *labels*) printf 'feature	0e8a16	New capability or user-visible behaviour
+'; exit 0 ;;
+  esac
+done
+exit 0
+GHEOF
+chmod +x "$ggh/gh"
+export GLOG="$WORK/gh-calls.log"
+
+# No `exit` in this awk: rec_rows emits far more after the first governance row,
+# and closing the pipe early SIGPIPEs the producer, which pipefail turns into a
+# suite abort rather than a result.
+grows="$(cd "$r" && env PATH="$ggh" GLOG="$GLOG" bash -c '. '"$SPARK"'; rec_rows "'"$r"'"' \
+  | awk -F'\t' '$1 == "governance" && $3 != "-" && !seen { print $4; seen = 1 }')"
+# The fixture must actually produce one, or everything below proves nothing.
+if [ -n "$grows" ]; then ok; else bad "the fixture produced no governance finding, so the delegation is untested"; fi
+
+: > "$GLOG"
+h_gov="$(git -C "$r" rev-parse HEAD)"
+out="$(cd "$r" && env PATH="$ggh" GLOG="$GLOG" "$SPARK" reconcile --approve "governance:$grows" --yes 2>&1)" || true
+assert_contains "a governance finding is delegated, not performed" \
+  "reconcile does not carry this out" "$out"
+assert_contains "and names the governance command to run" "run yourself: spark governance apply" "$out"
+# The load-bearing assertion: approving ONE finding must not drive the
+# family-wide command. Any label-writing call in the log means it did.
+case "$(cat "$GLOG" 2>/dev/null)" in
+  *"--method"*|*"-f "*|*"-F "*) bad "reconciliation mutated governance state itself" ;;
+  *) ok ;;
+esac
+assert_eq "and manufactured no commit" "$h_gov" "$(git -C "$r" rev-parse HEAD)"
 
 # ============ 5. one group, one commit, and it validates ==================
 h0="$(git -C "$r" rev-parse HEAD)"
