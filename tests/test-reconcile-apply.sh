@@ -210,6 +210,64 @@ assert_eq "the slate reports exactly the reverted finding" "1" \
 assert_eq "and names the right record" "v0.2.md" \
   "$(printf '%s\n' "$rows2" | awk -F'\t' '$1 == "release" { print $4; exit }')"
 
+# ============ 6b. a stale row must never authorise a mutation (#590) ======
+# Every selector is resolved against a FRESHLY derived slate immediately before
+# acting. Resolving against the snapshot taken at the start of the run let an
+# already-cleared finding authorise a second "application": the edit rewrote a
+# value to itself, produced no commit, passed validation because the finding was
+# already gone, and still counted. One commit, two groups reported — which makes
+# both the machine result and the operator's recovery contract false.
+
+# --- the exact duplicate from the report
+h_dup="$(git -C "$r" rev-parse HEAD)"
+out="$(R "$r" --approve release:v0.2.md --approve release:v0.2.md --yes)" || true
+n_commits="$(git -C "$r" rev-list --count "$h_dup"..HEAD | tr -d ' ')"
+assert_eq "a duplicate approval produces one commit" "1" "$n_commits"
+assert_contains "and the refusal covers both shapes" "an earlier group" "$out"
+assert_contains "and the count matches the commits" "Applied 1 group(s)" "$out"
+case "$out" in
+  *"Applied 2 group(s)"*) bad "a duplicate approval was counted as a second group" ;;
+  *) ok ;;
+esac
+
+# THE INVARIANT, asserted as a relationship rather than a literal: whatever
+# number the run reports, that many commits must exist. A message assertion
+# alone would pass on a different wrong number.
+reported="$(printf '%s\n' "$out" | sed -n 's/^Applied \([0-9][0-9]*\) group(s).*/\1/p' | head -1)"
+assert_eq "the reported count equals the commits made" "$reported" "$n_commits"
+
+# --- the GENERAL case: an earlier group clears a later selected finding.
+# Not a duplicate selector — two different ids, where applying the first makes
+# the second disappear. The snapshot would still have authorised it.
+git -C "$r" checkout -q -- . 2>/dev/null || true
+cat > "$r/docs/releases/v0.4.md" <<'RECEOF'
+# Release record v0.4
+
+> **Disposition: `Blocked`.** Something went wrong once.
+
+History: this record was Blocked and that is deliberately kept.
+RECEOF
+git -C "$r" add -A; git -C "$r" commit -qm "chore: add v0.4 record"
+git -C "$r" tag v0.4.0
+# Applying v0.4 first; then approve it again under its own id after it has gone.
+h_gen="$(git -C "$r" rev-parse HEAD)"
+out="$(R "$r" --approve release:v0.4.md --approve release:v0.4.md --yes)" || true
+assert_eq "a cleared finding cannot be re-applied" "1" \
+  "$(git -C "$r" rev-list --count "$h_gen"..HEAD | tr -d ' ')"
+reported="$(printf '%s\n' "$out" | sed -n 's/^Applied \([0-9][0-9]*\) group(s).*/\1/p' | head -1)"
+assert_eq "and the count still matches the commits" "1" "$reported"
+
+# --- a finding that is present but whose application changes nothing is NOT
+# an applied group. Simulated by pointing a selector at a record already
+# correct: the slate would not list it, so this asserts the refusal path holds
+# for an id that names nothing rather than silently counting.
+out="$(R "$r" --approve release:v0.4.md --yes)" || true
+assert_contains "an already-corrected record is refused, not counted" "no such finding" "$out"
+case "$out" in
+  *"Applied 1 group(s)"*) bad "a no-op was counted as an applied group" ;;
+  *) ok ;;
+esac
+
 # ============ 7. a dirty tree refuses ====================================
 # "Exactly one commit per group" would be a lie if unrelated work rode along.
 echo "unrelated" > "$r/scratch.txt"
@@ -221,6 +279,6 @@ rm -f "$r/scratch.txt"
 # ============ 8. an id that no longer names a finding is refused ==========
 out="$(R "$r" --approve release:v9.9.md --yes)" || true
 assert_contains "an unknown finding is refused" "no such finding" "$out"
-assert_contains "and explains that the slate is re-derived" "re-derived every run" "$out"
+assert_contains "and explains that the slate is re-derived" "re-derived before every group" "$out"
 
 finish
