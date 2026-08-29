@@ -7354,12 +7354,16 @@ cmd_state() {
 #   issue <TAB> n <TAB> order <TAB> cats <TAB> prios <TAB> prio <TAB> blocked <TAB> title
 #       order   0-based index in the gate's sub-issue list, or "-" when absent
 #       cats    count of issue.taxonomy category labels carried
-#       prios   count of P0-P3 labels carried
+#       prios   count of PRIORITY-FAMILY labels carried, whatever the model
+#               declares them to be
 #       prio    the priority token, or "-"
 #       blocked count of OPEN native blockers, or "?" when unreadable
 #   cycle <TAB> <n> <TAB> <path>
 #   orderdrift <TAB> <kind> <TAB> <detail>
 #   ordercount <TAB> <n>   how many issues the order record holds
+#   priofamily <TAB> <name> <TAB> <members>
+#       the resolved priority family, so a diagnostic names what the model
+#       declares rather than a hard-coded P0-P3
 #
 # Exits: 0 a selection was made / 1 nothing is eligible (a DETERMINATE answer —
 # every candidate is genuinely blocked) / 3 not assessed (the slate is not
@@ -7367,6 +7371,10 @@ cmd_state() {
 # reported as "could not tell", and an uninterpretable slate never yields a
 # pick.
 next_select() {
+  # The priority family is model data, so the diagnostic names what the model
+  # actually declares. Saying "P0-P3" was a second copy of a rule the schema
+  # owns, and it lied to any project that renamed or extended the family.
+  local priolabel=""
   local kind a b c d e f g
   local gaps="" gapn=0 cand="" cands=0 blocked_lines="" blockedn=0 ordertotal=""
   local n order cats prios prio blocked title
@@ -7381,6 +7389,9 @@ next_select() {
         gap "not assessed: the delivery-order record $a — $b" ;;
       ordercount)
         case "$a" in ''|*[!0-9]*) ;; *) ordertotal="$a" ;; esac ;;
+      priofamily)
+        # What the resolved model calls this family, and what it declares in it.
+        priolabel="$a${b:+ ($b)}" ;;
       issue)
         n="$a" order="$b" cats="$c" prios="$d" prio="$e" blocked="$f" title="$g"
         if [ "$cats" != "1" ]; then
@@ -7388,7 +7399,7 @@ next_select() {
           continue
         fi
         if [ "$prios" != "1" ]; then
-          gap "not assessed: #$n carries $prios P0-P3 labels — exactly one is required"
+          gap "not assessed: #$n carries $prios ${priolabel:-priority} labels — exactly one is required"
           continue
         fi
         case "$blocked" in
@@ -7676,7 +7687,8 @@ EOF_ROWS
     ev="${ev}orderdrift	is missing	no issue in this milestone carries sub-issues, so no explicit order exists
 "
   else
-    ev="${ev}ordercount	$(printf '%s\n' "$order_list" | awk 'NF' | wc -l | tr -d ' ')
+    ev="${ev}priofamily	priority	$(printf '%s\n' "$prio_members" | awk 'NF { printf "%s%s", (n++ ? ", " : ""), $0 }')
+ordercount	$(printf '%s\n' "$order_list" | awk 'NF' | wc -l | tr -d ' ')
 "
   fi
 
