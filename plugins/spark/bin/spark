@@ -4302,22 +4302,29 @@ EOF
 
 # rec_kind <area> <disposition> — how a finding would be carried out.
 #
-#   tree         edits files. Applies under --yes, and lands as exactly ONE
-#                commit so it can be reverted on its own.
-#   destructive  deletes a ref or mutates remote state. Needs --allow-destructive
-#                said out loud on top of --yes.
-#   none         never applicable by Spark. KEEP has nothing to do, and
-#                DECISION-REQUIRED is not Spark's to carry out at all — no flag
-#                combination makes it applicable, which is the point.
+#   tree    edits files. This is the ONLY kind reconcile applies automatically,
+#           because it is the only kind that can honour the guarantee the whole
+#           design rests on: one approved group is exactly one commit, revertible
+#           on its own.
+#   manual  the action is real and named, but reconcile does not perform it. A
+#           deleted ref, a closed milestone and a provisioned label are not
+#           commits; nothing about them reverts with `git revert`, so automating
+#           them would mean quietly weakening the one-group/one-commit contract
+#           to fit operations that cannot satisfy it.
+#   none    nothing to carry out. KEEP is already correct, and DECISION-REQUIRED
+#           is not Spark's to carry out at all.
+#
+# There is deliberately no flag that promotes `manual` to `tree`. Automating an
+# irreversible operation needs a compensating contract this release does not
+# have, and a flag would be a way of pretending otherwise.
 rec_kind() {
   case "$2" in
     DECISION-REQUIRED|KEEP|-) printf 'none';  return 0 ;;
   esac
   case "$1" in
-    release)            printf 'tree' ;;
-    branch|milestone)   printf 'destructive' ;;
-    governance)         printf 'destructive' ;;
-    *)                  printf 'none' ;;
+    release)                       printf 'tree' ;;
+    branch|milestone|governance)   printf 'manual' ;;
+    *)                             printf 'none' ;;
   esac
 }
 
@@ -4341,19 +4348,16 @@ sys.exit(0 if n == 1 else 1)
 PYEOF
       echo "    set the current-state disposition to Shipped"
       return 0 ;;
-    branch)
-      git -C "$root" branch -d "$id" >/dev/null 2>&1 || return 1
-      echo "    deleted the merged branch"
-      return 0 ;;
-    milestone)
-      command -v gh >/dev/null 2>&1 || return 1
-      gh api --method PATCH "repos/{owner}/{repo}/milestones/${id#\#}" -f state=closed >/dev/null 2>&1 || return 1
-      echo "    closed the milestone"
-      return 0 ;;
-    governance)
-      "$0" governance apply --yes >/dev/null 2>&1 || return 1
-      echo "    provisioned through the governance path"
-      return 0 ;;
+    # No branch, milestone or governance case, on purpose.
+    #
+    # Governance in particular: a single approved finding once called
+    # `governance apply --yes`, which is a FAMILY-WIDE operation. It could
+    # provision labels the operator never approved, and re-deriving the slate
+    # would not notice — the approved finding would be gone and so would the
+    # others, which looks like success. One approved finding must mean one
+    # mutation and nothing else, so reconciliation delegates to the governance
+    # command rather than invoking it, until that command can act on exactly
+    # one finding.
   esac
   return 2
 }
@@ -4372,7 +4376,7 @@ rec_still_present() {
 # makes a mistake recoverable: reverting the middle of a run leaves the rest
 # applied, because nothing was batched into a single opaque change.
 rec_apply() {
-  local root="$1" rows="$2" approved="$3" yes="$4" destructive="$5"
+  local root="$1" rows="$2" approved="$3" yes="$4"
   local sel area id line disp kind rc=0 applied=0 refused=0 dirty
 
   # A dirty tree would make "exactly one commit per group" a lie: unrelated
@@ -4414,11 +4418,15 @@ rec_apply() {
           echo "  $sel — $disp, nothing to apply"
         fi
         refused=$((refused+1)); continue ;;
-      destructive)
-        if [ "$destructive" -eq 0 ]; then
-          yellow "  $sel — deletes a ref or changes remote state; needs --allow-destructive"
-          refused=$((refused+1)); continue
-        fi ;;
+      manual)
+        # Reported in full, and not performed. The action column already names
+        # the exact command; running it is the operator's act because it cannot
+        # be undone by reverting a commit.
+        yellow "  $sel — $disp, and reconcile does not carry this out."
+        printf '%s' "$line" | awk -F'\t' '{ printf "    run yourself: %s\n", $6 }'
+        yellow "    It deletes a ref or changes remote state, so it cannot land as"
+        yellow "    one revertible commit. No flag changes that."
+        refused=$((refused+1)); continue ;;
     esac
 
     echo "  $sel — $disp ($kind)"
@@ -4468,13 +4476,12 @@ EOF
 
 # spark reconcile [--tsv]
 cmd_reconcile() {
-  local tsv=0 yes=0 destructive=0 approved=""
-  local usage_line="usage: spark reconcile [--tsv] [--approve <area>:<id>]... [--yes] [--allow-destructive]"
+  local tsv=0 yes=0 approved=""
+  local usage_line="usage: spark reconcile [--tsv] [--approve <area>:<id>]... [--yes]"
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --tsv) tsv=1 ;;
       --yes) yes=1 ;;
-      --allow-destructive) destructive=1 ;;
       --approve) shift; approved="${approved}${1:-}
 " ;;
       --approve=*) approved="${approved}${1#--approve=}
@@ -4488,9 +4495,11 @@ cmd_reconcile() {
         echo
         echo "  --approve <area>:<id>   carry out ONE finding; repeatable"
         echo "  --yes                   actually apply the approved findings"
-        echo "  --allow-destructive     also allow ref deletion and remote state"
         echo
-        echo "  A DECISION-REQUIRED finding is never applicable, with any flags."
+        echo "  Only file edits are applied automatically, because only they land"
+        echo "  as one revertible commit. Ref deletion, milestone closure and"
+        echo "  governance provisioning are reported with the exact command to run"
+        echo "  yourself. A DECISION-REQUIRED finding is never carried out at all."
         return 0 ;;
       *) red "unknown option: $1"; echo "$usage_line"; return 1 ;;
     esac
@@ -4505,7 +4514,7 @@ cmd_reconcile() {
 
   # --- the approval path ---------------------------------------------------
   if [ -n "$approved" ]; then
-    rec_apply "$root" "$rows" "$approved" "$yes" "$destructive"
+    rec_apply "$root" "$rows" "$approved" "$yes"
     return $?
   fi
   ndec="$(printf '%s\n' "$rows" | awk -F'\t' '$3 == "DECISION-REQUIRED" && NF' | wc -l | tr -d ' ')"
