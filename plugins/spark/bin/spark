@@ -62,6 +62,7 @@ docs-impact|cmd_docs_impact|Verify the declared documentation impact of an issue
 plan|cmd_plan|Compile an approved plan artifact into GitHub state: validate, diff, apply, verify
 triage|cmd_triage|Establish what is true about an existing repository, read-only, before anything mutates it
 reconcile|cmd_reconcile|Turn the Triage evidence into an approval-gated reconciliation slate; proposes, never applies
+course|cmd_course|Derive which objective is coherent to pursue next; read-only, recommends and routes
 next|cmd_next|Select the next eligible milestone issue from live GitHub metadata
 help|usage|Show this help'
 
@@ -4579,6 +4580,209 @@ cmd_reconcile() {
   return 0
 }
 
+# current_milestone — the open milestone with open issues whose title sorts
+# first by version. This is the one answer to "which course is currently
+# running", and it was inline in `next`. `course` needs the same answer, and a
+# second implementation of it would be a second opinion about what the project
+# is currently doing.
+current_milestone() {
+  gh api --paginate 'repos/{owner}/{repo}/milestones?state=open' \
+    --jq '.[] | select(.open_issues > 0) | .title' 2>/dev/null \
+    | LC_ALL=C sort -V | head -n1
+}
+
+# completed_milestones — open milestones with no open issues left. The work is
+# done and the release boundary is not closed, which is a course in its own
+# right rather than a defect.
+completed_milestones() {
+  gh api --paginate 'repos/{owner}/{repo}/milestones?state=open' \
+    --jq '.[] | select(.open_issues == 0) | .title' 2>/dev/null | LC_ALL=C sort -V
+}
+
+# ---------------------------------------------------------------------------
+# spark course (#469) — which objective is coherent next.
+#
+# THREE QUESTIONS, THREE OWNERS. They are easy to blur and the blur is the
+# defect, so they are named here and nowhere else re-answered:
+#
+#   spark brief   where did the lifecycle leave off?      (stage + recorded intent)
+#   spark course  which objective is coherent to pursue?  (this verb)
+#   spark next    which issue inside that objective?      (deterministic selection)
+#
+# `course` never recomputes brief's stage and never picks an issue. It consumes
+# the truth pass (#467) and the reconciliation slate (#468) rather than
+# rediscovering repository state, because a third reading of the same repository
+# is a third opinion about it.
+#
+# Five outcomes, and UNKNOWN is not one of them — it is an evidence state that
+# sits beside whichever outcome the readable evidence supports, exactly as it
+# does everywhere else in this binary.
+#
+#   CONTINUE CURRENT COURSE          an active coherent milestone exists
+#   REPAIR CURRENT COURSE            the course exists but truth contradicts it
+#   CLOSE / RELEASE COMPLETED COURSE the work is done and the boundary is open
+#   PLAN A NEW COURSE                no milestone, and evidence supports planning
+#   HUMAN DECISION REQUIRED          materially different directions are plausible
+#
+# Read-only, and more narrowly than that: it may recommend and route, but it
+# creates no milestone, assigns no priority or disposition, and records no
+# product direction. A repository is never made coherent by writing something
+# that says it is.
+# ---------------------------------------------------------------------------
+
+# course_evidence <root> — the facts, gathered from the owning authorities.
+# Emits key<TAB>value, and never a verdict.
+course_evidence() {
+  local root="$1" trows rrows
+  if ! command -v gh >/dev/null 2>&1 || ! gh auth status >/dev/null 2>&1; then
+    printf 'readable\tno\treason\tcourse derivation reads live milestone state and needs an authenticated gh\n'
+    return 0
+  fi
+  printf 'readable\tyes\n'
+  printf 'active\t%s\n' "$(current_milestone)"
+  printf 'completed\t%s\n' "$(completed_milestones | awk 'NF { printf "%s%s", (n++ ? ", " : ""), $0 }')"
+
+  # Consumed, not rediscovered.
+  trows="$(triage_rows "$root")"
+  rrows="$(rec_rows "$root")"
+  printf 'truth_mechanical\t%s\n' \
+    "$(printf '%s\n' "$(gov_mechanical_rows "$trows")" | awk 'NF' | wc -l | tr -d ' ')"
+  printf 'truth_decisions\t%s\n' \
+    "$(printf '%s\n' "$(gov_judgment_rows "$trows")" | awk 'NF' | wc -l | tr -d ' ')"
+  printf 'truth_unread\t%s\n' \
+    "$(printf '%s\n' "$trows" | awk -F'\t' '$2 == "?" && NF' | wc -l | tr -d ' ')"
+  printf 'intent_spent\t%s\n' \
+    "$(printf '%s\n' "$trows" | awk -F'\t' '$1 == "intent" && $2 == "!" && NF' | wc -l | tr -d ' ')"
+  printf 'slate_decisions\t%s\n' \
+    "$(printf '%s\n' "$rrows" | awk -F'\t' '$3 == "DECISION-REQUIRED" && NF' | wc -l | tr -d ' ')"
+  printf 'slate_unread\t%s\n' \
+    "$(printf '%s\n' "$rrows" | awk -F'\t' '$2 == "unread" && NF' | wc -l | tr -d ' ')"
+}
+
+# spark course [--tsv]
+cmd_course() {
+  local tsv=0 usage_line="usage: spark course [--tsv]"
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --tsv) tsv=1 ;;
+      -h|--help)
+        echo "$usage_line"
+        echo
+        echo "  Which objective is coherent to pursue next, from the truth pass and"
+        echo "  the reconciliation slate. Read-only: it recommends and routes, and"
+        echo "  creates nothing. Where the lifecycle left off is 'spark brief';"
+        echo "  which issue to start inside a course is 'spark next'."
+        return 0 ;;
+      *) red "unknown option: $1"; echo "$usage_line"; return 1 ;;
+    esac
+    shift
+  done
+
+  local root; root="$(git_root)"
+  if [ -z "$root" ]; then red "not inside a git repo"; return 1; fi
+
+  # Gathered ONCE. Each pass runs the truth pass and the slate, both of which
+  # talk to GitHub; calling twice would double that for no new information.
+  local ev
+  ev="$(course_evidence "$root")"
+
+  local k v readable=no reason='' active='' completed=''
+  local mech=0 tdec=0 tunread=0 spent=0 sdec=0 sunread=0
+  while IFS=$'\t' read -r k v _; do
+    case "$k" in
+      readable) readable="$v" ;;
+      active) active="$v" ;;
+      completed) completed="$v" ;;
+      truth_mechanical) mech="$v" ;;
+      truth_decisions) tdec="$v" ;;
+      truth_unread) tunread="$v" ;;
+      intent_spent) spent="$v" ;;
+      slate_decisions) sdec="$v" ;;
+      slate_unread) sunread="$v" ;;
+    esac
+  done <<EOF
+$ev
+EOF
+  reason="$(printf '%s\n' "$ev" | awk -F'\t' '$1 == "readable" && $2 == "no" { print $4 }')"
+
+  # --- the verdict ---------------------------------------------------------
+  # Precedence, most constraining first. A contradiction outranks a plan; two
+  # plausible directions outrank either of them, because choosing between them
+  # is not Spark's to do.
+  local course why route
+  if [ "$readable" != "yes" ]; then
+    course="NOT ASSESSED"
+    why="$reason"
+    route="restore the reader, then re-run"
+  elif [ "$mech" -gt 0 ]; then
+    course="REPAIR CURRENT COURSE"
+    why="the truth pass reports $mech mechanically invalid finding(s); a course cannot rest on state the repository cannot hold"
+    route="spark triage, then spark reconcile"
+  elif [ -n "$active" ] && [ -n "$completed" ]; then
+    course="HUMAN DECISION REQUIRED"
+    why="two materially different directions are open: finish \"$active\", or close out the completed milestone(s) $completed"
+    route="choose one; Spark will not"
+  elif [ -n "$active" ] && [ "$spent" -gt 0 ]; then
+    course="REPAIR CURRENT COURSE"
+    why="\"$active\" is active, but the recorded intent names only closed work, so what the course is pursuing is contradicted"
+    route="spark reconcile, then re-run"
+  elif [ -n "$active" ]; then
+    course="CONTINUE CURRENT COURSE"
+    why="\"$active\" is open with open issues and nothing contradicts it"
+    route="spark next"
+  elif [ -n "$completed" ]; then
+    course="CLOSE / RELEASE COMPLETED COURSE"
+    why="no milestone has open work, and $completed is open with none left; the boundary is what remains"
+    route="release certification, not new feature work"
+  else
+    course="PLAN A NEW COURSE"
+    why="no open milestone holds work, and none is waiting to be closed"
+    route="spark:plan"
+  fi
+
+  if [ "$tsv" -eq 1 ]; then
+    printf '%s\n' "$ev"
+    printf 'course\t%s\n' "$course"
+    printf 'route\t%s\n' "$route"
+    [ "$course" = "HUMAN DECISION REQUIRED" ] && return 5
+    [ "$course" = "NOT ASSESSED" ] && return 3
+    return 0
+  fi
+
+  echo "Spark course — $root"
+  echo
+  echo "Read-only: no milestone, priority, disposition or direction was recorded."
+  echo
+  echo "Evidence, from the authorities that own it"
+  printf '  %-22s %s\n' "active milestone" "${active:-none}"
+  printf '  %-22s %s\n' "completed, still open" "${completed:-none}"
+  printf '  %-22s %s\n' "truth: contradictions" "$mech"
+  printf '  %-22s %s\n' "truth: decisions owed" "$tdec"
+  printf '  %-22s %s\n' "slate: decisions owed" "$sdec"
+  if [ "$((tunread + sunread))" -gt 0 ]; then
+    printf '  %-22s %s\n' "not assessed" "$((tunread + sunread)) surface(s) could not be read"
+  fi
+  echo
+  case "$course" in
+    "HUMAN DECISION REQUIRED") yellow "Course: $course" ;;
+    "NOT ASSESSED")            yellow "Course: $course" ;;
+    *)                         green  "Course: $course" ;;
+  esac
+  echo "  $why"
+  echo "  next: $route"
+  echo
+  if [ "$((tunread + sunread))" -gt 0 ] && [ "$course" != "NOT ASSESSED" ]; then
+    yellow "  Some surfaces could not be read, so this course rests on a partial"
+    yellow "  picture. That is evidence state, not a decision awaiting you."
+  fi
+  echo "  Where the lifecycle left off is 'spark brief'; which issue to start"
+  echo "  inside this course is 'spark next'. This verb answers neither."
+
+  [ "$course" = "HUMAN DECISION REQUIRED" ] && return 5
+  [ "$course" = "NOT ASSESSED" ] && return 3
+  return 0
+}
+
 # spark triage [--tsv]
 cmd_triage() {
   local tsv=0 usage_line="usage: spark triage [--tsv]"
@@ -7313,9 +7517,7 @@ cmd_next() {
   if [ -n "$want_ms" ]; then
     ms="$want_ms"
   else
-    ms="$(gh api --paginate 'repos/{owner}/{repo}/milestones?state=open' \
-            --jq '.[] | select(.open_issues > 0) | .title' 2>/dev/null \
-          | LC_ALL=C sort -V | head -n1)" || ms=""
+    ms="$(current_milestone)" || ms=""
     if [ -z "$ms" ]; then
       yellow "not assessed: no open milestone with open issues could be read from GitHub"
       return 3

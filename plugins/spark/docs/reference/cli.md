@@ -428,6 +428,68 @@ The four dispositions, the unread evidence state and the approval boundary are
 depends on it, and a repository with only the core plugin installed produces a
 slate.
 
+## `spark course [--tsv]`
+
+Which objective is coherent to pursue next.
+
+### Three questions, three owners
+
+The blur between these is the defect this verb exists to avoid, so it is stated
+rather than implied — and `course` says so in its own output:
+
+| Verb | Question |
+| --- | --- |
+| `spark brief` | where did the lifecycle leave off? (stage, recorded intent) |
+| **`spark course`** | **which objective is coherent to pursue?** |
+| `spark next` | which issue inside that objective? |
+
+`course` never recomputes the lifecycle position and never selects an issue.
+
+### It consumes, it does not rediscover
+
+The evidence comes from the truth pass and the reconciliation slate, and the
+current milestone comes from the same selector `next` uses. A third reading of
+the same repository would be a third opinion about it.
+
+| Fact | Owner |
+| --- | --- |
+| contradictions, decisions owed, unread surfaces | the truth pass |
+| outstanding dispositions | the reconciliation slate |
+| which milestone is running | the selector shared with `next` |
+
+### Five outcomes
+
+| Outcome | When |
+| --- | --- |
+| `CONTINUE CURRENT COURSE` | an active milestone holds open work and nothing contradicts it |
+| `REPAIR CURRENT COURSE` | the course exists but truth contradicts it — a mechanically invalid finding, or a recorded intent naming only closed work |
+| `CLOSE / RELEASE COMPLETED COURSE` | no milestone holds open work, and one is open with none left |
+| `PLAN A NEW COURSE` | no open milestone holds work and none waits to be closed |
+| `HUMAN DECISION REQUIRED` | materially different directions are plausible |
+
+**`UNKNOWN / NOT ASSESSED` is not a sixth outcome.** It is an evidence state,
+reported beside whichever course the readable evidence supports — or, when the
+essential inputs cannot be read at all, as the verdict in its own right. An
+unreadable milestone surface is never read as *having no milestones*: a negative
+fact and an unread one are different answers.
+
+### Read-only, and narrowly
+
+It creates no milestone, assigns no priority or disposition, and records no
+product direction. A repository is not made coherent by writing something that
+says it is. It recommends and routes; that is the whole of its authority.
+
+### Exit codes
+
+| Exit | Meaning |
+| --- | --- |
+| `0` | a course was derived — `CONTINUE`, `REPAIR`, `CLOSE / RELEASE`, or `PLAN` |
+| `5` | `HUMAN DECISION REQUIRED` — two or more materially different directions |
+| `3` | `NOT ASSESSED` — the essential evidence could not be read |
+| `1` | not inside a git repository |
+
+`--tsv` emits the gathered evidence plus a `course` and a `route` line.
+
 ## `spark hub [--set <owner/repo|url|none>]`
 
 Reports the memory hub this project declares — the one repository designated

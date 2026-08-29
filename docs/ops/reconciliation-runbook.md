@@ -133,7 +133,32 @@ with it. Commit or set aside your changes and re-run.
   `Blocked` keeps saying so in its history; only the current-state claim is
   corrected.
 
-## 7. If an approval names something that has gone
+## 7. When the slate is clear: deciding the course
+
+Reconciliation ends when nothing material is left to reconcile. It does not tell
+you *what to do next* — that is a different question with a different verb:
+
+```bash
+spark course
+```
+
+It reads the truth pass and this slate rather than the repository again, and
+answers with one of five courses: continue the active milestone, repair it,
+close out a finished one, plan a new one, or stop because two directions are
+genuinely open. That last one is the only outcome that needs you, and it exits
+`5` so a script can tell.
+
+Three verbs, three questions, and it is worth keeping them apart in your head:
+
+| `spark brief` | where the lifecycle left off |
+| `spark course` | which objective is coherent next |
+| `spark next` | which issue inside that objective |
+
+`course` records nothing. It will not create a milestone, set a priority or a
+disposition, or write down a direction — a repository is not made coherent by
+writing something that says it is.
+
+## 8. If an approval names something that has gone
 
 ```
 release:v0.20.md — no such finding in the current slate
