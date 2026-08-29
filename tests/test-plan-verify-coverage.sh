@@ -460,6 +460,45 @@ case "$(lscreated '["a","b","c"]')" in
   *) pass=$((pass+1)) ;;
 esac
 
+# --- a label name must survive the transport BYTE FOR BYTE ----------------
+# @tsv is not transparent: it escapes backslash, tab, CR and LF. A label named
+# `foo\bar` therefore arrived at the comparison as `foo\\bar` and compared
+# unequal to the artifact's own `foo\bar` — while the live path, which reads the
+# name raw, compared it equal. One legal value, two paths, two answers.
+#
+# Structural transport means the bytes survive, not merely that the records are
+# separate.
+bsart="$WORK/bs.tsv"; echo body > "$WORK/bsbody.md"
+printf 'issue\tK\tT\tfoo\\bar\t\t%s\n' "$WORK/bsbody.md" > "$bsart"
+bsstate="$WORK/bs.state"; printf 'created\tK\t300\n' > "$bsstate"
+bscreated() { ( cd "$lsrepo" && env PATH="$lsbin" LIVE_LABELS="$1" \
+  bash -c '. '"$SPARK"'; plan_created_rows "'"$bsart"'" "'"$bsstate"'"' 2>&1 ); }
+
+case "$(bscreated '["foo\\bar"]')" in
+  *"labels match the artifact"*) pass=$((pass+1)) ;;
+  *) fail=$((fail+1)); echo "  ✖ created: a backslash-bearing label must survive the transport intact" ;;
+esac
+# ...and a DIFFERENT backslash-bearing name must still be drift, so the case
+# above cannot be passing because both sides were mangled the same way.
+case "$(bscreated '["foo\\baz"]')" in
+  *"labels match the artifact"*) fail=$((fail+1)); echo "  ✖ created: a different backslash label must not match" ;;
+  *) pass=$((pass+1)) ;;
+esac
+# The live path already read names raw; asserted here so the two paths are
+# known to agree about the same legal value rather than assumed to.
+bslive_art="$WORK/bslive.tsv"
+printf 'update\t#300\tlabels\tfoo\\bar\n' > "$bslive_art"
+bslive() { ( cd "$lsrepo" && env PATH="$lsbin" LIVE_LABELS="$1" \
+  bash -c '. '"$SPARK"'; plan_live_rows "'"$bslive_art"'"' 2>&1 ); }
+case "$(bslive '["foo\\bar"]')" in
+  *$'live\t=\t#300'*) pass=$((pass+1)) ;;
+  *) fail=$((fail+1)); echo "  ✖ live: a backslash-bearing label must compare equal too" ;;
+esac
+case "$(bslive '["foo\\baz"]')" in
+  *$'live\t~\t#300'*) pass=$((pass+1)) ;;
+  *) fail=$((fail+1)); echo "  ✖ live: a different backslash label must be drift" ;;
+esac
+
 # --- unread live labels are NOT ASSESSED, never equality
 failbin="$WORK/lsfail"; mkdir -p "$failbin"
 for t in git awk sed grep find sort printf bash env cat wc tr head tail cut date mktemp rm mkdir ls dirname basename jq python3 paste; do
