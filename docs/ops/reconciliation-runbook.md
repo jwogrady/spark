@@ -98,6 +98,28 @@ passes when the command succeeded and did the wrong thing.
 If a group fails, the run **stops there**. Earlier groups stay applied — they
 were each validated — and nothing later is attempted.
 
+## 3b. Approving the same thing twice
+
+Each selector is resolved against a **freshly derived slate immediately before
+acting**, not against the slate you read at the start. So approving one finding
+twice does not make it two groups — the second is refused, because by then it is
+no longer a finding:
+
+```
+release:v0.2.md — no such finding in the current slate
+    The slate is re-derived before every group, so this covers both the
+    case where you approved it twice and the case where an earlier group
+    cleared it.
+```
+
+The same rule covers the case you did not intend: an earlier approved group that
+happens to clear a later selected finding. A stale row never authorises a
+mutation.
+
+**`Applied N group(s)` always equals the number of commits made.** A group that
+turns out to change nothing is refused rather than counted, so the number you
+read and the number of things you can revert are the same number.
+
 ## 4. Undoing one group
 
 Because each group is its own commit, reverting one leaves the rest alone:

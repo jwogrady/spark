@@ -395,6 +395,14 @@ succeed?" passes when the command succeeded and did the wrong thing.
 A failing group **stops the run**, leaving earlier groups applied and validated
 and attempting nothing later.
 
+Each selector is resolved against a **freshly derived slate immediately before
+acting**, never against the slate read at the start of the run. Approving one
+finding twice therefore does not make it two groups, and neither does an earlier
+group that happens to clear a later selected finding: a stale row never
+authorises a mutation. **`Applied N group(s)` always equals the number of commits
+made** — a group that turns out to change nothing is refused rather than
+counted.
+
 One group being one commit is what makes an approval recoverable: `git revert` on
 a group in the middle of a run leaves the others applied, and the next
 `reconcile` shows the reverted finding back on the slate because the slate is
