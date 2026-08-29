@@ -349,19 +349,42 @@ An approval names one finding, `area:id`, and one approved finding is one group:
 ```
 spark reconcile --approve release:v0.20.md            # preview; changes nothing
 spark reconcile --approve release:v0.20.md --yes      # apply it
-spark reconcile --approve branch:spent --allow-destructive --yes
 ```
 
 | Flag | Effect |
 | --- | --- |
 | *(none)* | preview — reports what each approved finding would do |
-| `--yes` | apply findings that edit files |
-| `--allow-destructive` | additionally allow ref deletion and remote state changes |
+| `--yes` | apply the approved findings that edit files |
 
-**A `DECISION-REQUIRED` finding is never applicable.** Not with `--yes`, not with
-`--allow-destructive`, not with both. A judgment is not one permission away from
-being Spark's to make — record the decision in the governed field yourself and
-the finding clears on the next run.
+**Only file edits are applied automatically**, because they are the only kind
+that can land as one revertible commit. Everything else is reported with the
+exact command to run yourself:
+
+| Kind | Areas | Applied by `--yes`? |
+| --- | --- | --- |
+| `tree` | `release` | yes — one commit each |
+| `manual` | `branch`, `milestone`, `governance` | **no** — reported with the command |
+| `none` | `KEEP`, `DECISION-REQUIRED` | never |
+
+Deleting a ref, closing a milestone and provisioning a label are not commits;
+nothing about them reverts with `git revert`. Automating them would mean
+quietly weakening the one-group/one-commit guarantee to fit operations that
+cannot satisfy it, so **there is deliberately no flag that promotes a `manual`
+finding to an applied one** — an unrecognised flag is rejected rather than
+ignored. Automating irreversible reconciliation needs a compensating contract
+this release does not have.
+
+Governance is delegated rather than invoked, and the reason is specific:
+`governance apply` acts on a **whole family**. Driving it from one approved
+finding could provision surfaces the operator never approved, and re-deriving
+the slate would not notice — the approved finding would be gone and so would the
+others, which reads as success. One approved finding means one mutation and
+nothing else, so reconciliation points at the governance command until that
+command can act on exactly one finding.
+
+**A `DECISION-REQUIRED` finding is never carried out**, with any flags. A
+judgment is not one permission away from being Spark's to make — record the
+decision in the governed field yourself and the finding clears on the next run.
 
 Per approved group, in the order given: the change is made; if it touched the
 tree it lands as **exactly one commit**; then the slate is **re-derived** and the
@@ -391,7 +414,7 @@ from a failure mid-run — is the
 | Exit | Meaning |
 | --- | --- |
 | `0` | nothing requires reconciliation |
-| `5` | at least one `DECISION-REQUIRED` item awaits human authority, or an approval was refused |
+| `5` | at least one `DECISION-REQUIRED` item awaits human authority, or an approval was refused as not automatically appliable |
 | `3` | some evidence could not be read; never a pass |
 | `1` | not inside a git repository, or a group failed while applying |
 

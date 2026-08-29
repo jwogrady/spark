@@ -49,19 +49,39 @@ spark reconcile --approve release:v0.20.md            # preview, changes nothing
 spark reconcile --approve release:v0.20.md --yes      # actually apply it
 ```
 
-Without `--yes` you get a preview. Approving something that deletes a ref or
-touches remote state additionally needs `--allow-destructive`, said out loud on
-top of `--yes`:
+Without `--yes` you get a preview.
 
-```bash
-spark reconcile --approve branch/spent-work --allow-destructive --yes
+**`--yes` applies file edits and nothing else.** Deleting a branch, closing a
+milestone and provisioning governance are reported with the exact command, and
+you run it:
+
+```
+branch:spent-work — DROP-ARCHIVE, and reconcile does not carry this out.
+    run yourself: git branch -d spent-work
+    It deletes a ref or changes remote state, so it cannot land as
+    one revertible commit. No flag changes that.
 ```
 
-Two flags is not ceremony. Deleting a branch and closing a milestone are the
-actions you cannot undo with `git revert`, so they are the ones that ask twice.
+That is not caution for its own sake. Every automatically applied group is one
+commit you can revert; a deleted ref and a closed milestone are not commits, and
+letting them ride under `--yes` would mean the guarantee no longer held for
+everything it covers. There is no flag that overrides this, and an invented one
+is rejected rather than ignored.
 
 **Approve a few findings, not the whole slate.** The point of a group being one
 finding is that you can change your mind about one of them.
+
+### Governance is delegated, not driven
+
+A governance finding always reports rather than acts, even though Spark has a
+perfectly good `governance apply`. The reason is that `apply` works on a **whole
+family**: driving it from one approved finding could provision surfaces you
+never approved, and re-deriving the slate would not catch it — your finding
+would be gone and so would the others, which looks like success.
+
+One approved finding has to mean one mutation and nothing else. Run
+`spark governance apply` yourself, where its own preview and `--repair-drift`
+gate show you the full set you are agreeing to.
 
 ## 3. What happens per group
 
@@ -102,6 +122,10 @@ with it. Commit or set aside your changes and re-run.
 
 - It will not settle a `DECISION-REQUIRED` finding. Record the decision in the
   governed field yourself; the finding clears on the next run.
+- It will not delete a ref, close a milestone, or provision governance. Those
+  are reported with the command to run. A later release may automate them, but
+  only behind a real compensating contract — an "undo" that works — rather than
+  behind a flag.
 - It will not propose dropping an **unmerged** branch. Only branches whose
   commits are already in trunk are proposed, so no history is lost.
 - It will not propose dropping trunk, a release line, or `gh-pages`.
