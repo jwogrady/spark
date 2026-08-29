@@ -471,9 +471,33 @@ the same repository would be a third opinion about it.
 | --- | --- |
 | `CONTINUE CURRENT COURSE` | an active milestone holds open work and nothing contradicts it |
 | `REPAIR CURRENT COURSE` | the course exists but truth contradicts it — a mechanically invalid finding, or a recorded intent naming only closed work |
-| `CLOSE / RELEASE COMPLETED COURSE` | no milestone holds open work, and one is open with none left |
+| `CLOSE / RELEASE COMPLETED COURSE` | the running course has no work left to do — either nothing at all, or only its release gate |
 | `PLAN A NEW COURSE` | no open milestone holds work and none waits to be closed |
 | `HUMAN DECISION REQUIRED` | materially different directions are plausible |
+
+### A release gate is not work
+
+The milestone's release-readiness gate is an open issue, and GitHub counts it in
+`open_issues` like any other. It is not work: it is what remains once the work
+is done, and `next` has always refused to select it because a parent closes
+last.
+
+Counting it as work made the finished state indistinguishable from the working
+one. Every Spark milestone ends with its gate open and every leaf closed, so
+`course` said `CONTINUE` and routed to `spark next` — which then reported there
+was no leaf to select. Two authorities, one question, two answers. Both
+verbs now read one projection over one snapshot of the milestone hierarchy, so
+they cannot disagree about whether work remains.
+
+The consequence worth stating: a milestone whose leaves are all closed is still
+**the running course** until its release boundary closes, and its certification
+outranks work queued under a later version. A later milestone holding open
+issues is a plan, not a competing direction — so this is a closure course, not
+`HUMAN DECISION REQUIRED`.
+
+An unread hierarchy is never read as "no work left". A truncated page and an
+empty one are different answers, and reading the second from the first is how a
+partial read would become a release recommendation.
 
 **`UNKNOWN / NOT ASSESSED` is not a sixth outcome.** It is an evidence state,
 reported beside whichever course the readable evidence supports — or, when the
