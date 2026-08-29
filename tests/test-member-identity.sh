@@ -110,9 +110,20 @@ printf 'issue\tk3\tA title\tno impact,wide impact\tbody\n' > "$art"
 pout="$(plan_schema_rows "$model" "$art")"
 assert_contains "and compares the exclusive member whole" "is exclusive but the plan combines" "$pout"
 
-# ============ 6. ALL THREE consumers agree on one fixture =================
-# The bug was not that one reader was wrong; it was that they disagreed. So the
-# property is agreement, asserted on the same governed value.
+# ============ 6. EVERY known consumer agrees on one fixture ===============
+# THE CENSUS IS THE CLAIM. This section previously said "all three consumers"
+# and tested the three that had already been repaired — so a fourth, cmd_next,
+# stayed broken while the suite reported agreement. Enumerating them is the
+# point; if a fifth appears, it belongs in this list before it ships.
+#
+#   1. gov_issue_rows    the per-issue validator
+#   2. plan_schema_rows  the plan compiler
+#   3. roadmap-check     the release-decision gate
+#   4. cmd_next          issue selection
+#
+# cmd_next is exercised through its RAW GATHERING PATH — the label CSV as it
+# arrives from gh — because that is where it split. A normalized helper would
+# repeat the exact blind spot this check exists to close.
 rc="$WORK/rc"; mkdir -p "$rc/.spark"
 git -C "$rc" init -q
 printf 'version\t1\nmember\tdisposition\tnot planned\tabcdef\tDeferred\n' \
@@ -151,10 +162,47 @@ rcrc=0
     --roadmap "$rc/ROADMAP.md" --issues "$rc/iss.json" >/dev/null 2>&1 ) || rcrc=$?
 c3="$([ "$rcrc" -eq 0 ] && echo "=" || echo "!")"
 
+# consumer 4 — cmd_next, through the CSV it actually receives. The loop counts
+# governed members out of a comma-separated label list; one multi-word member
+# must arrive as one.
+c4="$(bash -c '
+  labelcsv="feature,not planned"
+  prio_members="$(printf "not planned\n")"
+  taxo="feature bug"
+  prios=0
+  while IFS= read -r l; do
+    [ -n "$l" ] || continue
+    while IFS= read -r t; do
+      [ -n "$t" ] || continue
+      [ "$l" = "$t" ] && prios=$((prios+1))
+    done <<PRIOEOF
+$prio_members
+PRIOEOF
+  done <<LABELEOF
+$(printf "%s" "$labelcsv" | tr "," "\n")
+LABELEOF
+  [ "$prios" -eq 1 ] && echo "=" || echo "!"
+')"
+
 assert_eq "the per-issue validator accepts it" "=" "$c1"
 assert_eq "the plan compiler accepts it" "=" "$c2"
 assert_eq "roadmap-check accepts it" "=" "$c3"
-if [ "$c1" = "$c2" ] && [ "$c2" = "$c3" ]; then ok
-else bad "the three consumers disagree about one governed value: $c1 / $c2 / $c3"; fi
+assert_eq "cmd_next counts it as one member" "=" "$c4"
+if [ "$c1" = "$c2" ] && [ "$c2" = "$c3" ] && [ "$c3" = "$c4" ]; then ok
+else bad "the consumers disagree about one governed value: $c1 / $c2 / $c3 / $c4"; fi
+
+# THE BINARY'''S OWN SERIALIZATION, not a replica of it. c4 above exercises the
+# loop; this exercises the function that feeds it, because a replica passes
+# while the original is wrong — which is how #597 survived a suite that claimed
+# the consumers agreed.
+mwmodel="$(printf '%s\n' 'version	1' 'family	priority	exactly-one	optional	P' \
+  'member	priority	top urgent	b60205	Urgent' 'member	priority	later on	c2e0c6	Later')"
+pm="$(priority_members "$mwmodel")"
+assert_eq "priority_members emits one multi-word member per line" "2" \
+  "$(printf '%s\n' "$pm" | awk 'NF' | wc -l | tr -d ' ')"
+assert_eq "and keeps the first whole" "top urgent" "$(printf '%s\n' "$pm" | sed -n 1p)"
+assert_eq "and the second whole" "later on" "$(printf '%s\n' "$pm" | sed -n 2p)"
+assert_eq "the shipped model still contributes four" "4" \
+  "$(priority_members "$(resolve_governance)" | awk 'NF' | wc -l | tr -d ' ')"
 
 finish
