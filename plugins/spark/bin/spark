@@ -5610,22 +5610,37 @@ plan_created_rows() {
       # inconsistent and the call count does not grow with the checks. The body
       # is a second read only when the artifact declares one.
       # STILL ONE READ, so the three facts cannot be mutually inconsistent —
-      # but the labels are their own records inside it rather than a joined
+      # but the labels are their own lines inside it rather than a joined
       # scalar. Title and milestone are single facts and stay scalar; a label
       # set is not one fact, and flattening it is what made `["a","b"]` and
       # `["a,b"]` indistinguishable.
+      #
+      # A LABEL NAME NEVER PASSES THROUGH @tsv. @tsv is not transparent: it
+      # escapes backslash, tab, CR and LF, so a label named `foo\bar` arrived as
+      # `foo\\bar` and compared unequal to the artifact's own `foo\bar` — while
+      # the live path, which reads the name raw, compared it equal. One legal
+      # value, two verification paths, two answers. Structural transport means
+      # the bytes survive, not merely that the records are separate.
+      #
+      # The metadata record stays TSV-encoded, so it is the first line; every
+      # later line is one label name, exactly as GitHub spells it.
       live="$(gh issue view "$num" --json title,labels,milestone \
         --jq '([ "meta", .title, (.milestone.title // "") ] | @tsv),
-              (.labels[]? | [ "label", .name ] | @tsv)' 2>/dev/null)" || {
+              (.labels[]?.name)' 2>/dev/null)" || {
         printf 'created\t?\t#%s\t%s could not be read — never assumed to match\n' "$num" "$key"
         continue; }
-      local l_title="" l_labels="" l_ms="" lkind la lb
-      while IFS=$'\t' read -r lkind la lb; do
-        case "$lkind" in
-          meta)  l_title="$la"; l_ms="$lb" ;;
-          label) [ -n "$la" ] && l_labels="${l_labels}${la}
-" ;;
-        esac
+      local l_title="" l_labels="" l_ms="" lfirst=1 lline lmk
+      while IFS= read -r lline; do
+        if [ "$lfirst" -eq 1 ]; then
+          lfirst=0
+          IFS=$'\t' read -r lmk l_title l_ms <<EOF_META
+$lline
+EOF_META
+          [ "$lmk" = "meta" ] || { l_title=""; l_ms=""; }
+        else
+          [ -n "$lline" ] && l_labels="${l_labels}${lline}
+"
+        fi
       done <<EOF_LIVE
 $live
 EOF_LIVE
