@@ -3590,11 +3590,22 @@ gov_issue_rows() {
       for (i = 1; i <= n; i++) {
         split(il[i], f, "\t")
         num = f[1]; if (num == "") continue
-        delete cnt
+        # MEMBER IDENTITY IS THE RECORD, not a token in a joined string. A
+        # label may contain spaces, so accumulating matches into one
+        # space-separated value and splitting it back counted `not planned` as
+        # two members and reported a valid single label as a cardinality
+        # violation. Three parallel structures instead, all keyed by the member
+        # name itself: how many, which ones (for the message), and membership.
+        delete cntn; delete cntv; delete hasv
         nl = split(f[2], lab, ",")
         for (j = 1; j <= nl; j++) {
           if (lab[j] == "") continue
-          if (lab[j] in memof) cnt[memof[lab[j]]] = cnt[memof[lab[j]]] " " lab[j]
+          if (lab[j] in memof) {
+            mfam = memof[lab[j]]
+            cntn[mfam]++
+            cntv[mfam] = cntv[mfam] (cntv[mfam] == "" ? "" : ", ") lab[j]
+            hasv[mfam SUBSEP lab[j]] = 1
+          }
         }
         # "Active execution issues" (#471): a required family is demanded of
         # work that has a release decision. An issue still in the backlog has
@@ -3606,22 +3617,19 @@ gov_issue_rows() {
         buf = ""
         for (fi = 1; fi <= nf; fi++) {
           fm = order[fi]
-          v = (fm in cnt) ? cnt[fm] : ""
-          k = split(v, vv, " ")
-          # split() on a leading-space string yields an empty first element.
-          c = 0; for (x = 1; x <= k; x++) if (vv[x] != "") c++
+          c = (fm in cntn) ? cntn[fm] : 0
+          v = (fm in cntv) ? cntv[fm] : ""
           if (c == 0) {
             if (req[fm] == "required" && active)
               buf = buf sprintf("metadata\t!\t#%s\t%s is required and none is declared\n", num, fm)
           } else if (c > 1 && (card[fm] == "exactly-one" || card[fm] == "at-most-one")) {
-            buf = buf sprintf("metadata\t!\t#%s\t%s allows %s but %d are set:%s\n", num, fm, card[fm], c, v)
+            buf = buf sprintf("metadata\t!\t#%s\t%s allows %s but %d are set: %s\n", num, fm, card[fm], c, v)
           }
           if ((fm in excl) && c > 1) {
-            # Membership over the split elements, never a prefix match: the
-            # exclusive member must actually be one of the declared labels.
-            hasx = 0
-            for (x = 1; x <= k; x++) if (vv[x] == excl[fm]) hasx = 1
-            if (hasx)
+            # Membership over whole member names, never a token or a prefix: the
+            # exclusive member must actually be one of the declared labels, and
+            # a multi-word one must be compared whole.
+            if ((fm SUBSEP excl[fm]) in hasv)
               buf = buf sprintf("metadata\t!\t#%s\t%s is exclusive but is combined with another %s value\n", num, excl[fm], fm)
           }
         }
@@ -5162,7 +5170,9 @@ plan_schema_rows() {
     /^[[:space:]]*(#|$)/ { next }
     $1 == "issue" || ($1 == "update" && $3 == "labels") {
       key = $2; csv = $4
-      delete cnt
+      # Cleared per RECORD: these accumulate per issue, and a leak between
+      # records would count labels from a neighbouring record against this one.
+      delete cntn; delete cntv; delete hasv
       nl = split(csv, lab, ",")
       for (j = 1; j <= nl; j++) {
         if (lab[j] == "") continue
@@ -5170,28 +5180,31 @@ plan_schema_rows() {
           printf "plan\t!\t%s\tlabel \"%s\" is not declared by any governed family\n", key, lab[j]
           continue
         }
-        cnt[memof[lab[j]]] = cnt[memof[lab[j]]] " " lab[j]
+        mfam = memof[lab[j]]
+        cntn[mfam]++
+        cntv[mfam] = cntv[mfam] (cntv[mfam] == "" ? "" : ", ") lab[j]
+        hasv[mfam SUBSEP lab[j]] = 1
       }
       for (fi = 1; fi <= nf; fi++) {
         fm = order[fi]
-        v = (fm in cnt) ? cnt[fm] : ""
-        k = split(v, vv, " "); c = 0
-        for (x = 1; x <= k; x++) if (vv[x] != "") c++
+        # Member identity is the record here too. The plan compiler and the
+        # per-issue validator have to agree about what one member is, or the
+        # same governed value validates in one and fails in the other.
+        c = (fm in cntn) ? cntn[fm] : 0
+        v = (fm in cntv) ? cntv[fm] : ""
         if (c == 0 && req[fm] == "required")
           printf "plan\t!\t%s\t%s is required and the plan declares none\n", key, fm
         else if (c > 1 && (card[fm] == "exactly-one" || card[fm] == "at-most-one"))
-          printf "plan\t!\t%s\t%s allows %s but the plan sets %d:%s\n", key, fm, card[fm], c, v
+          printf "plan\t!\t%s\t%s allows %s but the plan sets %d: %s\n", key, fm, card[fm], c, v
         # The exclusive member has to be checked HERE too. Without it a plan
         # declaring `docs-impact:none` alongside another value validated
         # cleanly and was then hard-FAILed as INVALID at validate time — the
         # precise drift between plan and enforcement this surface exists to
         # stop.
         if ((fm in excl) && c > 1) {
-          # Membership, not a prefix match — same rule, same reason as the
-          # per-issue check.
-          hasx = 0
-          for (y = 1; y <= k; y++) if (vv[y] == excl[fm]) hasx = 1
-          if (hasx)
+          # Whole-name membership, not a token or a prefix — same rule, same
+          # reason as the per-issue check.
+          if ((fm SUBSEP excl[fm]) in hasv)
             printf "plan\t!\t%s\t%s is exclusive but the plan combines it with another %s value\n", key, excl[fm], fm
         }
       }

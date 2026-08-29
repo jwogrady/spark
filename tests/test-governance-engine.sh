@@ -85,7 +85,10 @@ assert_eq "and raises no finding" "" \
 two="$(printf '11\tfeature,bug,docs-impact:none\tv0.21 — Governance as schema\n')"
 out="$(iss "$two")"
 assert_contains "two categories is reported" "category allows exactly-one but 2 are set" "$out"
-assert_contains "naming both" "feature bug" "$out"
+# Comma-separated, not space-separated: a space-joined list cannot be read back
+# unambiguously once a member name may itself contain a space, which is the
+# defect this separator exists to make impossible to reintroduce.
+assert_contains "naming both, separably" "feature, bug" "$out"
 # ...and Spark must NOT choose between them.
 case "$out" in
   *"should be"*|*"use feature"*|*"correct label is"*) bad "Spark must not choose which category is meant" ;;
