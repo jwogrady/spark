@@ -2276,6 +2276,15 @@ governance_records() {
       else if ($1 == "family" || $1 == "enforce" || $1 == "exclusive")
                                                        key = $1 "/" $2
       else if ($1 == "member")                       { key = $1 "/" $2 "/" $3; group = "member/" $2 }
+      # A structure ASPECT is one statement made of one or more facts — a
+      # dependency has an authoritative form and a derived one — so these key
+      # per fact but REPLACE per aspect, exactly as a member set does. Keying
+      # alone left the release-gate binding of a project sitting beside the
+      # shipped one rather than replacing it: both survived layering, the
+      # consumer took whichever came first, and a project that renamed the role
+      # was silently overruled by the tier it had just overridden (#511 again,
+      # one record kind over).
+      else if ($1 == "structure")                    { key = $1 "/" $2 "/" $3; group = "structure/" $2 }
       else if ($1 == "pathclass")                    { key = $1 "/" $2 "/" $3 "/" $5
                                                        group = "pathclass/" $2 "/" $3 }
       else                                             key = $1 "/" $2 "/" $3
