@@ -1,0 +1,96 @@
+# docs-truth — a dedicated, binding release-readiness check (#484).
+#
+# Runs as its own job so it becomes a check-run named `docs-truth`, which is the
+# same surface milestone-gate already reads for doctor and tests. That is the
+# whole point: documentation truth becomes a gate of the same kind as the others,
+# not a human checkbox beside them.
+#
+# It is deliberately read-only. It reports whether the repository describes the
+# state this release will ship, and it changes nothing to make that true.
+name: docs-truth
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+  workflow_run:
+    # Re-evaluate once validation has finished, so structural truth reads the
+    # final doctor result rather than racing it.
+    workflows: [validate]
+    types: [completed]
+  issue_comment:
+    # The semantic verdict lives in a PR comment, so creating or editing that
+    # evidence must re-evaluate the gate.
+    types: [created, edited, deleted]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: read
+
+jobs:
+  docs-truth:
+    runs-on: ubuntu-latest
+    # An issue_comment fires for issues as well as PRs; only PR comments carry
+    # release verdicts.
+    if: github.event_name != 'issue_comment' || github.event.issue.pull_request
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve the pull request under evaluation
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          PR_FROM_EVENT: ${{ github.event.pull_request.number || github.event.issue.number }}
+        run: |
+          set -euo pipefail
+          number="${PR_FROM_EVENT:-}"
+          if [ -z "$number" ]; then
+            # workflow_run / dispatch: fall back to the open release PR, which is
+            # the only PR whose documentation truth gates a release.
+            number="$(gh pr list --state open --limit 50 \
+              --json number,headRefName \
+              --jq '[.[] | select(.headRefName | startswith("release-please--"))] | first | .number // ""')"
+          fi
+          if [ -z "$number" ]; then
+            echo "no pull request to evaluate" >&2
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # docs-truth gates the RELEASE, not every change. Running it on each
+          # feature PR would report a release-scope verdict against work that is
+          # not the release, and mark honest PRs red for it.
+          ref="$(gh pr view "$number" --json headRefName --jq .headRefName)"
+          case "$ref" in
+            release-please--*) ;;
+            *)
+              echo "PR #$number is not the release PR; docs-truth gates the release" >&2
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              exit 0 ;;
+          esac
+          head="$(gh pr view "$number" --json headRefOid --jq .headRefOid)"
+          milestone="$(gh pr view "$number" --json milestone --jq '.milestone.title // ""')"
+          if [ -z "$milestone" ]; then
+            # A release PR carries no milestone of its own; the release being
+            # prepared is the open milestone whose version the PR proposes.
+            milestone="$(gh api "repos/${{ github.repository }}/milestones?state=open&per_page=100" \
+              --jq 'sort_by(.number) | first | .title // ""')"
+          fi
+          {
+            echo "number=$number"
+            echo "head=$head"
+            echo "milestone=$milestone"
+            echo "skip=false"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: docs-truth
+        if: steps.pr.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          bash .github/scripts/docs-truth.sh \
+            --repo "${{ github.repository }}" \
+            --pr "${{ steps.pr.outputs.number }}" \
+            --head "${{ steps.pr.outputs.head }}" \
+            --milestone "${{ steps.pr.outputs.milestone }}"

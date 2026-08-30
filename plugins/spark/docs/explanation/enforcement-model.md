@@ -102,6 +102,41 @@ plan) rather than a git hook, because readiness is about the substance of the
 plan, not the syntax of a commit. Form lives in `hooks/`; readiness lives in the
 lifecycle skills.
 
+## Documentation as a gate, not a checkbox
+
+Spark's release gates were `doctor`, `tests`, and `milestone-gate`. Documentation
+was not among them — it was a checklist a human ticked. So a release could go
+green while the docs described a version that no longer existed. Nothing lied;
+nothing checked.
+
+`docs-truth` closes that. It is a **binding** release-readiness check of the same
+kind as the others: `milestone-gate` reads its result alongside `doctor` and
+`tests`, and reports not-ready while it fails. It answers one question — *does
+the repository describe the state that will exist after this release?* — never
+"what happened, in what order", which GitHub already holds.
+
+It works in three layers, and each is enforced where it can actually be proven:
+
+- **Structural** truth composes `doctor`, which already owns every list-vs-list
+  parity check. Nothing is reimplemented.
+- **Interface** truth requires every shipped CLI verb to carry exactly one
+  machine-readable compatibility classification. An unclassified verb *fails*;
+  it is never defaulted to Stable to go green, because a gate that promotes a
+  surface to make itself pass is manufacturing a promise nobody made.
+- **Semantic** truth cannot honestly be reduced to a script, so it is *narrowed*
+  instead: the check derives a bounded per-issue claim list from declared
+  documentation impact — "these behaviours changed, verify these documents" —
+  rather than instructing anyone to review the docs.
+
+Two properties keep it honest. **NOT ASSESSED is never green**, and the report
+names which layer could not be assessed; a gate that cannot tell "passed" from
+"could not look" is not a gate. And the semantic verdict lives in **GitHub
+evidence on the release PR, never in the tree** — committing it would write
+change-over-time evidence into a current-state surface, the exact thing the
+ownership contract forbids. A gate that forced its own violation would be worse
+than no gate. A verdict is bound to an exact HEAD SHA, so when the release PR
+moves, the previous verdict is stale by arithmetic rather than by judgement.
+
 ## Why this is the right trade, and where it stops
 
 Mechanical enforcement costs more up front — you write and test a hook instead of a

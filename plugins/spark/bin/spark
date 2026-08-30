@@ -898,6 +898,88 @@ cmd_doctor() {
     [ "$cli_ok" -eq 1 ] && green "  ✓ every shipped verb is documented in the canonical CLI reference"
   fi
 
+  # Compatibility classification (#484): every shipped verb carries exactly one
+  # MACHINE-READABLE class, and reference/stability.md is checked against that
+  # data rather than being the authority for it.
+  #
+  # `unclassified` is a real value and it fails. The alternative — defaulting an
+  # unclassified verb to Stable so the check goes green — would use a mechanical
+  # gate to manufacture a compatibility promise nobody made, which is worse than
+  # the gap it hides. A verb reaches a class by decision, never by shipping.
+  local stab="$SPARK_ROOT/preferences/cli-stability.tsv"
+  if [ -f "$stab" ]; then
+    echo
+    echo "CLI compatibility classification (VERBS vs cli-stability.tsv):"
+    local cls_ok=1 verb cls n rv
+    for verb in $(printf '%s\n' "$VERBS" | awk -F'|' 'NF{print $1}'); do
+      n="$(awk -F'\t' -v v="$verb" '/^[[:space:]]*(#|$)/ {next} $1 == v {c++} END {print c+0}' "$stab")"
+      if [ "$n" -eq 0 ]; then
+        red "  ✗ verb '$verb' ships with no compatibility classification"
+        errors=$((errors+1)); cls_ok=0; continue
+      fi
+      if [ "$n" -gt 1 ]; then
+        red "  ✗ verb '$verb' carries $n classifications — exactly one is required"
+        errors=$((errors+1)); cls_ok=0; continue
+      fi
+      cls="$(awk -F'\t' -v v="$verb" '/^[[:space:]]*(#|$)/ {next} $1 == v {print $2; exit}' "$stab")"
+      case "$cls" in
+        stable|compatible-with-migration|advisory|internal|experimental) ;;
+        unclassified)
+          red "  ✗ verb '$verb' is unclassified — it needs an explicit compatibility decision"
+          errors=$((errors+1)); cls_ok=0 ;;
+        *)
+          red "  ✗ verb '$verb' carries unknown class '$cls'"
+          errors=$((errors+1)); cls_ok=0 ;;
+      esac
+    done
+    # A classification for a verb that no longer ships is stale data wearing the
+    # shape of a promise.
+    while IFS=$'\t' read -r rv _; do
+      case "$rv" in ''|'#'*) continue ;; esac
+      if ! printf '%s\n' "$VERBS" | awk -F'|' -v v="$rv" 'NF && $1 == v {f=1} END {exit !f}'; then
+        red "  ✗ cli-stability.tsv classifies '$rv', which no longer ships"
+        errors=$((errors+1)); cls_ok=0
+      fi
+    done < "$stab"
+    # The prose renders the data. Where they disagree, the prose is wrong.
+    if [ -f "$SPARK_ROOT/docs/reference/stability.md" ]; then
+      local doc_names tsv_stable
+      # The row writes the first name as `spark setup` and the rest bare, so
+      # take every backticked token and strip an optional `spark ` prefix.
+      doc_names="$(grep -m1 'CLI command \*\*names\*\*' "$SPARK_ROOT/docs/reference/stability.md" \
+        | grep -o '`[^`]*`' | tr -d '`' | sed 's/^spark //' | LC_ALL=C sort)"
+      tsv_stable="$(awk -F'\t' '/^[[:space:]]*(#|$)/ {next} $2 == "stable" {print $1}' "$stab" | LC_ALL=C sort)"
+      if [ "$doc_names" != "$tsv_stable" ]; then
+        red "  ✗ reference/stability.md's Stable CLI names disagree with cli-stability.tsv"
+        errors=$((errors+1)); cls_ok=0
+      fi
+    fi
+    if [ "$cls_ok" -eq 1 ]; then
+      green "  ✓ every shipped verb carries exactly one compatibility classification"
+    fi
+  fi
+
+  # Preference-key vocabulary (#484): every key the shipped defaults declare must
+  # appear in the reference vocabulary. A key that ships undocumented is a
+  # setting nobody can discover, and the reference is the only place a reader
+  # looks for the answer.
+  local prefs="$SPARK_ROOT/preferences/defaults.json"
+  local prefdoc="$SPARK_ROOT/docs/reference/engineering-preferences.md"
+  if [ -f "$prefs" ] && [ -f "$prefdoc" ]; then
+    echo
+    echo "Preference-key vocabulary (defaults.json vs reference/engineering-preferences.md):"
+    local pk_ok=1 pk
+    for pk in $(grep -o '"[a-z_.-]*":' "$prefs" | tr -d '":' | LC_ALL=C sort -u); do
+      if ! grep -q -- "$pk" "$prefdoc"; then
+        red "  ✗ preference key '$pk' ships but is absent from the reference vocabulary"
+        errors=$((errors+1)); pk_ok=0
+      fi
+    done
+    if [ "$pk_ok" -eq 1 ]; then
+      green "  ✓ every shipped preference key appears in the reference vocabulary"
+    fi
+  fi
+
   # Permission presets (ADR-0017, #277): every preset in the enum must resolve
   # to a shipped baseline that is valid JSON, so a preset can never be offered
   # without the file it applies. Reads the same permission_baseline authority

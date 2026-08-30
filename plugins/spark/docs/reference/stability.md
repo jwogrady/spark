@@ -40,9 +40,21 @@ guess.
 
 ## Surface classification
 
+The CLI rows below classify the **verb surface** — the command name and its
+documented invocation contract. They do not freeze everything reached through
+that verb: output *phrasing* stays Advisory even for a Stable command, and the
+schemas behind a verb (the governance model, the plan artifact, `.spark/`
+runtime files) carry their own contracts in their own rows. A Stable verb
+promises the command keeps working, not that nothing behind it can evolve.
+
+The machine-readable authority for the CLI rows is
+`preferences/cli-stability.tsv`; this page is checked against it, never the
+other way round.
+
 | Surface | Class | What that guarantees |
 | --- | --- | --- |
-| CLI command **names** (`spark setup`, `doctor`, `preferences`, `brief`, `resume`, `state`, `footprint`, `list-skills`, `new-skill`, `install-git-hooks`, `apply-permissions`, `profiles`, `orient`, `version`) | **Stable** | A name in v1 keeps working through the v1 line; removal or rename is a major bump |
+| CLI command **names** (`spark setup`, `doctor`, `preferences`, `brief`, `resume`, `state`, `footprint`, `list-skills`, `new-skill`, `install-git-hooks`, `apply-permissions`, `profiles`, `orient`, `version`, `next`, `docs-impact`, `labels`, `hub`, `help`, `governance`, `plan`, `triage`, `reconcile`, `course`) | **Stable** | A name in v1 keeps working through the v1 line; removal or rename is a major bump |
+| CLI command names introduced in v0.23 (`telemetry`, `budget`, `evidence`, `route`, `ci`) | **Experimental** | Still being dogfooded and their contracts actively validated; may change or be withdrawn in any release |
 | CLI **flags** documented in the [CLI reference](cli.md) and their **exit-code contract** (`0` success, non-zero failure; `doctor` error/warn levels; documented gate codes) | **Stable** | Documented flags and exit semantics do not change meaning within v1 |
 | Undocumented flags, output *phrasing*, and log formatting | **Advisory** | Human-readable text may be reworded in a minor release; do not parse it — use `--json` where offered |
 | **Plugin skill names and invocation** (`/spark:<skill>` for the nine core skills; `/spark-audit:*`, `/spark-connect:*`, `/spark-docs:*`) | **Stable** | An invocation string in v1 keeps resolving to the same skill through the v1 line |

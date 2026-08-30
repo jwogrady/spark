@@ -28,10 +28,13 @@ gh api "repos/$repo/contents/.release-please-manifest.json?ref=$head_sha" \
 gh issue list --repo "$repo" --state all --limit 500 \
   --json number,state,milestone > issues.json
 
-# Validate is green only if every doctor/tests run on the PR head succeeded.
+# Validation is green only if every required run on the PR head succeeded.
+# docs-truth (#484) joins doctor and tests as a BINDING gate: a release must not
+# go green while current-state documentation is stale, and the only way to mean
+# that is to read its result here rather than beside it.
 checks="unknown"
 concl="$(gh api "repos/$repo/commits/$head_sha/check-runs" \
-  --jq '[.check_runs[] | select(.name=="doctor" or .name=="tests") | .conclusion]' 2>/dev/null || echo '[]')"
+  --jq '[.check_runs[] | select(.name=="doctor" or .name=="tests" or .name=="docs-truth") | .conclusion]' 2>/dev/null || echo '[]')"
 if printf '%s' "$concl" | jq -e 'length>0 and all(.=="success")' >/dev/null 2>&1; then
   checks="green"
 elif printf '%s' "$concl" | jq -e 'length>0' >/dev/null 2>&1; then

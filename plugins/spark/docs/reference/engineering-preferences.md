@@ -125,6 +125,11 @@ operator guidance Spark does not check or enforce.
 
 ### Issue management
 - Track work explicitly across: **features, bugs, documentation, chores, technical debt, research, infrastructure** — `issue.taxonomy`.
+- Name the governance model whose label families, cardinality rules, and
+  documentation path classes this project is held to — `governance.model`. It
+  resolves to a model under `preferences/governance-models/`; `spark governance`
+  renders, diffs, and validates the repository against it, and `spark plan`
+  mutates only the families that model declares.
 
 ### Architecture
 - Favor systems that are **modular, loosely coupled, highly cohesive, API-first, reusable, evolvable.**
