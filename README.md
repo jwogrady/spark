@@ -13,6 +13,7 @@
 [![License](https://img.shields.io/badge/license-MIT-0F172A)](LICENSE)
 
 [Quick start](#start-shipping) ·
+[Existing repos](#the-repository-you-already-have) ·
 [The lifecycle](#one-lifecycle-carried-everywhere) ·
 [Your standards](#your-standards-loaded-once) ·
 [Guardrails](#guardrails-that-actually-run) ·
@@ -34,10 +35,11 @@ workflow preferences into every project; lets you override them when a
 repository needs different rules; and guides work through one traceable
 lifecycle from intent to pull request. Decisions become documentation. Plans
 become GitHub issues. Issues become branches and pull requests. Reviews become
-gates instead of suggestions. Session state survives. The result is not AI
-activity — it is more finished software, shipped with the consistency, memory,
-and discipline of an engineering organization, using the subscriptions and
-tools already on the desk.
+gates instead of suggestions. Session state survives. And when the repository
+already exists, Spark establishes what is true about it **before** anything
+changes. The result is not AI activity — it is more finished software, shipped
+with the consistency, memory, and discipline of an engineering organization,
+using the subscriptions and tools already on the desk.
 
 ## The force multiplier
 
@@ -56,6 +58,46 @@ Claude is capable. GitHub is durable. Spark makes them operate as one system.
 
 Spark does not replace Claude Code or GitHub. It supplies the project
 engineering that lets both deliver more value.
+
+## The repository you already have
+
+Most work does not start on an empty directory. It starts on a repository with
+history, half-finished intent, and decisions nobody wrote down — and the fastest
+way to damage one is to let an agent act on what it assumed rather than what is
+true.
+
+So Spark enters an existing repository read-only, and stops:
+
+```mermaid
+flowchart LR
+    O([orient]) --> T([triage]) --> R([reconcile]) --> C([course]) --> N([next])
+    classDef stage fill:#F97316,stroke:#0F172A,color:#1e1300,font-weight:bold
+    class O,T,R,C,N stage
+```
+
+| Verb | Question it answers | What it may change |
+| --- | --- | --- |
+| `spark orient` | Is this repository new, existing, or ambiguous? | Records the classification, once |
+| `spark triage` | What is actually true here? | **Nothing.** Read-only, and mechanically so |
+| `spark reconcile` | What should change, and who may approve it? | **Nothing.** It proposes a slate; you apply it one group at a time |
+| `spark course` | Which objective is coherent to pursue next? | **Nothing.** No milestone, priority or direction is recorded |
+| `spark next` | Which issue inside that objective? | **Nothing.** It selects; you decide |
+
+Each verb sorts what it finds into four states — established, mechanically
+wrong, **judgment-bearing**, and unread — and they never collapse into each
+other. An unread surface is not a passing one, and a contradiction Spark can see
+is not a decision Spark may make.
+
+That last distinction is the point. When evidence is sufficient but the call is
+yours, Spark reports `DECISION REQUIRED` and stops with its own exit code:
+
+```text
+DECISION REQUIRED — nothing is mechanically wrong; 4 decision(s) await human authority
+  Reported, never chosen. A recommendation is not authority.
+```
+
+Release disposition, priority, milestone, and product direction stay yours.
+Spark will not assign one to make its own gate turn green.
 
 ## One lifecycle, carried everywhere
 
@@ -181,16 +223,23 @@ brief of what was created, kept, and still open:
 ```
 
 It stops at each human decision (an ambiguous repo, the profile choice, the
-LICENSE) rather than guessing. Prefer the raw verbs? `/spark:onboard` just
-sequences them, and each stands alone:
+LICENSE) rather than guessing. **On a repository that already exists, `onboard`
+routes through `triage` first** — truth is established read-only before anything
+is seeded. Prefer the raw verbs? `/spark:onboard` just sequences them, and each
+stands alone:
 
 ```bash
+spark orient          # new, existing, or ambiguous — recorded once
+spark triage          # what is true here, read-only
+spark reconcile       # the approval-gated slate; it proposes, never applies
+spark course          # which objective is coherent to pursue next
 spark setup           # hooks + permissions + resolved standards, one command
 spark doctor          # confirm the repo is armed
 ```
 
 `spark setup` is idempotent. The granular commands remain available when you
-want to apply or inspect each step separately.
+want to apply or inspect each step separately, and the
+[CLI reference](plugins/spark/docs/reference/cli.md) documents every verb.
 
 **3. Run the lifecycle**
 

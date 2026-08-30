@@ -4,7 +4,7 @@ This roadmap reflects current intent, not a commitment or timeline.
 Priorities may shift as the project evolves.
 
 **Current phase: Alpha (v0.x).** The engineering pipeline is proven and
-`v0.21.0` is the published baseline; the product itself is now being validated
+`v0.22.0` is the published baseline; the product itself is now being validated
 by real users.
 The program, its evidence gates, and the Alpha → Beta → v1.0.0 promotion path
 are the [Alpha program](docs/alpha/alpha-program.md) — a stable v1.0.0 is
@@ -491,10 +491,11 @@ accumulated 22 open issues across six unrelated outcomes.
 
 ## v0.22 — Truth-first onboarding
 
-**Status:** Certified, awaiting release authorization — see #479. Certification
-ran against `8ab4c34` with every scope issue closed and every one carrying a
-satisfied `docs-impact` disposition; no version has been cut, and cutting it is
-a human decision.
+**Status:** Shipped (`v0.22.0`) — published 2026-08-30 at `f364d42`, the commit
+the `v0.22.0` tag names; milestone #19 is closed. Certification ran against
+`8ab4c34` with every scope issue closed and every one carrying a satisfied
+`docs-impact` disposition, and release authorization was the human act that
+followed it.
 Record: [`docs/releases/v0.22.md`](docs/releases/v0.22.md).
 
 An existing repository is understood read-only, reconciled through approval, and
@@ -561,26 +562,60 @@ before work can start.
 
 ---
 
-## v0.23 — State and provenance separation
+## v0.23 — Execution efficiency, observability, state and provenance
 
 **Status:** Planned
 
-Repository code and docs own current state and durable meaning; Git and GitHub
-own change-over-time provenance; Spark detects leakage between them and proves
-current-state documentation is truthful before a release goes green. GitHub
-milestone #20 is the version authority; issue #480 is the release gate.
+v0.22 proved Spark can govern **what work is allowed**. v0.23 must also govern
+**how autonomous software work executes** — bounded convergence instead of
+thrashing, targeted verification instead of repeated full suites, model routing
+proportional to difficulty, and every automated run observable by cost, latency,
+tokens, tool calls and verdict. Repository code and docs still own current state
+and durable meaning; Git and GitHub own change-over-time provenance. GitHub
+milestone #20 is the version authority; issue #480 is the release gate and
+carries the scope as sub-issues.
 
 Nothing here is implemented.
 
-- The state-versus-provenance ownership contract, refining ADR-0008/ADR-0028
-  (#474), then removing duplicated historical chronology from state documents
-  (#475).
-- `audit` detecting provenance leakage as a first-class finding (#476), and the
-  terminology split reserving `provenance` for change history (#477).
-- `docs-truth` as a **required** release-readiness check (#484) — structural
-  checks composed from what `doctor` already proves, one explicit compatibility
-  classification per shipped CLI verb, and a bounded semantic verdict recorded in
-  GitHub evidence and bound to the reviewed HEAD.
+The approved delivery course is **truth/ownership → measurement → efficiency
+primitives → safe execution lanes → autonomous loops → release automation →
+release gate**. It is a course, not a per-issue schedule: native `blocked-by`
+records literal prerequisites only, and no dependency edge exists to express a
+preferred sequence.
+
+- **Truth and ownership.** The state-versus-provenance ownership contract,
+  refining ADR-0008/ADR-0028 (#474), then removing duplicated historical
+  chronology from state documents (#475); `audit` detecting provenance leakage as
+  a first-class finding (#476), and the terminology split reserving `provenance`
+  for change history (#477). `docs-truth` becomes a **required** release-readiness
+  check (#484) — structural checks composed from what `doctor` already proves, one
+  explicit compatibility classification per shipped CLI verb, and a bounded
+  semantic verdict bound to the reviewed HEAD. It lands early enough to govern the
+  rest of the release.
+- **Measurement before optimization.** Autonomous-run cost, latency, tokens,
+  tools and convergence measured and exposed (#574); Spark's own hot-path and
+  suite runtime measured and reduced before autonomous loops scale it (#609). No
+  optimization claim is admissible without a baseline that precedes it.
+- **Efficiency primitives.** Token- and tool-efficient agent context by default
+  (#576); bounded convergence and verification budgets (#558); capability- and
+  cost-based routing with recorded escalation reasons (#575); evidence-backed
+  decomposition of the core executable where structure itself creates context and
+  change cost (#614).
+- **Safe execution lanes.** The Claude coding lane activated with least
+  privilege (#583), and the independent OpenAI reviewer lane (#584) — separated
+  permissions, bounded verdict contract.
+- **Autonomous loops.** The reviewer-to-Claude repair loop closed with zero
+  operator relay (#585); Agent Relay as an observable multi-agent conversation
+  (#578); live operator steering and strategic compaction checkpoints (#610).
+- **Release automation.** Delivery order read correctly beneath nested gate
+  containers (#611); release-note carrier cycles and author-written link identity
+  preserved (#508, #615); release-certification repair loops automated without
+  making the operator the message bus (#608), final release authority still human.
+
+A release does not go green while README or other current-state documentation
+describes the previous product. That regression is v0.22's, and it is recorded as
+evidence in [`docs/releases/v0.22.md`](docs/releases/v0.22.md) and guarded by
+`tests/test-readme-product-truth.sh`.
 
 ---
 
