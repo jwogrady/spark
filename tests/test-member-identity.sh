@@ -195,12 +195,24 @@ cat > "$nxbin/gh" <<'GHEOF'
 #!/usr/bin/env bash
 case "${1:-}" in
   auth) exit 0 ;;
+  repo) printf 'o/r\n'; exit 0 ;;
   issue)
     jqx=""; prev=""
     for a in "$@"; do [ "$prev" = "--jq" ] && jqx="$a"; prev="$a"; done
     if [ -n "$jqx" ]; then printf '%s' "$ISSUES" | jq -r "$jqx"; else printf '%s' "$ISSUES"; fi
     exit 0 ;;
 esac
+# The release-gate capture. Gate identity is a governed fact read here, not
+# inferred from the open-issue labels above — a gate that has closed is absent
+# from that list entirely.
+for a in "$@"; do
+  if [ "$a" = "graphql" ]; then
+    jqx=""; prev=""
+    for b in "$@"; do [ "$prev" = "--jq" ] && jqx="$b"; prev="$b"; done
+    if [ -n "$jqx" ]; then printf '%s' "$GATECAP" | jq -r "$jqx"; else printf '%s' "$GATECAP"; fi
+    exit 0
+  fi
+done
 for a in "$@"; do
   case "$a" in
     # PER ISSUE, not one answer for both: #900 is the container, #901 the leaf.
@@ -222,7 +234,11 @@ js() {
   printf '[{"number":900,"title":"Gate","labels":[{"name":"feature"},{"name":"release-gate"}]},{"number":901,"title":"Real work","labels":[%s]}]' "$labs"
 }
 
-nx() { ( cd "$nextrepo" && env PATH="$nxbin" ISSUES="$1" \
+GATECAP="$(gate_cap "$(gate_mil 'v0.9' \
+  "$(gate_iss 900 'v0.9' - OPEN feature release-gate),$(gate_iss 901 'v0.9' 900 OPEN feature)")" \
+  "$(gate_iss 900 'v0.9' - OPEN feature release-gate)")"
+
+nx() { ( cd "$nextrepo" && env PATH="$nxbin" ISSUES="$1" GATECAP="$GATECAP" \
   "$SPARK" next --milestone "v0.9" 2>&1 ); }
 
 # ONE multi-word priority label must count as ONE. #900 carries the governed

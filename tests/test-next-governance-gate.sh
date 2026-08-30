@@ -44,13 +44,17 @@ done
 cat > "$stub/gh" <<'STUB'
 #!/usr/bin/env bash
 args="$*"
-case "$1 $2" in "auth status") exit 0 ;; esac
+case "$1 $2" in
+  "auth status") exit 0 ;;
+  "repo view") printf 'o/r\n'; exit 0 ;;
+esac
 case "$args" in
   *"issue list"*)
     printf 'issue\t%s\t%s\n' 10 "Release readiness gate"
     printf 'label\t%s\t%s\n' 10 "chore"
     printf 'label\t%s\t%s\n' 10 "P1"
     printf 'label\t%s\t%s\n' 10 "docs-impact:none"
+    printf 'label\t%s\t%s\n' 10 "release-gate"
     printf 'issue\t%s\t%s\n' 11 "The work"
     printf 'label\t%s\t%s\n' 11 "feature"
     printf 'label\t%s\t%s\n' 11 "P1"
@@ -60,7 +64,15 @@ case "$args" in
   *"/issues/11/sub_issues"*) exit 0 ;;
   *"dependencies/blocked_by"*) exit 0 ;;
   *"milestones?state=open"*) printf '%s\n' "v1.0"; exit 0 ;;
-  *graphql*) exit 0 ;;
+  # The release-gate capture, in the shape the binary's --jq produces. #10
+  # carries the governed role; #11 is its sub-issue. next reads WHICH issue is
+  # the gate from here, never from the issue list above.
+  *graphql*)
+    printf 'milestone\t%s\n' "v1.0"
+    printf 'issue\t%s\t%s\t%s\t%s\n' 10 "v1.0" "" "OPEN"
+    printf 'label\t%s\t%s\n' 10 "release-gate"
+    printf 'issue\t%s\t%s\t%s\t%s\n' 11 "v1.0" 10 "OPEN"
+    exit 0 ;;
 esac
 exit 0
 STUB
@@ -141,13 +153,17 @@ assert_eq "and it is 3, not 1 and not 4" 3 "$N_RC"
 cat > "$stub/gh" <<'STUB2'
 #!/usr/bin/env bash
 args="$*"
-case "$1 $2" in "auth status") exit 0 ;; esac
+case "$1 $2" in
+  "auth status") exit 0 ;;
+  "repo view") printf 'o/r\n'; exit 0 ;;
+esac
 case "$args" in
   *"issue list"*)
     printf 'issue\t%s\t%s\n' 10 "Release readiness gate"
     printf 'label\t%s\t%s\n' 10 "chore"
     printf 'label\t%s\t%s\n' 10 "sev1"
     printf 'label\t%s\t%s\n' 10 "docs-impact:none"
+    printf 'label\t%s\t%s\n' 10 "release-gate"
     printf 'issue\t%s\t%s\n' 11 "The work"
     printf 'label\t%s\t%s\n' 11 "feature"
     printf 'label\t%s\t%s\n' 11 "sev1"
@@ -157,7 +173,14 @@ case "$args" in
   *"/issues/11/sub_issues"*) exit 0 ;;
   *"dependencies/blocked_by"*) exit 0 ;;
   *"milestones?state=open"*) printf '%s\n' "v1.0"; exit 0 ;;
-  *graphql*) exit 0 ;;
+  # The same repository as above: the renamed family is a PRIORITY question,
+  # and it does not change which issue is the gate.
+  *graphql*)
+    printf 'milestone\t%s\n' "v1.0"
+    printf 'issue\t%s\t%s\t%s\t%s\n' 10 "v1.0" "" "OPEN"
+    printf 'label\t%s\t%s\n' 10 "release-gate"
+    printf 'issue\t%s\t%s\t%s\t%s\n' 11 "v1.0" 10 "OPEN"
+    exit 0 ;;
 esac
 exit 0
 STUB2
