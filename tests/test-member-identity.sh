@@ -203,7 +203,11 @@ case "${1:-}" in
 esac
 for a in "$@"; do
   case "$a" in
-    *sub_issues*)   printf '900\n901\n'; exit 0 ;;
+    # PER ISSUE, not one answer for both: #900 is the container, #901 the leaf.
+    # One reply for every path made every issue look like a parent, which the
+    # hierarchy rule then correctly refused to offer as work.
+    */issues/900/sub_issues*) printf '901\n'; exit 0 ;;
+    */issues/901/sub_issues*) exit 0 ;;
     *dependencies*) printf '0\n'; exit 0 ;;
   esac
 done
@@ -215,14 +219,14 @@ chmod +x "$nxbin/gh"
 js() {
   local labs="" l
   for l in "$@"; do labs="${labs:+$labs,}$(printf '{"name":%s}' "$(printf '%s' "$l" | jq -R .)")"; done
-  printf '[{"number":900,"title":"Gate","labels":[{"name":"feature"}]},{"number":901,"title":"Real work","labels":[%s]}]' "$labs"
+  printf '[{"number":900,"title":"Gate","labels":[{"name":"feature"},{"name":"release-gate"}]},{"number":901,"title":"Real work","labels":[%s]}]' "$labs"
 }
 
 nx() { ( cd "$nextrepo" && env PATH="$nxbin" ISSUES="$1" \
   "$SPARK" next --milestone "v0.9" 2>&1 ); }
 
-# ONE multi-word priority label must count as ONE. The gate carries sub-issues,
-# so 900 is the gate and 901 is the selectable issue.
+# ONE multi-word priority label must count as ONE. #900 carries the governed
+# release-gate role, so it is the gate; #901 is the selectable issue.
 out4="$(nx "$(js feature 'top urgent')")" || true
 case "$out4" in
   *"carries 2"*) c4="!" ;;
