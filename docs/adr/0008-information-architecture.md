@@ -102,8 +102,21 @@ must be reconciled after the fact.
 - Portable knowledge home and sync model — owner: #67.
 - State-artifact schema — owner: #66.
 
+## Later Clarification
+
+ADR-0031 adds an axis this model assumes and does not state. The table above
+answers **which layer owns a class** and where its canonical source lives; it
+does not say, for a given class, whether information about *how that state
+changed over time* belongs in the tree or in the history.
+
+That axis cuts across all three layers rather than adding a fourth: Project-layer
+information has both a current state and a provenance, and so does Operator-layer
+information. The decision here is unchanged — ADR-0031 names the boundary the
+"canonical source" column already relied on.
+
 ## Related Docs
 
+- [0031-state-provenance-ownership.md](0031-state-provenance-ownership.md) — the state/provenance axis across these three layers
 - [../adr/0004-cosmic-is-the-generated-unit.md](0004-cosmic-is-the-generated-unit.md) — placed preferences in-plugin
 - `plugins/spark/docs/glossary.md` — carry-in / carry-through / carry-forward, the three layers
 - `plugins/spark/docs/explanation/philosophy.md` — the principles this model rests on
