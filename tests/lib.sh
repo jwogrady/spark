@@ -168,17 +168,28 @@ gov_iss() {
 # here, once, because `governance` and `next` now read the same capture and a
 # second copy of it in a second suite is how they would drift apart again.
 
-# gate_iss <number> <milestone|-> <parent|-> <state> <label>... — one issue
-# node, in whatever state it is in. Closed issues are part of the answer: a
-# gate does not stop being the gate the moment it closes.
+# gate_iss <number> <milestone|-> <parent|-> <state> <subs-csv|-> <label>... —
+# one issue node, in whatever state it is in. Closed issues are part of the
+# answer: a gate does not stop being the gate the moment it closes.
+#
+# ONE NODE FOR BOTH CAPTURES. The release-gate capture and the milestone
+# snapshot read the same issues for different questions, and a fixture that
+# described them differently could make the two verbs disagree in a way no
+# repository can — which is the opposite of what these suites exist to prove.
 gate_iss() {
-  local n="$1" ms="$2" par="$3" st="$4"; shift 4
-  local labs="" l
+  local n="$1" ms="$2" par="$3" st="$4" subs="$5"; shift 5
+  local labs="" l nodes="" x cnt=0
   for l in "$@"; do labs="${labs:+$labs,}$(printf '{"name":%s}' "$(printf '%s' "$l" | jq -R .)")"; done
-  printf '{"number":%s,"state":"%s","milestone":%s,"parent":%s,"labels":{"pageInfo":{"hasNextPage":%s},"nodes":[%s]}}' \
+  if [ "$subs" != "-" ]; then
+    for x in $(printf '%s' "$subs" | tr ',' ' '); do
+      nodes="${nodes:+$nodes,}{\"number\":$x}"; cnt=$((cnt+1))
+    done
+  fi
+  printf '{"number":%s,"state":"%s","milestone":%s,"parent":%s,"subIssues":{"totalCount":%s,"pageInfo":{"hasNextPage":%s},"nodes":[%s]},"labels":{"pageInfo":{"hasNextPage":%s},"nodes":[%s]}}' \
     "$n" "$st" \
     "$([ "$ms" = "-" ] && echo null || printf '{"title":%s}' "$(printf '%s' "$ms" | jq -R .)")" \
     "$([ "$par" = "-" ] && echo null || printf '{"number":%s}' "$par")" \
+    "$cnt" "${SUBS_TRUNCATED:-false}" "$nodes" \
     "${LABELS_TRUNCATED:-false}" "$labs"
 }
 
