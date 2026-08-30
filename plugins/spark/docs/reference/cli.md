@@ -1854,6 +1854,56 @@ envelope under "routing inputs (not budgets)".
 escalation and buys one more verification — it never clears the failing set.
 New evidence admits new work; it does not absolve old findings.
 
+## `spark evidence [put|get|preflight|status|forget] --key <name>`
+
+Captures an authoritative fact once so several consumers can share it, with
+explicit completeness bounds and invalidation by named inputs. Captures live at
+`.spark/evidence/<key>.tsv` beside their payload.
+
+```text
+capture once -> project -> many consumers -> invalidate on named inputs
+```
+
+| Action | What it does |
+|---|---|
+| `put --key K [invalidators] [--bound n --count n]` | Stores a projection read from stdin (or `--from <file>`). A `put` over an already-fresh capture is reported as duplicate collection and reuses it; `--force` recaptures deliberately. |
+| `get --key K [invalidators]` | Writes the payload to **stdout and nothing else**, so it can be piped straight into whatever needed the fact. |
+| `preflight [--budget n] <file…>` | Estimates a bundle before dispatch. |
+| `status [--json]` | Every capture, its consumer count, and whether it is complete. |
+| `forget --key K` | Drops a capture. |
+
+### Invalidation
+
+Invalidators are `--head`, `--contract`, `--model`, `--effort` and `--tools`.
+A capture is reusable only while every **stated** invalidator matches, and the
+refusal names the one that moved:
+
+```
+STALE — the model changed (claude-opus-5 -> claude-sonnet-5)
+```
+
+An invalidator the caller does not state cannot invalidate — otherwise every
+consumer would have to restate the whole fingerprint to read anything.
+
+Exit codes: `0` fresh, `1` no such capture, `2` stale (the payload is **not**
+returned — a reused capture must never make an old verdict valid), `4`
+complete-but-bounded.
+
+### Bounds and preflight
+
+`--bound` with `--count` marks a capture that reached its limit as NOT ASSESSED
+— at capture time and on every read after it. The payload is still returned,
+always with the warning, because partial evidence presented as whole evidence is
+how a run concludes something false cheaply.
+
+`preflight` estimates with the same bytes-per-token heuristic as `footprint`,
+exiting `2` when over `--budget` so a caller reroutes *before* generation rather
+than discovering the excess after paying for it. With no `--budget` the verdict
+is NOT ASSESSED, never "fits".
+
+Every mechanism here reduces repetition, never evidence: a smaller answer that
+might be wrong is not an optimization.
+
 ## `spark version`
 
 Prints the Spark plugin version, read from `.claude-plugin/plugin.json`.
