@@ -20,6 +20,87 @@ Keep a Changelog format. Do not hand-edit released sections.
 
 ---
 
+## [0.22.0](https://github.com/jwogrady/spark/compare/v0.21.0...v0.22.0) (2026-08-30)
+
+
+### Features
+
+* add spark course, which objective is coherent next ([a9cec8b](https://github.com/jwogrady/spark/commit/a9cec8b2928f54394b0809c0392462d269987ee2))
+* add spark course, which objective is coherent next ([f9c8133](https://github.com/jwogrady/spark/commit/f9c81330371fff8fae93b8455c9e32c74b2786ff)), closes [#469](https://github.com/jwogrady/spark/issues/469)
+* add spark reconcile, the read-only reconciliation slate ([61040bd](https://github.com/jwogrady/spark/commit/61040bdd0a8038fd0c06cc5e7185791fe6969da2))
+* add spark reconcile, the read-only reconciliation slate ([125e53e](https://github.com/jwogrady/spark/commit/125e53eb73f3ced1e7387a62f46f2f7cb56670f9)), closes [#468](https://github.com/jwogrady/spark/issues/468)
+* add spark triage, the read-only repository truth pass ([f40ddfe](https://github.com/jwogrady/spark/commit/f40ddfeb370bd99256ed146d0496d944fc354841))
+* add spark triage, the read-only repository truth pass ([87b0796](https://github.com/jwogrady/spark/commit/87b079696bff76efa8fa36245d85d79c0f6b95d1)), closes [#467](https://github.com/jwogrady/spark/issues/467)
+* apply approved reconciliation groups, one commit at a time ([1142c67](https://github.com/jwogrady/spark/commit/1142c6789f808c88cfe543acfcb81fe1524f8be3))
+* apply approved reconciliation groups, one commit at a time ([3fe2eb6](https://github.com/jwogrady/spark/commit/3fe2eb6846922104883d444651d42c8bb2d6fb61)), closes [#468](https://github.com/jwogrady/spark/issues/468)
+* declare which issue is the release gate ([1d14e51](https://github.com/jwogrady/spark/commit/1d14e51c02c68029c949ebce981b124e76baada2))
+* route an existing repo into triage before onboard seeds it ([bad4438](https://github.com/jwogrady/spark/commit/bad4438bbcf1eec39266f5c8d53e265fb4ae1bfb)), closes [#467](https://github.com/jwogrady/spark/issues/467)
+
+
+### Bug Fixes
+
+* apply only what can land as one revertible commit ([a5fa9d1](https://github.com/jwogrady/spark/commit/a5fa9d1e0c7960a58a4a1c5b2d85a0d4cfc9a51e)), closes [#468](https://github.com/jwogrady/spark/issues/468)
+* carry disposition member names whole, one per line ([98460f2](https://github.com/jwogrady/spark/commit/98460f234e310abe7adb7bdf05dd6b03125d5d3d))
+* carry disposition member names whole, one per line ([9944594](https://github.com/jwogrady/spark/commit/9944594165f04743d0e1b906378db057d70564b1)), closes [#587](https://github.com/jwogrady/spark/issues/587)
+* carry labels and milestone selection structurally, not by delimiter ([f2c5445](https://github.com/jwogrady/spark/commit/f2c54454e119f70e14ffad1bcdb94f42e057e252)), closes [#594](https://github.com/jwogrady/spark/issues/594) [#597](https://github.com/jwogrady/spark/issues/597)
+* compare plan label sets as sets, not as joined scalars ([f14e40b](https://github.com/jwogrady/spark/commit/f14e40bb2909d62bb44973a50145246cc09d0c83))
+* compare plan label sets as sets, not as joined scalars ([6e0d4cf](https://github.com/jwogrady/spark/commit/6e0d4cf107c1da50ce1a2048eec34e0e412b92e9)), closes [#599](https://github.com/jwogrady/spark/issues/599)
+* derive the course from the governed release boundary ([238f21c](https://github.com/jwogrady/spark/commit/238f21c91844d57121c368e34e41f68ce4997e8f)), closes [#602](https://github.com/jwogrady/spark/issues/602)
+* give an owed governance decision its own verdict and exit code ([5ed3f6f](https://github.com/jwogrady/spark/commit/5ed3f6fb214f1b269a26daf04cd77117a3f8b74a)), closes [#559](https://github.com/jwogrady/spark/issues/559)
+* give an owed governance decision its own verdict, not a failure ([d8f7f55](https://github.com/jwogrady/spark/commit/d8f7f55909bcfb739e08d3d5749d2a446ae9bec1))
+* give governance and next one release-gate answer ([4b8cd4b](https://github.com/jwogrady/spark/commit/4b8cd4b623c04772b82e67c0831f9e990c79e90c)), closes [#605](https://github.com/jwogrady/spark/issues/605)
+* identify issue references by the sigil, not by digit runs ([c4a1b57](https://github.com/jwogrady/spark/commit/c4a1b57d3d7e1d9e58a7e53b8d6f24230e4bd882))
+* identify issue references by the sigil, not by digit runs ([b54863a](https://github.com/jwogrady/spark/commit/b54863a99c233e5134c0248cb99d5f7880694fd8)), closes [#571](https://github.com/jwogrady/spark/issues/571)
+* judge the release gate over milestones, not over open issues ([7f3222e](https://github.com/jwogrady/spark/commit/7f3222ed370abdf0885a4e4ffc34e68556b713c5)), closes [#605](https://github.com/jwogrady/spark/issues/605)
+* keep label names out of [@tsv](https://github.com/tsv) on the created path ([f45426c](https://github.com/jwogrady/spark/commit/f45426c7a43cddb92e5731d757b82618997d2a45)), closes [#599](https://github.com/jwogrady/spark/issues/599)
+* let a tier replace a structure aspect it redeclares ([1ff007b](https://github.com/jwogrady/spark/commit/1ff007bb6c03e02fbc636da0e0b454afeb5629db)), closes [#605](https://github.com/jwogrady/spark/issues/605)
+* match a linkified subject token against the rendered notes ([08002a1](https://github.com/jwogrady/spark/commit/08002a1aa9c69f610bf43243801989db63835ad0)), closes [#563](https://github.com/jwogrady/spark/issues/563)
+* name the priority family the model declares, not P0-P3 ([c508d3e](https://github.com/jwogrady/spark/commit/c508d3e2ed6f8eee98b03b8b6e9b0dde426c52b2)), closes [#597](https://github.com/jwogrady/spark/issues/597)
+* never read a failed request as an absent fact ([720ed7c](https://github.com/jwogrady/spark/commit/720ed7ceffe30bd2dda70360b461d0f9a26ef5fa))
+* never read a failed request as an absent fact ([6444bd6](https://github.com/jwogrady/spark/commit/6444bd6bce9c347d723626a6a37390397b8e991c)), closes [#594](https://github.com/jwogrady/spark/issues/594) [#597](https://github.com/jwogrady/spark/issues/597)
+* read milestone work from the hierarchy, not the open-issue count ([8ab4c34](https://github.com/jwogrady/spark/commit/8ab4c347de1caed80a73f707c235edcddddaff9d))
+* read milestone work from the hierarchy, not the open-issue count ([4baea20](https://github.com/jwogrady/spark/commit/4baea203e5781682a5c2efb81b6bfba712a125a3)), closes [#602](https://github.com/jwogrady/spark/issues/602)
+* resolve every approval against a freshly derived slate ([d50f1c8](https://github.com/jwogrady/spark/commit/d50f1c82c900b87cc823a124a3cccf77963e4331))
+* resolve every approval against a freshly derived slate ([110c248](https://github.com/jwogrady/spark/commit/110c248a10beaa36813978a9128cc7158d3df670)), closes [#590](https://github.com/jwogrady/spark/issues/590)
+* resolve the release gate from a governed role, not parenthood ([263d84d](https://github.com/jwogrady/spark/commit/263d84d13e698ae7b64776afb1f42e2b253f8e43))
+* resolve the release gate from the governed role, never parenthood ([b64f62f](https://github.com/jwogrady/spark/commit/b64f62f018c7a6b1710e695fa8ce2094141d0b5e))
+* separate an owed release decision from a roadmap gap ([750545b](https://github.com/jwogrady/spark/commit/750545bb5ae2f6d243df5b2e12546966f246a97e)), closes [#559](https://github.com/jwogrady/spark/issues/559)
+* stop treating issue-body prose as a release decision ([88c0f75](https://github.com/jwogrady/spark/commit/88c0f75eb6442f90a5aba36e3be55dd50fc14095))
+* stop treating issue-body prose as a release decision ([10c1e51](https://github.com/jwogrady/spark/commit/10c1e513e570ddb4ea4410f3b044ee105d4479c1)), closes [#570](https://github.com/jwogrady/spark/issues/570)
+* treat a governed member name as one record in both validators ([fe382d6](https://github.com/jwogrady/spark/commit/fe382d6c793d861d01a447d0dfca646f6a6143cd))
+* treat a governed member name as one record in both validators ([68e04d9](https://github.com/jwogrady/spark/commit/68e04d9c716d3b3e7f1109925e2879814b3c2656)), closes [#592](https://github.com/jwogrady/spark/issues/592)
+* verify the v0.21 ledger over its release interval, not the tree ([cdb1b4f](https://github.com/jwogrady/spark/commit/cdb1b4f77a881c7f73affda1ccd86bea3e106132))
+* verify the v0.21 ledger over its release interval, not the tree ([89fe82f](https://github.com/jwogrady/spark/commit/89fe82fb6b35ed8c84695c9c204715e10196a11f)), closes [#567](https://github.com/jwogrady/spark/issues/567)
+
+
+### Documentation
+
+* add the reconciliation runbook and the approval contract ([54f0fa7](https://github.com/jwogrady/spark/commit/54f0fa76d26be66512ad4b74b4b835addee71e34)), closes [#468](https://github.com/jwogrady/spark/issues/468)
+* admit [#570](https://github.com/jwogrady/spark/issues/570) and [#571](https://github.com/jwogrady/spark/issues/571) to the v0.22 scope ([66eec3a](https://github.com/jwogrady/spark/commit/66eec3a3a59110bdd585a3b6a5aadc85919df0a9))
+* admit [#570](https://github.com/jwogrady/spark/issues/570) and [#571](https://github.com/jwogrady/spark/issues/571) to the v0.22 scope ([9a61e7e](https://github.com/jwogrady/spark/commit/9a61e7e97cbdbed104a00a452aa877538a1cbd03)), closes [#479](https://github.com/jwogrady/spark/issues/479)
+* correct the gov_issue_rows contract comment ([53983a5](https://github.com/jwogrady/spark/commit/53983a5a4f456733b774d192ce7405cd6ad261fd)), closes [#597](https://github.com/jwogrady/spark/issues/597)
+* document explicit issue references in recorded intent ([47012ed](https://github.com/jwogrady/spark/commit/47012ed49e35195d18ecad50dbaac124f8549881)), closes [#571](https://github.com/jwogrady/spark/issues/571)
+* document the DECISION REQUIRED outcome and the authority boundary ([678efbc](https://github.com/jwogrady/spark/commit/678efbc4f6c02d2ee22fafd6ae0d26801e97fd7a)), closes [#559](https://github.com/jwogrady/spark/issues/559)
+* document the reconciliation slate contract ([00fc32c](https://github.com/jwogrady/spark/commit/00fc32cdc59b45b1fd19ee09bc3bcc576e416208)), closes [#468](https://github.com/jwogrady/spark/issues/468)
+* document the spark triage contract ([bfffe2e](https://github.com/jwogrady/spark/commit/bfffe2ebe54756b5eedf8ae55cbb48412d1bbeed)), closes [#467](https://github.com/jwogrady/spark/issues/467)
+* reconcile the v0.22 order with [#567](https://github.com/jwogrady/spark/issues/567)'s admission ([570dc95](https://github.com/jwogrady/spark/commit/570dc95f7ab9122e7fcee017e622c7f494c89b39)), closes [#479](https://github.com/jwogrady/spark/issues/479)
+* record [#559](https://github.com/jwogrady/spark/issues/559) in the v0.22 roadmap scope ([504f0db](https://github.com/jwogrady/spark/commit/504f0db6bf924724ef282bcad82edf3a7b661f45)), closes [#479](https://github.com/jwogrady/spark/issues/479)
+* record the v0.22 certification against 8ab4c34 ([4d35897](https://github.com/jwogrady/spark/commit/4d35897ca6bc7f589fce7991cae2cdcb484d2eb9)), closes [#479](https://github.com/jwogrady/spark/issues/479)
+* record the v0.22 release state as Blocked ([0f8c90b](https://github.com/jwogrady/spark/commit/0f8c90bd5ed21cd6c33140e046a50c694a3944d2))
+* record the v0.22 release state as Blocked ([39b374d](https://github.com/jwogrady/spark/commit/39b374d9585ba0f9db70a076f705a34de2ad70e7)), closes [#479](https://github.com/jwogrady/spark/issues/479)
+* record v0.21 as shipped ([235c5b9](https://github.com/jwogrady/spark/commit/235c5b9ad06d5cddc329b84bbfd645683e536450))
+* record why the first certification failed and what changed ([22e9a20](https://github.com/jwogrady/spark/commit/22e9a20ae3de673ebd6aba3f5a593db92100977a)), closes [#479](https://github.com/jwogrady/spark/issues/479)
+* state that a disposition member may contain spaces ([d438d78](https://github.com/jwogrady/spark/commit/d438d78047f843c0894c80c72f3c46eeb48c3ab1)), closes [#587](https://github.com/jwogrady/spark/issues/587)
+* state that a release gate is not work ([8d3f024](https://github.com/jwogrady/spark/commit/8d3f024496f83db6ca7586321cebc7931d8e4241)), closes [#602](https://github.com/jwogrady/spark/issues/602)
+* state that a stale row never authorises a mutation ([a1d6d2f](https://github.com/jwogrady/spark/commit/a1d6d2fd8faa24d89938d24c426938614bb633ba)), closes [#590](https://github.com/jwogrady/spark/issues/590)
+* state that a structure aspect replaces whole ([2ca2760](https://github.com/jwogrady/spark/commit/2ca2760899ebe0894be6ff7b5f22da329a1adbe7)), closes [#605](https://github.com/jwogrady/spark/issues/605)
+* state that next reads the same gate fact ([9355e34](https://github.com/jwogrady/spark/commit/9355e3454c2b44649fe4d331a2bec24b3fddf436)), closes [#605](https://github.com/jwogrady/spark/issues/605)
+* state that only file edits are applied automatically ([d544dee](https://github.com/jwogrady/spark/commit/d544deeb86260ebf8a5e4955ab4263925fefb87a)), closes [#468](https://github.com/jwogrady/spark/issues/468)
+* state that the course reads a governed boundary ([0bf6779](https://github.com/jwogrady/spark/commit/0bf677975f0e54d18859bfa711d60908a49b9d2c)), closes [#602](https://github.com/jwogrady/spark/issues/602)
+* state the gate scope rule and that the convention is optional ([5dba6ed](https://github.com/jwogrady/spark/commit/5dba6ed8d4d3af8e9e6c72eb332bf7dcab12de71)), closes [#605](https://github.com/jwogrady/spark/issues/605)
+* state the three-verb ownership split ([843af8a](https://github.com/jwogrady/spark/commit/843af8a3fac18cdc2c5bc88062055d06a34d4fdf)), closes [#469](https://github.com/jwogrady/spark/issues/469)
+* state which surfaces carry release-decision authority ([9927662](https://github.com/jwogrady/spark/commit/9927662187dcd4e46bb3ebbc9d9d718ac81515ec)), closes [#570](https://github.com/jwogrady/spark/issues/570)
+
 ## [0.21.0](https://github.com/jwogrady/spark/compare/v0.20.0...v0.21.0) (2026-08-28)
 
 
