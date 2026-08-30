@@ -158,3 +158,41 @@ gov_iss() {
   local l
   for l in "$@"; do printf 'label\t%s\t%s\n' "$num" "$l"; done
 }
+
+# --- the release-gate capture, as GitHub actually answers it ---------------
+#
+# Fixtures build the GraphQL RESPONSE and let the binary's own --jq shape it.
+# Handing the projection pre-shaped records would leave the shaping — where a
+# label name, a parent link or an issue's state is either preserved or lost —
+# untested, and a replica passes while the original is wrong. The shape lives
+# here, once, because `governance` and `next` now read the same capture and a
+# second copy of it in a second suite is how they would drift apart again.
+
+# gate_iss <number> <milestone|-> <parent|-> <state> <label>... — one issue
+# node, in whatever state it is in. Closed issues are part of the answer: a
+# gate does not stop being the gate the moment it closes.
+gate_iss() {
+  local n="$1" ms="$2" par="$3" st="$4"; shift 4
+  local labs="" l
+  for l in "$@"; do labs="${labs:+$labs,}$(printf '{"name":%s}' "$(printf '%s' "$l" | jq -R .)")"; done
+  printf '{"number":%s,"state":"%s","milestone":%s,"parent":%s,"labels":{"pageInfo":{"hasNextPage":%s},"nodes":[%s]}}' \
+    "$n" "$st" \
+    "$([ "$ms" = "-" ] && echo null || printf '{"title":%s}' "$(printf '%s' "$ms" | jq -R .)")" \
+    "$([ "$par" = "-" ] && echo null || printf '{"number":%s}' "$par")" \
+    "${LABELS_TRUNCATED:-false}" "$labs"
+}
+
+# gate_mil <title> <issue-nodes> — one OPEN milestone. It is a node in its own
+# right, so a milestone holding no issues at all is still a milestone judged.
+gate_mil() {
+  printf '{"title":%s,"issues":{"pageInfo":{"hasNextPage":%s},"nodes":[%s]}}' \
+    "$(printf '%s' "$1" | jq -R .)" "${ISSUES_TRUNCATED:-false}" "$2"
+}
+
+# gate_cap <milestone-nodes> [marked-issue-nodes] — the whole response. The
+# second half is what GitHub answers for the marker label repository-wide, so a
+# marked issue legitimately arrives TWICE and must still be one issue.
+gate_cap() {
+  printf '{"data":{"repository":{"milestones":{"pageInfo":{"hasNextPage":%s},"nodes":[%s]},"marked":{"pageInfo":{"hasNextPage":%s},"nodes":[%s]}}}}' \
+    "${MILESTONES_TRUNCATED:-false}" "$1" "${MARKED_TRUNCATED:-false}" "${2:-}"
+}

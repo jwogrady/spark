@@ -2276,6 +2276,15 @@ governance_records() {
       else if ($1 == "family" || $1 == "enforce" || $1 == "exclusive")
                                                        key = $1 "/" $2
       else if ($1 == "member")                       { key = $1 "/" $2 "/" $3; group = "member/" $2 }
+      # A structure ASPECT is one statement made of one or more facts — a
+      # dependency has an authoritative form and a derived one — so these key
+      # per fact but REPLACE per aspect, exactly as a member set does. Keying
+      # alone left the release-gate binding of a project sitting beside the
+      # shipped one rather than replacing it: both survived layering, the
+      # consumer took whichever came first, and a project that renamed the role
+      # was silently overruled by the tier it had just overridden (#511 again,
+      # one record kind over).
+      else if ($1 == "structure")                    { key = $1 "/" $2 "/" $3; group = "structure/" $2 }
       else if ($1 == "pathclass")                    { key = $1 "/" $2 "/" $3 "/" $5
                                                        group = "pathclass/" $2 "/" $3 }
       else                                             key = $1 "/" $2 "/" $3
@@ -2430,6 +2439,49 @@ governance_member_from() {
     $1 == "member" && $2 == f && $3 == l { print $c; exit }'
 }
 
+
+# governance_structure_fact <resolved-model> <aspect> — the fact a structure row
+# binds an execution aspect to, or empty when the model does not govern it.
+governance_structure_fact() {
+  printf '%s\n' "$1" | awk -F'\t' -v a="$2" '$1 == "structure" && $2 == a { print $3; exit }'
+}
+
+# release_gate_label <resolved-model> — THE RELEASE-GATE LOCATOR, and the only
+# place it is resolved.
+#
+# The model declares which issue is the gate the same way it declares every
+# other governed fact — as data:
+#
+#   structure  release-gate  role:release-gate  authoritative
+#
+# so this reads the aspect, splits the `family:member` it binds to, and returns
+# the member NAME, which is the label a marked issue carries. No consumer
+# spells `release-gate` itself: a second spelling of one fact is precisely the
+# defect this exists to end, and a model that binds the aspect to a different
+# family or member is followed rather than overridden.
+#
+# The member must actually be declared, because a locator naming a label no
+# family declares is a label nobody provisions — every consumer would then find
+# no marked issue anywhere and report a repository-wide "no gate" that is an
+# artifact of the model, not a fact about the work.
+#
+# Exit codes are the caller's whole vocabulary here, and they are three
+# different situations that must not collapse:
+#
+#   0  resolved; the label name is on stdout
+#   1  the model does not govern this aspect at all — there is no invariant
+#   2  the aspect is declared but its locator does not resolve — a defect
+release_gate_label() {
+  local fact fam mem
+  fact="$(governance_structure_fact "$1" "release-gate")"
+  [ -n "$fact" ] || return 1
+  case "$fact" in *:*) ;; *) return 2 ;; esac
+  fam="${fact%%:*}"; mem="${fact#*:}"
+  [ -n "$fam" ] && [ -n "$mem" ] || return 2
+  printf '%s\n' "$1" | awk -F'\t' -v f="$fam" -v m="$mem" \
+    '$1 == "member" && $2 == f && $3 == m { found = 1 } END { exit !found }' || return 2
+  printf '%s\n' "$mem"
+}
 
 # resolve_issue_taxonomy — the declared work categories, resolved the same way
 # every other standard is: the preference first, then the machine-backed marker
@@ -3678,6 +3730,261 @@ gov_issue_rows() {
   ' </dev/null
 }
 
+# gov_gate_capture <marker-label> — the release-gate evidence, in ONE request.
+#
+# Everything the invariant judges arrives together: which OPEN MILESTONES are
+# being judged, the issues each one holds, whether each is open or closed,
+# whose sub-issue it is, and which labels it carries. Reading those from
+# separate surfaces would rebuild #602's defect one layer down — an answer
+# assembled from two moments, coherent-looking and true of neither.
+#
+# THE MILESTONES ARE READ DIRECTLY, not discovered from the issues that mention
+# them. Deriving the population from open issues alone made three states
+# invisible: an open milestone with no open issues produced no row at all, and
+# a gate that had closed while its milestone stayed open vanished from the
+# surface — leaving an open milestone with a closed gate reportable as a
+# perfectly valid no-gate milestone. The role is structural issue metadata, not
+# open-issue metadata, so the milestone's issues are read in EVERY state.
+#
+# The marker is also queried repository-wide, because a marked issue in NO
+# milestone cannot be found by walking milestones and is exactly the state that
+# must fail. `labels:` filters the connection itself — the search index is a
+# second, lagging moment and is not consulted.
+#
+# Bounded pages rather than `--paginate`: paginating is several requests and so
+# several moments, while one page plus an explicit `hasNextPage` keeps the
+# capture a single instant. A lost page and an empty one stay different
+# answers — truncation reports `unread`, never "nothing there".
+#
+# Emits, every row a fact rather than a judgment:
+#
+#   milestone <title>                       an open milestone being judged
+#   issue <num> <milestone> <parent> <state>
+#   label <num> <name>                      one record per label, never joined
+#   unread <reason>                         a surface that could not be read whole
+gov_gate_capture() {
+  local nwo owner repo
+  nwo="$(di_repo_nwo)" || return 1
+  [ -n "$nwo" ] || return 1
+  owner="${nwo%%/*}"; repo="${nwo##*/}"
+  gh api graphql -F owner="$owner" -F name="$repo" -F marker="$1" -f query='
+    query($owner:String!,$name:String!,$marker:String!){
+      repository(owner:$owner,name:$name){
+        milestones(first:50, states:OPEN){
+          pageInfo{ hasNextPage }
+          nodes{
+            title
+            issues(first:100){
+              pageInfo{ hasNextPage }
+              nodes{
+                number
+                state
+                milestone{ title }
+                parent{ number }
+                labels(first:50){ pageInfo{ hasNextPage } nodes{ name } }
+              }
+            }
+          }
+        }
+        marked: issues(first:100, labels:[$marker]){
+          pageInfo{ hasNextPage }
+          nodes{
+            number
+            state
+            milestone{ title }
+            parent{ number }
+            labels(first:50){ pageInfo{ hasNextPage } nodes{ name } }
+          }
+        }
+      }
+    }' --jq '
+    def issuerows:
+      . as $i
+      | ([ "issue", ($i.number | tostring), ($i.milestone.title // ""),
+           ($i.parent.number // "" | tostring), $i.state ] | @tsv),
+        (if $i.labels.pageInfo.hasNextPage
+         then ["unread", ("the labels of #" + ($i.number | tostring) + " were truncated")] | @tsv
+         else empty end),
+        ( $i.labels.nodes[] | [ "label", ($i.number | tostring), .name ] | @tsv );
+    .data.repository as $r
+    | (if $r.milestones.pageInfo.hasNextPage
+       then ["unread", "the list of open milestones was truncated"] | @tsv
+       else empty end),
+      ( $r.milestones.nodes[]
+        | (["milestone", .title] | @tsv),
+          (if .issues.pageInfo.hasNextPage
+           then ["unread", ("the issues of \"" + .title + "\" were truncated")] | @tsv
+           else empty end),
+          ( .issues.nodes[] | issuerows ) ),
+      (if $r.marked.pageInfo.hasNextPage
+       then ["unread", "the list of issues carrying the release-gate role was truncated"] | @tsv
+       else empty end),
+      ( $r.marked.nodes[] | issuerows )' 2>/dev/null
+}
+
+# release_gate_projection <marker-label> <capture> — THE gate answer, once.
+#
+# This is the machine fact beneath every gate verdict: one row per open
+# milestone, plus one for a marked issue that belongs to no milestone. It
+# renders nothing and decides nothing about presentation, so a consumer cannot
+# reach a different answer by reading a different surface — which is the whole
+# defect #605 exists to end, and it would come straight back if `next` kept
+# looking for the marker in its own issue list while governance looked here.
+#
+# The marker is passed IN, resolved once by release_gate_label from the model.
+# Nothing here spells the label, so a model that binds the aspect elsewhere is
+# followed rather than second-guessed.
+#
+# Emits: <verdict> <milestone> <gate> <count> <names>
+#
+#   none     the milestone has no release gate            KNOWN, valid
+#   ok       <gate> is the gate and carries the milestone  KNOWN, valid
+#   settled  <gate> is the gate; it and everything in the milestone are closed
+#   many     <count> issues carry the role (<names>)      mechanically invalid
+#   child    <gate> is itself a sub-issue of <names>      mechanically invalid
+#   closed   <gate> closed while <count> issues stay open mechanically invalid
+#   orphan   <count> open issues (<names>) are outside <gate>'s hierarchy
+#   loose    <gate> carries the role in no milestone      mechanically invalid
+#
+# ABSENCE IS KNOWN, NOT UNKNOWN. A milestone with no release gate is a complete,
+# valid answer. Unreadable evidence never reaches this function — the caller
+# stops at the capture's `unread` rows — so nothing here can turn a surface it
+# could not read into a milestone with nothing left to do.
+release_gate_projection() {
+  GOV_GATE_LABEL="$1" GOV_GATE_CAP="$2" awk '
+    # Ancestry, not parenthood: the gate carries the milestone through
+    # containers of its own, so a leaf under an ordinary parent under the gate
+    # is inside the gate scope. A chain that leaves the captured population
+    # ends there — an unwalkable link is not a descendant.
+    function under(n, g,   cur, hops) {
+      cur = ipar[n]
+      while (cur != "" && hops++ < 64) {
+        if (cur == g) return 1
+        if (!(cur in iss)) return 0
+        cur = ipar[cur]
+      }
+      return 0
+    }
+    function numsort(a, k,   i, j, t) {
+      for (i = 1; i <= k; i++) for (j = i + 1; j <= k; j++)
+        if (a[i] + 0 > a[j] + 0) { t = a[i]; a[i] = a[j]; a[j] = t }
+    }
+    BEGIN {
+      FS = "\t"
+      marker = ENVIRON["GOV_GATE_LABEL"]
+      n = split(ENVIRON["GOV_GATE_CAP"], il, "\n")
+      # PASS 1 — who carries the marker, and which milestones are being judged.
+      # A label arrives as its own record, so a name is never split back out of
+      # something it was joined into; a milestone arrives as its own record, so
+      # an empty milestone is still a milestone.
+      for (i = 1; i <= n; i++) {
+        split(il[i], f, "\t")
+        if (f[1] == "label" && f[2] != "" && f[3] == marker) marked[f[2]] = 1
+        else if (f[1] == "milestone" && f[2] != "" && !(f[2] in seenms)) {
+          seenms[f[2]] = 1; msorder[++nm] = f[2]
+        }
+      }
+      # PASS 2 — the population. An issue can arrive twice, once inside its
+      # milestone and once because it carries the marker. It is one issue, and
+      # counting it twice would invent open work that does not exist.
+      for (i = 1; i <= n; i++) {
+        split(il[i], f, "\t")
+        if (f[1] != "issue" || f[2] == "" || (f[2] in iss)) continue
+        num = f[2]; ms = f[3]
+        iss[num] = 1; ipar[num] = f[4]
+        if (ms == "") {
+          if (num in marked) printf "loose\t\t%s\t-\t-\n", num
+          continue
+        }
+        # A milestone that is not open is not being judged here.
+        if (!(ms in seenms)) continue
+        if (f[5] == "OPEN") { msopen[ms]++; openof[ms] = openof[ms] " " num }
+        if (num in marked) {
+          gcount[ms]++
+          gnames[ms] = gnames[ms] (gnames[ms] == "" ? "" : ", ") "#" num
+          gone[ms] = num
+          gopen[num] = (f[5] == "OPEN")
+        }
+      }
+      for (i = 1; i <= nm; i++) {
+        ms = msorder[i]
+        c = (ms in gcount) ? gcount[ms] : 0
+        if (c == 0)  { printf "none\t%s\t-\t-\t-\n", ms; continue }
+        if (c > 1)   { printf "many\t%s\t-\t%d\t%s\n", ms, c, gnames[ms]; continue }
+        g = gone[ms]
+        if (ipar[g] != "") { printf "child\t%s\t%s\t-\t%s\n", ms, g, ipar[g]; continue }
+        # THE GATE CLOSES LAST. A closed gate does not stop being the gate —
+        # its identity is still observable, and it is the milestone still
+        # holding open work behind it that is the contradiction.
+        if (!gopen[g]) {
+          if (msopen[ms] > 0) printf "closed\t%s\t%s\t%d\t-\n", ms, g, msopen[ms]
+          else                printf "settled\t%s\t%s\t-\t-\n", ms, g
+          continue
+        }
+        # THE GATE CARRIES THE MILESTONE SCOPE. Holding one child is not
+        # carrying the scope: an open issue in the milestone that the gate does
+        # not govern is work the delivery order cannot see, and closing the
+        # gate would declare a release over it. Ancestry counts, so ordinary
+        # parents nested under the gate stay ordinary parents.
+        k = 0
+        j = split(openof[ms], oo, " ")
+        for (x = 1; x <= j; x++) {
+          if (oo[x] == "" || oo[x] == g || under(oo[x], g)) continue
+          orph[++k] = oo[x]
+        }
+        if (k > 0) {
+          numsort(orph, k)
+          out = ""
+          for (x = 1; x <= k; x++) out = out (out == "" ? "" : ", ") "#" orph[x]
+          printf "orphan\t%s\t%s\t%d\t%s\n", ms, g, k, out
+          for (x = 1; x <= k; x++) delete orph[x]
+          continue
+        }
+        printf "ok\t%s\t%s\t-\t-\n", ms, g
+      }
+    }
+  ' </dev/null
+}
+
+# release_gate_render <marker> <verdict> <milestone> <gate> <count> <names> —
+# one projected verdict as one governance row.
+#
+# The `=`/`!` split lives HERE and only here, so "is this state broken?" has a
+# single answer for every consumer. The failures are MECHANICAL: none of them
+# needs anyone's authority to see, so none is a decision to hand a human.
+release_gate_render() {
+  local marker="$1" v="$2" ms="$3" g="$4" c="$5" names="$6"
+  case "$v" in
+    none)
+      printf 'gate\t=\t%s\tno issue carries the %s role: this milestone has no release gate\n' "$ms" "$marker" ;;
+    ok)
+      printf 'gate\t=\t%s\t#%s is the release gate\n' "$ms" "$g" ;;
+    settled)
+      printf 'gate\t=\t%s\t#%s is the release gate; it and every issue in this milestone are closed\n' "$ms" "$g" ;;
+    loose)
+      printf 'gate\t!\t#%s\tcarries the %s role but is in no milestone, so it gates no release\n' "$g" "$marker" ;;
+    many)
+      printf 'gate\t!\t%s\t%s issues carry the %s role (%s); a milestone has at most one release gate\n' "$ms" "$c" "$marker" "$names" ;;
+    child)
+      printf 'gate\t!\t#%s\tcarries the %s role but is itself a sub-issue of #%s; a gate is a container that closes last, not a child\n' "$g" "$marker" "$names" ;;
+    closed)
+      printf 'gate\t!\t#%s\tcarries the %s role but is closed while "%s" still holds %s open issue(s); the release gate closes last\n' "$g" "$marker" "$ms" "$c" ;;
+    orphan)
+      printf 'gate\t!\t#%s\tis the release gate, but %s open issue(s) in "%s" are outside its hierarchy (%s); the gate carries the milestone scope as sub-issues\n' "$g" "$c" "$ms" "$names" ;;
+  esac
+}
+
+# gov_gate_rows <marker-label> <capture> — the gate surface, rendered.
+gov_gate_rows() {
+  local v ms g c names
+  while IFS="$(printf '\t')" read -r v ms g c names; do
+    [ -n "$v" ] || continue
+    release_gate_render "$1" "$v" "$ms" "$g" "$c" "$names"
+  done <<EOF_GATE_PROJ
+$(release_gate_projection "$1" "$2")
+EOF_GATE_PROJ
+}
+
 # gov_cycle_rows <edges-tsv> — cycle detection over the native blocked-by
 # graph. A cycle makes every issue in it permanently unstartable, and the
 # codify preflight would report each one blocked forever with no cause named.
@@ -3784,6 +4091,7 @@ gov_collect() {
     printf 'label\t?\tall\tnot assessed: labels live on GitHub and need an authenticated gh\n'
     printf 'metadata\t?\tall\tnot assessed: issue metadata lives on GitHub\n'
     printf 'dependency\t?\tall\tnot assessed: the dependency graph lives on GitHub\n'
+    printf 'gate\t?\tall\tnot assessed: the release gate is an issue role and lives on GitHub\n'
     printf 'ruleset\t>\ttrunk\tdeferred: spark doctor --requirements judges the trunk policy\n'
     gov_file_rows "$model" "$root"
     return 0
@@ -3812,6 +4120,37 @@ gov_collect() {
     printf 'metadata\t?\tall\tnot assessed: open issues could not be read — never assumed empty\n'
     printf 'dependency\t?\tall\tnot assessed: the dependency graph could not be read without the issue list\n'
     issues=""
+  fi
+
+  # THE RELEASE GATE, from the fact the model declares rather than from the
+  # shape of the hierarchy. `release_gate_label` is the one place the locator is
+  # resolved; three outcomes that must not collapse:
+  #
+  #   the model does not govern the aspect  -> there is no invariant to report
+  #   it governs it but names no member     -> a defect in the model itself
+  #   resolved                              -> judge the repository against it
+  local gate_label="" gate_rc=0 gate_cap="" gate_unread=""
+  gate_label="$(release_gate_label "$model")" || gate_rc=$?
+  if [ "$gate_rc" -eq 2 ]; then
+    printf 'gate\t!\tlocator\tthe model declares a release-gate aspect whose locator names no declared member, so no issue could carry it\n'
+  elif [ "$gate_rc" -eq 0 ]; then
+    if gate_cap="$(gov_gate_capture "$gate_label")"; then
+      gate_unread="$(printf '%s\n' "$gate_cap" | awk -F'\t' '$1 == "unread" { print $2 }')"
+      if [ -n "$gate_unread" ]; then
+        # An unread hierarchy is never "no release gate" — that inversion is the
+        # whole reason this row exists.
+        while IFS= read -r u; do
+          [ -n "$u" ] || continue
+          printf 'gate\t?\tall\tnot assessed: %s\n' "$u"
+        done <<EOF_GUNREAD
+$gate_unread
+EOF_GUNREAD
+      else
+        gov_gate_rows "$gate_label" "$gate_cap"
+      fi
+    else
+      printf 'gate\t?\tall\tnot assessed: the issue hierarchy could not be read — never assumed to hold no release gate\n'
+    fi
   fi
 
   # The dependency graph. A probe that fails must not read as "no prerequisite":
@@ -7480,6 +7819,10 @@ cmd_state() {
 #       blocked count of OPEN native blockers, or "?" when unreadable
 #   cycle <TAB> <n> <TAB> <path>
 #   orderdrift <TAB> <kind> <TAB> <detail>
+#   ordernone <TAB> <detail>
+#       KNOWN: this milestone declares no release gate, so there is no explicit
+#       order to follow. Absence is not drift and not an unread surface — the
+#       role is optional, and ranking by priority is the correct answer here.
 #   ordercount <TAB> <n>   how many issues the order record holds
 #   priofamily <TAB> <name> <TAB> <members>
 #       the resolved priority family, so a diagnostic names what the model
@@ -7497,6 +7840,7 @@ next_select() {
   local priolabel=""
   local kind a b c d e f g
   local gaps="" gapn=0 cand="" cands=0 blocked_lines="" blockedn=0 ordertotal=""
+  local ordernone=""
   local n order cats prios prio blocked title
   gap() { gaps="${gaps}${1}
 "; gapn=$((gapn+1)); }
@@ -7507,6 +7851,11 @@ next_select() {
         gap "not assessed: dependency cycle through #$a ($b) — no delivery order exists; break the cycle" ;;
       orderdrift)
         gap "not assessed: the delivery-order record $a — $b" ;;
+      ordernone)
+        # NOT a gap. A milestone with no release gate is a complete answer, and
+        # reporting it as "not mechanically interpretable" refused to select in
+        # a state the model calls optional.
+        ordernone="$a" ;;
       ordercount)
         case "$a" in ''|*[!0-9]*) ;; *) ordertotal="$a" ;; esac ;;
       priofamily)
@@ -7599,6 +7948,9 @@ next_select() {
   printf '\n'
   if [ "$blockedn" -gt 0 ]; then
     printf 'note      %s candidate(s) excluded as blocked by an open prerequisite\n' "$blockedn"
+  fi
+  if [ -n "$ordernone" ]; then
+    printf 'note      %s; ranked by priority\n' "$ordernone"
   fi
   return 0
 }
@@ -7810,21 +8162,108 @@ cmd_next() {
   ev="${ev}priofamily	priority	$(printf '%s\n' "$prio_members" | awk 'NF { printf "%s%s", (n++ ? ", " : ""), $0 }')
 "
 
-  # The gate is the milestone's release-readiness container: the open issue
-  # carrying sub-issues. It is never itself selectable (a parent closes last),
-  # and its sub-issue order IS the delivery-order authority.
+  # ONE GATE ANSWER, FOR EVERY CONSUMER.
+  #
+  # These were one rule and are two facts. The model says a parent is a
+  # container that closes last, and separately that the release gate's
+  # sub-issue order is the delivery-order authority — it never said which
+  # container was the gate. Reading "the first open issue carrying sub-issues"
+  # answered the second question with the first one's evidence, so an ordinary
+  # parent became a release gate and which one won depended on the order
+  # GitHub happened to return issues in (#605).
+  #
+  # Identity now comes from the model-declared role, and selectability from the
+  # hierarchy — neither borrows the other's evidence. And identity is read from
+  # the SAME projection governance renders, not from this verb's own open-issue
+  # rows: searching the open list for the marker made a closed gate look like a
+  # milestone that never had one, so the two verbs could hold opposite views of
+  # the same repository at the same moment. A gate answer that depends on which
+  # verb you asked is the defect, whatever each answer says.
   gate=""; order_list=""
+  local gate_label_n="" gate_rc_n=0
+  gate_label_n="$(release_gate_label "$gov_model_n")" || gate_rc_n=$?
+  if [ "$gate_rc_n" -eq 2 ]; then
+    echo
+    red "not ready: the model declares a release-gate aspect whose locator names no"
+    red "  declared member, so no issue can carry the role and the delivery order"
+    red "  cannot resolve."
+    red "  No decision resolves this — the state itself is impossible."
+    red "  Inspect it with: spark governance inspect"
+    return 4
+  fi
+  if [ "$gate_rc_n" -eq 0 ]; then
+    local gate_cap_n="" gate_unread_n="" grow="" gv gms gg gc gn rendered gkind
+    if ! gate_cap_n="$(gov_gate_capture "$gate_label_n")" || [ -z "$gate_cap_n" ]; then
+      yellow "not assessed: the release-gate evidence could not be read, so whether this"
+      yellow "  milestone has a gate — and which issue it is — is unknown. An unread"
+      yellow "  surface is never \"no release gate\"."
+      return 3
+    fi
+    gate_unread_n="$(printf '%s\n' "$gate_cap_n" | awk -F'\t' '$1 == "unread" { print $2; exit }')"
+    if [ -n "$gate_unread_n" ]; then
+      yellow "not assessed: $gate_unread_n, so the release gate could not be established"
+      yellow "  — a truncated read is never \"no release gate\"."
+      return 3
+    fi
+    grow="$(release_gate_projection "$gate_label_n" "$gate_cap_n" \
+      | awk -F'\t' -v m="$ms" '$2 == m { print; exit }')"
+    if [ -z "$grow" ]; then
+      yellow "not assessed: \"$ms\" is not among the open milestones GitHub returned, so"
+      yellow "  its release gate could not be established."
+      return 3
+    fi
+    IFS="$(printf '\t')" read -r gv gms gg gc gn <<EOF_GATE_ROW
+$grow
+EOF_GATE_ROW
+    rendered="$(release_gate_render "$gate_label_n" "$gv" "$gms" "$gg" "$gc" "$gn")"
+    gkind="$(printf '%s\n' "$rendered" | awk -F'\t' '{ print $2; exit }')"
+    # Broken is broken, and it is the projection that says so — not a second
+    # opinion formed here. Two gates, a gate that closed before its work, a
+    # gate that governs only part of its milestone: no ordering exists to
+    # select against, and none of them is an unread surface.
+    if [ "$gkind" = "!" ]; then
+      echo
+      red "not ready: the release gate for \"$ms\" is in a mechanically invalid state"
+      printf '%s\n' "$rendered" | awk -F'\t' 'NF { print "    ! " $4 }'
+      red "  No decision resolves this — the state itself is impossible."
+      red "  Report it with: spark governance validate"
+      return 4
+    fi
+    case "$gv" in ok|settled) gate="$gg" ;; esac
+  fi
+  if [ -n "$gate" ]; then
+    # The order is the gate's OWN sub-issue order. A failed read is never "no
+    # order": that inversion would silently promote priority ranking over an
+    # order the human declared.
+    if ! order_list="$(gh api "repos/{owner}/{repo}/issues/$gate/sub_issues" --paginate \
+        --jq '.[].number' 2>/dev/null)"; then
+      yellow "NOT ASSESSED: #$gate is the release gate, but its sub-issue order could not"
+      yellow "  be read — an unread order is never \"no order\"."
+      return 3
+    fi
+  fi
+  # A PARENT IS NOT SELECTABLE, gate or not. That is the hierarchy rule and it
+  # applies to every container: an issue with children has no branch and no PR
+  # of its own. Sourced from the hierarchy, because it is a different question
+  # from which container is the gate.
+  local containers=""
   while IFS=$'\t' read -r kind n title; do
     [ "$kind" = "issue" ] || continue
     [ -n "$n" ] || continue
     local subs
-    subs="$(gh api "repos/{owner}/{repo}/issues/$n/sub_issues" --jq '.[].number' 2>/dev/null)" || subs=""
-    if [ -n "$subs" ]; then gate="$n"; order_list="$subs"; break; fi
+    if ! subs="$(gh api "repos/{owner}/{repo}/issues/$n/sub_issues" --paginate \
+        --jq '.[].number' 2>/dev/null)"; then
+      yellow "NOT ASSESSED: whether #$n carries sub-issues could not be read, and a failed"
+      yellow "  read is never \"carries none\" — that would offer a container as work."
+      return 3
+    fi
+    [ -n "$subs" ] && containers="${containers}${n}
+"
   done <<EOF_ROWS
 $rows
 EOF_ROWS
   if [ -z "$gate" ]; then
-    ev="${ev}orderdrift	is missing	no issue in this milestone carries sub-issues, so no explicit order exists
+    ev="${ev}ordernone	this milestone declares no release gate, so no explicit order exists
 "
   else
     ev="${ev}ordercount	$(printf '%s\n' "$order_list" | awk 'NF' | wc -l | tr -d ' ')
@@ -7835,6 +8274,8 @@ EOF_ROWS
     [ "$kind" = "issue" ] || continue
     [ -n "$n" ] || continue
     [ "$n" = "$gate" ] && continue
+    printf '%s\n' "$containers" | awk -v x="$n" 'NF && $0 == x { found = 1 } END { exit !found }' \
+      && continue
     local cats=0 prios=0 prio="-" order blockers l t prank=99 lkind ln
     # This issue's labels, each still whole because each arrived as its own
     # record. Nothing is split here, so nothing depends on what a name contains.

@@ -195,15 +195,31 @@ cat > "$nxbin/gh" <<'GHEOF'
 #!/usr/bin/env bash
 case "${1:-}" in
   auth) exit 0 ;;
+  repo) printf 'o/r\n'; exit 0 ;;
   issue)
     jqx=""; prev=""
     for a in "$@"; do [ "$prev" = "--jq" ] && jqx="$a"; prev="$a"; done
     if [ -n "$jqx" ]; then printf '%s' "$ISSUES" | jq -r "$jqx"; else printf '%s' "$ISSUES"; fi
     exit 0 ;;
 esac
+# The release-gate capture. Gate identity is a governed fact read here, not
+# inferred from the open-issue labels above — a gate that has closed is absent
+# from that list entirely.
+for a in "$@"; do
+  if [ "$a" = "graphql" ]; then
+    jqx=""; prev=""
+    for b in "$@"; do [ "$prev" = "--jq" ] && jqx="$b"; prev="$b"; done
+    if [ -n "$jqx" ]; then printf '%s' "$GATECAP" | jq -r "$jqx"; else printf '%s' "$GATECAP"; fi
+    exit 0
+  fi
+done
 for a in "$@"; do
   case "$a" in
-    *sub_issues*)   printf '900\n901\n'; exit 0 ;;
+    # PER ISSUE, not one answer for both: #900 is the container, #901 the leaf.
+    # One reply for every path made every issue look like a parent, which the
+    # hierarchy rule then correctly refused to offer as work.
+    */issues/900/sub_issues*) printf '901\n'; exit 0 ;;
+    */issues/901/sub_issues*) exit 0 ;;
     *dependencies*) printf '0\n'; exit 0 ;;
   esac
 done
@@ -215,14 +231,18 @@ chmod +x "$nxbin/gh"
 js() {
   local labs="" l
   for l in "$@"; do labs="${labs:+$labs,}$(printf '{"name":%s}' "$(printf '%s' "$l" | jq -R .)")"; done
-  printf '[{"number":900,"title":"Gate","labels":[{"name":"feature"}]},{"number":901,"title":"Real work","labels":[%s]}]' "$labs"
+  printf '[{"number":900,"title":"Gate","labels":[{"name":"feature"},{"name":"release-gate"}]},{"number":901,"title":"Real work","labels":[%s]}]' "$labs"
 }
 
-nx() { ( cd "$nextrepo" && env PATH="$nxbin" ISSUES="$1" \
+GATECAP="$(gate_cap "$(gate_mil 'v0.9' \
+  "$(gate_iss 900 'v0.9' - OPEN feature release-gate),$(gate_iss 901 'v0.9' 900 OPEN feature)")" \
+  "$(gate_iss 900 'v0.9' - OPEN feature release-gate)")"
+
+nx() { ( cd "$nextrepo" && env PATH="$nxbin" ISSUES="$1" GATECAP="$GATECAP" \
   "$SPARK" next --milestone "v0.9" 2>&1 ); }
 
-# ONE multi-word priority label must count as ONE. The gate carries sub-issues,
-# so 900 is the gate and 901 is the selectable issue.
+# ONE multi-word priority label must count as ONE. #900 carries the governed
+# release-gate role, so it is the gate; #901 is the selectable issue.
 out4="$(nx "$(js feature 'top urgent')")" || true
 case "$out4" in
   *"carries 2"*) c4="!" ;;

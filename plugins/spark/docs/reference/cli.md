@@ -626,7 +626,18 @@ as governance authority.
 A later tier overrides a record by key. **A tier that declares any member of a
 family replaces that family's whole member set** — so an overlay can remove a
 member and not only add one, which a per-member merge could never express. The
-same applies to a class's governed paths.
+same applies to a class's governed paths, and to a **structure aspect**: a tier
+that declares any fact about an aspect replaces that aspect's whole set of
+lower-tier facts.
+
+An aspect can state more than one fact, and those stay together when their tier
+wins. `dependency` is the example: the shipped model declares native blocked-by
+as its **authoritative** form and an issue-body `Blocked by #N` sentence as a
+**derived** one, and replacing that aspect means replacing both — not merging
+one new fact in beside them. Records still key per `(aspect, fact)`, which is
+what lets the winning tier declare several; replacement is per aspect, which is
+what lets a project restate what an aspect means rather than only adding a
+rival claim beside the shipped one.
 
 Removing a member leaves the lower tiers' rules about it — its exclusivity, its
 governed paths — pointing at nothing. Those rules are **pruned**, not treated as
@@ -1231,6 +1242,35 @@ Two questions, two authorities, deliberately kept apart:
   **native sub-issue order**. Free-form milestone prose is never parsed — it
   explains the order, it does not define it.
 
+**Which issue is the gate is a governed fact, not an inference.** It is the
+issue carrying the `release-gate` role, and the model declares that binding
+(`structure release-gate role:release-gate`) so the locator is read rather than
+spelled a second time here. Parenthood does not make a gate: a milestone may
+hold ordinary parents, and reading "the first open issue with sub-issues" as
+the gate made an ordinary parent the delivery-order authority, decided by
+whatever order GitHub returned issues in.
+
+**And it is the same fact `spark governance` reports** — one projection, read
+by both, rather than each verb working it out from whatever it happened to have
+loaded. Searching the open issue list for the marker was a second
+implementation of that question, and it disagreed with the first in exactly the
+states that matter: a gate that has closed is absent from the open list, so a
+milestone whose gate closed before its work read as a milestone that never had
+one. So the gate's state decides what selection does:
+
+| Gate state | `next` |
+|---|---|
+| no issue carries the role | ranks by priority and says the milestone declares no gate |
+| one does, and it carries the milestone | follows that issue's sub-issue order |
+| more than one, or the gate closed before its work, or open work sits outside it | refuses as **mechanically invalid** (exit 4) — the same verdict `governance` gives |
+| the evidence could not be read | **not assessed** (exit 3) |
+
+A milestone with no gate is a known state, not an unreadable one. A milestone
+whose gate contradicts itself is a known *bad* state — not an unknown one, and
+not one selection may proceed past: there is no ordering left to select
+against, and reporting it as merely unread would suggest that looking again
+might help.
+
 Collapsing the two is what makes a backlog lie: an ordering preference encoded
 as a `blocked-by` edge becomes a false blocker that fails readiness closed,
 and a real prerequisite demoted to "ordering" starts work too early.
@@ -1239,7 +1279,8 @@ Ranking is priority, then the explicit sub-issue order, then issue number as a
 documented stable fallback. Priority ranks by the **declaration order of the
 model's `priority` family** — not by the label spelling — so a project that
 renames the family is ranked as it declared it, rather than alphabetically. The
-gate itself is never selected: a parent is a container and closes last.
+gate itself is never selected — and neither is any other parent: a container
+has no branch and no PR of its own, so it is never offered as work.
 
 Before selecting, the verb refuses to guess when the slate is not mechanically
 interpretable. Missing or duplicated taxonomy categories, missing or duplicated
@@ -1263,7 +1304,7 @@ Five outcomes, and the middle three matter:
 | a selection | 0 | this issue is next, with the reason |
 | no eligible issue | 1 | **a known answer** — every candidate is genuinely blocked, or the milestone has no open leaf |
 | not assessed | 3 | the slate could not be read, **or the governance model does not resolve**; nothing is claimed and nothing is routed |
-| selected but not ready | 4 | an issue was selected and its **execution metadata is mechanically invalid** — no decision resolves it. Reported before the route, never routed |
+| selected but not ready | 4 | the **release gate for the milestone, or the selected issue's own execution metadata, is mechanically invalid** — no decision resolves it. Reported before the route, never routed |
 | selected but awaiting a decision | 5 | an issue was selected and its metadata has a gap **only a human may fill** — reported with the admissible values, before the route, never routed |
 
 Exit 4 is separate from exit 1 on purpose: "everything is blocked" and "this one

@@ -146,6 +146,55 @@ assert_contains "a new family needs no schema code" \
 assert_contains "the new family's member resolves generically" \
   "$(printf 'member\tproving-family\tproving-member\t444444\t')" "$out_pr"
 
+# ============ structure aspects: whole-set replacement, multi-fact ==========
+#
+# The generic layering contract, not the release-gate consumer that exposed it.
+# Structure records key per (aspect, fact) — one aspect may state several facts
+# — but a tier declaring ANY fact about an aspect replaces that aspect's WHOLE
+# lower-tier set, the same way a member set replaces a family's.
+#
+# `dependency` is the multi-fact aspect the shipped model already carries: an
+# authoritative native-blocked-by form and a derived issue-body-prose one.
+mkdir -p "$repo/.spark"
+{
+  printf 'version\t1\n'
+  printf 'structure\tdependency\tnative-blocked-by\tauthoritative\tProject dependency rule\n'
+} > "$repo/.spark/governance.tsv"
+rc=0; out_st="$(gov --tsv)" || rc=$?
+assert_rc "a tier may restate a structure aspect" 0 "$rc"
+assert_contains "and its own fact is what is in force" \
+  "$(printf 'structure\tdependency\tnative-blocked-by\tauthoritative\tProject dependency rule\tproject')" "$out_st"
+
+# A. WHOLE-ASPECT REPLACEMENT. The sibling fact the project did not restate is
+# gone — replaced away with the rest of the aspect, exactly as an unrestated
+# member of a family is. Keying alone would have left it beside the new fact,
+# and the aspect would then mean two things at once.
+sibling="$(printf '%s\n' "$out_st" | awk -F'\t' '$1=="structure" && $2=="dependency" && $3=="issue-body-prose"')"
+assert_eq "an unrestated fact of the same aspect is replaced away" "" "$sibling"
+kept="$(printf '%s\n' "$out_st" | awk -F'\t' '$1=="structure" && $2=="dependency"' | wc -l | tr -d ' ')"
+assert_eq "so the aspect holds only the winning tier's declaration" "1" "$kept"
+# Aspects the project never mentioned are untouched: replacement is per aspect,
+# not per record type.
+assert_contains "another aspect keeps the default tier" \
+  "$(printf 'structure\thierarchy\tparent-sub-issue\tauthoritative')" "$out_st"
+
+# B. A WINNING ASPECT MAY STILL BE MULTI-FACT. The guard against "fixing"
+# whole-aspect replacement by collapsing an aspect to a single row: an aspect
+# states as many facts as its owning tier declares, and both must survive.
+{
+  printf 'version\t1\n'
+  printf 'structure\tdependency\tnative-blocked-by\tauthoritative\tProject dependency rule\n'
+  printf 'structure\tdependency\tproject-body-prose\tderived\tA second fact about the same aspect\n'
+} > "$repo/.spark/governance.tsv"
+rc=0; out_st2="$(gov --tsv)" || rc=$?
+assert_rc "a winning tier may declare several facts for one aspect" 0 "$rc"
+both="$(printf '%s\n' "$out_st2" | awk -F'\t' '$1=="structure" && $2=="dependency"' | wc -l | tr -d ' ')"
+assert_eq "both of the winning tier's facts survive together" "2" "$both"
+assert_contains "the authoritative one" \
+  "$(printf 'structure\tdependency\tnative-blocked-by\tauthoritative\tProject dependency rule\tproject')" "$out_st2"
+assert_contains "and the derived one beside it" \
+  "$(printf 'structure\tdependency\tproject-body-prose\tderived\tA second fact about the same aspect\tproject')" "$out_st2"
+
 rm -f "$repo/.spark/governance.tsv" "$opgov"
 
 # ======================== fail closed ========================
