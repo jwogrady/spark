@@ -1720,6 +1720,72 @@ fixture layout of known sizes, which is how `tests/test-footprint.sh` and
 `tests/test-footprint-budget.sh` use it; it is not needed for ordinary
 reporting.
 
+## `spark telemetry [record|show|relay|compare|list] [--run <id>] [--head <sha>] [--json] [--timing]`
+
+Records and renders the facts of one automated run — cost, latency, tokens,
+cache behaviour, tool and API counts, convergence and outcome — bound to an
+exact PR HEAD SHA. It is deterministic: every value is supplied by the process
+that already knew it, so producing routine telemetry never costs a model call
+and never reads the network. Records live at `.spark/telemetry/<run>.tsv`.
+
+The run a command addresses is `--run`, else `$SPARK_RUN_ID`, else `current`,
+so a workflow can export the id once instead of threading it through each call.
+
+| Action | What it does |
+|---|---|
+| `record key=value ...` | Merge facts into the run's record. Every pair is validated **before any is written**, so a rejected value never leaves a half-written record behind. Re-recording a field supersedes it. |
+| `show` | The compact human summary; `--json` for the machine shape. |
+| `relay` | A Markdown projection for the Agent Relay discussion — it links its evidence and states that it is not itself authority. |
+| `compare <a> <b>` | Two runs side by side with signed deltas on every counter. |
+| `list` | Every recorded run with its verdict and head SHA. |
+
+`--timing` measures the overhead of observability itself: the median of three
+`record`+`show` cycles against `TELEMETRY_OVERHEAD_MS` (default 400), exiting
+non-zero when over budget, in the same spirit as `footprint --timing`.
+
+### The field schema
+
+`run_id`, `attempt`, `trigger`, `pr`, `head_sha`, `actions_run`; `provider`,
+`model`, `routing_reason`, `effort`; `preflight_tokens`, `input_tokens`,
+`output_tokens`, `cache_write_tokens`, `cache_read_tokens`, `cache_reason`,
+`tool_schema_tokens`; `cost_usd`, `wall_seconds`; `tool_calls`,
+`api_requests`, `full_suite_runs`, `targeted_checks`, `iterations`,
+`batch_usage`; `compaction_events`, `context_before`, `context_after`;
+`failing_before`, `failing_after`; `verdict`, `overhead_ms`.
+
+`verdict` is closed: `PASS`, `CHANGES REQUIRED`, `DECISION REQUIRED`,
+`NOT ASSESSED`, `FAIL`. Counters must be whole numbers and `cost_usd` decimal —
+a field that cannot be measured is left **unrecorded**, never zeroed.
+
+These are derived at read time and never stored, so they cannot go stale
+against the facts they summarize:
+
+| Derived | Rule |
+|---|---|
+| `cache hit ratio` | `read ÷ (read + write)`. Requires **both** halves — a ratio from one side is invention, and the field exists precisely to tell a cached loop from one rebuilding the cache. A cold run is a real `0.0%`, which is not the same answer as unknown. |
+| `context change`, `failing change` | Signed deltas; `NOT ASSESSED` without both ends. |
+| `repeated, no progress` | `yes` when two or more full-suite runs left the failing set unchanged — the signal a convergence budget acts on. Missing evidence reports `NOT ASSESSED`, never "fine". |
+| `binding status` | `current` when the recorded `head_sha` matches the PR's live head, `superseded` when it moved, `NOT ASSESSED` when the live head could not be read. An unreadable head never resolves to `current`. |
+
+### The observability cost contract
+
+Observability that costs what it measures is the inefficiency it was meant to
+expose. Three rules make that contract mechanical rather than advisory, and
+`spark telemetry record` refuses anything that breaks them:
+
+1. **The schema is an allowlist.** A raw prompt, transcript, hidden reasoning,
+   full diff or test log has no key to live under.
+2. **Values are one short line** (`TELEMETRY_MAX_VALUE`, default 200
+   characters). An Actions URL fits; a pasted log does not. Deep evidence stays
+   in GitHub and Actions and is linked.
+3. **Credential-shaped values are refused** whatever key they claim, because
+   telemetry is a surface that gets published.
+
+Telemetry is evidence, never authority: it cannot resolve a DECISION REQUIRED
+or change governance metadata. Exits 1 outside a git repo, on an unknown key or
+action, on a malformed value, and on an invalid run id (the id becomes a
+filename).
+
 ## `spark version`
 
 Prints the Spark plugin version, read from `.claude-plugin/plugin.json`.
