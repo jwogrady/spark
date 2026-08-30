@@ -6303,12 +6303,17 @@ plan_live_rows() {
           printf 'live\t?\t%s\tlabels could not be assessed: the governance model would not resolve, so which families this plan owns is unknown\n' "$n"
           continue
         fi
+        #
+        # The predicate is the producer's own output: the issue matches the plan
+        # when it ALREADY holds what applying would leave. Apply writes
+        # `target`; verify asserts live equals `target`. One calculation, so the
+        # two cannot describe different repositories.
         local replaced preserved suffix
         replaced="$(plan_label_scope "$model" "$wantcsv" "$live" replaced)"
         preserved="$(plan_label_scope "$model" "$wantcsv" "$live" preserved)"
         suffix=""
         [ -n "$preserved" ] && suffix=" (preserved, outside the families this plan owns: $(label_set_show "$preserved"))"
-        if label_set_equal "$replaced" "$want"; then
+        if label_set_equal "$(plan_label_scope "$model" "$wantcsv" "$live" target)" "$live"; then
           printf 'live\t=\t%s\tlabels already match the plan%s\n' "$n" "$suffix"
         else
           printf 'live\t~\t%s\tgoverned labels are "%s"; the plan says "%s"%s\n' \
