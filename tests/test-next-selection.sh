@@ -184,6 +184,76 @@ sel 3 "two priorities are not assessed" \
 " \
   "carries 2 priority labels"
 
+# --- OPTIONAL PRIORITY STAYS OPTIONAL (#611).
+#
+# The model declares two different facts in two different columns:
+#   family  priority  exactly-one  optional
+# `exactly-one` is cardinality; `optional` is requirement. The selector read the
+# first and ignored the second, so an issue with NO priority was reported as
+# uninterpretable — and since one uninterpretable issue correctly poisons the
+# whole slate, a single unprioritised issue made an entire milestone NOT
+# ASSESSED. Live v0.23 was in exactly that state: #611 and #615 carry no
+# priority, so nothing anywhere in the milestone could be selected.
+#
+# The only way out was to invent a priority to unblock the tool, which is the
+# distortion `separation order priority` exists to prevent.
+sel 0 "an unprioritised issue is selectable where the model says optional" \
+"prioreq	optional
+ordercount	2
+issue	611	0	1	0	99:-	0	no priority, first in the order
+issue	616	1	1	1	01:P1	0	P1, second in the order
+" \
+  "selected  #611" "none recorded (the model makes it optional)" \
+  "first in the gate's recorded delivery order"
+
+# ...and it is still ranked, not merely admitted: with no order to decide, a
+# prioritised issue outranks an unprioritised one rather than the reverse.
+sel 0 "an unprioritised issue does not outrank a prioritised one" \
+"prioreq	optional
+ordernone	this milestone declares no release gate, so no explicit order exists
+issue	620	-	1	0	99:-	0	no priority
+issue	621	-	1	1	01:P1	0	P1
+" \
+  "selected  #621"
+
+# --- REQUIREMENT IS NOT RELAXED BY SILENCE. Absent `prioreq` evidence, the
+# policy still demands a priority: assuming optional would quietly loosen a
+# constraint a project may depend on, and the gatherer saying nothing is not
+# the model saying optional.
+sel 3 "with no requirement evidence, a missing priority is still not assessed" \
+"issue	630	0	1	0	-	0	no priority, no prioreq line
+" \
+  "carries 0 priority labels"
+
+# --- and `optional` never licenses TWO. Cardinality is the other column.
+sel 3 "optional does not permit two priorities" \
+"prioreq	optional
+issue	640	0	1	2	P1	0	two priorities
+" \
+  "carries 2 priority labels — at most one is allowed"
+
+# --- MUTATION CONTROL for the optional-priority repair. Restoring the strict
+# `prios != 1` test must make the live-shaped fixture fail, or the fixture above
+# proves nothing. Again the REAL body, mutated, not a replica.
+optmut_src="$(declare -f next_select \
+  | sed 's/if \[ "\$prios" != "1" \] && \[ "\$priooptional" != "1" \]; then/if [ "$prios" != "1" ]; then/')"
+case "$optmut_src" in
+  *'if [ "$prios" != "1" ]; then'*) ok ;;
+  *) bad "mutation control: could not restore the strict priority test" ;;
+esac
+eval "${optmut_src/next_select /next_select_optmutant }"
+optmut_out="$(printf '%s' \
+"prioreq	optional
+ordercount	2
+issue	611	0	1	0	99:-	0	no priority, first in the order
+issue	616	1	1	1	01:P1	0	P1, second in the order
+" | next_select_optmutant 2>&1)" || true
+case "$optmut_out" in
+  *"selected  #611"*) bad "mutation control: the strict test ALSO selects #611 — the fixture proves nothing" ;;
+  *"not mechanically interpretable"*) ok ;;
+  *) bad "mutation control: strict priority gave an unexpected result ($optmut_out)" ;;
+esac
+
 # ...and when the evidence carries the resolved family, the diagnostic uses it.
 # A project that renames or extends the family is told what IT declared, not
 # what the shipped default happens to be.

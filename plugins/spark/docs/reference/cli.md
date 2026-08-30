@@ -1388,11 +1388,38 @@ stops at the repeat rather than recursing, and the verb's own cycle evidence is
 what names the state.
 
 Before selecting, the verb refuses to guess when the slate is not mechanically
-interpretable. Missing or duplicated taxonomy categories, missing or duplicated
-priority labels, unreadable native blockers, a dependency cycle, or a missing
+interpretable. Missing or duplicated taxonomy categories, duplicated priority
+labels, unreadable native blockers, a dependency cycle, or a missing
 delivery-order record all report **not assessed** (exit 3) and name the issue
 at fault. One uninterpretable issue stops the whole selection: picking around
 it would mean choosing from a set that could not be fully read.
+
+**A missing priority is uninterpretable only where the model requires one.**
+The family declares cardinality and requirement in two separate columns:
+
+```text
+family  priority  exactly-one  optional  Execution priority — exactly one where
+                                         priority is required
+```
+
+`exactly-one` constrains how many an issue may carry; `optional` says it need
+not carry any. Reading the first and ignoring the second deadlocked the verb: an
+unprioritised issue was reported as broken metadata, and because one
+uninterpretable issue correctly poisons the whole slate, a single unprioritised
+issue made an entire milestone **not assessed** — leaving no way forward except
+to invent a priority to unblock the tool, which is the distortion
+`separation order priority` exists to prevent.
+
+So where the model says `optional`, an issue carrying no priority is ordinary
+work: selectable, ranked below an equally-placed issue that carries one, and
+reported as *none recorded* rather than shown a placeholder. Two priorities
+remain uninterpretable whatever the requirement says — that is the cardinality
+column, and it is a different fact.
+
+**Silence is not permission.** With no requirement evidence the verb still
+demands a priority. Assuming `optional` because the model said nothing would
+quietly relax a constraint a project may depend on, and that is the more
+dangerous of the two guesses.
 
 **An unresolvable governance model stops the verb before it selects anything**,
 with the findings and exit 3. Every judgment here depends on the model — which

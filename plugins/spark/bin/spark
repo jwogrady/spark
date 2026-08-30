@@ -5228,6 +5228,29 @@ priority_members() {
   printf '%s\n' "$1" | awk -F'\t' '$1 == "member" && $2 == "priority" { print $3 }'
 }
 
+# priority_requirement <model> — whether the model REQUIRES a priority, as the
+# family's own requirement column says: `required` or `optional`.
+#
+# The cardinality and the requirement are two different facts and the schema
+# keeps them in two different columns:
+#
+#   family  priority  exactly-one  optional  Execution priority — exactly one
+#                                            where priority is required
+#
+# `exactly-one` constrains how many you may carry; `optional` says you need not
+# carry any. The selector read the first and ignored the second, so an issue
+# with no priority was reported as uninterpretable metadata — and because one
+# uninterpretable issue poisons the whole slate, a single unprioritised issue
+# made an entire milestone NOT ASSESSED and nothing could be selected at all.
+#
+# An empty answer is `required`. Failing closed is right for a model that does
+# not declare the column: assuming optional would silently relax a constraint a
+# project may be relying on, which is the more dangerous of the two guesses.
+priority_requirement() {
+  printf '%s\n' "$1" \
+    | awk -F'\t' '$1 == "family" && $2 == "priority" { print ($4 == "optional") ? "optional" : "required"; exit }'
+}
+
 # The two PURE PROJECTIONS over an inventory. One rule, one place, whoever asks.
 #
 # Capturing once and then re-deriving the selection inline was how `course`
@@ -8161,7 +8184,7 @@ next_select() {
   local priolabel=""
   local kind a b c d e f g
   local gaps="" gapn=0 cand="" cands=0 blocked_lines="" blockedn=0 ordertotal=""
-  local ordernone=""
+  local ordernone="" priooptional=0
   local n order cats prios prio blocked title
   gap() { gaps="${gaps}${1}
 "; gapn=$((gapn+1)); }
@@ -8182,13 +8205,33 @@ next_select() {
       priofamily)
         # What the resolved model calls this family, and what it declares in it.
         priolabel="$a${b:+ ($b)}" ;;
+      prioreq)
+        # `optional` means an issue may carry NO priority and still be work.
+        # Absent evidence stays `required`: the policy must not relax a
+        # constraint because the gatherer said nothing.
+        [ "$a" = "optional" ] && priooptional=1 ;;
       issue)
         n="$a" order="$b" cats="$c" prios="$d" prio="$e" blocked="$f" title="$g"
         if [ "$cats" != "1" ]; then
           gap "not assessed: #$n carries $cats taxonomy category labels — exactly one is required"
           continue
         fi
-        if [ "$prios" != "1" ]; then
+        # CARDINALITY AND REQUIREMENT ARE TWO FACTS. Carrying two priorities is
+        # always uninterpretable — `exactly-one` means at most one. Carrying
+        # NONE is uninterpretable only where the model says a priority is
+        # required; where it says optional, an unprioritised issue is ordinary
+        # work, not broken metadata.
+        #
+        # Conflating them deadlocked the selector: one unprioritised issue made
+        # the whole slate NOT ASSESSED — because a single uninterpretable issue
+        # correctly poisons the slate — so nothing could be selected anywhere in
+        # the milestone until a human invented a priority for it. Inventing one
+        # to unblock the tool is exactly the distortion the model forbids.
+        if [ "$prios" -gt 1 ] 2>/dev/null; then
+          gap "not assessed: #$n carries $prios ${priolabel:-priority} labels — at most one is allowed"
+          continue
+        fi
+        if [ "$prios" != "1" ] && [ "$priooptional" != "1" ]; then
           gap "not assessed: #$n carries $prios ${priolabel:-priority} labels — exactly one is required"
           continue
         fi
@@ -8265,6 +8308,9 @@ next_select() {
   case "$pick_prio" in
     [0-9][0-9]:*) pick_prio="${pick_prio#*:}" ;;
   esac
+  # An issue carrying no priority is named as carrying none, rather than shown
+  # as the placeholder the sort key uses. "-" in a report reads like a value.
+  [ "$pick_prio" = "-" ] && pick_prio="none recorded (the model makes it optional)"
   pick_n="$(printf '%s' "$pick" | cut -d'|' -f3)"
   pick_title="$(printf '%s' "$pick" | cut -d'|' -f4-)"
   pick_n=$((10#$pick_n))
@@ -8521,6 +8567,10 @@ cmd_next() {
   # milestone with no gate lost the family name and its diagnostic fell back to
   # a generic word — a coupling between two unrelated facts.
   ev="${ev}priofamily	priority	$(printf '%s\n' "$prio_members" | awk 'NF { printf "%s%s", (n++ ? ", " : ""), $0 }')
+"
+  # Whether the model requires a priority at all — model data, like the family
+  # itself, and carried separately so the policy never has to re-resolve it.
+  ev="${ev}prioreq	$(priority_requirement "$gov_model_n")
 "
 
   # ONE GATE ANSWER, FOR EVERY CONSUMER, OVER ONE MOMENT.
