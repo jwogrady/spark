@@ -1314,19 +1314,81 @@ Collapsing the two is what makes a backlog lie: an ordering preference encoded
 as a `blocked-by` edge becomes a false blocker that fails readiness closed,
 and a real prerequisite demoted to "ordering" starts work too early.
 
-Ranking is priority, then the explicit sub-issue order, then issue number as a
-documented stable fallback. Priority ranks by the **declaration order of the
-model's `priority` family** — not by the label spelling — so a project that
-renames the family is ranked as it declared it, rather than alphabetically. The
-gate itself is never selected — and neither is any other parent: a container
+### Ranking — the authoritative order decides, not priority
+
+**When the milestone has a release gate, that gate's sub-issue order ranks the
+slate.** Priority does not override a recorded position. It ranks only the work
+the order does not position — issues absent from the record, which all share the
+last place — and that is the governed fallback, not a second sequencing
+authority. Issue number is the final stable tiebreak.
+
+**When the milestone has no gate there is no order to follow**, and priority
+ranks the whole slate. Absence is a known, valid state rather than a fallback
+from a failure.
+
+| The milestone | Ranked by | The `reason` line says |
+|---|---|---|
+| has a gate, and the pick has a position | the gate's sub-issue order | `first eligible issue in the release-gate sub-issue order` |
+| has a gate, and no eligible issue has a position | priority, among unpositioned work | `no eligible issue carries a recorded position` |
+| has no gate | priority | `highest-priority eligible issue` |
+
+The reason names **which authority decided**, because an operator who cannot
+tell them apart cannot tell whether the recorded course was followed.
+
+Ranking priority-first was a defect (#611). The model declares the gate's
+sub-issue order the delivery-order authority *and* declares that delivery order
+is never manufactured from priority (`separation order priority`); ranking
+priority ahead of the order honoured neither. A `P2` recorded second was
+delivered after every `P1`, so the recorded course was reported as followed
+while being inverted — and the operator's only correction was to distort
+`P0`-`P3` to express sequence, the exact act the model forbids.
+
+Priority ranks by the **declaration order of the model's `priority` family** —
+not by the label spelling — so a project that renames the family is ranked as it
+declared it, rather than alphabetically.
+
+**The order projects through nested containers.** The gate carries its scope
+through ordinary containers of its own, so the order record is *walked*, not
+listed: leaves are emitted in preorder and a container occupies the position it
+sat in, its children taking the places it would have held. Wrapping existing work
+in a container therefore does not renumber the work around it. Reading only the
+gate's direct children left every nested leaf with no position at all, in a
+hierarchy the gate validator calls valid (#611).
+
+Parenthood is read from the sub-issue links rather than from open-issue
+containment, so a **closed** container still projects its children rather than
+stranding them. A hierarchy that reaches itself has no delivery order: the
+projection stops rather than looping, and invents no sequence.
+
+The gate itself is never selected — and neither is any other parent: a container
 has no branch and no PR of its own, so it is never offered as work.
 
+### Priority is optional, and optional means optional
+
+The `priority` family is declared `exactly-one optional`. **Cardinality and
+requiredness are two different facts**: `exactly-one` bounds how many labels may
+be carried, `required`/`optional` says whether one must be. An issue carrying no
+priority is valid, is selectable, and reports its priority as
+`not recorded (optional)`.
+
+Where a model declares the family **required**, absence is still a gap and the
+diagnostic says which model rule it violates. Where the requiredness cannot be
+read at all, it is **not** assumed required — absence of evidence never becomes a
+gap.
+
+Treating a missing optional priority as an uninterpretable slate was the other
+half of #611: one unlabelled issue made every other issue in the milestone
+unselectable, so the operator's only route to a selection was to invent a
+priority — manufacturing the fact the model calls optional to satisfy a rule it
+never stated.
+
 Before selecting, the verb refuses to guess when the slate is not mechanically
-interpretable. Missing or duplicated taxonomy categories, missing or duplicated
-priority labels, unreadable native blockers, a dependency cycle, or a missing
-delivery-order record all report **not assessed** (exit 3) and name the issue
-at fault. One uninterpretable issue stops the whole selection: picking around
-it would mean choosing from a set that could not be fully read.
+interpretable. Missing or duplicated taxonomy categories, **more than one**
+priority label, a priority absent where the model requires one, unreadable native
+blockers, a dependency cycle, or a missing delivery-order record all report **not
+assessed** (exit 3) and name the issue at fault. One uninterpretable issue stops
+the whole selection: picking around it would mean choosing from a set that could
+not be fully read.
 
 **An unresolvable governance model stops the verb before it selects anything**,
 with the findings and exit 3. Every judgment here depends on the model — which

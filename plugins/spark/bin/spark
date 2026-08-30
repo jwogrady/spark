@@ -5155,8 +5155,46 @@ containers_of() {
 # order. The gate is passed IN, resolved by the projection that owns that fact.
 suborder_of() {
   [ -n "${3:-}" ] || return 0
-  printf '%s\n' "$1" | awk -F'\t' -v t="$2" -v g="$3" \
-    '$1 == "sub" && $2 == t && $3 == g { print $4 }'
+  printf '%s\n' "$1" | awk -F'\t' -v t="$2" -v g="$3" '
+    # Children per parent, in the order GitHub declared them. The gate carries
+    # its scope through containers of its own, so the order record has to be
+    # walked, not listed: reading only the gate’s direct children left every
+    # nested leaf with no order at all (#611).
+    $1 == "sub" && $2 == t { kid[$3, ++cnt[$3]] = $4; isparent[$3] = 1 }
+    END { walk(g) }
+
+    # PREORDER, AND LEAVES ONLY. A container is never selectable, so it does not
+    # occupy a position — its children take the positions it would have held,
+    # immediately where it sat. That is what makes the projection stable: adding
+    # a container around existing work does not renumber the work around it.
+    #
+    # Parenthood comes from the `sub` rows rather than the `container` rows on
+    # purpose. `container` is emitted for OPEN issues only, so a CLOSED
+    # container would have read as a leaf and silently stranded every child
+    # beneath it — the same order loss this function exists to end, arriving by
+    # a different door.
+    function walk(p,   i, c) {
+      # A hierarchy that reaches itself has no delivery order. Stop rather than
+      # loop: fail closed on contradictory evidence, never invent a sequence.
+      if (seen[p]++) return
+      for (i = 1; i <= cnt[p]; i++) {
+        c = kid[p, i]
+        if (isparent[c]) walk(c); else print c
+      }
+    }
+  '
+}
+
+# governance_family_required <model> <family> — `required` or `optional`, as the
+# model declares it. Empty when the model does not govern that family.
+#
+# The selector needs this because "exactly-one" and "required" are two different
+# facts and were being read as one: a family declared `exactly-one optional`
+# permits zero or one, and treating a missing OPTIONAL label as an
+# uninterpretable slate made `NOT ASSESSED` the answer to a state the model
+# calls valid (#611).
+governance_family_required() {
+  printf '%s\n' "$1" | awk -F'\t' -v f="$2" '$1 == "family" && $2 == f { print $4; exit }'
 }
 
 # snapshot_unread <snapshot> — the surfaces that could not be read whole.
@@ -8108,23 +8146,46 @@ cmd_state() {
 #       order to follow. Absence is not drift and not an unread surface — the
 #       role is optional, and ranking by priority is the correct answer here.
 #   ordercount <TAB> <n>   how many issues the order record holds
-#   priofamily <TAB> <name> <TAB> <members>
+#   priofamily <TAB> <name> <TAB> <members> <TAB> <required|optional>
 #       the resolved priority family, so a diagnostic names what the model
-#       declares rather than a hard-coded P0-P3
+#       declares rather than a hard-coded P0-P3. The fourth field is the
+#       model's REQUIREDNESS, which is a different fact from the family's
+#       `exactly-one` cardinality: cardinality bounds how many labels may be
+#       carried, requiredness says whether one must be. An `exactly-one
+#       optional` family permits zero.
+#
+# RANKING. When the milestone has an authoritative release-gate order, that
+# order ranks the slate and priority only separates work the order does not
+# position (everything absent from the record). When it has no gate, there is no
+# order to follow and priority ranks. Priority never overrides a recorded
+# position — the model declares delivery order is not manufactured from
+# priority, and ranking priority-first manufactured exactly that.
 #
 # Exits: 0 a selection was made / 1 nothing is eligible (a DETERMINATE answer —
 # every candidate is genuinely blocked) / 3 not assessed (the slate is not
 # mechanically interpretable). A determinate "nothing eligible" is never
 # reported as "could not tell", and an uninterpretable slate never yields a
 # pick.
+# prio_show <token> — a priority token as a person reads it.
+#
+# The gatherer prefixes the family's declaration rank so the key sorts in the
+# model's order rather than alphabetically ("02:P1"). That prefix exists to make
+# the sort correct, not to be read, and an issue carrying no priority at all
+# arrives as the rank sentinel with no member ("99:-").
+prio_show() {
+  local p="${1#*:}"
+  case "$1" in [0-9][0-9]:*) ;; *) p="$1" ;; esac
+  case "$p" in -|'') printf 'not recorded (optional)' ;; *) printf '%s' "$p" ;; esac
+}
+
 next_select() {
   # The priority family is model data, so the diagnostic names what the model
   # actually declares. Saying "P0-P3" was a second copy of a rule the schema
   # owns, and it lied to any project that renamed or extended the family.
-  local priolabel=""
+  local priolabel="" prioreq=""
   local kind a b c d e f g
   local gaps="" gapn=0 cand="" cands=0 blocked_lines="" blockedn=0 ordertotal=""
-  local ordernone=""
+  local ordernone="" raw=""
   local n order cats prios prio blocked title
   gap() { gaps="${gaps}${1}
 "; gapn=$((gapn+1)); }
@@ -8143,16 +8204,30 @@ next_select() {
       ordercount)
         case "$a" in ''|*[!0-9]*) ;; *) ordertotal="$a" ;; esac ;;
       priofamily)
-        # What the resolved model calls this family, and what it declares in it.
-        priolabel="$a${b:+ ($b)}" ;;
+        # What the resolved model calls this family, what it declares in it, and
+        # whether it is required. The last one is the model's judgment and is
+        # carried here rather than assumed, because assuming "required" is
+        # exactly what turned a valid optional-priority slate into NOT ASSESSED.
+        priolabel="$a${b:+ ($b)}"; prioreq="$c" ;;
       issue)
         n="$a" order="$b" cats="$c" prios="$d" prio="$e" blocked="$f" title="$g"
         if [ "$cats" != "1" ]; then
           gap "not assessed: #$n carries $cats taxonomy category labels — exactly one is required"
           continue
         fi
-        if [ "$prios" != "1" ]; then
-          gap "not assessed: #$n carries $prios ${priolabel:-priority} labels — exactly one is required"
+        # CARDINALITY AND REQUIREDNESS ARE TWO FACTS. `exactly-one` bounds how
+        # many may be carried; `required`/`optional` says whether one must be.
+        # Reading them as one rule made a missing OPTIONAL priority poison the
+        # whole slate: one unlabelled issue and every other issue in the
+        # milestone became unselectable, so the operator's only route to a
+        # selection was to invent a priority — manufacturing the very fact the
+        # model calls optional, to satisfy a rule it never stated (#611).
+        if [ "$prios" -gt 1 ] 2>/dev/null; then
+          gap "not assessed: #$n carries $prios ${priolabel:-priority} labels — at most one is allowed"
+          continue
+        fi
+        if [ "$prios" = "0" ] && [ "$prioreq" = "required" ]; then
+          gap "not assessed: #$n carries no ${priolabel:-priority} label — the model declares this family required"
           continue
         fi
         case "$blocked" in
@@ -8164,17 +8239,24 @@ next_select() {
             continue ;;
         esac
         if [ "$blocked" -gt 0 ]; then
-          blocked_lines="${blocked_lines}  #$n ($prio) — blocked by $blocked open prerequisite(s)
+          blocked_lines="${blocked_lines}  #$n ($(prio_show "$prio")) — blocked by $blocked open prerequisite(s)
 "
           blockedn=$((blockedn+1))
           continue
         fi
-        # Sort key: priority, then explicit order, then issue number. An issue
-        # absent from the order record sorts after every ordered one (999) and
-        # is reported as drift by the gatherer — it stays selectable, so a
-        # missing order line can never strand a milestone.
+        # An issue absent from the order record sorts after every ordered one
+        # (999) and is reported as drift by the gatherer — it stays selectable,
+        # so a missing order line can never strand a milestone.
+        #
+        # THE SORT KEY IS NOT BUILT HERE. Which authority ranks these depends on
+        # whether the milestone has an authoritative order at all, and that fact
+        # arrives on its own evidence line — which this function must not assume
+        # has already been read. Holding the rows raw until the stream ends
+        # makes the answer independent of the order the evidence arrives in,
+        # rather than correct only because the gatherer happens to emit the gate
+        # rows first.
         case "$order" in ''|*[!0-9]*) order=999 ;; esac
-        cand="${cand}$(printf '%s|%03d|%09d|%s' "$prio" "$order" "$n" "$title")
+        raw="${raw}$(printf '%s|%03d|%09d|%s' "$prio" "$order" "$n" "$title")
 "
         cands=$((cands+1)) ;;
     esac
@@ -8196,17 +8278,46 @@ next_select() {
     return 1
   fi
 
+  # WHICH AUTHORITY RANKS THIS SLATE.
+  #
+  # The model declares the release gate's sub-issue order the delivery-order
+  # authority, and separately declares that delivery order is never manufactured
+  # from priority. Ranking priority-first honoured neither: a P2 sitting second
+  # in the recorded order was delivered after every P1, so the recorded course
+  # was reported as followed while being inverted, and the only way an operator
+  # could correct it was to distort P0-P3 to express sequence — the exact act
+  # the model forbids (#611).
+  #
+  # So when an authoritative order EXISTS, it ranks. Priority still ranks the
+  # work the order cannot separate — issues absent from the record, which all
+  # share position 999 — and that is the governed fallback, not a second
+  # sequencing authority. When no gate exists there is no order to follow, and
+  # priority ranking is the whole answer rather than a fallback.
+  local ord_authority=1
+  [ -z "$ordernone" ] || ord_authority=0
+  local rline rprio rorder rnum rtitle
+  while IFS='|' read -r rprio rorder rnum rtitle; do
+    [ -n "$rnum" ] || continue
+    if [ "$ord_authority" -eq 1 ]; then
+      cand="${cand}${rorder}|${rprio}|${rnum}|${rprio}|${rorder}|${rnum}|${rtitle}
+"
+    else
+      cand="${cand}${rprio}|${rorder}|${rnum}|${rprio}|${rorder}|${rnum}|${rtitle}
+"
+    fi
+  done <<RAW_ROWS
+$(printf '%s' "$raw" | awk 'NF')
+RAW_ROWS
+
   local pick pick_n pick_prio pick_order pick_title total
   pick="$(printf '%s' "$cand" | awk 'NF' | LC_ALL=C sort | head -n1)"
-  pick_prio="$(printf '%s' "$pick" | cut -d'|' -f1)"
-  # Strip a leading numeric rank: it exists to make the sort correct, not to be
-  # read. "02:P1" displays as "P1"; a bare "P1" is left alone.
-  case "$pick_prio" in
-    [0-9][0-9]:*) pick_prio="${pick_prio#*:}" ;;
-  esac
-  pick_order="$(printf '%s' "$pick" | cut -d'|' -f2)"
-  pick_n="$(printf '%s' "$pick" | cut -d'|' -f3)"
-  pick_title="$(printf '%s' "$pick" | cut -d'|' -f4-)"
+  # Fields 1-3 are the sort key and are deliberately not read back: the display
+  # fields that follow are the same facts in a fixed place, so what is shown
+  # never depends on which key shape ranked the slate.
+  pick_prio="$(prio_show "$(printf '%s' "$pick" | cut -d'|' -f4)")"
+  pick_order="$(printf '%s' "$pick" | cut -d'|' -f5)"
+  pick_n="$(printf '%s' "$pick" | cut -d'|' -f6)"
+  pick_title="$(printf '%s' "$pick" | cut -d'|' -f7-)"
   pick_n=$((10#$pick_n))
   # "N of M in the sub-issue order" counts positions in the ORDER RECORD, not
   # the candidates left on the slate. Counting candidates produced "5 of 1"
@@ -8221,13 +8332,33 @@ next_select() {
   printf 'eligible  yes\n'
   printf 'blocked   no\n'
   if [ "$pick_order" = "999" ]; then
-    printf 'order     not recorded — sorted last; add it to the gate sub-issues\n'
+    # Never "add it to the gate sub-issues". A leaf nested under an ordinary
+    # container beneath the gate is already in the hierarchy, and that
+    # instruction asked the operator to flatten a shape the gate validator
+    # calls valid. Say what is true — it has no recorded position — and leave
+    # the structure alone.
+    printf 'order     not recorded — sorted after every issue that has a position\n'
   else
     printf 'order     %s of %s in the gate sub-issue order\n' "$((10#$pick_order + 1))" "$total"
   fi
-  printf 'reason    highest-priority eligible issue'
-  if [ "$cands" -gt 1 ]; then
-    printf '; the explicit sub-issue order broke the %s tie' "$pick_prio"
+  # NAME THE AUTHORITY THAT DECIDED. Two different facts can pick an issue, and
+  # an operator who cannot tell which one did cannot tell whether the recorded
+  # course was followed.
+  if [ "$ord_authority" -eq 1 ] && [ "$pick_order" != "999" ]; then
+    printf 'reason    first eligible issue in the release-gate sub-issue order'
+    if [ "$cands" -gt 1 ]; then
+      printf '; priority did not override it'
+    fi
+  elif [ "$ord_authority" -eq 1 ]; then
+    printf 'reason    no eligible issue carries a recorded position'
+    if [ "$cands" -gt 1 ]; then
+      printf '; ranked by priority among unordered work'
+    fi
+  else
+    printf 'reason    highest-priority eligible issue'
+    if [ "$cands" -gt 1 ]; then
+      printf '; the explicit sub-issue order broke the %s tie' "$pick_prio"
+    fi
   fi
   printf '\n'
   if [ "$blockedn" -gt 0 ]; then
@@ -8407,7 +8538,7 @@ cmd_next() {
   # together, at exit 0 — indistinguishable from governance-validated work, and
   # defeating "selection is not a licence to start" at exactly the moment the
   # governing authority was invalid (#520).
-  local gov_model_n="" prio_members="" gov_findings=""
+  local gov_model_n="" prio_members="" gov_findings="" prio_required=""
   if ! gov_findings="$(resolve_governance 2>&1 >/dev/null)"; then
     yellow "NOT ASSESSED: the governance model does not resolve, so nothing here can"
     yellow "  be judged — not the priority set, not execution metadata, not the route."
@@ -8423,6 +8554,10 @@ cmd_next() {
   # multi-word member in two, exactly as it did in the validators, so a valid
   # governed slate was rejected here after it passed everywhere else.
   prio_members="$(priority_members "$gov_model_n")"
+  # Whether the family is REQUIRED is the model's to say, not the selector's.
+  # Read once here and carried in the evidence so `next_select` stays a pure
+  # function over what it is given.
+  prio_required="$(governance_family_required "$gov_model_n" priority)"
   # No hard-coded fallback. `P0 P1 P2 P3` here was a second copy of the same rule
   # and it silently took over whenever the model was unusable — the identical
   # defect one level down.
@@ -8443,7 +8578,7 @@ cmd_next() {
   # delivery-order gate exists. Emitting it inside the gate branch meant a
   # milestone with no gate lost the family name and its diagnostic fell back to
   # a generic word — a coupling between two unrelated facts.
-  ev="${ev}priofamily	priority	$(printf '%s\n' "$prio_members" | awk 'NF { printf "%s%s", (n++ ? ", " : ""), $0 }')
+  ev="${ev}priofamily	priority	$(printf '%s\n' "$prio_members" | awk 'NF { printf "%s%s", (n++ ? ", " : ""), $0 }')	${prio_required}
 "
 
   # ONE GATE ANSWER, FOR EVERY CONSUMER, OVER ONE MOMENT.
