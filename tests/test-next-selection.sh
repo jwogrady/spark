@@ -33,19 +33,101 @@ sel() {
 
 bash -n "$script" && ok || bad "bash -n spark"
 
-# --- priority outranks order: P0 wins even when it sits later in the list.
-sel 0 "priority outranks explicit order" \
+# --- ORDER OUTRANKS PRIORITY (#611). This assertion is the inverse of what it
+# was, and the inversion is the point: it used to prove "priority outranks
+# explicit order", which is the defect. A recorded gate order is the delivery
+# authority, so a P1 sitting first in it is selected ahead of a P0 sitting
+# later — and the reason names which fact decided.
+#
+# The governance model already forbade the old behaviour:
+#   separation  order  priority
+#   Delivery order is never manufactured from priority
+# With priority leading the sort, the only way an operator could correct a
+# sequence was to relabel priorities — the exact distortion that rule prohibits.
+sel 0 "the recorded gate order outranks priority" \
 "issue	10	0	1	1	P1	0	first in order but P1
 issue	11	1	1	1	P0	0	later in order but P0
 " \
-  "selected  #11" "priority  P0"
+  "selected  #10" "priority  P1" "first in the gate's recorded delivery order"
 
-# --- equal priority: the explicit sub-issue order breaks the tie.
-sel 0 "explicit order breaks a same-priority tie" \
+# --- equal priority: the order still decides, and still says so.
+sel 0 "explicit order decides a same-priority slate" \
 "issue	21	1	1	1	P1	0	second
 issue	20	0	1	1	P1	0	first
 " \
-  "selected  #20" "the explicit sub-issue order broke the P1 tie"
+  "selected  #20" "first in the gate's recorded delivery order"
+
+# --- THE LIVE v0.23 CASE (#611 defect 2), reproduced exactly.
+#
+# Gate #480 governs v0.23 with a FLAT hierarchy: every issue is a direct child,
+# every one carries a recorded order, so defect 1 cannot apply. The order encodes
+# the operator-approved course, whose first phase is truth/ownership.
+#
+# #475 and #477 sit in that first phase and are P2. Everything in the later
+# phases is P1. With priority leading the sort, both were surfaced AFTER the
+# entire autonomous-loop and release-automation phases — inverting the approved
+# course with a complete, correct order record sitting right there.
+#
+# The operator could not fix that without committing the offence the model
+# forbids: relabelling #475/#477 to P1 to express sequence is precisely
+# "distorting P0-P3 to express sequence". The only truthful repair was here.
+sel 0 "a P2 earlier in the recorded order is selected ahead of a later P1" \
+"ordercount	4
+issue	475	1	1	1	P2	0	truth/ownership, second in the course
+issue	616	5	1	1	P1	0	a later phase
+issue	477	3	1	1	P2	0	truth/ownership, fourth in the course
+issue	484	9	1	1	P1	0	a later phase still
+" \
+  "selected  #475" "priority  P2" \
+  "order     2 of 4 in the gate sub-issue order" \
+  "first in the gate's recorded delivery order"
+
+# --- MUTATION CONTROL for the sort key.
+#
+# The assertion above is worthless unless the pre-#611 key would fail it. This
+# takes the REAL function body and mutates only the sort-key line back to
+# priority-first — not a hand-written replica of the old policy, because this
+# codebase has already been bitten by a replica passing while the original was
+# wrong (see priority_members). The issue number is field 3 of both key shapes,
+# so `selected #N` is read identically either way; only the ranking differs.
+mutant_src="$(declare -f next_select \
+  | sed "s/printf '%03d|%s|%09d|%s' \"\$order\" \"\$prio\"/printf '%s|%03d|%09d|%s' \"\$prio\" \"\$order\"/")"
+case "$mutant_src" in
+  *"'%s|%03d|%09d|%s' \"\$prio\" \"\$order\""*) ok ;;
+  *) bad "mutation control: could not rewrite the sort key — the control proves nothing" ;;
+esac
+eval "${mutant_src/next_select /next_select_mutant }"
+mut_out="$(printf '%s' \
+"ordercount	4
+issue	475	1	1	1	P2	0	truth/ownership, second in the course
+issue	616	5	1	1	P1	0	a later phase
+issue	477	3	1	1	P2	0	truth/ownership, fourth in the course
+issue	484	9	1	1	P1	0	a later phase still
+" | next_select_mutant 2>&1)" || true
+case "$mut_out" in
+  *"selected  #475"*) bad "mutation control: priority-first ALSO selects #475 — the fixture proves nothing" ;;
+  *"selected  #616"*) ok ;;
+  *) bad "mutation control: priority-first selected something unexpected ($mut_out)" ;;
+esac
+
+# --- and where NO gate declares an order, priority ranking is unchanged and is
+# still reported as the reason. Absence stays a valid answer, not a fallback.
+sel 0 "with no gate, priority ranks and the reason says so" \
+"ordernone	this milestone declares no release gate, so no explicit order exists
+issue	200	-	1	1	P2	0	lower priority
+issue	201	-	1	1	P0	0	higher priority
+" \
+  "selected  #201" "priority  P0" \
+  "highest-priority eligible issue; no gate declares an order"
+
+# --- an issue absent from an EXISTING order record sorts last, and the reason
+# names that rather than implying the gate chose it.
+sel 0 "an unordered issue under a gate is named as unordered" \
+"ordercount	2
+issue	300	-	1	1	P0	0	absent from the order
+" \
+  "selected  #300" "place it under the gate hierarchy" \
+  "#300 is absent from the gate order"
 
 # --- a higher-priority BLOCKED issue never outranks a lower-priority eligible
 # one. This is the whole point of separating the two authorities.
@@ -185,9 +267,12 @@ issue	6	5	1	1	P1	2	F
 " \
   "selected  #1" "priority  P1"
 
-# Step 2 — A closed: B and C unblock together. B is P0, so priority decides,
-# NOT the order (B happens to be next in order too, but priority is the reason).
-sel 0 "dogfood step 2 selects B on priority" \
+# Step 2 — A closed: B and C unblock together. B is next in the recorded order
+# AND the higher priority, so both authorities agree; the order is the one that
+# decides, and the reason says so. (Before #611 this case was described as
+# priority deciding — it read as agreement only because the two never disagreed
+# in this fixture. The disagreement case is the flat-gate fixture below.)
+sel 0 "dogfood step 2 selects B, next in the order" \
 "issue	2	1	1	1	P0	0	B
 issue	3	2	1	1	P1	0	C
 issue	4	3	1	1	P1	1	D
@@ -204,7 +289,7 @@ issue	4	3	1	1	P1	1	D
 issue	5	4	1	1	P1	0	E
 issue	6	5	1	1	P1	1	F
 " \
-  "selected  #3" "broke the P1 tie"
+  "selected  #3" "first in the gate's recorded delivery order"
 
 # Step 4 — C closed: D and E eligible, both P1; order picks D.
 sel 0 "dogfood step 4 selects D on order" \
@@ -212,7 +297,7 @@ sel 0 "dogfood step 4 selects D on order" \
 issue	5	4	1	1	P1	0	E
 issue	6	5	1	1	P1	1	F
 " \
-  "selected  #4" "broke the P1 tie"
+  "selected  #4" "first in the gate's recorded delivery order"
 
 # Step 5 — D closed: E is eligible, F still waits on E.
 sel 0 "dogfood step 5 selects E" \

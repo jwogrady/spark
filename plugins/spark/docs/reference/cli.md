@@ -1147,7 +1147,7 @@ Each new type exists because its absence was where drift entered:
 
   Order is *applied*, not merely recorded: GitHub holds preferred order as the
   **sub-issue order under a parent**, which is the authority `spark next` reads
-  to break a priority tie. An `order` record therefore needs its issue to be a
+  to decide delivery sequence. An `order` record therefore needs its issue to be a
   sub-issue of something in the same artifact — if it is not, the plan says the
   placement **cannot be applied** and why, rather than reporting success with
   the data dropped.
@@ -1314,12 +1314,78 @@ Collapsing the two is what makes a backlog lie: an ordering preference encoded
 as a `blocked-by` edge becomes a false blocker that fails readiness closed,
 and a real prerequisite demoted to "ordering" starts work too early.
 
-Ranking is priority, then the explicit sub-issue order, then issue number as a
-documented stable fallback. Priority ranks by the **declaration order of the
-model's `priority` family** — not by the label spelling — so a project that
-renames the family is ranked as it declared it, rather than alphabetically. The
-gate itself is never selected — and neither is any other parent: a container
-has no branch and no PR of its own, so it is never offered as work.
+### The selection contract
+
+Four parts, in this order:
+
+1. **Native `blocked-by` decides eligibility.** An issue with an open native
+   blocker is not eligible, whatever its priority or its position in the order.
+2. **Where an authoritative gate order exists, that order decides the preferred
+   sequence.** A lower-priority issue earlier in the order is selected ahead of
+   a higher-priority issue later in it.
+3. **Priority never lets a later course phase jump an earlier one.**
+4. **Priority decides only where the authoritative order does not** — between
+   issues absent from the order record, or where no gate declares an order at
+   all.
+
+Ranking is therefore the recorded order, then priority, then issue number as a
+documented stable fallback.
+
+Priority leading that key is what #611 repaired. The order was documented as
+the delivery authority while behaving as a **tiebreaker within a priority
+band**: any P1 outranked any P2 whatever the gate recorded, so a later phase
+jumped an earlier one, and the only correction available to an operator was to
+relabel priorities — the exact distortion `separation order priority` forbids.
+A rule the model states and the tool makes unenforceable is not a rule.
+
+**Absence stays a valid answer, not a fallback.** A milestone with no release
+gate has no authoritative order, and priority ranking there is correct rather
+than degraded. The same key expresses both: with no order record every
+candidate takes the same rank and the key resolves to priority, then number.
+
+**The reason names which authority decided** — the recorded order, or priority
+— so the contract is legible from the output without reading the code. That
+distinction is what went unnoticed while order behaved as a tiebreaker: the
+output said "highest-priority eligible issue" whether or not the gate had had
+any say.
+
+Priority ranks by the **declaration order of the model's `priority` family** —
+not by the label spelling — so a project that renames the family is ranked as
+it declared it, rather than alphabetically. The gate itself is never selected —
+and neither is any other parent: a container has no branch and no PR of its
+own, so it is never offered as work.
+
+### Order through nested hierarchies
+
+The gate's order is read as a **preorder walk of its hierarchy**, not as its
+direct children alone. The gate validator has always accepted ancestry — a leaf
+beneath an ordinary container under the gate is a correctly scoped shape — so
+the order projection has to reach it:
+
+```text
+#900 release gate
+├─ #800 ordinary container   ├─ #812   position 1
+│                            └─ #811   position 2
+└─ #801 ordinary container   ├─ #802   position 3
+                             └─ #803   position 4
+```
+
+Each container's children take its place in the sequence, in the order that
+container declares them. **Containers hold no position of their own**, because
+a position spent on one would count work nobody can be given.
+
+Nothing is manufactured. Where the hierarchy does not distinguish two leaves,
+they keep the order GitHub recorded and the stable fallback decides the rest.
+
+Before this, only direct children of the gate received a position: every nested
+leaf sorted at the fallback rank and was told to *add itself to the gate
+sub-issues* — remediation that would have collapsed a valid hierarchy to record
+an order it already implied. An issue that reaches the fallback rank now is
+genuinely not under the gate at any depth, and the remediation says so.
+
+A hierarchy containing a cycle is not a shape whose order can be read; the walk
+stops at the repeat rather than recursing, and the verb's own cycle evidence is
+what names the state.
 
 Before selecting, the verb refuses to guess when the slate is not mechanically
 interpretable. Missing or duplicated taxonomy categories, missing or duplicated

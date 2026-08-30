@@ -5151,12 +5151,49 @@ containers_of() {
   printf '%s\n' "$1" | awk -F'\t' -v t="$2" '$1 == "container" && $2 == t { print $3 }'
 }
 
-# suborder_of <snapshot> <title> <gate> — the gate'"'"'s sub-issues, in declared
-# order. The gate is passed IN, resolved by the projection that owns that fact.
+# suborder_of <snapshot> <title> <gate> — the gate'"'"'s SELECTABLE descendants, in
+# the hierarchy'"'"'s own declared order. The gate is passed IN, resolved by the
+# projection that owns that fact.
+#
+# A PREORDER WALK, not the gate'"'"'s direct children. The gate validator has always
+# accepted ancestry — a leaf beneath an ordinary container under the gate is a
+# correctly scoped shape — but this projection used to emit only rows whose
+# immediate parent was the gate. Every nested leaf was therefore absent from the
+# order record, sorted at the fallback rank, and handed remediation that told the
+# operator to reparent it directly onto the gate: advice that would collapse the
+# very hierarchy the model permits, to record an order it already implies.
+#
+# Preorder is what makes the order well defined without inventing one. The gate
+# lists its children in a declared order; each container lists its own the same
+# way; walking depth-first in that order yields one stable sequence, and it is
+# the sequence a reader gets from the hierarchy itself. Nothing is manufactured:
+# where the hierarchy does not distinguish two leaves, this emits them in the
+# order GitHub recorded, and the selector'"'"'s own fallback decides the rest.
+#
+# CONTAINERS ARE NOT EMITTED. They are not selectable, so a position spent on
+# one would make "N of M" count things nobody can be given. Their children take
+# their place in the sequence, which is what their position actually meant.
+#
+# `seen` is a cycle guard, not an optimisation. A hierarchy that contains a loop
+# is not a shape whose order can be read, and recursing it forever would hang
+# the verb rather than report the state — the projection stops at the repeat and
+# the caller'"'"'s own cycle evidence names it.
 suborder_of() {
   [ -n "${3:-}" ] || return 0
-  printf '%s\n' "$1" | awk -F'\t' -v t="$2" -v g="$3" \
-    '$1 == "sub" && $2 == t && $3 == g { print $4 }'
+  printf '%s\n' "$1" | awk -F'\t' -v t="$2" -v g="$3" '
+    function walk(p,   i, n, arr, c) {
+      if (p in seen) return
+      seen[p] = 1
+      n = split(kids[p], arr, " ")
+      for (i = 1; i <= n; i++) {
+        c = arr[i]
+        if (c in cont) walk(c)
+        else print c
+      }
+    }
+    $1 == "sub" && $2 == t { kids[$3] = kids[$3] " " $4 }
+    $1 == "container" && $2 == t { cont[$3] = 1 }
+    END { walk(g) }'
 }
 
 # snapshot_unread <snapshot> — the surfaces that could not be read whole.
@@ -8169,12 +8206,35 @@ next_select() {
           blockedn=$((blockedn+1))
           continue
         fi
-        # Sort key: priority, then explicit order, then issue number. An issue
-        # absent from the order record sorts after every ordered one (999) and
-        # is reported as drift by the gatherer — it stays selectable, so a
-        # missing order line can never strand a milestone.
+        # Sort key: ORDER, then priority, then issue number.
+        #
+        # Order leads because the release gate's sub-issue order is the
+        # authoritative delivery sequence, and the governance model forbids
+        # expressing sequence through priority at all:
+        #
+        #   separation  order  priority
+        #   Delivery order is never manufactured from priority; distorting
+        #   P0-P3 to express sequence destroys both facts
+        #
+        # With priority leading, that rule was unenforceable from the operator's
+        # side: any P1 outranked any P2 whatever the gate recorded, so a later
+        # course phase jumped an earlier one, and the only way to correct the
+        # sequence was to relabel priorities — the exact distortion the model
+        # prohibits. Order was documented as the authority while behaving as a
+        # tiebreaker within a priority band.
+        #
+        # THE NO-GATE CASE NEEDS NO BRANCH. Absent a gate there is no order
+        # record, every candidate takes the same fallback rank, and this key
+        # degenerates to priority then issue number — which is the correct
+        # ranking there, and is what it has always done. One key, both states.
+        #
+        # An issue absent from the order record sorts after every ordered one
+        # (999) and is reported as drift by the gatherer. It stays selectable,
+        # so a missing order line can never strand a milestone, and priority
+        # still decides among those — which is the one place the contract
+        # leaves to priority: where authoritative order does not distinguish.
         case "$order" in ''|*[!0-9]*) order=999 ;; esac
-        cand="${cand}$(printf '%s|%03d|%09d|%s' "$prio" "$order" "$n" "$title")
+        cand="${cand}$(printf '%03d|%s|%09d|%s' "$order" "$prio" "$n" "$title")
 "
         cands=$((cands+1)) ;;
     esac
@@ -8198,13 +8258,13 @@ next_select() {
 
   local pick pick_n pick_prio pick_order pick_title total
   pick="$(printf '%s' "$cand" | awk 'NF' | LC_ALL=C sort | head -n1)"
-  pick_prio="$(printf '%s' "$pick" | cut -d'|' -f1)"
+  pick_order="$(printf '%s' "$pick" | cut -d'|' -f1)"
+  pick_prio="$(printf '%s' "$pick" | cut -d'|' -f2)"
   # Strip a leading numeric rank: it exists to make the sort correct, not to be
   # read. "02:P1" displays as "P1"; a bare "P1" is left alone.
   case "$pick_prio" in
     [0-9][0-9]:*) pick_prio="${pick_prio#*:}" ;;
   esac
-  pick_order="$(printf '%s' "$pick" | cut -d'|' -f2)"
   pick_n="$(printf '%s' "$pick" | cut -d'|' -f3)"
   pick_title="$(printf '%s' "$pick" | cut -d'|' -f4-)"
   pick_n=$((10#$pick_n))
@@ -8221,13 +8281,30 @@ next_select() {
   printf 'eligible  yes\n'
   printf 'blocked   no\n'
   if [ "$pick_order" = "999" ]; then
-    printf 'order     not recorded — sorted last; add it to the gate sub-issues\n'
+    # "Somewhere under the gate" is the truthful remediation, not "directly on
+    # the gate". Nested leaves now inherit a position from the hierarchy, so
+    # reaching this line means the issue is not under the gate at ANY depth —
+    # and telling someone to reparent a correctly nested issue onto the gate
+    # would have destroyed a valid hierarchy to record an order it already had.
+    printf 'order     not recorded — sorted last; place it under the gate hierarchy\n'
   else
     printf 'order     %s of %s in the gate sub-issue order\n' "$((10#$pick_order + 1))" "$total"
   fi
-  printf 'reason    highest-priority eligible issue'
-  if [ "$cands" -gt 1 ]; then
-    printf '; the explicit sub-issue order broke the %s tie' "$pick_prio"
+  # WHICH AUTHORITY DECIDED, named rather than implied. Two different facts can
+  # select an issue, and an operator reading "highest-priority eligible issue"
+  # under a gate that actually decided it cannot tell whether the order was
+  # honoured — which is how order-as-authority went unnoticed while behaving as
+  # a tiebreaker. The reason now says which fact ranked this pick first, so the
+  # contract is legible from the output alone.
+  if [ "$pick_order" != "999" ]; then
+    printf 'reason    first in the gate'"'"'s recorded delivery order'
+    if [ "$cands" -gt 1 ]; then
+      printf '; priority did not decide'
+    fi
+  elif [ -n "$ordernone" ]; then
+    printf 'reason    highest-priority eligible issue; no gate declares an order'
+  else
+    printf 'reason    highest-priority eligible issue; #%s is absent from the gate order' "$pick_n"
   fi
   printf '\n'
   if [ "$blockedn" -gt 0 ]; then
