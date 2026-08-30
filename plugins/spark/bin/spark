@@ -56,6 +56,7 @@ state|cmd_state|Show or write the work state (.spark/state.json); --set key=valu
 footprint|cmd_footprint|Measure Spark'\''s context footprint per surface (--json); --timing gates hot-path latency
 telemetry|cmd_telemetry|Record and render run telemetry bound to an exact PR HEAD SHA (record/show/relay/compare/list)
 budget|cmd_budget|Bound an autonomous run: declare its convergence condition and envelope, then check before expensive work
+evidence|cmd_evidence|Capture an authoritative fact once and share it, with explicit bounds and named invalidation
 orient|cmd_orient|Classify this repo as new, existing, or ambiguous before setup; --set records the decision
 hub|cmd_hub|Report the memory hub this project declares and where the value came from; --set records it (or none)
 labels|cmd_labels|Compare this repo'\''s GitHub labels against the declared issue taxonomy; --apply creates the missing ones
@@ -9010,6 +9011,299 @@ EOF
       ;;
     *)
       red "unknown budget action: $action"; echo "$usage_line"; return 1 ;;
+  esac
+}
+
+# ---------------------------------------------------------------------------
+# spark evidence — capture a fact once, share it, and know when it went stale (#576)
+#
+# Autonomous runs pay repeatedly for the same facts: the same remote read
+# performed by each consumer that needs it, whole surfaces re-fetched when a
+# range would do, and evidence carried forward past the moment it stopped being
+# true. The first two are waste. The third is a correctness bug wearing the
+# costume of an optimization, and it is the one this is built around.
+#
+#   capture once -> project -> many consumers -> invalidate on named inputs
+#
+# Freshness is decided by INVALIDATORS the caller states outright -- the commit,
+# the governing contract, the model, the effort class, the tool surface. A
+# capture is reusable only while every one of them is unchanged, and when one
+# has moved the refusal NAMES IT, because "stale" without a cause is a thing
+# nobody can act on.
+#
+# Completeness is decided by a declared bound. A capture that hit its bound is
+# marked NOT ASSESSED and says so on every read: partial evidence presented as
+# whole evidence is how a run concludes something false cheaply. Reducing cost
+# is never a licence to reduce truth -- a smaller answer that might be wrong is
+# not an optimization.
+EVIDENCE_INVALIDATORS="head contract model effort tools"
+EVIDENCE_FIELDS="$EVIDENCE_INVALIDATORS bound count truncated consumers captured"
+
+ev_dir()     { printf '%s/.spark/evidence' "$1"; }
+ev_file()    { printf '%s/.spark/evidence/%s.tsv' "$1" "$2"; }
+ev_payload() { printf '%s/.spark/evidence/%s.data' "$1" "$2"; }
+
+ev_get() {
+  [ -f "$1" ] || return 0
+  awk -F'\t' -v k="$2" '$1 == k { v = $2 } END { if (v != "") print v }' "$1"
+}
+
+ev_load() {
+  local f="$1" k v
+  for k in $EVIDENCE_FIELDS; do eval "evv_$k=''"; done
+  [ -f "$f" ] || return 0
+  while IFS=$'\t' read -r k v; do
+    case " $EVIDENCE_FIELDS " in *" $k "*) eval "evv_$k=\$v" ;; esac
+  done < "$f"
+  return 0
+}
+
+ev_write() {
+  local f="$1" k v
+  mkdir -p "$(dirname "$f")" || return 1
+  {
+    for k in $EVIDENCE_FIELDS; do
+      eval "v=\$evv_$k"
+      if [ -n "$v" ]; then printf '%s\t%s\n' "$k" "$v"; fi
+    done
+  } > "$f"
+}
+
+# ev_drift <field> <recorded> <asked> — one line naming what moved, or empty.
+# An invalidator the caller did not state cannot invalidate: absence is not a
+# mismatch, or every consumer would be forced to restate the whole fingerprint
+# to read anything at all.
+ev_drift() {
+  [ -n "$3" ] || return 0
+  [ -n "$2" ] || return 0
+  [ "$2" = "$3" ] && return 0
+  printf 'the %s changed (%s -> %s)' "$1" "$2" "$3"
+}
+
+# ev_tokens <file...> — the same bytes/FOOTPRINT_CPT heuristic the footprint
+# gate uses, so a preflight estimate and a footprint report cannot disagree
+# about what a surface costs.
+ev_tokens() {
+  local total=0 f b
+  for f in "$@"; do
+    [ -f "$f" ] || continue
+    b=$(wc -c < "$f" | tr -d ' ')
+    total=$((total + b))
+  done
+  printf '%s' $((total / FOOTPRINT_CPT))
+}
+
+cmd_evidence() {
+  local usage_line="usage: spark evidence [put|get|preflight|status|forget] --key <name> [--head <sha>] [--contract <id>] [--model <m>] [--effort <e>] [--tools <digest>] [--bound <n>] [--count <n>] [--from <file>] [--budget <n>] [--json] [--force]"
+  local action=""
+  case "${1:-}" in
+    put|get|preflight|status|forget) action="$1"; shift ;;
+    *) action="status" ;;
+  esac
+
+  local key="" head="" contract="" model="" effort="" tools=""
+  local bound="" count="" from="" budget="" json="" force="" files=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --key)      shift; key="${1:-}" ;;
+      --key=*)    key="${1#--key=}" ;;
+      --head)     shift; head="${1:-}" ;;
+      --head=*)   head="${1#--head=}" ;;
+      --contract) shift; contract="${1:-}" ;;
+      --contract=*) contract="${1#--contract=}" ;;
+      --model)    shift; model="${1:-}" ;;
+      --model=*)  model="${1#--model=}" ;;
+      --effort)   shift; effort="${1:-}" ;;
+      --effort=*) effort="${1#--effort=}" ;;
+      --tools)    shift; tools="${1:-}" ;;
+      --tools=*)  tools="${1#--tools=}" ;;
+      --bound)    shift; bound="${1:-}" ;;
+      --bound=*)  bound="${1#--bound=}" ;;
+      --count)    shift; count="${1:-}" ;;
+      --count=*)  count="${1#--count=}" ;;
+      --from)     shift; from="${1:-}" ;;
+      --from=*)   from="${1#--from=}" ;;
+      --budget)   shift; budget="${1:-}" ;;
+      --budget=*) budget="${1#--budget=}" ;;
+      --json)     json=1 ;;
+      --force)    force=1 ;;
+      -h|--help)  echo "$usage_line"; return 0 ;;
+      -*) red "unknown option: $1"; echo "$usage_line"; return 1 ;;
+      *)  files="${files}$1
+" ;;
+    esac
+    shift
+  done
+
+  local top
+  top="$(git_root)"; if [ -z "$top" ]; then
+    red "spark evidence needs a git repo — run it from inside the project."
+    return 1
+  fi
+
+  if [ "$action" = "preflight" ]; then
+    # Estimating BEFORE dispatch is the whole point: discovering that a bundle
+    # was too large after paying for generation is the failure this prevents.
+    local list="" f est
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      if [ ! -f "$f" ]; then red "no such file: $f"; return 1; fi
+      list="$list $f"
+    done <<EOF
+$files
+EOF
+    if [ -z "$list" ]; then
+      red "spark evidence preflight needs one or more files to estimate"
+      return 1
+    fi
+    est="$(ev_tokens $list)"
+    case "$budget" in
+      ''|*[!0-9]*)
+        if [ -n "$json" ]; then
+          printf '{"estimate":%s,"budget":null,"verdict":"NOT ASSESSED"}\n' "$est"
+        else
+          echo "Preflight estimate: ~$est tokens (bytes ÷ $FOOTPRINT_CPT; heuristic, not a tokenizer)"
+          echo "  no --budget given, so whether it fits is NOT ASSESSED"
+        fi
+        return 0 ;;
+    esac
+    if [ "$est" -gt "$budget" ]; then
+      if [ -n "$json" ]; then
+        printf '{"estimate":%s,"budget":%s,"verdict":"OVER BUDGET"}\n' "$est" "$budget"
+      else
+        red "OVER BUDGET — ~$est tokens against a budget of $budget"
+        echo "  reroute or reduce the evidence set before dispatch, not after generation"
+      fi
+      return 2
+    fi
+    if [ -n "$json" ]; then
+      printf '{"estimate":%s,"budget":%s,"verdict":"WITHIN BUDGET"}\n' "$est" "$budget"
+    else
+      green "WITHIN BUDGET — ~$est tokens of $budget"
+    fi
+    return 0
+  fi
+
+  if [ "$action" = "status" ]; then
+    local any=0 f k
+    for f in "$(ev_dir "$top")"/*.tsv; do
+      [ -f "$f" ] || continue
+      any=1; k="$(basename "$f" .tsv)"
+      if [ -n "$json" ]; then
+        printf '{"key":"%s","head":"%s","consumers":%s,"truncated":"%s"}\n' \
+          "$k" "$(ev_get "$f" head)" "$(ev_get "$f" consumers)" "$(ev_get "$f" truncated)"
+      else
+        printf '%-24s head=%-12s consumers=%-4s %s\n' "$k" \
+          "$(ev_get "$f" head)" "$(ev_get "$f" consumers)" \
+          "$([ "$(ev_get "$f" truncated)" = "yes" ] && echo 'NOT ASSESSED (bound exceeded)' || echo complete)"
+      fi
+    done
+    [ "$any" -eq 1 ] || yellow "no captures under .spark/evidence"
+    return 0
+  fi
+
+  if [ -z "$key" ]; then red "spark evidence $action needs --key <name>"; return 1; fi
+  if ! tm_valid_run "$key"; then
+    red "invalid key: '$key' (letters, digits, dot, dash and underscore only — the key becomes a filename)"
+    return 1
+  fi
+
+  local file payload
+  file="$(ev_file "$top" "$key")"
+  payload="$(ev_payload "$top" "$key")"
+  ev_load "$file"
+
+  case "$action" in
+    forget)
+      [ -f "$file" ] || { yellow "no capture for key '$key'"; return 0; }
+      rm -f "$file" "$payload"
+      green "forgot capture '$key'"
+      ;;
+
+    put)
+      # A second producer of a fact that is already captured and still fresh is
+      # the duplicate collection this is meant to make detectable. Say so and
+      # reuse it rather than paying for the same remote read again.
+      if [ -f "$file" ] && [ -z "$force" ]; then
+        local drift="" d
+        for d in $EVIDENCE_INVALIDATORS; do
+          local recorded asked
+          eval "recorded=\$evv_$d"
+          eval "asked=\$$d"
+          local msg; msg="$(ev_drift "$d" "$recorded" "$asked")"
+          if [ -n "$msg" ]; then drift="$msg"; break; fi
+        done
+        if [ -z "$drift" ]; then
+          yellow "already captured — reusing '$key' (${evv_consumers:-0} consumer(s) so far)"
+          echo "  one capture, many consumers: pass --force to deliberately recapture"
+          return 0
+        fi
+      fi
+
+      local data
+      if [ -n "$from" ]; then
+        [ -f "$from" ] || { red "no such file: $from"; return 1; }
+        data="$(cat "$from")"
+      else
+        data="$(cat)"
+      fi
+
+      for d in $EVIDENCE_INVALIDATORS; do eval "evv_$d=\$$d"; done
+      evv_bound="$bound"; evv_count="$count"
+      evv_consumers=0
+      evv_captured="$(date +%F)"
+      evv_truncated="no"
+      # A capture that reached its declared bound is incomplete, and incomplete
+      # evidence must announce itself on every single read.
+      if [ -n "$bound" ] && [ -n "$count" ]; then
+        case "$bound$count" in
+          *[!0-9]*) red "--bound and --count must be whole numbers"; return 1 ;;
+        esac
+        if [ "$count" -ge "$bound" ]; then evv_truncated="yes"; fi
+      fi
+
+      mkdir -p "$(ev_dir "$top")" || { red "could not create $(ev_dir "$top")"; return 1; }
+      printf '%s\n' "$data" > "$payload" || { red "could not write $payload"; return 1; }
+      ev_write "$file" || { red "could not write $file"; return 1; }
+      if [ "$evv_truncated" = "yes" ]; then
+        yellow "captured '$key' — NOT ASSESSED: the capture hit its bound ($count of $bound)"
+      else
+        green "captured '$key'"
+      fi
+      ;;
+
+    get)
+      # get is a data-producing command: stdout carries the payload and nothing
+      # else, so a consumer can pipe it straight into whatever needed the fact.
+      # Diagnostics go to stderr or they end up inside the evidence.
+      if [ ! -f "$file" ]; then
+        yellow "no capture for key '$key' — collect it once, then share it" >&2
+        return 1
+      fi
+      local d drift=""
+      for d in $EVIDENCE_INVALIDATORS; do
+        local recorded asked msg
+        eval "recorded=\$evv_$d"
+        eval "asked=\$$d"
+        msg="$(ev_drift "$d" "$recorded" "$asked")"
+        if [ -n "$msg" ]; then drift="$msg"; break; fi
+      done
+      if [ -n "$drift" ]; then
+        red "STALE — $drift" >&2
+        echo "  the capture describes an earlier state; a reused capture can never make an old verdict valid" >&2
+        return 2
+      fi
+      evv_consumers="$(( ${evv_consumers:-0} + 1 ))"
+      ev_write "$file"
+      if [ "$evv_truncated" = "yes" ]; then
+        yellow "NOT ASSESSED — this capture hit its bound (${evv_count} of ${evv_bound}); it is partial evidence" >&2
+        cat "$payload"
+        return 4
+      fi
+      cat "$payload"
+      ;;
+    *)
+      red "unknown evidence action: $action"; echo "$usage_line"; return 1 ;;
   esac
 }
 
