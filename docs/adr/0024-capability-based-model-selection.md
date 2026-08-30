@@ -1,14 +1,13 @@
 # ADR: Capability-based model selection — profiles per group, not hard-coded names
 
 Date: 2026-07-21
-Status: Accepted (2026-07-21, at the #198 decision gate — capability-based selection is the ratified policy; no selection infrastructure is built until an orchestration slice is adopted. Verdict annotated 2026-07-22: no slice was adopted (#206 closed unmeasured) and the build trigger has not fired (#288 closed as a standing conditional); the policy stands, infrastructure unbuilt)
+Status: Accepted — the policy stands, infrastructure unbuilt. No selection infrastructure is built until an orchestration slice is adopted, and none has been. The decision gate and the later verdict are GitHub #198, #206 and #288.
 Owner: jwogrady
 
-> This ADR records an **Accepted** decision (issue #204, the second deliverable of
-> the #190 orchestration epic, ratified at the #198 gate on 2026-07-21). It adopts a
-> selection *policy*. It is an architectural decision only: it builds **no** routing
-> or selection infrastructure, and none has shipped. It stands on ADR-0023's
-> topology (the three groups it selects for).
+> This ADR records an **Accepted** decision (issue #204, in the #190 orchestration
+> epic). It adopts a selection *policy*. It is an architectural decision only: it
+> builds **no** routing or selection infrastructure, and none has shipped. It
+> stands on ADR-0023's topology (the three groups it selects for).
 
 ## Context
 

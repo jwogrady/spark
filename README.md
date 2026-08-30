@@ -298,7 +298,8 @@ Spark is MIT licensed and designed for single-developer work.
 > help shape it, see the [Alpha program](docs/alpha/alpha-program.md). What a
 > stable `v1.0.0` will protect — and what it deliberately won't — is already
 > written down in the [stability contract](plugins/spark/docs/reference/stability.md);
-> the [changelog](CHANGELOG.md) records every change.
+> the [changelog](CHANGELOG.md) projects each release from the commits that
+> produced it — Git and GitHub remain the full history.
 
 ## Documentation
 

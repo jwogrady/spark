@@ -10,16 +10,12 @@ The program, its evidence gates, and the Alpha → Beta → v1.0.0 promotion pat
 are the [Alpha program](docs/alpha/alpha-program.md) — a stable v1.0.0 is
 **not** authorized just because the proving releases shipped.
 
-> **Release-planning reconciliation, 2026-08-26.** Earlier `v0.17.0`–`v0.19.1`
-> publications were withdrawn. They did not fail the same way: v0.17 had a
-> milestone, a release-readiness gate, a roadmap entry and a plan, and was
-> published anyway on a gate closed with unmet criteria; v0.18 and v0.19 had no
-> milestone, no gate and no roadmap entry at all. Their GitHub Releases and tags
-> were deleted, which returned the published baseline to `v0.16.2` until the
-> catch-up tag was cut. **No commit was removed and no pull request was unmerged** — the
-> implementation stayed on `master` and was replanned into the milestones below,
-> where v0.17 and v0.18 are recorded as `Complete (no release)` and the
-> cumulative implementation was published once, as `v0.19.0` (2026-08-26).
+> **Why v0.17 and v0.18 read `Complete (no release)`.** Their publications were
+> withdrawn and the implementation was replanned, shipping once as `v0.19.0`.
+> **No commit was removed and no pull request was unmerged** — the work is on
+> `master`. The full account is the release record
+> [`docs/releases/v0.19.md`](docs/releases/v0.19.md), which owns it; it is not
+> retold here.
 
 Each entry carries one **Status** backed by evidence — `Planned`,
 `In progress`, `Merged (awaiting release)`, `Shipped (vX.Y.Z)`,
