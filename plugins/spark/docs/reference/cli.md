@@ -1166,6 +1166,15 @@ Each new type exists because its absence was where drift entered:
 - **`update`** — an existing issue could only ever be a link target, so every
   restructuring had to be applied by hand.
 
+  An `update … labels` record declares **family-scoped intent**, not the whole
+  label set. Applying it removes the current members of the families the record
+  names and preserves every other label, including project-local ones no
+  governed family claims — the contract and its worked example live in
+  [metadata-governance.md](metadata-governance.md#the-governed-label-families).
+  The families are resolved against live state *before* anything is written, so
+  an issue whose labels cannot be read fails the run rather than being
+  overwritten with a guess.
+
   Its target is a **positive** `#N`, validated by the same canonical rule as
   every other issue reference: not empty, all digits, and not zero. That
   matters more here than elsewhere because creates and milestone creates

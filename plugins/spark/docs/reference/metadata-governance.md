@@ -158,6 +158,39 @@ declared rather than one inferred from the label text.
 records in any tier's artifact is the whole change — generic consumers pick the
 family up with no code change.
 
+**Spark mutates only the families it owns.** Authority over labels is granted by
+family. A plan that changes governed labels has said nothing about a label no
+family claims, and saying nothing is not permission to delete it. An
+`update … labels` record therefore declares intent for the families it names:
+applying it removes the current members *of those families only*, and every
+other label stays.
+
+An issue carrying `feedback`, `bug` and `docs-impact:public`, under a plan that
+sets `feature,docs-impact:none,backlog`:
+
+| Label | Family | Result |
+| --- | --- | --- |
+| `feedback` | none — project-local | preserved |
+| `bug` | `category`, declared | replaced by `feature` |
+| `docs-impact:public` | `docs-impact`, declared | replaced by `docs-impact:none` |
+| — | `disposition`, declared | `backlog` added |
+
+Two consequences are the point of the rule. A project-local label never has to
+be adopted into the governance model merely to survive an update — an
+ungoverned label in the *artifact* is still refused, because it survives by
+Spark not reaching into its family, not by the model widening. And an update
+never restates families it is not changing, so a required family that is
+already satisfied on the issue is not demanded again; a **create** carries the
+whole set, so there the requirement still holds.
+
+`diff` previews the family-scoped mutation and names what it preserves.
+`verify` holds the artifact to the governed projection of the live set, so a
+correct apply verifies clean without the artifact owning unrelated labels.
+
+Full label-set replacement remains available as the low-level operation —
+driving `issue-manifest.sh` directly, where the artifact's CSV *is* the whole
+set — and is deliberately not what an ordinary governed update means.
+
 ## Milestone rules
 
 - **A milestone represents release scope** — the set of work a release ships.
