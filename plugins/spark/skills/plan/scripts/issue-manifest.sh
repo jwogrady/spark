@@ -743,6 +743,29 @@ api_order_subissue() { # <parent-number> <child-id> <after-id-or-empty>
   gh api "${args[@]}" >/dev/null
 }
 
+# The resolved-label sidecar `spark plan` writes: "#N<TAB>csv" lines giving the
+# label set each issue should be LEFT with. Empty when the script is driven
+# directly.
+IM_LABELS_RESOLVED="${IM_LABELS_RESOLVED:-}"
+
+# im_resolved_labels <number> <artifact-csv> — the set to write for this issue.
+#
+# `api_update_issue labels` replaces the WHOLE set, so whoever calls it must
+# already have decided what the whole set should be. `spark plan` decides that
+# family-scoped (#637) and passes the answer in via --labels-resolved: Spark
+# owns the families the plan declares and leaves every other label alone.
+#
+# Without the sidecar the artifact's own CSV is the whole set, unchanged. That
+# is the low-level, explicitly destructive operation — running this script by
+# hand means saying "these are the labels", and nothing here quietly softens it.
+im_resolved_labels() {
+  local hit
+  [ -n "$IM_LABELS_RESOLVED" ] && [ -f "$IM_LABELS_RESOLVED" ] || { printf '%s' "$2"; return 0; }
+  hit="$(awk -F'\t' -v k="#$1" '$1 == k { print $2; found = 1; exit }
+    END { if (!found) exit 1 }' "$IM_LABELS_RESOLVED")" || { printf '%s' "$2"; return 0; }
+  printf '%s' "$hit"
+}
+
 api_update_issue() { # <number> <field> <value> -> nothing
   case "$2" in
     title)     gh api "repos/{owner}/{repo}/issues/$1" -X PATCH -f "title=$3" >/dev/null ;;
@@ -922,6 +945,7 @@ EOF_WANT
           fi
           d="$msn"
         fi
+        if [ "$c" = "labels" ]; then d="$(im_resolved_labels "$target" "$d")"; fi
         if ! api_update_issue "$target" "$c" "$d" 2>"$errf"; then
           im_fail "updating #$target $c (PATCH repos/{owner}/{repo}/issues/$target)" "$(cat "$errf")" \
             "$created" "$wired" "$skipped" "$state" "$updated"; return 1
@@ -1053,7 +1077,7 @@ EOF_WANT
 
 main() {
   set -euo pipefail
-  local usage="usage: issue-manifest.sh [--dry-run] [--state FILE] [--fresh] MANIFEST"
+  local usage="usage: issue-manifest.sh [--dry-run] [--state FILE] [--fresh] [--labels-resolved FILE] MANIFEST"
   local dry=0 fresh=0 state="./.issue-manifest.state" manifest=""
 
   while [ $# -gt 0 ]; do
@@ -1063,6 +1087,10 @@ main() {
       --state)
         [ $# -ge 2 ] || { echo "--state needs a file argument" >&2; echo "$usage" >&2; exit 2; }
         state="$2"; shift 2 ;;
+      --labels-resolved)
+        [ $# -ge 2 ] || { echo "--labels-resolved needs a file argument" >&2; echo "$usage" >&2; exit 2; }
+        [ -f "$2" ] || { echo "labels file not found: $2" >&2; exit 2; }
+        IM_LABELS_RESOLVED="$2"; shift 2 ;;
       -h|--help) echo "$usage"; exit 0 ;;
       -*) echo "unknown argument: $1" >&2; echo "$usage" >&2; exit 2 ;;
       *)
