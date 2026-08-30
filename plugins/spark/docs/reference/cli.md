@@ -1786,6 +1786,74 @@ or change governance metadata. Exits 1 outside a git repo, on an unknown key or
 action, on a malformed value, and on an invalid run id (the id becomes a
 filename).
 
+## `spark budget [declare|record|check|status|reopen] --run <id>`
+
+Bounds one autonomous run. A repository can be fully deterministic and the run
+inside it still unbounded — expensive certification bought again and again,
+findings rediscovered rather than carried as a shrinking failing set. This makes
+the boundary external and declared, and stores it at `.spark/budgets/<run>.tsv`.
+
+The run id resolves as it does for `telemetry`: `--run`, else `$SPARK_RUN_ID`,
+else `current`. The budget holds only the **bounds**; the facts it checks
+against — iterations, tool calls, API requests, wall seconds, cost — come from
+the `telemetry` record for the same run id. Two files, one run: what happened,
+and what was permitted.
+
+| Action | What it does |
+|---|---|
+| `declare --convergence <text> [--max-… <n>]` | Names what finishing means, plus an optional envelope. Required before any spend can be authorized. |
+| `record --failing <n>` | Records the known failing-set size, so "is it shrinking?" is answerable without re-deriving it. |
+| `check --kind full\|targeted` | Asks whether the next expensive act is permitted. |
+| `status [--json]` | The envelope, the routing inputs, and the progress so far. |
+| `reopen --reason <text>` | Deliberately admits new release-critical evidence to a stopped or converged run. |
+
+Bounds available to `declare`: `--max-iterations`, `--max-full-suite`,
+`--max-targeted`, `--max-tool-calls`, `--max-api-requests`,
+`--max-wall-seconds`, `--max-cost-usd`, `--max-no-progress`. Routing inputs
+(recorded, never treated as bounds): `--model`, `--effort`,
+`--preflight-tokens`, `--per-request-output-cap`.
+
+### The five answers
+
+`check` returns one of five as text **and** as an exit code, so a loop reading
+only the status still terminates:
+
+| Verdict | Exit | Meaning |
+|---|---|---|
+| `PROCEED` | 0 | Inside the envelope, and something material changed |
+| `STOP` | 2 | A hard bound was reached, or a soft one with no movement |
+| `ESCALATE` | 3 | The same expensive work repeated with no material change |
+| `CONVERGED` | 4 | The declared condition is met; the loop is finished |
+| error | 1 | Usage — including a run that never declared convergence |
+
+**Hard bounds** stop the run. The **soft signal** (targeted checks) behaves
+differently on purpose: targeted checks are the cheap half of verification, and
+a run still shrinking its failing set is doing what the contract wants, so
+crossing it while converging continues with a warning. Movement is measured
+against the failing set at the *last targeted check*, not the last recorded one
+— otherwise a run banks one improvement and coasts on it indefinitely.
+
+The **no-progress boundary** allows one unchanged repeat, then escalates.
+Its point is that a stalled run stops *with resource budget to spare*:
+convergence, not spend, ends it.
+
+An undeclared bound is not a bound of zero — absence is simply absence, and
+treating it as a limit would stop every run that declined to guess a number.
+
+### A budget is never authority
+
+Reaching a boundary stops work; it can never drop a blocker, mark a failing set
+clean, or resolve a DECISION REQUIRED. Every stop reports the failing set it is
+stopping on, and no stop can read as success.
+
+A provider's `max_tokens` or effort class bounds **one request**; an episode is
+many requests and many tool calls, so `status` prints those apart from the
+envelope under "routing inputs (not budgets)".
+
+`reopen` is announced and its reason recorded. It clears the no-progress
+escalation and buys one more verification — it never clears the failing set.
+New evidence admits new work; it does not absolve old findings.
+
 ## `spark version`
 
 Prints the Spark plugin version, read from `.claude-plugin/plugin.json`.
