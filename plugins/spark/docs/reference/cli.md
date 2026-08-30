@@ -1978,15 +1978,19 @@ and a green rollup for a newer commit is not evidence about an older one.
 **Pending is not a failure.** Reporting one would send someone to debug work
 that is correct and merely unfinished elsewhere. **An unreadable rollup is an
 unknown, never a pass** — resolving it to "nothing is failing" is how an
-unchecked commit gets merged.
+unchecked commit gets merged. A PR with **no checks registered** is reported
+separately from one that could not be read: both refuse to become a pass, but
+they send an operator to different places.
 
 ### Polling is counted, not forbidden
 
-`status` exits `3` and reports `NO TRANSITION` when the rollup is unchanged —
-that read produced no new information — and keeps the unchanged count. Each read
-is also recorded as a remote request in the run's telemetry, so a poll loop
-appears as spend where `budget` already watches for it, rather than needing its
-own alarm.
+Every live read goes through one counted path, whichever verb asked for it —
+`resume` is the default action, so a guarantee that held only for `status` would
+be one nobody reached. `status` exits `3` and reports `NO TRANSITION` when the
+rollup is unchanged (that read produced no new information), and both verbs keep
+the poll and unchanged counts and record the read as a remote request in the
+run's telemetry. A poll loop therefore appears as spend where `budget` already
+watches for it, rather than needing an alarm of its own.
 
 ## `spark version`
 

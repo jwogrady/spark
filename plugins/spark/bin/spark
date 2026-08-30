@@ -9717,11 +9717,39 @@ ci_write() {
 ci_live() {
   local out
   command -v gh >/dev/null 2>&1 || { printf '__unreadable__'; return 0; }
+  # A rollup holds two disjoint shapes. A CheckRun reports .status while it runs
+  # and .conclusion once finished; a StatusContext reports only .state. Reading
+  # conclusion-then-status-then-state covers both in the right order: a finished
+  # run's verdict wins, a running one reports that it is running, and a plain
+  # status context still answers.
   out="$(gh pr view "$1" --json statusCheckRollup \
-        --jq '.statusCheckRollup[] | [(.name // .context), (.conclusion // .state)] | @tsv' 2>/dev/null)" \
+        --jq '.statusCheckRollup[] | [(.name // .context), (.conclusion // .status // .state)] | @tsv' 2>/dev/null)" \
     || { printf '__unreadable__'; return 0; }
-  [ -n "$out" ] || { printf '__unreadable__'; return 0; }
+  # No checks at all is a different fact from being unable to ask, and a caller
+  # that cannot tell them apart will treat one as the other.
+  [ -n "$out" ] || { printf '__nochecks__'; return 0; }
   printf '%s' "$out" | LC_ALL=C sort
+}
+
+# ci_sentinel_state <lines> — the state name when a read produced no check rows
+# at all, or empty when these are real rows. Both sentinels refuse to become a
+# pass; they differ only in what they tell the operator to do about it.
+ci_sentinel_state() {
+  case "$1" in
+    __unreadable__) printf 'unreadable' ;;
+    __nochecks__)   printf 'no-checks' ;;
+  esac
+}
+
+# ci_sentinel_report <state> — the human explanation for a sentinel state.
+ci_sentinel_report() {
+  if [ "$1" = "no-checks" ]; then
+    yellow "NOT ASSESSED — this PR has no checks registered"
+    echo "  nothing has reported, which is not the same as everything having passed"
+  else
+    yellow "NOT ASSESSED — the check rollup could not be read"
+    echo "  an unreadable rollup is an unknown, never a pass"
+  fi
 }
 
 # ci_verdict <lines> — the state of the whole rollup: pending until every
@@ -9754,6 +9782,40 @@ ci_failing_set() {
     }'
 }
 
+# ci_observe <run> <file> — one live read, counted. BOTH status and resume go
+# through here, because `resume` is the default action and the one the runbook
+# shows: an anti-polling guarantee that only holds for the verb nobody reaches
+# for is not a guarantee, it is a decoration. Sets CI_OBS_LINES, CI_OBS_VERDICT,
+# CI_OBS_SENT and CI_OBS_CHANGED.
+ci_observe() {
+  local run="$1" file="$2" newdigest
+  CI_OBS_LINES="$(ci_live "$civ_pr")"
+  CI_OBS_SENT="$(ci_sentinel_state "$CI_OBS_LINES")"
+  civ_polls="$(( ${civ_polls:-0} + 1 ))"
+  civ_observed_at="$(date -u +%FT%TZ)"
+  if [ -n "$CI_OBS_SENT" ]; then
+    CI_OBS_VERDICT="$CI_OBS_SENT"; CI_OBS_CHANGED=1
+    civ_state="$CI_OBS_SENT"
+    ci_write "$file"
+    return 0
+  fi
+  CI_OBS_VERDICT="$(ci_verdict "$CI_OBS_LINES")"
+  newdigest="$(printf '%s' "$CI_OBS_LINES" | cksum | awk '{ print $1 }')"
+  if [ "$newdigest" = "$civ_digest" ]; then
+    CI_OBS_CHANGED=0
+    civ_unchanged="$(( ${civ_unchanged:-0} + 1 ))"
+  else
+    CI_OBS_CHANGED=1
+    civ_digest="$newdigest"
+  fi
+  civ_state="$CI_OBS_VERDICT"
+  ci_write "$file"
+  # Every read is a remote request, whichever verb asked for it.
+  "$SPARK_ROOT/bin/spark" telemetry record --run "$run" \
+    api_requests="$civ_polls" ci_state="$CI_OBS_VERDICT" >/dev/null 2>&1 || true
+  return 0
+}
+
 cmd_ci() {
   local usage_line="usage: spark ci [handoff|status|resume] --run <id> [--pr <n>] [--head <sha>] [--json]"
   local action=""
@@ -9775,7 +9837,11 @@ cmd_ci() {
       -h|--help) echo "$usage_line"; return 0 ;;
       *) red "unknown option: $1"; echo "$usage_line"; return 1 ;;
     esac
-    shift
+    # A flag whose value was the last token has already consumed everything.
+    # A bare `shift` at $# = 0 returns 1, and under `set -e` that aborts the
+    # process silently — the worst possible answer to a typo, because the user
+    # sees no output at all and cannot tell a bad flag from a crash.
+    if [ "$#" -gt 0 ]; then shift; fi
   done
 
   local top
@@ -9799,10 +9865,11 @@ cmd_ci() {
         yellow "  without it, a later resume cannot tell whether CI answered about this work or newer work."
         return 1
       fi
-      local lines verdict
+      local lines verdict sent
       lines="$(ci_live "$pr")"
-      if [ "$lines" = "__unreadable__" ]; then
-        civ_state="unreadable"; civ_required=""; civ_digest=""
+      sent="$(ci_sentinel_state "$lines")"
+      if [ -n "$sent" ]; then
+        civ_state="$sent"; civ_required=""; civ_digest=""
       else
         civ_state="$(ci_verdict "$lines")"
         civ_required="$(printf '%s\n' "$lines" | awk -F'\t' 'NF { printf "%s%s", (n++ ? "," : ""), $1 }')"
@@ -9832,49 +9899,42 @@ cmd_ci() {
 
     status)
       [ -f "$file" ] || { red "no CI handoff recorded for run '$run'"; return 1; }
-      local lines verdict newdigest
-      lines="$(ci_live "$civ_pr")"
-      civ_polls="$(( ${civ_polls:-0} + 1 ))"
-      civ_observed_at="$(date -u +%FT%TZ)"
-      if [ "$lines" = "__unreadable__" ]; then
-        ci_write "$file"
-        yellow "NOT ASSESSED — the check rollup could not be read"
-        echo "  an unreadable rollup is an unknown, never a pass"
+      ci_observe "$run" "$file"
+      if [ -n "$CI_OBS_SENT" ]; then
+        if [ -n "$json" ]; then
+          printf '{"run":"%s","state":"%s","transition":null,"polls":%s,"unchanged":%s}\n' \
+            "$run" "$CI_OBS_SENT" "${civ_polls:-0}" "${civ_unchanged:-0}"
+        else
+          ci_sentinel_report "$CI_OBS_SENT"
+        fi
         return 1
       fi
-      verdict="$(ci_verdict "$lines")"
-      newdigest="$(printf '%s' "$lines" | cksum | awk '{ print $1 }')"
-      # Each remote read is a remote read. Counting it here is what makes a
-      # polling loop show up as spend rather than as diligence.
-      "$SPARK_ROOT/bin/spark" telemetry record --run "$run" \
-        api_requests="$civ_polls" ci_state="$verdict" >/dev/null 2>&1 || true
-
-      if [ "$newdigest" = "$civ_digest" ]; then
-        civ_unchanged="$(( ${civ_unchanged:-0} + 1 ))"
-        civ_state="$verdict"
-        ci_write "$file"
-        yellow "NO TRANSITION — this read produced no new information (${civ_unchanged} unchanged of ${civ_polls} reads)"
-        echo "  state is still '$verdict'; waiting is free, asking again is not"
+      if [ -n "$json" ]; then
+        printf '{"run":"%s","state":"%s","transition":%s,"polls":%s,"unchanged":%s}\n' \
+          "$run" "$CI_OBS_VERDICT" \
+          "$([ "$CI_OBS_CHANGED" -eq 1 ] && printf true || printf false)" \
+          "${civ_polls:-0}" "${civ_unchanged:-0}"
+        if [ "$CI_OBS_CHANGED" -eq 1 ]; then return 0; fi
         return 3
       fi
-      civ_digest="$newdigest"; civ_state="$verdict"
-      ci_write "$file"
-      green "TRANSITION — the rollup changed; state is now '$verdict'"
+      if [ "$CI_OBS_CHANGED" -eq 0 ]; then
+        yellow "NO TRANSITION — this read produced no new information (${civ_unchanged} unchanged of ${civ_polls} reads)"
+        echo "  state is still '$CI_OBS_VERDICT'; waiting is free, asking again is not"
+        return 3
+      fi
+      green "TRANSITION — the rollup changed; state is now '$CI_OBS_VERDICT'"
       return 0
       ;;
 
     resume)
       [ -f "$file" ] || { red "no CI handoff recorded for run '$run'"; return 1; }
       local lines verdict
-      lines="$(ci_live "$civ_pr")"
-      if [ "$lines" = "__unreadable__" ]; then
-        yellow "NOT ASSESSED — the check rollup could not be read"
-        echo "  an unreadable rollup is an unknown, never a pass"
+      ci_observe "$run" "$file"
+      if [ -n "$CI_OBS_SENT" ]; then
+        ci_sentinel_report "$CI_OBS_SENT"
         return 1
       fi
-      verdict="$(ci_verdict "$lines")"
-      civ_state="$verdict"; civ_observed_at="$(date -u +%FT%TZ)"
-      ci_write "$file"
+      lines="$CI_OBS_LINES"; verdict="$CI_OBS_VERDICT"
 
       if [ -n "$json" ]; then
         printf '{"run":"%s","pr":%s,"head":"%s","state":"%s","polls":%s,"unchanged":%s}\n' \

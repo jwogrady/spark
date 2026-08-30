@@ -28,6 +28,9 @@ cat > "$WORK/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 set -uo pipefail
 if [ "${1:-}" = "pr" ] && [ "${2:-}" = "view" ]; then
+  # "EMPTY" means gh answered successfully with no checks — a different fact
+  # from gh failing, which the fixtures below hold apart.
+  if [ "$(cat "$GH_ROLLUP" 2>/dev/null)" = "EMPTY" ]; then exit 0; fi
   [ -s "$GH_ROLLUP" ] || exit 1
   cat "$GH_ROLLUP"
   exit 0
@@ -54,6 +57,13 @@ rc 1 "handoff needs the exact head" -- "$SPARK" ci handoff --run r1 --pr 42
 assert_contains "and says why the head matters" "cannot tell whether CI answered about this work" \
   "$("$SPARK" ci handoff --run r1 --pr 42 2>&1 || true)"
 rc 1 "resuming without a handoff is refused" -- "$SPARK" ci resume --run never
+
+# A flag whose value is missing must produce an error, not a silent abort. Under
+# `set -e` a bare `shift` at $# = 0 kills the process with no output at all,
+# which reads to a user as a crash rather than as a typo.
+TRAIL="$("$SPARK" ci resume --run 2>&1 || true)"
+if [ -n "$TRAIL" ]; then ok
+else bad "a trailing flag with no value must not exit silently"; fi
 
 pending
 HO="$("$SPARK" ci handoff --run r1 --pr 42 --head abc123)"
@@ -91,8 +101,39 @@ assert_contains "each read is counted as a remote request" "api requests" \
 
 partial
 rc 0 "a genuine state change is a transition" -- "$SPARK" ci status --run r1
-assert_contains "and it reports the new state" "TRANSITION" \
-  "$("$SPARK" ci status --run r1 2>&1 || true)"
+rc 3 "the same rollup read again is not news" -- "$SPARK" ci status --run r1
+
+green_
+T2="$("$SPARK" ci status --run r1 2>&1 || true)"
+# "NO TRANSITION" contains "TRANSITION", so a substring check alone would pass
+# whichever answer the code gave. The negative case is what carries the weight.
+assert_contains "a further change is reported as a transition" "TRANSITION" "$T2"
+case "$T2" in
+  *"NO TRANSITION"*) bad "a changed rollup must not report NO TRANSITION" ;;
+  *) ok ;;
+esac
+
+# --- resume is the default verb, so it must count its own reads --------------
+# The anti-polling guarantee cannot depend on a caller remembering to use
+# `status`: `resume` is the default action and the one the runbook shows.
+B="$("$SPARK" ci resume --run r1 --json)"
+A="$("$SPARK" ci resume --run r1 --json)"
+pb="$(printf '%s' "$B" | sed 's/.*"polls":\([0-9]*\).*/\1/')"
+pa="$(printf '%s' "$A" | sed 's/.*"polls":\([0-9]*\).*/\1/')"
+if [ "$pa" -gt "$pb" ]; then ok
+else bad "resume must count its own reads (polls went $pb -> $pa)"; fi
+ub="$(printf '%s' "$B" | sed 's/.*"unchanged":\([0-9]*\).*/\1/')"
+ua="$(printf '%s' "$A" | sed 's/.*"unchanged":\([0-9]*\).*/\1/')"
+if [ "$ua" -gt "$ub" ]; then ok
+else bad "an unchanged rollup read via resume must still count as unchanged"; fi
+
+# --- status honours --json ---------------------------------------------------
+SJ="$("$SPARK" ci status --run r1 --json 2>&1 || true)"
+assert_contains "status emits the machine shape" '"transition":' "$SJ"
+case "$SJ" in
+  *"NO TRANSITION"*) bad "status --json must not fall back to human text" ;;
+  *) ok ;;
+esac
 
 # --- a failure resumes from GitHub evidence, not from a replay ---------------
 failing
@@ -119,6 +160,15 @@ UNK="$("$SPARK" ci resume --run r1 2>&1 || true)"
 assert_contains "and says so"                "NOT ASSESSED" "$UNK"
 assert_contains "refusing to call it a pass" "never a pass" "$UNK"
 case "$UNK" in *READY*) bad "an unreadable rollup must never read as ready" ;; *) ok ;; esac
+
+# A PR with no checks is a different fact from being unable to ask. Both refuse
+# to become a pass; conflating them tells the operator to chase the wrong thing.
+printf 'EMPTY\n' > "$GH_ROLLUP"
+rc 1 "a PR with no checks is NOT ASSESSED" -- "$SPARK" ci resume --run r1
+NOCHK="$("$SPARK" ci resume --run r1 2>&1 || true)"
+assert_contains "and is named as having none" "no checks registered" "$NOCHK"
+assert_contains "not as an unread rollup"     "not the same as everything having passed" "$NOCHK"
+case "$NOCHK" in *READY*) bad "a PR with no checks must never read as ready" ;; *) ok ;; esac
 
 # --- machine shape -----------------------------------------------------------
 green_

@@ -56,9 +56,15 @@ commit; repeating it produces the same result at the same cost.
 
 ## Polling is counted, not forbidden
 
-`spark ci status` performs one read and compares it against the recorded
-snapshot. An unchanged rollup reports `NO TRANSITION` and exits 3 — this read
-produced no new information — and the unchanged count is kept.
+Every live read — `status` **and** `resume` — goes through one counted path.
+That matters more than it sounds: `resume` is the default action and the verb
+this runbook's own diagram shows, so a guarantee that held only for `status`
+would be one almost nobody reached. An independent review caught exactly that
+gap before this shipped.
+
+`spark ci status` compares the read against the recorded snapshot. An unchanged
+rollup reports `NO TRANSITION` and exits 3 — this read produced no new
+information — and the unchanged count is kept either way.
 
 Each read is also recorded as a remote request in the run's telemetry. That is
 deliberate: it makes a polling loop appear as *spend* in the same place a
