@@ -55,10 +55,13 @@ this?" is assess; "get rid of what's dead/false" is purge.
 - **04 Synthesis Lead** — consolidates the notes into the final report or the
   categorized deletion slate. *Barrier; both modes.*
 
-Full briefs: [`references/assess-brief.md`](references/assess-brief.md) (the
-six dimensions, scoring, report format) and
-[`references/purge-protocol.md`](references/purge-protocol.md) (evidence
-table, deletion-safety categories, branch and docs-truth protocols).
+Full briefs: [`references/assess-brief.md`](references/assess-brief.md) (six
+dimensions, scoring, report format) and
+[`references/purge-protocol.md`](references/purge-protocol.md) (evidence table,
+deletion-safety categories, branch and docs-truth protocols).
+
+**Provenance leakage** is a finding class in both modes, never a third mode —
+[`references/provenance-leakage.md`](references/provenance-leakage.md) holds it.
 
 ## The evidence contract
 
@@ -69,7 +72,8 @@ or git evidence. Purge findings go in one table:
 
 Confidence is **High** (proven by code references, command output, or git
 evidence), **Medium** (static analysis, not runtime-proven), or **Low**
-(hypothesis needing human review). Every deletion candidate is forced into
+(hypothesis needing human review); unreadable evidence is **NOT ASSESSED**, which
+carries no action and is never PASS. Every deletion candidate is forced into
 **safe delete**, **needs review**, or **do not delete** — the categories are
 defined in [`references/purge-protocol.md`](references/purge-protocol.md).
 

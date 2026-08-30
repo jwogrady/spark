@@ -20,6 +20,10 @@ Three dimensions, each scored 1–10:
 - **Documentation** — README (purpose/setup/usage), CLAUDE.md/AGENTS.md,
   contribution guide, API and architecture docs, ops docs. What could a new
   developer not figure out? Is anything documented that the code disproves?
+  Also: does any current-state document keep a second account of change over
+  time that a record or Git already owns? Classify with
+  [`provenance-leakage.md`](provenance-leakage.md) and its producer rather than
+  judging by eye — a document that merely *cites* history is not a finding.
 - **Architecture** — layer/module structure, patterns, coupling and cohesion,
   state management, error-handling strategy, scalability assumptions, code
   reuse, testability (mockable dependencies, clean seams), architectural debt.
