@@ -626,7 +626,18 @@ as governance authority.
 A later tier overrides a record by key. **A tier that declares any member of a
 family replaces that family's whole member set** — so an overlay can remove a
 member and not only add one, which a per-member merge could never express. The
-same applies to a class's governed paths.
+same applies to a class's governed paths, and to a **structure aspect**: a tier
+that declares any fact about an aspect replaces that aspect's whole set of
+lower-tier facts.
+
+An aspect can state more than one fact, and those stay together when their tier
+wins. `dependency` is the example: the shipped model declares native blocked-by
+as its **authoritative** form and an issue-body `Blocked by #N` sentence as a
+**derived** one, and replacing that aspect means replacing both — not merging
+one new fact in beside them. Records still key per `(aspect, fact)`, which is
+what lets the winning tier declare several; replacement is per aspect, which is
+what lets a project restate what an aspect means rather than only adding a
+rival claim beside the shipped one.
 
 Removing a member leaves the lower tiers' rules about it — its exclusivity, its
 governed paths — pointing at nothing. Those rules are **pruned**, not treated as
