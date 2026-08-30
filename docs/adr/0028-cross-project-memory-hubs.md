@@ -8,6 +8,7 @@ Owner: jwogrady
 
 - **Identity / prior decisions served:** ADR-0008 (three information layers and one canonical source per class), ADR-0019 (human-directed product model), ADR-0027 (current delivery model).
 - **Supersedes / Superseded by:** nothing. This extends ADR-0008 for related-project memory; it does not replace the Operator / Project / Session layers.
+- **Generalised by:** ADR-0031. The responsibilities below — GitHub as engineering evidence cited rather than transcribed, runtime as observed truth, meaning promoted without copied history — are this decision applied to hubs and spokes. ADR-0031 states the same boundary as a general rule for every repository document, so it can be cited where no hub is involved. The ruling here is unchanged; only its scope was narrower than the rule it was using.
 - **Status tracks evidence:** n/a. The boundary is a human architectural ruling; v0.17 implementation and dogfood evidence must still prove the proposed workflow.
 
 ## Context
@@ -94,6 +95,7 @@ Resolved by implementation (#375/#376/#377, closed):
 
 ## Related Docs
 
+- [0031-state-provenance-ownership.md](0031-state-provenance-ownership.md) — the general state/provenance rule these responsibilities apply to hubs
 - [0008-information-architecture.md](0008-information-architecture.md) — canonical Operator / Project / Session model and explicit promotion rule
 - [0019-human-directed-product-model.md](0019-human-directed-product-model.md) — human judgment and approval boundary
 - [../problem-statement.md](../problem-statement.md) — v0.17 problem and shippable outcome

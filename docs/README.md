@@ -41,6 +41,7 @@ How the layers fit together, and the dated record of why Spark is built this way
 - [adr/0027-delivery-model.md](adr/0027-delivery-model.md) — **Accepted (v0.16)**: delivery is issue PRs to trunk with the dependency-order and one-writer invariants; a temporary integration branch is the exception/recovery technique, never a develop branch
 - [adr/0028-cross-project-memory-hubs.md](adr/0028-cross-project-memory-hubs.md) — **Accepted**: a declared memory hub carries durable meaning shared across related repositories, above one spoke and below operator-global knowledge; promotion is explicit and human-approved
 - [adr/0029-four-tier-artifact-separation.md](adr/0029-four-tier-artifact-separation.md) — **Accepted**: every artifact is code, shipped documentation, prose/provenance, or project management; repo-root `docs/` cannot ship structurally and `spark doctor` errors on development-only kinds under `plugins/`
+- [adr/0031-state-provenance-ownership.md](adr/0031-state-provenance-ownership.md) — **Accepted**: the repository owns current state and durable meaning, Git/GitHub own provenance, runtime owns observed truth; durable rationale stays in the tree, chronology stays in the history, and state docs cite evidence rather than transcribing it
 - [adr/0000-template.md](adr/0000-template.md) — the ADR template
 
 ## Governance
