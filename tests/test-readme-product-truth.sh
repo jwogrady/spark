@@ -87,10 +87,14 @@ else
   bad "v0.22 record no longer carries the docs-truth fixture"
 fi
 
-if grep -q 'Disposition: `Released`' "$RECORD"; then
+# `Shipped` is the governed status vocabulary, shared with the ROADMAP and with
+# every other release record. `Released` reads the same to a person and is not a
+# vocabulary member — `reconcile` classifies that as a deterministic rewrite, not
+# a judgment, so the assertion pins the governed spelling.
+if grep -q 'Disposition: `Shipped`' "$RECORD"; then
   ok
 else
-  bad "v0.22 record does not record the release as Released"
+  bad "v0.22 record does not carry the governed 'Shipped' disposition"
 fi
 
 finish
