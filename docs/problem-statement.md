@@ -8,12 +8,10 @@
 > document is retained as the framing that produced the provenance-promotion
 > work, and it is read here as history, not as present intent.
 >
-> What happened since: `v0.17.0` was published 2026-08-13 and **withdrawn**
-> 2026-08-26 along with the rest of the `v0.17`–`v0.19.1` line. **No commit was
-> removed and no pull request was unmerged** — the capability described below
-> survived on `master` and is publicly present in the reconstructed
-> **`v0.19.0`**, published 2026-08-26. The v0.17 milestone is recorded as
-> `Complete (no release)`.
+> The capability described below survived on `master` and shipped in `v0.19.0`;
+> the v0.17 milestone is recorded as `Complete (no release)`. Why that is so is
+> the release record [`docs/releases/v0.19.md`](releases/v0.19.md), which owns
+> that account.
 >
 > Current planning and release truth live in
 > [`ROADMAP.md`](../ROADMAP.md) and the v0.20 release gate (#443), never here.

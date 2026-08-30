@@ -46,8 +46,8 @@ fix: validate the whole hub locator scheme and authority (#393)
 The subject is not conventional, but the body is — so Release Please gave
 `5d7d4b7` its own `0.18.0` changelog entry, alongside the branch commit
 `9ddfeb4` that actually made the change. One change, two bullets. (The `v0.18.0`
-*release* was withdrawn on 2026-08-26; both commits and the `0.18.0` changelog
-section remain on `master`, so this example is still inspectable there.)
+*release* was withdrawn; both commits and the `0.18.0` changelog section remain
+on `master`, so this example is still inspectable there.)
 
 `.github/scripts/release-notes-runner.sh` builds its commit list with `git log
 --no-merges`, so the completeness check never saw the merge commit: from its
@@ -137,11 +137,11 @@ release check already catches it.
 
 ## What the historical instances taught
 
-The duplication was observed across the `v0.16`–`v0.18` publications. The
-`v0.17` and `v0.18` releases were **withdrawn** on 2026-08-26, so their Release
-bodies can no longer be inspected; the commits and `CHANGELOG.md` sections remain
-on `master`, and `docs/releases/v0.19.md` records the withdrawal. What survives is
-below, all of it encoded in the rule above.
+The duplication was observed across the `v0.16`–`v0.18` publications. Those
+Release bodies can no longer be inspected — `v0.17` and `v0.18` were withdrawn,
+as [`docs/releases/v0.19.md`](../releases/v0.19.md) records — but the commits and
+`CHANGELOG.md` sections remain on `master`, so the evidence is still reachable.
+What survives is below, all of it encoded in the rule above.
 
 **On the shape of the bug:**
 
