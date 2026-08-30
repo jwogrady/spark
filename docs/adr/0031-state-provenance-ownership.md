@@ -30,6 +30,22 @@ The failure is asymmetric and that is why it needs a rule rather than judgement.
 > Git and GitHub own provenance: how that state changed over time.
 > Runtime owns observed operational truth.**
 
+### Three axes, and this is the third
+
+An artifact has a **layer**, a **tier**, *and* a kind of truth. Deciding any one
+never decides another, and the third had been applied without ever being stated —
+which is why it was applied inconsistently.
+
+| Axis | Question it answers | Decided in |
+|---|---|---|
+| **Layer** | Whose knowledge is this — the ownership scope: operator, project, or session? | ADR-0008 |
+| **Tier** | Whether and how the artifact ships | ADR-0029 |
+| **Kind of truth** | Is this **current state**, **provenance**, or **observed runtime**? | **this ADR** |
+
+The axis cuts *across* the layers rather than adding a fourth: Project-layer
+information has both a current state and a provenance, and so does Operator-layer
+information.
+
 ### The repository tree — current state and durable meaning
 
 Owns source and tests; configuration and standards; current architecture and the *conclusions* of ADRs; current runbooks and operating instructions; current problem and product documentation; and the durable rationale still required to understand or operate the system as it is now.
@@ -66,7 +82,9 @@ An ADR's *Alternatives Considered* section is durable rationale: it stops the ne
 
 Current-state documents **may and should cite** GitHub evidence — an issue, PR, commit or release — as the provenance for a claim. Citing is a pointer that stays true. Transcribing the event history into the document creates a second copy that must be maintained and will eventually disagree with the first.
 
-A citation is enough. If the reader needs the detail, the link has it, in its original form, with its own history intact.
+**A citation is enough for the provenance detail** — how the state came to be. If the reader needs that, the link has it in its original form, with its own history intact.
+
+It is **not** enough for durable rationale. Reasoning a reader needs in order to understand or safely operate the current system stays in the tree, written out. A link is not a substitute for it: an operator reading a runbook, or an engineer changing a design, must not have to leave the checked-out tree to learn why it is shaped as it is. The citation carries the *evidence*; the tree carries the *conclusion*.
 
 ### Memory hubs preserve meaning, not history
 
@@ -92,4 +110,5 @@ Promotion to a memory hub (ADR-0028) carries **durable meaning derived from evid
 - [0008-information-architecture.md](0008-information-architecture.md) — which layer owns each class; this ADR adds the state/provenance axis across all three
 - [0028-cross-project-memory-hubs.md](0028-cross-project-memory-hubs.md) — the hub-scoped instance of this rule, and the promotion chain that applies it
 - [0029-four-tier-artifact-separation.md](0029-four-tier-artifact-separation.md) — where an artifact may physically live, which is a separate question from what it may say
+- [../architecture/spark-internals.md](../architecture/spark-internals.md) — the architecture map, which links back to this axis
 - `plugins/spark/docs/explanation/philosophy.md` — the principles this rests on
