@@ -491,7 +491,11 @@ accumulated 22 open issues across six unrelated outcomes.
 
 ## v0.22 — Truth-first onboarding
 
-**Status:** In progress — see #479.
+**Status:** Certified, awaiting release authorization — see #479. Certification
+ran against `8ab4c34` with every scope issue closed and every one carrying a
+satisfied `docs-impact` disposition; no version has been cut, and cutting it is
+a human decision.
+Record: [`docs/releases/v0.22.md`](docs/releases/v0.22.md).
 
 An existing repository is understood read-only, reconciled through approval, and
 only then given a coherent course. Today `onboard` is an *arming* flow, which is
@@ -520,9 +524,19 @@ v0.22 delivers Triage and does not redesign Greenfield.
   DECISION-REQUIRED reconciliation slate, owned by the core plugin (#468).
 - A coherent course derived from reconciled truth rather than session memory
   (#469).
+- Five guarantees repaired where dogfooding falsified them after the capability
+  had shipped: a failed milestone request read as a repository with no
+  milestones (#594), one multi-word priority split into two members (#597), a
+  label set compared through a lossy joined scalar (#599), a finished milestone
+  read as active work because its open release gate was counted as something to
+  do (#602), and — found while repairing that — the model naming the release
+  gate as the delivery-order authority without declaring which issue it is
+  (#605).
 
-Delivery order is `#567 -> #559 -> #467 -> #570 -> #571 -> #468 -> #469 ->
-#479`, recorded in #479's sub-issue order. Two constraints the release must
+Delivery order is recorded in #479's sub-issue order, and which issue is that
+gate is itself a governed fact since #605 — the `release-gate` role, declared in
+the model rather than inferred from the shape of the hierarchy
+([`docs/ops/release-gate-role.md`](docs/ops/release-gate-role.md)). Two constraints the release must
 hold: **unknown evidence is not human judgment**, and **recommendation is not
 authority**.
 
