@@ -66,12 +66,27 @@ member	theme	human-approval	e99695	Needs explicit human approval before it may p
 family	disposition	at-most-one	optional	Release disposition where an issue has no milestone
 member	disposition	backlog	cfd3d7	Deferred with a reason; revisit before a future milestone (roadmap-check disposition)
 
+# --- Structural role: what an issue IS inside its milestone ---------------
+# The hierarchy row below says a parent is a container that closes last, and
+# the order row says the release gate's sub-issue order is the delivery-order
+# authority. Those are two different facts, and nothing used to say WHICH
+# container is the gate — so the order authority was underdetermined and the
+# only signal left was parenthood, which the hierarchy row already spends
+# itself on. An ordinary parent was then read as a release gate, and which one
+# won depended on the order GitHub happened to return issues in.
+#
+# The role is that missing fact, declared as data like every other governed
+# field, so a consumer reads it instead of inferring it.
+family	role	at-most-one	optional	Structural role an issue plays inside its milestone
+member	role	release-gate	6f42c1	The milestone's release-readiness gate: carries the scope as sub-issues, closes last
+
 # --- Execution structure --------------------------------------------------
 structure	scope	milestone	authoritative	A milestone is release/outcome scope; a milestone titled vX.Y maps to the release whose version is X.Y.*
 structure	hierarchy	parent-sub-issue	authoritative	Native parent/sub-issue links are the hierarchy; a sub-issue is an issue, a parent is a container that closes last
 structure	dependency	native-blocked-by	authoritative	Native blocked-by records a TRUE prerequisite only — what must be true before work can start
 structure	dependency	issue-body-prose	derived	A "Blocked by #N" sentence explains a prerequisite; it never creates one
 structure	order	gate-sub-issue-order	authoritative	Preferred delivery order is the release-gate's sub-issue order — its own authority
+structure	release-gate	role:release-gate	authoritative	The release gate is the issue carrying the governed role:release-gate marker — never inferred from parenthood, title, issue number or prose
 structure	linkage	closing-keyword	authoritative	Implementation linkage is a linked PR plus a closing keyword
 
 # --- Separations that must not be collapsed ------------------------------

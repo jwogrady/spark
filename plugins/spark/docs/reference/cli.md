@@ -1231,6 +1231,17 @@ Two questions, two authorities, deliberately kept apart:
   **native sub-issue order**. Free-form milestone prose is never parsed — it
   explains the order, it does not define it.
 
+**Which issue is the gate is a governed fact, not an inference.** It is the
+issue carrying the `release-gate` role, and the model declares that binding
+(`structure release-gate role:release-gate`) so the locator is read rather than
+spelled a second time here. Parenthood does not make a gate: a milestone may
+hold ordinary parents, and reading "the first open issue with sub-issues" as
+the gate made an ordinary parent the delivery-order authority, decided by
+whatever order GitHub returned issues in. A milestone with **no** marked gate
+is a known state, not an unreadable one — selection ranks by priority and says
+so. Two marked gates make the authority ambiguous, and selection stops rather
+than picking one.
+
 Collapsing the two is what makes a backlog lie: an ordering preference encoded
 as a `blocked-by` edge becomes a false blocker that fails readiness closed,
 and a real prerequisite demoted to "ordering" starts work too early.
@@ -1239,7 +1250,8 @@ Ranking is priority, then the explicit sub-issue order, then issue number as a
 documented stable fallback. Priority ranks by the **declaration order of the
 model's `priority` family** — not by the label spelling — so a project that
 renames the family is ranked as it declared it, rather than alphabetically. The
-gate itself is never selected: a parent is a container and closes last.
+gate itself is never selected — and neither is any other parent: a container
+has no branch and no PR of its own, so it is never offered as work.
 
 Before selecting, the verb refuses to guess when the slate is not mechanically
 interpretable. Missing or duplicated taxonomy categories, missing or duplicated

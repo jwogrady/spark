@@ -147,6 +147,7 @@ schema with its cardinality and whether it is required:
 | `priority` | exactly one where priority is required | `P0`–`P3`, most urgent first |
 | `theme` | any, optional | orthogonal routing/safety signals: `decision`, `human-approval` |
 | `disposition` | at most one, optional | `backlog` — the release decision, recorded mechanically |
+| `role` | at most one, optional | `release-gate` — the structural role an issue plays in its milestone |
 | `docs-impact` | at least one, **required** | the declared documentation impact of the change |
 
 **Priority order is data, not spelling.** `P0`–`P3` rank by their declaration
@@ -182,6 +183,14 @@ that parent rule, not an exception to it.
 Each milestone has one **release-readiness issue** that doubles as the milestone
 epic:
 
+- **The gate is the issue carrying the `release-gate` role**, and that marker
+  is the only thing that makes it the gate. Parenthood does not: the model
+  declares hierarchy and delivery order as two separate facts, and a milestone
+  may hold ordinary parents that are containers without being the release
+  boundary. Nothing infers the gate from a title, an issue number, a position
+  in a list, or prose. The binding is itself declared in the model —
+  `structure release-gate role:release-gate` — so a project that governs the
+  role differently is followed rather than second-guessed.
 - The release-readiness issue carries the milestone's issues as **native
   sub-issues**, so scope and progress are visible on the gate itself.
 - **Blocked-by links record true prerequisites only** — what must be *true*
@@ -201,6 +210,28 @@ epic:
 - The readiness issue **closes last**, when the milestone is complete and the
   release evidence is assembled (see the
   [release-docs checklist](release-docs-checklist.md)).
+
+### What Spark checks about the gate
+
+`spark governance` reports the release gate as its own surface, and every
+failure below is mechanical — no decision resolves them, so none is handed to a
+human as a choice:
+
+| State | Result |
+| --- | --- |
+| no issue carries the role | **known**: this milestone has no release gate |
+| one does | that issue is the gate |
+| more than one does | fails: a milestone has at most one |
+| the marked issue is in no milestone | fails: it gates no release |
+| the marked issue is itself a sub-issue | fails: a gate is a container, not a child |
+| it carries no sub-issues while the milestone holds other open work | fails: it governs nothing |
+| the hierarchy could not be read | **not assessed** |
+
+**Absence is known, not unknown.** A milestone with no release gate is a
+complete answer and reports as such; `spark next` ranks by priority and says
+so. *Not assessed* is reserved for a surface Spark tried to read and could
+not — collapsing the two would let an unread hierarchy be reported as a
+milestone with nothing left to do.
 
 ### The milestone gate
 
