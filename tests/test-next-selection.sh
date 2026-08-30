@@ -33,19 +33,56 @@ sel() {
 
 bash -n "$script" && ok || bad "bash -n spark"
 
-# --- priority outranks order: P0 wins even when it sits later in the list.
-sel 0 "priority outranks explicit order" \
+# --- THE AUTHORITATIVE ORDER OUTRANKS PRIORITY (#611).
+#
+# This assertion is INVERTED from what it asserted before. The model declares
+# the release gate's sub-issue order the delivery-order authority and separately
+# declares that delivery order is never manufactured from priority. Ranking
+# priority-first honoured neither: a P2 recorded second was delivered after every
+# P1, so the recorded course was reported as followed while being inverted, and
+# the operator's only correction was to distort P0-P3 to express sequence.
+#
+# A P1 recorded first is now selected ahead of a P0 recorded second.
+sel 0 "the recorded order outranks priority" \
 "issue	10	0	1	1	P1	0	first in order but P1
 issue	11	1	1	1	P0	0	later in order but P0
 " \
-  "selected  #11" "priority  P0"
+  "selected  #10" "priority  P1" "first eligible issue in the release-gate sub-issue order" \
+  "priority did not override it"
 
-# --- equal priority: the explicit sub-issue order breaks the tie.
-sel 0 "explicit order breaks a same-priority tie" \
+# --- equal priority: the recorded order still decides, and says so.
+sel 0 "explicit order decides a same-priority pair" \
 "issue	21	1	1	1	P1	0	second
 issue	20	0	1	1	P1	0	first
 " \
-  "selected  #20" "the explicit sub-issue order broke the P1 tie"
+  "selected  #20" "first eligible issue in the release-gate sub-issue order"
+
+# --- priority is the GOVERNED FALLBACK, not a second sequencing authority: it
+# ranks only work the order does not position. Both issues are absent from the
+# record, so nothing about their sequence is recorded and priority decides.
+sel 0 "priority ranks only work the order does not position" \
+"issue	22	-	1	1	P1	0	unordered P1
+issue	23	-	1	1	P0	0	unordered P0
+" \
+  "selected  #23" "priority  P0" "no eligible issue carries a recorded position" \
+  "ranked by priority among unordered work"
+
+# --- a positioned issue always precedes an unpositioned one, whatever its
+# priority: 999 sorts after every real position.
+sel 0 "a positioned P2 precedes an unpositioned P0" \
+"issue	24	-	1	1	P0	0	unpositioned P0
+issue	25	3	1	1	P2	0	positioned P2
+" \
+  "selected  #25" "in the gate sub-issue order"
+
+# --- with NO gate there is no order to follow, so priority ranks the slate.
+# Absence is a known, valid state, not a fallback from a failure.
+sel 0 "priority ranks when the milestone declares no gate" \
+"ordernone	this milestone declares no release gate, so no explicit order exists
+issue	26	-	1	1	P1	0	P1
+issue	27	-	1	1	P0	0	P0
+" \
+  "selected  #27" "highest-priority eligible issue" "ranked by priority"
 
 # --- a higher-priority BLOCKED issue never outranks a lower-priority eligible
 # one. This is the whole point of separating the two authorities.
@@ -89,18 +126,42 @@ sel 3 "two categories are not assessed" \
 " \
   "carries 2 taxonomy category labels"
 
-# The diagnostic names the family, not a hard-coded set. With no priofamily
-# record it falls back to the generic word rather than inventing P0-P3, which
-# would be a second copy of a rule the schema owns.
-sel 3 "a missing priority is not assessed" \
+# --- A MISSING OPTIONAL PRIORITY IS NOT A GAP (#611).
+#
+# Cardinality and requiredness are two facts. `exactly-one` bounds how many
+# labels may be carried; `required`/`optional` says whether one must be. Reading
+# them as one rule made a single unlabelled issue poison the WHOLE slate — every
+# other issue in the milestone became unselectable — so the operator's only
+# route to a selection was to invent a priority, manufacturing the very fact the
+# model calls optional to satisfy a rule it never stated.
+sel 0 "a missing priority is selectable when the family is optional" \
+"priofamily	priority	P0, P1, P2, P3	optional
+issue	52	0	1	0	-	0	no priority
+" \
+  "selected  #52" "priority  not recorded (optional)"
+
+# ...and where the model DOES declare the family required, absence is still a
+# gap. The rule is the model's, read from the evidence, not a constant here.
+sel 3 "a missing priority is not assessed when the family is required" \
+"priofamily	priority	P0, P1, P2, P3	required
+issue	52	0	1	0	-	0	no priority
+" \
+  "carries no priority (P0, P1, P2, P3) label" "the model declares this family required"
+
+# With no priofamily record at all, requiredness is unknown and is NOT assumed
+# to be required — absence of evidence never becomes a gap. The diagnostic still
+# falls back to the generic word rather than inventing P0-P3.
+sel 0 "an unknown requiredness does not manufacture a gap" \
 "issue	52	0	1	0	-	0	no priority
 " \
-  "carries 0 priority labels"
+  "selected  #52"
 
+# Cardinality is still enforced: `exactly-one` means at most one may be carried,
+# and two remains mechanically wrong whatever the requiredness says.
 sel 3 "two priorities are not assessed" \
 "issue	53	0	1	2	P1	0	two priorities
 " \
-  "carries 2 priority labels"
+  "carries 2 priority labels" "at most one is allowed"
 
 # ...and when the evidence carries the resolved family, the diagnostic uses it.
 # A project that renames or extends the family is told what IT declared, not
@@ -204,7 +265,7 @@ issue	4	3	1	1	P1	1	D
 issue	5	4	1	1	P1	0	E
 issue	6	5	1	1	P1	1	F
 " \
-  "selected  #3" "broke the P1 tie"
+  "selected  #3" "first eligible issue in the release-gate sub-issue order"
 
 # Step 4 — C closed: D and E eligible, both P1; order picks D.
 sel 0 "dogfood step 4 selects D on order" \
@@ -212,7 +273,7 @@ sel 0 "dogfood step 4 selects D on order" \
 issue	5	4	1	1	P1	0	E
 issue	6	5	1	1	P1	1	F
 " \
-  "selected  #4" "broke the P1 tie"
+  "selected  #4" "first eligible issue in the release-gate sub-issue order"
 
 # Step 5 — D closed: E is eligible, F still waits on E.
 sel 0 "dogfood step 5 selects E" \
