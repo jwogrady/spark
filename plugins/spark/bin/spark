@@ -54,6 +54,7 @@ version|cmd_version|Print the Spark plugin version
 brief|cmd_brief|Print the session brief: orient, locate, load (--short for the SessionStart hook)
 state|cmd_state|Show or write the work state (.spark/state.json); --set key=value records a stage close-out
 footprint|cmd_footprint|Measure Spark'\''s context footprint per surface (--json); --timing gates hot-path latency
+telemetry|cmd_telemetry|Record and render run telemetry bound to an exact PR HEAD SHA (record/show/relay/compare/list)
 orient|cmd_orient|Classify this repo as new, existing, or ambiguous before setup; --set records the decision
 hub|cmd_hub|Report the memory hub this project declares and where the value came from; --set records it (or none)
 labels|cmd_labels|Compare this repo'\''s GitHub labels against the declared issue taxonomy; --apply creates the missing ones
@@ -8171,6 +8172,444 @@ cmd_footprint() {
     fi
   fi
   return 0
+}
+
+# ---------------------------------------------------------------------------
+# spark telemetry — run facts as a by-product of execution (#574)
+#
+# The operator cannot optimize what is not visible; but observability that costs
+# model tokens to produce is itself the inefficiency it was meant to expose. So
+# this verb records only facts the executing process ALREADY KNOWS, deterministically,
+# with no model call anywhere in the path.
+#
+# Three mechanical rules give that contract teeth, so it survives contact with a
+# hurried caller instead of living in a style guide:
+#
+#   1. The field set is an ALLOWLIST. A raw prompt, transcript, hidden reasoning,
+#      full diff or test log has no key to live under, so it cannot enter the
+#      stream by accident — the schema refuses it rather than a reviewer catching it.
+#   2. Every value is one short line. An Actions URL fits; a pasted log does not.
+#      Deep evidence stays in GitHub and is LINKED, which is also why the record
+#      stays cheap enough to carry into a model context when it is genuinely needed.
+#   3. Credential-shaped values are refused whatever key they claim.
+#
+# What was not recorded reports as NOT ASSESSED. A missing provider metric is an
+# unknown, and an unknown rendered as a number is a lie the operator would then
+# optimize against.
+TELEMETRY_KEYS="run_id attempt trigger pr head_sha actions_run provider model routing_reason effort preflight_tokens input_tokens output_tokens cache_write_tokens cache_read_tokens cache_reason tool_schema_tokens cost_usd wall_seconds tool_calls api_requests full_suite_runs targeted_checks iterations batch_usage compaction_events context_before context_after failing_before failing_after verdict overhead_ms"
+
+# Counts and measurements are integers. A field that must be a number and is not
+# is a recording error: taking it anyway would put a value in a comparison column
+# that cannot be compared.
+TELEMETRY_INT_KEYS="attempt pr preflight_tokens input_tokens output_tokens cache_write_tokens cache_read_tokens tool_schema_tokens wall_seconds tool_calls api_requests full_suite_runs targeted_checks iterations compaction_events context_before context_after failing_before failing_after overhead_ms"
+
+# The verdict vocabulary is closed and matches the lifecycle's own answers, so a
+# run's outcome is comparable across runs. NOT ASSESSED is a legitimate verdict —
+# it is what a run reports when it could not tell, and it must never render as PASS.
+TELEMETRY_VERDICTS="PASS|CHANGES REQUIRED|DECISION REQUIRED|NOT ASSESSED|FAIL"
+
+# One line, and short enough that only a reference fits. This is the number that
+# makes "link deep evidence, never duplicate it" enforceable instead of advisory.
+TELEMETRY_MAX_VALUE="${TELEMETRY_MAX_VALUE:-200}"
+# Budget for the observability overhead itself (--timing), in the spirit of the
+# footprint gate: measuring the work must stay negligible against doing it.
+TELEMETRY_OVERHEAD_MS="${TELEMETRY_OVERHEAD_MS:-400}"
+
+tm_is_key()     { case " $TELEMETRY_KEYS "     in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
+tm_is_int_key() { case " $TELEMETRY_INT_KEYS " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
+
+# tm_secret_shaped <value> — true when a value looks like a credential. Spark
+# cannot know every secret, but it can refuse the shapes that are never a
+# legitimate metric, whatever field they are handed to.
+tm_secret_shaped() {
+  case "$1" in
+    ghp_*|gho_*|ghu_*|ghs_*|ghr_*|github_pat_*|sk-ant-*|sk-*|xoxb-*|xoxp-*|xoxa-*|xoxr-*|*'PRIVATE KEY'*)
+      return 0 ;;
+  esac
+  printf '%s' "$1" | grep -Eq 'AKIA[0-9A-Z]{16}'
+}
+
+# tm_valid_run <id> — the run id becomes a filename, so the alphabet is closed.
+tm_valid_run() {
+  case "$1" in
+    ''|.|..) return 1 ;;
+    *[!A-Za-z0-9._-]*) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+tm_dir()  { printf '%s/.spark/telemetry' "$1"; }
+tm_file() { printf '%s/.spark/telemetry/%s.tsv' "$1" "$2"; }
+
+# tm_get <file> <key> — the recorded value, or empty. Last write wins, so
+# re-recording a field supersedes it rather than leaving two truths on disk.
+tm_get() {
+  [ -f "$1" ] || return 0
+  awk -F'\t' -v k="$2" '$1 == k { v = $2 } END { if (v != "") print v }' "$1"
+}
+
+# tm_load <file> — fill tmv_<key> for every schema key, empty when unrecorded.
+tm_load() {
+  local f="$1" k v
+  for k in $TELEMETRY_KEYS; do eval "tmv_$k=''"; done
+  [ -f "$f" ] || return 0
+  while IFS=$'\t' read -r k v; do
+    tm_is_key "$k" && eval "tmv_$k=\$v"
+  done < "$f"
+  return 0
+}
+
+# tm_cache_ratio <read> <write> — cache hit ratio as a percentage. BOTH halves
+# are required: a ratio derived from one of them is invention, and the whole
+# point of the field is to tell a cached loop from one rebuilding the cache.
+tm_cache_ratio() {
+  local r="$1" w="$2" tot
+  case "$r" in ''|*[!0-9]*) printf 'NOT ASSESSED'; return 0 ;; esac
+  case "$w" in ''|*[!0-9]*) printf 'NOT ASSESSED'; return 0 ;; esac
+  tot=$((r + w))
+  [ "$tot" -gt 0 ] || { printf 'NOT ASSESSED'; return 0; }
+  awk -v r="$r" -v t="$tot" 'BEGIN { printf "%.1f%%", (r * 100) / t }'
+}
+
+# tm_delta <before> <after> — signed change, or NOT ASSESSED without both ends.
+tm_delta() {
+  case "$1" in ''|*[!0-9]*) printf 'NOT ASSESSED'; return 0 ;; esac
+  case "$2" in ''|*[!0-9]*) printf 'NOT ASSESSED'; return 0 ;; esac
+  printf '%+d' "$(( $2 - $1 ))"
+}
+
+# tm_no_progress <full-suite-runs> <failing-before> <failing-after> — the signal
+# #558 acts on: expensive verification repeated while the failing set stood
+# still. Missing evidence is NOT ASSESSED, never read as "fine" — a silent
+# no-progress loop is exactly the thing this is here to make visible.
+tm_no_progress() {
+  local runs="$1" fb="$2" fa="$3"
+  case "$runs" in ''|*[!0-9]*) printf 'NOT ASSESSED'; return 0 ;; esac
+  case "$fb"   in ''|*[!0-9]*) printf 'NOT ASSESSED'; return 0 ;; esac
+  case "$fa"   in ''|*[!0-9]*) printf 'NOT ASSESSED'; return 0 ;; esac
+  if [ "$runs" -ge 2 ] && [ "$fb" = "$fa" ]; then
+    printf 'yes — %s full-suite runs left the failing set at %s' "$runs" "$fa"
+  else
+    printf 'no'
+  fi
+}
+
+# tm_binding_status <recorded-sha> <live-sha> — whether this record still
+# describes the PR's current head. A run bound to a superseded commit is not
+# evidence about the code under review, and without a live head to compare
+# against the answer is unknown — which is not the same as current.
+tm_binding_status() {
+  local rec="$1" live="$2"
+  [ -n "$rec" ]  || { printf 'NOT ASSESSED — no head_sha recorded'; return 0; }
+  [ -n "$live" ] || { printf 'NOT ASSESSED — the live head could not be read'; return 0; }
+  if [ "$rec" = "$live" ]; then printf 'current'
+  else printf 'superseded — the live head is %s' "$live"; fi
+}
+
+# tm_live_head <pr> — the PR's current head SHA, or empty when it cannot be read.
+# Failing to read it yields NOT ASSESSED upstream; it never yields "current".
+tm_live_head() {
+  local pr="$1"
+  [ -n "$pr" ] || return 0
+  command -v gh >/dev/null 2>&1 || return 0
+  gh pr view "$pr" --json headRefOid --jq .headRefOid 2>/dev/null || true
+}
+
+# tm_hot_cycle — one record+show round trip, the unit --timing measures.
+tm_hot_cycle() {
+  "$SPARK_ROOT/bin/spark" telemetry record --run "$TM_TIMING_RUN" tool_calls=1 >/dev/null 2>&1
+  "$SPARK_ROOT/bin/spark" telemetry show   --run "$TM_TIMING_RUN" >/dev/null 2>&1
+}
+
+cmd_telemetry() {
+  local usage_line="usage: spark telemetry [record key=value ...|show|relay|compare <run> <run>|list] [--run <id>] [--head <sha>] [--json] [--timing]"
+  local action="show"
+  case "${1:-}" in
+    record|show|relay|list|compare) action="$1"; shift ;;
+  esac
+
+  local run="" head="" json="" timing="" pairs="" argv=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --run)    shift; run="${1:-}" ;;
+      --run=*)  run="${1#--run=}" ;;
+      --head)   shift; head="${1:-}" ;;
+      --head=*) head="${1#--head=}" ;;
+      --json)   json=1 ;;
+      --timing) timing=1 ;;
+      -h|--help) echo "$usage_line"; return 0 ;;
+      *=*)  pairs="${pairs}$1
+" ;;
+      -*)   red "unknown option: $1"; echo "$usage_line"; return 1 ;;
+      *)    argv="${argv}$1
+" ;;
+    esac
+    shift
+  done
+
+  local top
+  top="$(git_root)"; if [ -z "$top" ]; then
+    red "spark telemetry needs a git repo — run it from inside the project."
+    return 1
+  fi
+
+  # The run a command addresses: an explicit --run, then $SPARK_RUN_ID (so a
+  # workflow step can export it once instead of threading it through every
+  # call), then "current".
+  [ -n "$run" ] || run="${SPARK_RUN_ID:-current}"
+  if ! tm_valid_run "$run"; then
+    red "invalid run id: '$run' (letters, digits, dot, dash and underscore only — the id becomes a filename)"
+    return 1
+  fi
+
+  if [ -n "$timing" ]; then
+    local ms
+    TM_TIMING_RUN="spark-telemetry-timing"
+    ms=$(fp_median3_ms tm_hot_cycle) || ms=""
+    rm -f "$(tm_file "$top" "$TM_TIMING_RUN")"
+    if [ -n "$json" ]; then
+      printf '{"method":"median-of-3 wall-clock ms for one record+show cycle (null = no ms-resolution clock)","overhead":{"ms":%s,"budget":%s}}\n' \
+        "${ms:-null}" "$TELEMETRY_OVERHEAD_MS"
+    elif [ -z "$ms" ]; then
+      echo "Telemetry overhead: not measured (no ms-resolution clock on this host)"
+    else
+      printf 'Telemetry overhead: %s ms per record+show cycle (budget %s)%s\n' \
+        "$ms" "$TELEMETRY_OVERHEAD_MS" \
+        "$([ "$ms" -gt "$TELEMETRY_OVERHEAD_MS" ] && echo '  OVER BUDGET')"
+    fi
+    [ -z "$ms" ] && return 0
+    [ "$ms" -le "$TELEMETRY_OVERHEAD_MS" ]
+    return $?
+  fi
+
+  local file; file="$(tm_file "$top" "$run")"
+
+  case "$action" in
+    record)
+      if [ -z "$pairs" ]; then
+        red "spark telemetry record needs at least one key=value pair"
+        echo "$usage_line"; return 1
+      fi
+      # Validate EVERY pair before writing ANY of them. A half-recorded run is a
+      # falsifiable record that later reads as fact, so this fails closed.
+      local pair key val
+      while IFS= read -r pair; do
+        [ -n "$pair" ] || continue
+        key="${pair%%=*}"; val="${pair#*=}"
+        if ! tm_is_key "$key"; then
+          red "unknown telemetry key: $key"
+          yellow "  the schema is an allowlist so raw prompts, transcripts, diffs and logs have nowhere to land."
+          yellow "  valid keys: $TELEMETRY_KEYS"
+          return 1
+        fi
+        case "$val" in
+          *$'\n'*|*$'\r'*|*$'\t'*)
+            red "telemetry values are one line ($key contains a newline/tab) — link deep evidence instead of pasting it"
+            return 1 ;;
+        esac
+        if [ "${#val}" -gt "$TELEMETRY_MAX_VALUE" ]; then
+          red "telemetry value for $key is ${#val} characters (limit $TELEMETRY_MAX_VALUE) — record a link, not the content"
+          return 1
+        fi
+        if tm_secret_shaped "$val"; then
+          red "refusing to record $key: the value is credential-shaped, and telemetry is a published surface"
+          return 1
+        fi
+        if tm_is_int_key "$key"; then
+          case "$val" in
+            ''|*[!0-9]*)
+              red "$key must be a whole number (got '$val') — an unmeasured field is left unrecorded and reports NOT ASSESSED"
+              return 1 ;;
+          esac
+        fi
+        if [ "$key" = "cost_usd" ]; then
+          case "$val" in
+            ''|*[!0-9.]*|*.*.*)
+              red "cost_usd must be a decimal number (got '$val')"
+              return 1 ;;
+          esac
+        fi
+        if [ "$key" = "verdict" ]; then
+          case "|$TELEMETRY_VERDICTS|" in
+            *"|$val|"*) ;;
+            *) red "unknown verdict: '$val' (one of: ${TELEMETRY_VERDICTS//|/, })"; return 1 ;;
+          esac
+        fi
+      done <<EOF
+$pairs
+EOF
+
+      tm_load "$file"
+      while IFS= read -r pair; do
+        [ -n "$pair" ] || continue
+        key="${pair%%=*}"; val="${pair#*=}"
+        eval "tmv_$key=\$val"
+      done <<EOF
+$pairs
+EOF
+      # The record always knows which run it is; storing it keeps the file
+      # self-describing once it is copied out of .spark/telemetry.
+      tmv_run_id="$run"
+
+      mkdir -p "$(tm_dir "$top")" || { red "could not create $(tm_dir "$top")"; return 1; }
+      local k v
+      {
+        for k in $TELEMETRY_KEYS; do
+          eval "v=\$tmv_$k"
+          if [ -n "$v" ]; then printf '%s\t%s\n' "$k" "$v"; fi
+        done
+      } > "$file" || { red "could not write $file"; return 1; }
+      green "telemetry: $file"
+      ;;
+
+    list)
+      local any=0 f id
+      for f in "$(tm_dir "$top")"/*.tsv; do
+        [ -f "$f" ] || continue
+        any=1; id="$(basename "$f" .tsv)"
+        local lv lh
+        lv="$(tm_get "$f" verdict)"; lh="$(tm_get "$f" head_sha)"
+        printf '%-28s %-16s %s\n' "$id" "${lv:-NOT ASSESSED}" "${lh:-NOT ASSESSED}"
+      done
+      [ "$any" -eq 1 ] || yellow "no telemetry records under .spark/telemetry"
+      ;;
+
+    compare)
+      local a b
+      a="$(printf '%s' "$argv" | sed -n '1p')"
+      b="$(printf '%s' "$argv" | sed -n '2p')"
+      if [ -z "$a" ] || [ -z "$b" ]; then
+        red "spark telemetry compare needs two run ids"; echo "$usage_line"; return 1
+      fi
+      tm_valid_run "$a" && tm_valid_run "$b" || { red "invalid run id"; return 1; }
+      local fa fb
+      fa="$(tm_file "$top" "$a")"; fb="$(tm_file "$top" "$b")"
+      [ -f "$fa" ] || { red "no telemetry record for run '$a'"; return 1; }
+      [ -f "$fb" ] || { red "no telemetry record for run '$b'"; return 1; }
+      echo "Spark run comparison — $a vs $b"
+      printf '  %-22s %-22s %-22s %s\n' field "$a" "$b" change
+      local k va vb ch
+      for k in $TELEMETRY_KEYS; do
+        [ "$k" = "run_id" ] && continue
+        va="$(tm_get "$fa" "$k")"; vb="$(tm_get "$fb" "$k")"
+        [ -z "$va" ] && [ -z "$vb" ] && continue
+        ch="—"
+        tm_is_int_key "$k" && ch="$(tm_delta "$va" "$vb")"
+        printf '  %-22s %-22s %-22s %s\n' "$k" "${va:-NOT ASSESSED}" "${vb:-NOT ASSESSED}" "$ch"
+      done
+      echo
+      echo "Cost, latency, tokens, cache, tool/API/full-suite counts and outcome are all above —"
+      echo "comparing two runs never requires reading a raw log."
+      ;;
+
+    show|relay)
+      [ -f "$file" ] || { yellow "no telemetry record for run '$run' (.spark/telemetry/$run.tsv)"; return 0; }
+      tm_load "$file"
+      local live ratio cdelta fdelta noprog binding
+      live="$head"; [ -n "$live" ] || live="$(tm_live_head "$tmv_pr")"
+      binding="$(tm_binding_status "$tmv_head_sha" "$live")"
+      ratio="$(tm_cache_ratio "$tmv_cache_read_tokens" "$tmv_cache_write_tokens")"
+      cdelta="$(tm_delta "$tmv_context_before" "$tmv_context_after")"
+      fdelta="$(tm_delta "$tmv_failing_before" "$tmv_failing_after")"
+      noprog="$(tm_no_progress "$tmv_full_suite_runs" "$tmv_failing_before" "$tmv_failing_after")"
+
+      if [ -n "$json" ] && [ "$action" = "show" ]; then
+        local first=1 k v
+        json_escape_out() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+        printf '{"run":"%s","fields":{' "$(json_escape_out "$run")"
+        for k in $TELEMETRY_KEYS; do
+          eval "v=\$tmv_$k"
+          [ "$first" -eq 1 ] && first=0 || printf ','
+          if [ -z "$v" ]; then printf '"%s":null' "$k"
+          elif tm_is_int_key "$k"; then printf '"%s":%s' "$k" "$v"
+          else printf '"%s":"%s"' "$k" "$(json_escape_out "$v")"; fi
+        done
+        printf '},"derived":{"cache_hit_ratio":"%s","context_delta":"%s","failing_delta":"%s","no_progress":"%s","binding":"%s"}}\n' \
+          "$ratio" "$cdelta" "$fdelta" "$(json_escape_out "$noprog")" "$(json_escape_out "$binding")"
+        return 0
+      fi
+
+      if [ "$action" = "relay" ]; then
+        # The projection the Agent Relay Discussion (#578) can carry. It links
+        # its evidence and summarizes nothing it cannot point at, which is what
+        # keeps the Discussion a window onto the PR rather than a rival source
+        # of truth.
+        local prshow="NOT ASSESSED"
+        if [ -n "$tmv_pr" ]; then prshow="#$tmv_pr"; fi
+        printf '### Run `%s` — %s\n\n' "$run" "${tmv_verdict:-NOT ASSESSED}"
+        printf 'PR %s @ `%s` · %s\n\n' "$prshow" \
+          "${tmv_head_sha:-NOT ASSESSED}" "$binding"
+        printf '| metric | value |\n|---|---|\n'
+        printf '| model / effort | %s / %s |\n' "${tmv_model:-NOT ASSESSED}" "${tmv_effort:-NOT ASSESSED}"
+        printf '| routing reason | %s |\n' "${tmv_routing_reason:-NOT ASSESSED}"
+        printf '| tokens in / out | %s / %s |\n' "${tmv_input_tokens:-NOT ASSESSED}" "${tmv_output_tokens:-NOT ASSESSED}"
+        printf '| cache hit ratio | %s |\n' "$ratio"
+        printf '| estimated cost (USD) | %s |\n' "${tmv_cost_usd:-NOT ASSESSED}"
+        printf '| wall seconds | %s |\n' "${tmv_wall_seconds:-NOT ASSESSED}"
+        printf '| tool calls / API requests | %s / %s |\n' "${tmv_tool_calls:-NOT ASSESSED}" "${tmv_api_requests:-NOT ASSESSED}"
+        printf '| full-suite / targeted runs | %s / %s |\n' "${tmv_full_suite_runs:-NOT ASSESSED}" "${tmv_targeted_checks:-NOT ASSESSED}"
+        printf '| failing set before → after | %s → %s (%s) |\n' \
+          "${tmv_failing_before:-NOT ASSESSED}" "${tmv_failing_after:-NOT ASSESSED}" "$fdelta"
+        printf '| repeated work with no progress | %s |\n' "$noprog"
+        printf '\n%s\n' "Authoritative evidence: the PR, its checks, and ${tmv_actions_run:-the Actions run}. This projection links them and is not itself authority."
+        return 0
+      fi
+
+      tm_row() { printf '  %-24s %s\n' "$1" "$2"; }
+      printf 'Spark run telemetry — run %s\n\n' "$run"
+      echo "binding"
+      tm_row "pr"                 "${tmv_pr:-NOT ASSESSED}"
+      tm_row "head sha"           "${tmv_head_sha:-NOT ASSESSED}"
+      tm_row "status"             "$binding"
+      tm_row "attempt"            "${tmv_attempt:-NOT ASSESSED}"
+      tm_row "trigger"            "${tmv_trigger:-NOT ASSESSED}"
+      tm_row "actions run"        "${tmv_actions_run:-NOT ASSESSED}"
+      echo
+      echo "routing"
+      tm_row "provider / model"   "${tmv_provider:-NOT ASSESSED} / ${tmv_model:-NOT ASSESSED}"
+      tm_row "effort"             "${tmv_effort:-NOT ASSESSED}"
+      tm_row "escalation reason"  "${tmv_routing_reason:-NOT ASSESSED}"
+      echo
+      echo "tokens"
+      tm_row "preflight estimate" "${tmv_preflight_tokens:-NOT ASSESSED}"
+      tm_row "input / output"     "${tmv_input_tokens:-NOT ASSESSED} / ${tmv_output_tokens:-NOT ASSESSED}"
+      tm_row "cache write / read" "${tmv_cache_write_tokens:-NOT ASSESSED} / ${tmv_cache_read_tokens:-NOT ASSESSED}"
+      tm_row "cache hit ratio"    "$ratio"
+      tm_row "cache rebuild cause" "${tmv_cache_reason:-NOT ASSESSED}"
+      tm_row "tool-schema tokens" "${tmv_tool_schema_tokens:-NOT ASSESSED}"
+      echo
+      echo "economics"
+      tm_row "estimated cost USD" "${tmv_cost_usd:-NOT ASSESSED}"
+      tm_row "wall seconds"       "${tmv_wall_seconds:-NOT ASSESSED}"
+      echo
+      echo "work"
+      tm_row "tool calls"         "${tmv_tool_calls:-NOT ASSESSED}"
+      tm_row "api requests"       "${tmv_api_requests:-NOT ASSESSED}"
+      tm_row "full-suite runs"    "${tmv_full_suite_runs:-NOT ASSESSED}"
+      tm_row "targeted checks"    "${tmv_targeted_checks:-NOT ASSESSED}"
+      tm_row "iterations"         "${tmv_iterations:-NOT ASSESSED}"
+      tm_row "batch usage"        "${tmv_batch_usage:-NOT ASSESSED}"
+      echo
+      echo "context"
+      tm_row "before / after"     "${tmv_context_before:-NOT ASSESSED} / ${tmv_context_after:-NOT ASSESSED}"
+      tm_row "change"             "$cdelta"
+      tm_row "compaction events"  "${tmv_compaction_events:-NOT ASSESSED}"
+      echo
+      echo "convergence"
+      tm_row "failing before/after" "${tmv_failing_before:-NOT ASSESSED} / ${tmv_failing_after:-NOT ASSESSED}"
+      tm_row "change"             "$fdelta"
+      tm_row "repeated, no progress" "$noprog"
+      echo
+      echo "outcome"
+      tm_row "verdict"            "${tmv_verdict:-NOT ASSESSED}"
+      tm_row "telemetry overhead" "${tmv_overhead_ms:-NOT ASSESSED}"
+      echo
+      echo "Deep evidence — logs, diffs, tool output — stays in GitHub and Actions."
+      echo "This record links it and never copies it."
+      ;;
+    *)
+      red "unknown telemetry action: $action"; echo "$usage_line"; return 1 ;;
+  esac
 }
 
 # state (#210, schema shrunk by #347): the mechanical half of the work-state
