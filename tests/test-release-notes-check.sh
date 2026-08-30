@@ -64,6 +64,27 @@ check 0 "trailing PR-number subject matches the linkified notes" \
 * stop the crash on empty input ([#256](https://x/256)) ([abc](https://x/abc)), closes [#224]" \
   "core subject-omission check passed"
 
+# --- an AUTOLINKED TOKEN inside the subject is not a false omission. Release
+# Please linkifies more than refs: a subject carrying `@tsv` renders as
+# `[@tsv](https://github.com/tsv)`, and matching a raw subject against rendered
+# markdown then reported a present entry as MISSING. That is a blocking finding
+# on complete notes — a red the operator is told to reconcile and cannot, which
+# teaches them to ship past the colour.
+check 0 "an autolinked mention in the subject matches the rendered bullet" \
+"fix	keep label names out of @tsv on the created path	bug" \
+"## Bug Fixes
+* keep label names out of [@tsv](https://github.com/tsv) on the created path ([f45426c](https://x/f45426c)), closes [#599](https://x/599)" \
+  "core subject-omission check passed"
+
+# ...and the unwrap does not make two different changes look like one: only the
+# link decoration is removed, never the text that distinguishes them.
+check 1 "unwrapping a link does not collapse distinct subjects" \
+"fix	keep label names out of @tsv on the created path	bug
+fix	keep label names out of @csv on the created path	bug" \
+"## Bug Fixes
+* keep label names out of [@tsv](https://github.com/tsv) on the created path ([f45426c](https://x/f45426c))" \
+  "omission: fix: keep label names out of @csv on the created path"
+
 # --- omission: a visible feat is missing from the notes.
 check 1 "missing feature flagged" \
 "feat	surface milestone-gated readiness	feature
