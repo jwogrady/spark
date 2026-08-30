@@ -1904,6 +1904,52 @@ is NOT ASSESSED, never "fits".
 Every mechanism here reduces repetition, never evidence: a smaller answer that
 might be wrong is not an optimization.
 
+## `spark route [policy|select|escalate|attempt|benchmark]`
+
+Selects the lowest-cost adequate execution class for a task, and escalates
+deliberately when evidence shows the cheaper path was insufficient.
+
+The policy is **data**: `preferences/routing-classes.tsv`, replaced wholesale by
+a project's `.spark/routing-classes.tsv`. Nothing in the CLI names a provider
+model — ids, effort levels, availability and prices are configuration that
+changes underneath a stable semantics.
+
+| Action | What it does |
+|---|---|
+| `policy [--json]` | Renders the resolved classes, task routes and escalation rules |
+| `select --task <kind> [--run <id>]` | Picks the class, model and effort, and records the route in the run's telemetry |
+| `escalate --run <id> --reason <text>` | Moves up exactly one rank, recording the evidence |
+| `attempt --run <id> --outcome pass\|fail` | Adds the attempt to the routing ledger, taking cost and wall time from telemetry |
+| `benchmark [--json]` | Cost per **completed** task per route |
+
+Classes ship as `deterministic` (0), `routine` (1), `normal` (2), `complex` (3)
+and `human` (9). Rank 9 is not a strength tier — it is where routing stops.
+
+### The human boundary is not escalatable
+
+`select` on a human-class task names no model and exits `5`; `escalate` refuses
+both from and to that class. A DECISION REQUIRED that could be escalated into an
+autonomous attempt is not a boundary. Escalation otherwise moves one rank at a
+time and requires `--reason`: an unexplained escalation is just starting at the
+top one step later.
+
+### A failed cheap attempt is still spend
+
+`benchmark` reports cost per completed task and charges the wasted attempt to
+the two-stage path, so a route that is cheaper per token can be shown to be
+dearer per result. A class with attempts but no successes reports NOT ASSESSED,
+not zero.
+
+### Effort is a cache invalidator
+
+`select --run` refuses to move a run's effort mid-conversation, because the
+rebuilt prefix is a cost that never appears on the line item that motivated the
+change. Pass `--rebuild-cache` to accept it, or route between work units. This
+is the same invalidator `evidence` tracks.
+
+Exit codes: `0` routed, `1` usage or unknown task kind, `2` refused (effort
+churn, or nothing above the strongest class), `5` human decision boundary.
+
 ## `spark version`
 
 Prints the Spark plugin version, read from `.claude-plugin/plugin.json`.
