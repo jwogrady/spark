@@ -236,6 +236,11 @@ human as a choice:
 | the gate is closed while the milestone still holds open work | fails: the gate closes last |
 | the milestones, their issues, or an issue's labels could not be read | **not assessed** |
 
+`spark next` reads this same projection rather than working the question out
+again from its own issue list, so the two verbs cannot hold opposite views of
+one repository: a state that fails here refuses selection there, with the same
+verdict and the same words.
+
 The question is asked of **every open milestone**, including one that holds no
 issues at all, and of that milestone's issues **in every state**. The role is
 structural issue metadata, not open-issue metadata: a gate that has closed is

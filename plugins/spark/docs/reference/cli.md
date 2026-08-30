@@ -1237,10 +1237,28 @@ issue carrying the `release-gate` role, and the model declares that binding
 spelled a second time here. Parenthood does not make a gate: a milestone may
 hold ordinary parents, and reading "the first open issue with sub-issues" as
 the gate made an ordinary parent the delivery-order authority, decided by
-whatever order GitHub returned issues in. A milestone with **no** marked gate
-is a known state, not an unreadable one — selection ranks by priority and says
-so. Two marked gates make the authority ambiguous, and selection stops rather
-than picking one.
+whatever order GitHub returned issues in.
+
+**And it is the same fact `spark governance` reports** — one projection, read
+by both, rather than each verb working it out from whatever it happened to have
+loaded. Searching the open issue list for the marker was a second
+implementation of that question, and it disagreed with the first in exactly the
+states that matter: a gate that has closed is absent from the open list, so a
+milestone whose gate closed before its work read as a milestone that never had
+one. So the gate's state decides what selection does:
+
+| Gate state | `next` |
+|---|---|
+| no issue carries the role | ranks by priority and says the milestone declares no gate |
+| one does, and it carries the milestone | follows that issue's sub-issue order |
+| more than one, or the gate closed before its work, or open work sits outside it | refuses as **mechanically invalid** (exit 4) — the same verdict `governance` gives |
+| the evidence could not be read | **not assessed** (exit 3) |
+
+A milestone with no gate is a known state, not an unreadable one. A milestone
+whose gate contradicts itself is a known *bad* state — not an unknown one, and
+not one selection may proceed past: there is no ordering left to select
+against, and reporting it as merely unread would suggest that looking again
+might help.
 
 Collapsing the two is what makes a backlog lie: an ordering preference encoded
 as a `blocked-by` edge becomes a false blocker that fails readiness closed,
@@ -1275,7 +1293,7 @@ Five outcomes, and the middle three matter:
 | a selection | 0 | this issue is next, with the reason |
 | no eligible issue | 1 | **a known answer** — every candidate is genuinely blocked, or the milestone has no open leaf |
 | not assessed | 3 | the slate could not be read, **or the governance model does not resolve**; nothing is claimed and nothing is routed |
-| selected but not ready | 4 | an issue was selected and its **execution metadata is mechanically invalid** — no decision resolves it. Reported before the route, never routed |
+| selected but not ready | 4 | the **release gate for the milestone, or the selected issue's own execution metadata, is mechanically invalid** — no decision resolves it. Reported before the route, never routed |
 | selected but awaiting a decision | 5 | an issue was selected and its metadata has a gap **only a human may fill** — reported with the admissible values, before the route, never routed |
 
 Exit 4 is separate from exit 1 on purpose: "everything is blocked" and "this one
