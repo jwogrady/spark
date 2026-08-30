@@ -238,5 +238,6 @@ motion left the core for a companion.
 - [../adr/0002-additive-to-anthropic-spec.md](../adr/0002-additive-to-anthropic-spec.md)
 - [../adr/0003-zero-dependency-bash-and-enforcement-hooks.md](../adr/0003-zero-dependency-bash-and-enforcement-hooks.md)
 - [../adr/0008-information-architecture.md](../adr/0008-information-architecture.md) — the layers, classes, and motions
+- [../adr/0031-state-provenance-runtime-ownership.md](../adr/0031-state-provenance-runtime-ownership.md) — which surface owns current state, which owns provenance, and why runtime outranks both
 - [../adr/0014-core-plus-companion-plugins.md](../adr/0014-core-plus-companion-plugins.md) — the core/companion boundary
 - [glossary.md](../../plugins/spark/docs/glossary.md) — Spark-internal vocabulary

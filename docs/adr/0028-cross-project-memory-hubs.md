@@ -94,6 +94,7 @@ Resolved by implementation (#375/#376/#377, closed):
 
 ## Related Docs
 
+- [0031-state-provenance-runtime-ownership.md](0031-state-provenance-runtime-ownership.md) — **states generally what this ADR ruled for hubs.** Two rulings below are general and are now owned there so they are stated once: GitHub evidence is cited rather than transcribed, and runtime owns observed operational truth. Everything hub-specific — the hub/spoke split, the rebuild classification test, the promotion chain, one hub per spoke — remains this ADR's and is unchanged
 - [0008-information-architecture.md](0008-information-architecture.md) — canonical Operator / Project / Session model and explicit promotion rule
 - [0019-human-directed-product-model.md](0019-human-directed-product-model.md) — human judgment and approval boundary
 - [../problem-statement.md](../problem-statement.md) — v0.17 problem and shippable outcome

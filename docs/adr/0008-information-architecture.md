@@ -104,6 +104,7 @@ must be reconciled after the fact.
 
 ## Related Docs
 
+- [0031-state-provenance-runtime-ownership.md](0031-state-provenance-runtime-ownership.md) — **refines this ADR** with the axis it did not name: within the Project layer, the repository owns current state and durable meaning while Git/GitHub own provenance, and runtime owns observed truth. The layers, classes, canonical sources and carry motions decided here are unchanged
 - [../adr/0004-cosmic-is-the-generated-unit.md](0004-cosmic-is-the-generated-unit.md) — placed preferences in-plugin
 - `plugins/spark/docs/glossary.md` — carry-in / carry-through / carry-forward, the three layers
 - `plugins/spark/docs/explanation/philosophy.md` — the principles this model rests on
