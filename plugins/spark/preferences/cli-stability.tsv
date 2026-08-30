@@ -1,0 +1,80 @@
+# Compatibility classification for every shipped CLI verb.
+#
+# This file is the MACHINE-READABLE AUTHORITY. reference/stability.md renders the
+# same facts for a reader and is checked against this data; prose is never the
+# classification.
+#
+# WHAT THIS FILE CLASSIFIES
+#
+# The shipped CLI **verb surface** — the command name and its documented
+# invocation contract. It does NOT classify every subordinate surface reached
+# through that verb, and those contracts must not be collapsed into this one:
+#
+#   * output PHRASING stays advisory for every verb, per the stability contract —
+#     a Stable verb may still reword its human-readable report in a minor release;
+#   * ARTIFACT AND MODEL SCHEMAS behind a verb (the governance model, the plan
+#     artifact, .spark/ runtime files) carry their own contracts, which may be
+#     compatible-with-migration or internal while the verb name is stable.
+#
+# A verb being Stable is a promise that the command keeps working, not a promise
+# that everything behind it is frozen.
+#
+# The vocabulary is the one the stability contract already defines:
+#
+#   stable                     a name/invocation the v1 line keeps; removal,
+#                              rename, or an exit-code change is a major bump
+#   compatible-with-migration  may change only in a release that migrates and
+#                              documents it
+#   advisory                   not under the compatibility promise; may change
+#                              in a minor release
+#   internal                   operational surface, not a public API
+#   experimental               may change or be withdrawn in any release
+#   unclassified               NO DECISION HAS BEEN MADE — this FAILS validation
+#
+# `unclassified` is never a resting state, and a verb must never be promoted to
+# `stable` to make a check pass: that would use a mechanical gate to manufacture
+# a compatibility promise nobody made, which is worse than the gap it hides.
+#
+# Rows: verb <TAB> class <TAB> why this class
+
+# --- Stable ----------------------------------------------------------------
+# The fourteen names already published as Stable in the stability contract.
+setup	stable	Published as Stable in the stability contract
+doctor	stable	Published as Stable in the stability contract
+preferences	stable	Published as Stable in the stability contract
+brief	stable	Published as Stable in the stability contract
+resume	stable	Published as Stable in the stability contract
+state	stable	Published as Stable in the stability contract
+footprint	stable	Published as Stable in the stability contract
+list-skills	stable	Published as Stable in the stability contract
+new-skill	stable	Published as Stable in the stability contract
+install-git-hooks	stable	Published as Stable in the stability contract
+apply-permissions	stable	Published as Stable in the stability contract
+profiles	stable	Published as Stable in the stability contract
+orient	stable	Published as Stable in the stability contract
+version	stable	Published as Stable in the stability contract
+
+# Established public and operator verbs, classified by decision. The command-name
+# contract is preserved; their prose output remains advisory, and the schemas
+# behind governance and plan carry their own separate contracts.
+next	stable	Established selection surface consumed by automation
+docs-impact	stable	Established gate surface consumed by release readiness
+labels	stable	Established operator command over GitHub label parity
+hub	stable	Established operator command (ADR-0028)
+help	stable	Dispatcher usage; the name is a contract, the phrasing is not
+governance	stable	Established verb; the governance MODEL schema is contracted separately
+plan	stable	Established verb; the plan ARTIFACT schema is contracted separately
+triage	stable	Established read-only truth surface
+reconcile	stable	Established approval-gated reconciliation surface
+course	stable	Established read-only routing surface
+
+# --- Experimental ----------------------------------------------------------
+# The v0.23 efficiency verbs. Newly introduced, still being dogfooded, and their
+# contracts are actively under validation — #649 records real machine-interface
+# and exit-code defects in `ci` today. Promoting these now would manufacture a
+# promise the evidence does not support.
+telemetry	experimental	Introduced in v0.23; contract still under validation
+budget	experimental	Introduced in v0.23; contract still under validation
+evidence	experimental	Introduced in v0.23; contract still under validation
+route	experimental	Introduced in v0.23; contract still under validation
+ci	experimental	Introduced in v0.23; machine-interface defects open (#649)
