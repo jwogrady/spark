@@ -35,31 +35,34 @@ tools="git awk sed grep find sort printf bash env cat wc tr head tail cut date m
 # production shaping untested — which is exactly how a fixture ends up asserting
 # a state the repository cannot actually reach.
 
-# lf <n> — an open issue carrying no sub-issues: actionable leaf work.
-lf() {
-  printf '{"number":%s,"subIssues":{"totalCount":0,"pageInfo":{"hasNextPage":false},"nodes":[]}}' "$1"
-}
-# ct <n> <sub-csv> [subs-truncated] — an open issue carrying sub-issues: a
-# release-readiness container. Its sub-issue order is the delivery authority.
-ct() {
-  local n="$1" subs="$2" trunc="${3:-false}" nodes="" x cnt=0
-  for x in ${subs//,/ }; do nodes="${nodes:+$nodes,}{\"number\":$x}"; cnt=$((cnt+1)); done
-  printf '{"number":%s,"subIssues":{"totalCount":%s,"pageInfo":{"hasNextPage":%s},"nodes":[%s]}}' \
-    "$n" "$cnt" "$trunc" "$nodes"
-}
+# The node builders are the shared ones (lib.sh): `course` and `next` read ONE
+# capture now, so a fixture that described the same issue differently for each
+# could make the two verbs disagree in a way no repository can.
+
+# lf <n> [parent] — an open issue carrying no sub-issues: actionable leaf work.
+# A leaf inside a gated milestone sits under the gate, because the gate carries
+# the milestone's scope — an open issue outside it is a governed failure, not a
+# shape this suite is free to invent.
+lf() { gate_iss "$1" - "${2:--}" OPEN - feature; }
+
+# ct <n> <sub-csv> [subs-truncated] — the RELEASE GATE: an open issue carrying
+# sub-issues AND the governed role. Carrying sub-issues is no longer what makes
+# it the gate (#605), so the fixture states the role it means.
+ct() { SUBS_TRUNCATED="${3:-false}" gate_iss "$1" - - OPEN "$2" chore release-gate; }
+
+# op <n> <sub-csv> [parent] — an ORDINARY parent: a container with no role. The
+# distinction ct/op is the one #605 introduced and the one this suite has to be
+# able to make, or "has sub-issues" quietly becomes "is the release gate" again.
+op() { gate_iss "$1" - "${3:--}" OPEN "$2" chore; }
+
 # mnode <title> <issue-nodes> [issues-truncated] — one open milestone.
-mnode() {
-  printf '{"title":%s,"issues":{"pageInfo":{"hasNextPage":%s},"nodes":[%s]}}' \
-    "$(printf '%s' "$1" | jq -R .)" "${3:-false}" "$2"
-}
+mnode() { ISSUES_TRUNCATED="${3:-false}" gate_mil "$1" "$2"; }
+
 # msnap <milestone-nodes> [milestones-truncated] — the whole response.
 #
 # NOT `snap`: section 8 defines a `snap` of its own for the read-only
 # fingerprint, and the later definition would silently take over here.
-msnap() {
-  printf '{"data":{"repository":{"milestones":{"pageInfo":{"hasNextPage":%s},"nodes":[%s]}}}}' \
-    "${2:-false}" "$1"
-}
+msnap() { MILESTONES_TRUNCATED="${2:-false}" gate_cap "$1"; }
 
 # stub_path <dir> <snapshot-json> — a PATH whose gh answers the hierarchy
 # snapshot with the given JSON and nothing else. Milestone state is the fact
@@ -112,7 +115,7 @@ git -C "$r" commit -qm "chore: seed"
 # the response shape rather than pre-filtered rows.
 #
 # v0.9 holds a gate (#900) and one open leaf (#901): work to do.
-ONLY_ACTIVE="$(msnap "$(mnode 'v0.9 — Now' "$(ct 900 901,902),$(lf 901)")")"
+ONLY_ACTIVE="$(msnap "$(mnode 'v0.9 — Now' "$(ct 900 901,902),$(lf 901 900)")")"
 # v0.9 holds work; v1.0 is open with nothing left at all. Two directions.
 ACTIVE="$(msnap "$(mnode 'v0.9 — Now' "$(lf 901)"),$(mnode 'v1.0 — Later' '')")"
 # v0.9 is open with nothing left at all — no work, and no gate either.
@@ -124,9 +127,25 @@ NONE="$(msnap '')"
 # and the one the old fixture could not express.
 END_OF_RELEASE="$(msnap "$(mnode 'v0.9 — Now' "$(ct 900 901,902)")")"
 # The same milestone one issue earlier: the gate plus a single open leaf.
-END_MINUS_ONE="$(msnap "$(mnode 'v0.9 — Now' "$(ct 900 901,902),$(lf 901)")")"
+END_MINUS_ONE="$(msnap "$(mnode 'v0.9 — Now' "$(ct 900 901,902),$(lf 901 900)")")"
 # An ordinary milestone that runs no release gate at all.
 NO_GATE="$(msnap "$(mnode 'v0.9 — Now' "$(lf 901),$(lf 902)")")"
+# THE SHAPE "FIRST CONTAINER = GATE" COULD NOT FAIL: an ordinary parent whose
+# every child has closed, and no release gate anywhere. It carries sub-issues,
+# so shape alone calls it the boundary — and the milestone then reads as
+# finished and awaiting certification when it has no boundary at all.
+ORDINARY_PARENT="$(msnap "$(mnode 'v0.9 — Now' "$(op 700 701)")")"
+# Two containers, one of them the gate. Which one wins must not depend on the
+# order GitHub returned them in, so the same milestone is built both ways.
+TWO_FWD="$(msnap "$(mnode 'v0.9 — Now' "$(op 800 810 900),$(ct 900 901,902)")")"
+TWO_REV="$(msnap "$(mnode 'v0.9 — Now' "$(ct 900 901,902),$(op 800 810 900)")")"
+# A BOUNDARY THAT DOES NOT HOLD. #902 is open in the milestone and outside the
+# gate's hierarchy, so the gate does not carry the milestone it is meant to
+# certify. Nothing is releasable across a boundary like that.
+BROKEN_GATE="$(msnap "$(mnode 'v0.9 — Now' "$(ct 900 901),$(lf 902)")")"
+# Two marked gates: the boundary is ambiguous, and no single issue can be named
+# as the thing that remains.
+TWO_GATES="$(msnap "$(mnode 'v0.9 — Now' "$(ct 900 901),$(ct 910 911)")")"
 
 run_course() { # <milestones-json> -> OUT / RC
   local ms="$1" d="$WORK/p$RANDOM"
@@ -422,6 +441,73 @@ assert_contains "and routed to the selector" "next: spark next" "$OUT"
 run_course "$NO_GATE"
 assert_rc "a milestone with no gate is unaffected" 0 "$RC"
 assert_contains "and still continues" "Course: CONTINUE CURRENT COURSE" "$OUT"
+
+# ============ 11b. a container is not a boundary (#605) ===================
+# An ordinary parent carries sub-issues, so under "the first container is the
+# gate" this milestone reported that only its release gate remained — a release
+# recommendation over a milestone that declares no release boundary at all.
+# Which issue is the gate is a governed fact now, and `course` reads it rather
+# than recognising a shape.
+run_course "$ORDINARY_PARENT"
+case "$OUT" in
+  *"release gate #700"*) bad "an ordinary parent was named as the release gate" ;;
+  *) ok ;;
+esac
+# The work IS done — every child of #700 has closed — so a closure course is
+# the honest reading. What it must not do is claim a boundary that does not
+# exist, or claim the milestone holds nothing open when a container remains.
+assert_contains "the finished milestone still closes out" \
+  "Course: CLOSE / RELEASE COMPLETED COURSE" "$OUT"
+case "$OUT" in
+  *"no milestone has open work"*)
+    bad "an open container was reported as no open work at all" ;;
+  *) ok ;;
+esac
+
+# With two containers present and exactly one of them marked, the marked one is
+# the gate — and the answer cannot depend on the order they arrived in. The
+# whole rendered course is compared, so this is a claim about the rule rather
+# than about one line of it.
+run_course "$TWO_FWD"; FWD_OUT="$OUT"; FWD_RC="$RC"
+run_course "$TWO_REV"; REV_OUT="$OUT"; REV_RC="$RC"
+assert_contains "the marked container is the gate" "release gate #900" "$FWD_OUT"
+case "$FWD_OUT" in
+  *"release gate #800"*) bad "the ordinary container was named as the gate" ;;
+  *) ok ;;
+esac
+assert_eq "and enumeration order changes nothing" "$FWD_OUT" "$REV_OUT"
+assert_eq "nor the exit code" "$FWD_RC" "$REV_RC"
+
+# ============ 11c. a boundary that does not hold is repaired, not released ==
+# A release recommendation is a claim about a boundary. When the projection
+# reports that boundary broken — open work outside it, or two of them — there is
+# nothing to certify across, and the course is to repair it. Reading a broken
+# gate as an ordinary one is how a release gets recommended over work the gate
+# does not govern.
+run_course "$BROKEN_GATE"
+assert_contains "an unsound boundary is a repair course" \
+  "Course: REPAIR CURRENT COURSE" "$OUT"
+assert_contains "naming what is wrong with it" "outside its hierarchy" "$OUT"
+case "$OUT" in
+  *"CLOSE / RELEASE COMPLETED COURSE"*)
+    bad "a release was recommended across a boundary that does not hold" ;;
+  *) ok ;;
+esac
+# And it is a KNOWN bad state, not an unreadable one: the evidence was read.
+case "$OUT" in
+  *"Course: NOT ASSESSED"*) bad "a broken gate was reported as unreadable" ;;
+  *) ok ;;
+esac
+
+run_course "$TWO_GATES"
+assert_contains "an ambiguous boundary is a repair course too" \
+  "Course: REPAIR CURRENT COURSE" "$OUT"
+assert_contains "naming the ambiguity" "at most one release gate" "$OUT"
+case "$OUT" in
+  *"CLOSE / RELEASE COMPLETED COURSE"*)
+    bad "a release was recommended over two rival boundaries" ;;
+  *) ok ;;
+esac
 
 # ============ 12. an unread hierarchy is never "no work left" =============
 # A truncated page and an empty one are different answers. Reading the second

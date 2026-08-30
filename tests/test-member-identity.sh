@@ -235,8 +235,8 @@ js() {
 }
 
 GATECAP="$(gate_cap "$(gate_mil 'v0.9' \
-  "$(gate_iss 900 'v0.9' - OPEN feature release-gate),$(gate_iss 901 'v0.9' 900 OPEN feature)")" \
-  "$(gate_iss 900 'v0.9' - OPEN feature release-gate)")"
+  "$(gate_iss 900 'v0.9' - OPEN 901 feature release-gate),$(gate_iss 901 'v0.9' 900 OPEN - feature)")" \
+  "$(gate_iss 900 'v0.9' - OPEN 901 feature release-gate)")"
 
 nx() { ( cd "$nextrepo" && env PATH="$nxbin" ISSUES="$1" GATECAP="$GATECAP" \
   "$SPARK" next --milestone "v0.9" 2>&1 ); }

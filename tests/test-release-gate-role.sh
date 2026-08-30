@@ -123,7 +123,7 @@ assert_eq "an ungoverned aspect is neither resolved nor a defect" "1" "$urc"
 # no marked gate anywhere. Under "first container is the gate" this milestone
 # reported that only its release gate remained.
 ORDINARY="$(gate_cap "$(gate_mil 'v1.0 — ordinary' \
-  "$(gate_iss 700 'v1.0 — ordinary' - OPEN feature P1),$(gate_iss 701 'v1.0 — ordinary' 700 CLOSED feature P1)")")"
+  "$(gate_iss 700 'v1.0 — ordinary' - OPEN - feature P1),$(gate_iss 701 'v1.0 — ordinary' 700 CLOSED - feature P1)")")"
 out="$(rows "$ORDINARY")"
 assert_contains "an ordinary parent leaves the milestone with no gate" \
   "this milestone has no release gate" "$out"
@@ -138,9 +138,9 @@ assert_eq "and nothing is reported as mechanically wrong" "" "$(bangs "$out")"
 # is legitimate, so ancestry — not direct parenthood — is what scope means.
 # The two fixtures differ ONLY in the order the issues arrive, and the marked
 # gate also arrives a second time in the marker half, as GitHub answers it.
-G="$(gate_iss 900 'v1.0 — two' - OPEN chore P1 release-gate)"
-P="$(gate_iss 800 'v1.0 — two' 900 OPEN feature P1)"
-L="$(gate_iss 801 'v1.0 — two' 800 OPEN feature P1)"
+G="$(gate_iss 900 'v1.0 — two' - OPEN - chore P1 release-gate)"
+P="$(gate_iss 800 'v1.0 — two' 900 OPEN - feature P1)"
+L="$(gate_iss 801 'v1.0 — two' 800 OPEN - feature P1)"
 
 fwd="$(rows "$(gate_cap "$(gate_mil 'v1.0 — two' "$P,$L,$G")" "$G")")"
 assert_contains "the marked gate is the gate, listed last" \
@@ -170,9 +170,9 @@ assert_eq "an issue that arrives twice is still one issue" "1" \
 # the gate have children" test passes — while #902 sits in the same milestone
 # outside its hierarchy. That is milestone work the delivery order cannot see,
 # and closing the gate would declare a release over it.
-GO="$(gate_iss 900 'v1.0 — orphan' - OPEN chore P1 release-gate)"
-KID="$(gate_iss 901 'v1.0 — orphan' 900 OPEN feature P1)"
-ORP="$(gate_iss 902 'v1.0 — orphan' - OPEN feature P1)"
+GO="$(gate_iss 900 'v1.0 — orphan' - OPEN - chore P1 release-gate)"
+KID="$(gate_iss 901 'v1.0 — orphan' 900 OPEN - feature P1)"
+ORP="$(gate_iss 902 'v1.0 — orphan' - OPEN - feature P1)"
 
 ofwd="$(rows "$(gate_cap "$(gate_mil 'v1.0 — orphan' "$GO,$KID,$ORP")" "$GO")")"
 assert_eq "an open issue outside the gate hierarchy fails" "!" "$(kind "$ofwd")"
@@ -187,12 +187,12 @@ assert_eq "and the enumeration order changes neither result" \
 # Closed issues are not the milestone's remaining scope: a milestone delivered
 # around its gate in the past is history, not a live contradiction.
 DONE="$(rows "$(gate_cap "$(gate_mil 'v1.0 — settled' \
-  "$GO,$KID,$(gate_iss 902 'v1.0 — settled' - CLOSED feature P1)")" "$GO")")"
+  "$GO,$KID,$(gate_iss 902 'v1.0 — settled' - CLOSED - feature P1)")" "$GO")")"
 assert_eq "a closed issue outside the hierarchy is not open work" "" "$(bangs "$DONE")"
 
 # ============ 5. two marked gates are a mechanical failure =================
-g900="$(gate_iss 900 'v1.0 — two gates' - OPEN chore P1 release-gate)"
-g910="$(gate_iss 910 'v1.0 — two gates' - OPEN chore P1 release-gate)"
+g900="$(gate_iss 900 'v1.0 — two gates' - OPEN - chore P1 release-gate)"
+g910="$(gate_iss 910 'v1.0 — two gates' - OPEN - chore P1 release-gate)"
 out="$(rows "$(gate_cap "$(gate_mil 'v1.0 — two gates' "$g900,$g910")" "$g900,$g910")")"
 assert_contains "two marked gates fail" "a milestone has at most one release gate" "$out"
 assert_contains "naming both" "#900, #910" "$out"
@@ -209,7 +209,7 @@ assert_eq "and owes no human decision" "0" \
 # is a complete answer. Reporting it as unknown would make every ordinary
 # milestone look unassessed and teach a reader to ignore the mark that matters.
 NONE="$(gate_cap "$(gate_mil 'v1.0 — flat' \
-  "$(gate_iss 700 'v1.0 — flat' - OPEN feature P1),$(gate_iss 701 'v1.0 — flat' - OPEN feature P2)")")"
+  "$(gate_iss 700 'v1.0 — flat' - OPEN - feature P1),$(gate_iss 701 'v1.0 — flat' - OPEN - feature P2)")")"
 out="$(rows "$NONE")"
 assert_eq "zero markers is a KNOWN state" "=" "$(kind "$out")"
 assert_contains "and says so plainly" "this milestone has no release gate" "$out"
@@ -231,9 +231,9 @@ assert_contains "stating the absence" "this milestone has no release gate" "$EMP
 # open issues let a gate disappear the moment it closed — and an open milestone
 # with a closed gate and open work left then read as a perfectly valid no-gate
 # milestone, which is the most dangerous shape on this surface.
-CG="$(gate_iss 900 'v1.0 — closing' - CLOSED chore P1 release-gate)"
+CG="$(gate_iss 900 'v1.0 — closing' - CLOSED - chore P1 release-gate)"
 CLOSING="$(rows "$(gate_cap "$(gate_mil 'v1.0 — closing' \
-  "$CG,$(gate_iss 901 'v1.0 — closing' 900 OPEN feature P1)")" "$CG")")"
+  "$CG,$(gate_iss 901 'v1.0 — closing' 900 OPEN - feature P1)")" "$CG")")"
 assert_eq "a closed gate over open work is a contradiction" "!" "$(kind "$CLOSING")"
 assert_contains "and names the rule it breaks" "the release gate closes last" "$CLOSING"
 assert_contains "counting the work still open behind it" "1 open issue" "$CLOSING"
@@ -242,9 +242,9 @@ assert_lacks "never reported as a milestone with no gate" \
 
 # ...and when everything has closed, the gate is still observably the gate. The
 # verdict may be benign; disappearing is not an option.
-CG2="$(gate_iss 900 'v1.0 — done' - CLOSED chore P1 release-gate)"
+CG2="$(gate_iss 900 'v1.0 — done' - CLOSED - chore P1 release-gate)"
 SETTLED="$(rows "$(gate_cap "$(gate_mil 'v1.0 — done' \
-  "$CG2,$(gate_iss 901 'v1.0 — done' 900 CLOSED feature P1)")" "$CG2")")"
+  "$CG2,$(gate_iss 901 'v1.0 — done' 900 CLOSED - feature P1)")" "$CG2")")"
 assert_contains "a fully closed milestone still knows its gate" \
   "#900 is the release gate" "$SETTLED"
 assert_eq "and reports it as a coherent state" "=" "$(kind "$SETTLED")"
@@ -260,14 +260,14 @@ unread_of() {
   PATH="$d:$PATH" gov_gate_capture "release-gate" | awk -F'\t' '$1 == "unread" { print $2 }'
 }
 LAB="$(LABELS_TRUNCATED=true gate_cap "$(LABELS_TRUNCATED=true gate_mil 'v1.0 — cut' \
-  "$(LABELS_TRUNCATED=true gate_iss 900 'v1.0 — cut' - OPEN chore P1 release-gate)")")"
+  "$(LABELS_TRUNCATED=true gate_iss 900 'v1.0 — cut' - OPEN - chore P1 release-gate)")")"
 assert_contains "a truncated label page is reported as unread" \
   "the labels of #900 were truncated" "$(unread_of "$LAB")"
 
 # The two surfaces the milestone-anchored capture adds, each of which could
 # otherwise pass for "nothing there".
 ISST="$(ISSUES_TRUNCATED=true gate_cap "$(ISSUES_TRUNCATED=true gate_mil 'v1.0 — cut' \
-  "$(gate_iss 900 'v1.0 — cut' - OPEN chore P1)")")"
+  "$(gate_iss 900 'v1.0 — cut' - OPEN - chore P1)")")"
 assert_contains "a truncated issue page is reported as unread" \
   "the issues of \"v1.0 — cut\" were truncated" "$(unread_of "$ISST")"
 MST="$(MILESTONES_TRUNCATED=true gate_cap "$(MILESTONES_TRUNCATED=true gate_mil 'v1.0 — cut' '')")"
@@ -289,20 +289,20 @@ assert_lacks "never claiming a gate from a partial read" "is the release gate" "
 #
 # A gate is a container that closes last. An issue carrying the role while
 # being somebody's child contradicts the fact the model states next door.
-CHILD="$(gate_cap "$(gate_mil 'v1.0 — nested' "$(gate_iss 900 'v1.0 — nested' 479 OPEN chore P1 release-gate)")")"
+CHILD="$(gate_cap "$(gate_mil 'v1.0 — nested' "$(gate_iss 900 'v1.0 — nested' 479 OPEN - chore P1 release-gate)")")"
 out="$(rows "$CHILD")"
 assert_contains "a marked gate that is itself a sub-issue fails" \
   "is itself a sub-issue of #479" "$out"
 
 # A gate alone in its milestone is NOT a failure: a freshly planned release and
 # a finished one both leave a gate with nothing open under it.
-ALONE="$(gate_iss 900 'v1.0 — alone' - OPEN chore P1 release-gate)"
+ALONE="$(gate_iss 900 'v1.0 — alone' - OPEN - chore P1 release-gate)"
 assert_eq "a gate alone in its milestone is not a failure" "" \
   "$(bangs "$(rows "$(gate_cap "$(gate_mil 'v1.0 — alone' "$ALONE")" "$ALONE")")")"
 
 # A marker outside any milestone gates no release at all — and is reachable
 # ONLY through the repository-wide marker half, because no milestone holds it.
-LOOSE="$(gate_iss 900 - - OPEN chore P1 release-gate)"
+LOOSE="$(gate_iss 900 - - OPEN - chore P1 release-gate)"
 assert_contains "a marker on an unmilestoned issue fails" \
   "is in no milestone" "$(rows "$(gate_cap "" "$LOOSE")")"
 
@@ -349,9 +349,6 @@ for a in "$@"; do
 done
 for a in "$@"; do
   case "$a" in
-    */issues/900/sub_issues*) printf '801\n802\n'; exit 0 ;;
-    */issues/800/sub_issues*) printf '810\n'; exit 0 ;;
-    */issues/80[12]/sub_issues*) exit 0 ;;
     *dependencies*) printf '0\n'; exit 0 ;;
   esac
 done
@@ -375,9 +372,9 @@ J_GATE_FIRST='[{"number":900,"title":"Gate","labels":[{"name":"chore"},{"name":"
  {"number":802,"title":"The work","labels":[{"name":"feature"},{"name":"P1"},{"name":"docs-impact:none"}]}]'
 
 # --- D. a valid marked gate: next follows its sub-issue order --------------
-NG="$(gate_iss 900 'v1.0' - OPEN chore P1 release-gate)"
-NP="$(gate_iss 800 'v1.0' 900 OPEN chore P1)"
-NW="$(gate_iss 802 'v1.0' 800 OPEN feature P1)"
+NG="$(gate_iss 900 'v1.0' - OPEN 801,802 chore P1 release-gate)"
+NP="$(gate_iss 800 'v1.0' 900 OPEN 810 chore P1)"
+NW="$(gate_iss 802 'v1.0' 800 OPEN - feature P1)"
 CAP_OK="$(gate_cap "$(gate_mil 'v1.0' "$NG,$NP,$NW")" "$NG")"
 assert_eq "governance finds the gate valid" "=" "$(kind "$(rows "$CAP_OK")")"
 
@@ -399,7 +396,7 @@ assert_eq "next's answer does not depend on enumeration order" "$o1" "$o2"
 # CLOSED issue, so it is absent from every open-issue list — next used to
 # conclude "this milestone declares no release gate" and rank by priority,
 # while governance called the same repository mechanically invalid.
-NGC="$(gate_iss 900 'v1.0' - CLOSED chore P1 release-gate)"
+NGC="$(gate_iss 900 'v1.0' - CLOSED 801,802 chore P1 release-gate)"
 CAP_CLOSED="$(gate_cap "$(gate_mil 'v1.0' "$NGC,$NP,$NW")" "$NGC")"
 grows_closed="$(rows "$CAP_CLOSED")"
 assert_eq "governance rejects a gate that closed before its work" "!" "$(kind "$grows_closed")"
@@ -415,7 +412,7 @@ assert_lacks "and never as NOT ASSESSED" "not assessed" "$oA"
 assert_lacks "selecting nothing" "selected  #" "$oA"
 
 # --- B. two marked gates: both verbs call it mechanically invalid ----------
-NG2="$(gate_iss 901 'v1.0' - OPEN chore P1 release-gate)"
+NG2="$(gate_iss 901 'v1.0' - OPEN - chore P1 release-gate)"
 CAP_TWO="$(gate_cap "$(gate_mil 'v1.0' "$NG,$NG2,$NW")" "$NG,$NG2")"
 assert_eq "governance rejects two gates" "!" "$(kind "$(rows "$CAP_TWO")")"
 
@@ -443,7 +440,7 @@ assert_lacks "never calling it unassessed" "not assessed" "$oC"
 # --- unread gate evidence stops selection ---------------------------------
 # The other half of the same rule: absence is known, a truncated read is not.
 CAP_CUT="$(LABELS_TRUNCATED=true gate_cap "$(LABELS_TRUNCATED=true gate_mil 'v1.0' \
-  "$(LABELS_TRUNCATED=true gate_iss 900 'v1.0' - OPEN chore P1 release-gate)")")"
+  "$(LABELS_TRUNCATED=true gate_iss 900 'v1.0' - OPEN - chore P1 release-gate)")")"
 rc=0; oU="$(nx "$J_GATE_LAST" "$CAP_CUT")" || rc=$?
 assert_rc "truncated gate evidence is NOT ASSESSED" 3 "$rc"
 assert_lacks "and is never read as no gate" "declares no release gate" "$oU"
@@ -465,7 +462,7 @@ awk -F'\t' 'BEGIN { OFS = "\t" }
   "$(dirname "$SPARK")/../preferences/governance-models/spark-default.tsv" \
   > "$alt_repo/.spark/governance.tsv"
 
-SG="$(gate_iss 900 'v1.0' - OPEN chore P1 ship-gate)"
+SG="$(gate_iss 900 'v1.0' - OPEN 801,802 chore P1 ship-gate)"
 CAP_ALT="$(gate_cap "$(gate_mil 'v1.0' "$SG,$NP,$NW")" "$SG")"
 J_ALT='[{"number":800,"title":"Ordinary parent","labels":[{"name":"chore"},{"name":"P1"},{"name":"docs-impact:none"}]},
  {"number":802,"title":"The work","labels":[{"name":"feature"},{"name":"P1"},{"name":"docs-impact:none"}]},
