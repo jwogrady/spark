@@ -5920,6 +5920,12 @@ plan_schema_rows() {
     /^[[:space:]]*(#|$)/ { next }
     $1 == "issue" || ($1 == "update" && $3 == "labels") {
       key = $2; csv = $4
+      # A create carries the WHOLE set; an update carries family-scoped intent
+      # (#637), and the families it does not name keep whatever they already
+      # hold. Demanding every required family of an update would force the plan
+      # to restate — and so claim authority over — families it is not changing,
+      # which is the boundary this record type exists to respect.
+      isupd = ($1 == "update")
       # Cleared per RECORD: these accumulate per issue, and a leak between
       # records would count labels from a neighbouring record against this one.
       delete cntn; delete cntv; delete hasv
@@ -5942,7 +5948,7 @@ plan_schema_rows() {
         # same governed value validates in one and fails in the other.
         c = (fm in cntn) ? cntn[fm] : 0
         v = (fm in cntv) ? cntv[fm] : ""
-        if (c == 0 && req[fm] == "required")
+        if (c == 0 && req[fm] == "required" && !isupd)
           printf "plan\t!\t%s\t%s is required and the plan declares none\n", key, fm
         else if (c > 1 && (card[fm] == "exactly-one" || card[fm] == "at-most-one"))
           printf "plan\t!\t%s\t%s allows %s but the plan sets %d: %s\n", key, fm, card[fm], c, v
@@ -5961,6 +5967,67 @@ plan_schema_rows() {
       next
     }
   ' "$artifact"
+}
+
+# plan_label_scope <model> <artifact-csv> <live-lines> <projection> (#637)
+#
+# THE producer for family-scoped label ownership. Validate, diff, apply and
+# verify all read it; none of them re-derives it, because two answers to "what
+# will this plan leave on the issue" is how apply and verify end up describing
+# different repositories while both look right.
+#
+# Spark's authority over labels is granted by FAMILY. A plan that selects a
+# category has said nothing about a project-local label the model never claimed,
+# and saying nothing is not permission to delete. The released compiler had no
+# way to express that: an unmanaged label in the artifact was refused as
+# ungoverned, and one left out was erased by a whole-set PATCH — so an issue
+# carrying a legitimate `feedback` label had NO safe update path.
+#
+# The touched families come from the ARTIFACT, never from live state. The
+# artifact is the intent; a family it does not name is not this plan's to
+# rewrite, however much of it happens to be sitting on the issue.
+#
+#   families  the governed families the artifact declares
+#   replaced  the live labels those families currently hold — exactly what the
+#             update removes, and the set `verify` holds the artifact to
+#   target    the resulting set: live, minus `replaced`, plus the artifact's
+#             labels. Idempotent, so a correct apply verifies clean.
+#
+# An ungoverned label in the ARTIFACT is not silently absorbed here: it belongs
+# to no family, so it touches none, and `plan_schema_rows` still refuses it.
+# Unmanaged labels survive because Spark does not reach into their family, not
+# because the governance model was widened to adopt them.
+plan_label_scope() {
+  PLS_MODEL="$1" PLS_CSV="$2" PLS_LIVE="$3" PLS_WANT="$4" awk '
+    BEGIN {
+      n = split(ENVIRON["PLS_MODEL"], ml, "\n")
+      for (i = 1; i <= n; i++) {
+        split(ml[i], f, "\t")
+        if (f[1] == "member") memof[f[3]] = f[2]
+      }
+      na = split(ENVIRON["PLS_CSV"], a, ",")
+      for (i = 1; i <= na; i++) {
+        if (a[i] == "") continue
+        art[a[i]] = 1
+        if (!(a[i] in memof)) continue
+        # Declaration order, not awk hash order: a set printed in a different
+        # order on every run is unreadable in a diff and untestable.
+        if (!(memof[a[i]] in touched)) { touched[memof[a[i]]] = 1; forder[++nt] = memof[a[i]] }
+      }
+      want = ENVIRON["PLS_WANT"]
+      if (want == "families") { for (i = 1; i <= nt; i++) print forder[i]; exit }
+      nl = split(ENVIRON["PLS_LIVE"], ll, "\n")
+      for (i = 1; i <= nl; i++) {
+        l = ll[i]
+        if (l == "") continue
+        owned = (l in memof) && (memof[l] in touched)
+        if (want == "replaced") { if (owned) print l }
+        # `preserved` is `target` without the plan: what survives untouched.
+        else if (!owned && !(l in art)) print l
+      }
+      if (want == "target") for (i = 1; i <= na; i++) if (a[i] != "") print a[i]
+    }
+  ' </dev/null
 }
 
 # Label SET comparison, for both verification paths.
@@ -6169,7 +6236,12 @@ plan_relation_rows() {
 # say `=` correct or `~` drifted, so an update that was already applied looked
 # identical to one that had never run.
 plan_live_rows() {
-  local artifact="$1" n field want live
+  local artifact="$1" n field want live wantcsv model=""
+  # Labels are compared family-scoped (#637), which needs the model that says
+  # which families exist. If it cannot be resolved the label rows are NOT
+  # ASSESSED — never compared as whole sets, because that is the comparison
+  # that reported a correctly preserved label as drift.
+  model="$(resolve_governance 2>/dev/null)" || model=""
   # A milestone value may be a KEY the artifact defines, and GitHub only ever
   # holds the TITLE — so comparing the raw value reported permanent phantom
   # drift and failed verify after a perfectly correct apply.
@@ -6192,6 +6264,7 @@ plan_live_rows() {
         milestone) live="$(gh issue view "${n#'#'}" --json milestone --jq '.milestone.title // ""' 2>/dev/null)" || live="__unreadable__" ;;
         labels)    live="$(gh issue view "${n#'#'}" --json labels \
                      --jq '.labels[].name' 2>/dev/null)" || live="__unreadable__"
+                   wantcsv="$want"
                    want="$(artifact_labels "$want")" ;;
         body-file)
           # Skipped before, so an applied body update was indistinguishable
@@ -6220,11 +6293,31 @@ plan_live_rows() {
         # A SET, compared as one. Title and milestone are single scalar facts
         # and compare as strings; labels are not, and joining them to pretend
         # otherwise is what let two labels `a` and `b` match one label `a,b`.
-        if label_set_equal "$live" "$want"; then
-          printf 'live\t=\t%s\tlabels already match the plan\n' "$n"
+        #
+        # And the set compared is the GOVERNED projection, not the whole label
+        # list (#637): the question is whether the families this plan declares
+        # hold what it says, not whether the issue carries labels the plan never
+        # claimed. Comparing the whole set made a preserved `feedback` look like
+        # permanent drift and failed `verify` after a perfectly correct apply.
+        if [ -z "$model" ]; then
+          printf 'live\t?\t%s\tlabels could not be assessed: the governance model would not resolve, so which families this plan owns is unknown\n' "$n"
+          continue
+        fi
+        #
+        # The predicate is the producer's own output: the issue matches the plan
+        # when it ALREADY holds what applying would leave. Apply writes
+        # `target`; verify asserts live equals `target`. One calculation, so the
+        # two cannot describe different repositories.
+        local replaced preserved suffix
+        replaced="$(plan_label_scope "$model" "$wantcsv" "$live" replaced)"
+        preserved="$(plan_label_scope "$model" "$wantcsv" "$live" preserved)"
+        suffix=""
+        [ -n "$preserved" ] && suffix=" (preserved, outside the families this plan owns: $(label_set_show "$preserved"))"
+        if label_set_equal "$(plan_label_scope "$model" "$wantcsv" "$live" target)" "$live"; then
+          printf 'live\t=\t%s\tlabels already match the plan%s\n' "$n" "$suffix"
         else
-          printf 'live\t~\t%s\tlabels are "%s"; the plan says "%s"\n' \
-            "$n" "$(label_set_show "$live")" "$(label_set_show "$want")"
+          printf 'live\t~\t%s\tgoverned labels are "%s"; the plan says "%s"%s\n' \
+            "$n" "$(label_set_show "$replaced")" "$(label_set_show "$want")" "$suffix"
         fi
       elif [ "$live" = "$want" ]; then
         printf 'live\t=\t%s\t%s already matches the plan\n' "$n" "$field"
@@ -6346,6 +6439,45 @@ EOF_LIVE
 }
 
 # spark plan validate|diff|apply|verify <artifact>
+# plan_resolve_labels <artifact> <model> <out> — the label set each
+# `update ... labels` record should LEAVE on its issue, one "#N<TAB>csv" line
+# per record, written to <out> (#637).
+#
+# Computed once, here, by the surface that owns meaning, and handed to the
+# script as the set to write. The script's PATCH stays a whole-set replacement —
+# that is the only unambiguous reading of "set the labels to this" — so the set
+# it is given must already BE the intended result.
+#
+# Live state is required, not optional. Without it there is no way to know what
+# the plan preserves, and the only remaining move is to write the artifact's
+# labels as the whole set: precisely the destructive behaviour this exists to
+# remove. An issue whose labels cannot be read is a hard failure before any
+# write, never a silent fallback.
+plan_resolve_labels() {
+  local artifact="$1" model="$2" out="$3" n csv live rc=0
+  : > "$out"
+  while IFS=$'\037' read -r n csv; do
+    [ -n "$n" ] || continue
+    case "$n" in '#'*) ;; *) continue ;; esac
+    if ! live="$(gh issue view "${n#'#'}" --json labels --jq '.labels[].name' 2>/dev/null)"; then
+      red "$n: its live labels could not be read, so what this plan preserves is unknown"
+      rc=1; continue
+    fi
+    printf '%s\t%s\n' "$n" \
+      "$(plan_label_scope "$model" "$csv" "$live" target \
+         | awk 'NF { printf "%s%s", (i++ ? "," : ""), $0 }')" >> "$out"
+  done < <(awk -F'\t' -v US=$'\037' '/^[[:space:]]*(#|$)/ { next }
+    $1 == "update" && $3 == "labels" { print $2 US $4 }' "$artifact")
+  return "$rc"
+}
+
+# plan_has_label_updates <artifact> — 0 iff the artifact updates any labels.
+plan_has_label_updates() {
+  awk -F'\t' '/^[[:space:]]*(#|$)/ { next }
+    $1 == "update" && $3 == "labels" { found = 1 }
+    END { exit !found }' "$1"
+}
+
 cmd_plan() {
   local usage_line="usage: spark plan validate|diff|apply|verify <artifact> [--tsv] [--yes] [--state FILE]"
   local sub="${1:-}" artifact="" tsv=0 yes=0 state=""
@@ -6458,8 +6590,27 @@ cmd_plan() {
         red "the artifact does not validate — run: spark plan validate $artifact"
         return 1
       fi
-      bash "$script" ${state:+--state "$state"} "$artifact"
-      return $? ;;
+      # The families this plan owns are resolved against live state BEFORE
+      # anything is written, so the script is handed a result rather than an
+      # instruction it would have to interpret. Failing here costs nothing;
+      # failing halfway through a whole-set PATCH costs a label.
+      local labelmap=""
+      if plan_has_label_updates "$artifact"; then
+        if ! model="$(resolve_governance)"; then
+          red "the governance model could not be resolved — which label families this plan owns is unknown"
+          return 3
+        fi
+        labelmap="$(mktemp)"
+        if ! plan_resolve_labels "$artifact" "$model" "$labelmap"; then
+          rm -f "$labelmap"
+          red "FAIL — nothing was applied"
+          return 1
+        fi
+      fi
+      bash "$script" ${state:+--state "$state"} ${labelmap:+--labels-resolved "$labelmap"} "$artifact"
+      rc=$?
+      [ -n "$labelmap" ] && rm -f "$labelmap"
+      return "$rc" ;;
     verify)
       # Confirm GitHub holds what the artifact says, rather than trusting the
       # apply report. A run that reported success can still have been followed

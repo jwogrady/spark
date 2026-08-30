@@ -426,9 +426,27 @@ case "$(lslive '["a,b"]')" in
   *$'live\t~\t#100'*) pass=$((pass+1)) ;;
   *) fail=$((fail+1)); echo "  ✖ a single label named 'a,b' must NOT match desired a,b" ;;
 esac
+# An extra live label belonging to no family this plan declares is PRESERVED,
+# not drift (#637). Whole-set comparison called it drift, which is the same
+# mistake as deleting it: `a,b` govern nothing, so `c` is not this plan's to
+# have an opinion about.
 case "$(lslive '["a","b","c"]')" in
+  *$'live\t=\t#100'*) pass=$((pass+1)) ;;
+  *) fail=$((fail+1)); echo "  ✖ a live label outside the plan's families must be preserved, not drift" ;;
+esac
+# A stale member of a family the plan DOES declare is still drift — the family
+# is Spark's, and applying would replace it.
+lsart3="$WORK/ls3.tsv"
+printf 'update\t#100\tlabels\tfeature\n' > "$lsart3"
+lslive3() { ( cd "$lsrepo" && env PATH="$lsbin" LIVE_LABELS="$1" \
+  bash -c '. '"$SPARK"'; plan_live_rows "'"$lsart3"'"' 2>&1 ); }
+case "$(lslive3 '["feature","bug"]')" in
   *$'live\t~\t#100'*) pass=$((pass+1)) ;;
-  *) fail=$((fail+1)); echo "  ✖ an extra live label must be drift" ;;
+  *) fail=$((fail+1)); echo "  ✖ a stale member of a governed family the plan declares must be drift" ;;
+esac
+case "$(lslive3 '["feature","feedback"]')" in
+  *$'live\t=\t#100'*) pass=$((pass+1)) ;;
+  *) fail=$((fail+1)); echo "  ✖ an unmanaged label beside a satisfied family must verify clean" ;;
 esac
 case "$(lslive '["a"]')" in
   *$'live\t~\t#100'*) pass=$((pass+1)) ;;
