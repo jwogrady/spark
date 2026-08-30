@@ -57,6 +57,25 @@ The Synthesis Lead forces every candidate into one:
 - Never delete a remote, protected, default, or release branch automatically —
   those always sit behind the approval gate.
 
+## Provenance-leakage protocol
+
+Chronology copied onto a surface that does not own it is a finding class here,
+not a separate mode. Run the producer, classify against the contract, and route
+the result through the normal gate:
+
+```bash
+plugins/spark-audit/skills/audit/scripts/provenance-scan.sh scan <path>
+```
+
+The rule, the five classes and the disposition mapping live in one place —
+[`provenance-leakage.md`](provenance-leakage.md). Do not restate them here; a
+second spelling of one rule is how two roles reach two answers.
+
+A `PROVENANCE-ONLY` row proposes **REWRITE-COLLAPSE**, never a deletion: the
+account is kept by whoever owns it, and the current-state copy collapses to its
+conclusion plus a citation. It is not a *safe delete* candidate and never enters
+the deletion slate. `NOT-ASSESSED` is reported as unread and gets no action.
+
 ## Documentation-truth protocol
 
 - For each doc claim, find the code that proves or disproves it. Fix the doc

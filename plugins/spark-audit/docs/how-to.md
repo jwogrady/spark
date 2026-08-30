@@ -55,6 +55,30 @@ each is independently revertible, validated (tests/build/`spark doctor`) after
 each group. Land the result through the normal lifecycle (`validate`, then
 `ship`).
 
+## Provenance leakage — a finding class in both modes
+
+Both modes classify **provenance leakage**: a second maintained account of how
+state changed over time, kept on a surface that does not own that account. Two
+copies of one history, written on different days, drift — and the stale one is
+found by whoever relies on it.
+
+It is deliberately narrow. Prose that merely *mentions* the past is not a
+finding: a current-state document may cite history, a decision record may
+explain the alternative it rejected, and a runbook may explain the incident that
+justifies its rule. Dates, issue references, and old-sounding words are not
+evidence of anything, and a release record or a generated changelog is not
+leaking when it holds history — that is its job.
+
+A finding names the passage, what the present system still needs from it, what
+is already owned elsewhere, and the record that owns it. The proposed action is
+**REWRITE-COLLAPSE**: keep the conclusion, cite the evidence, drop the duplicate
+account.
+
+**Audit never performs that rewrite.** It classifies and cites; changing the
+document stays behind the same human approval gate as every other finding, and a
+passage whose evidence could not be read is reported as NOT ASSESSED rather than
+passed.
+
 **Done when** — assess: the critical risks are triaged into issues; purge:
 every removal is backed by cited evidence, the docs claim no more than the
 code proves, and the truth report's validation status is green (or the gaps
