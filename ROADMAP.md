@@ -290,9 +290,9 @@ field proved got enforced mechanically; what it disproved got deleted.
 ## v0.17 — Provenance promotion
 
 **Status:** Complete (no release) — outcome complete on `master`; no version
-cut, deliberately. `v0.17.0` was published 2026-08-13 and **withdrawn**
-2026-08-26. The implementation is first published inside the cumulative
-`v0.19.0`.
+cut, deliberately. The implementation is first published inside the cumulative
+`v0.19.0`. The tag history is owned by
+[`docs/releases/v0.17.md`](docs/releases/v0.17.md).
 
 A Spark-managed spoke stays lean while durable cross-project learning is
 deliberately promoted — with GitHub evidence and human judgment — into one
@@ -334,9 +334,9 @@ record (#451).
 ## v0.18 — Truthful first run and provisioned governance
 
 **Status:** Complete (no release) — outcome complete on `master`; no version
-cut, deliberately. `v0.18.0`–`v0.18.2` were published 2026-08-25/26 and
-**withdrawn** 2026-08-26. The implementation is first published inside the
-cumulative `v0.19.0`.
+cut, deliberately. The implementation is first published inside the cumulative
+`v0.19.0`. The tag history is owned by
+[`docs/releases/v0.18.md`](docs/releases/v0.18.md).
 
 A newly armed repository's first run tells the truth about itself, and the
 governance Spark declares is actually provisioned on the remote. GitHub
@@ -480,8 +480,9 @@ the sole bootstrap exception. Making that rule satisfiable required correcting
 the gate's preferred order so #483 landed before the #471 spine — recorded on
 #478, with the native dependency graph and every priority untouched.
 
-v0.21–v0.24 were separated from the v0.20 milestone on 2026-08-26, when it had
-accumulated 22 open issues across six unrelated outcomes.
+v0.21–v0.24 are separate milestones because milestone #17 (v0.20) had
+accumulated 22 open issues across six unrelated outcomes. When that separation
+happened is GitHub milestone history.
 
 ---
 
