@@ -3798,9 +3798,9 @@ gov_gate_capture() {
         }
       }
     }' --jq '
-    def issuerows:
+    def issuerows($ms):
       . as $i
-      | ([ "issue", ($i.number | tostring), ($i.milestone.title // ""),
+      | ([ "issue", ($i.number | tostring), ($ms // $i.milestone.title // ""),
            ($i.parent.number // "" | tostring), $i.state ] | @tsv),
         (if $i.labels.pageInfo.hasNextPage
          then ["unread", ("the labels of #" + ($i.number | tostring) + " were truncated")] | @tsv
@@ -3810,16 +3810,16 @@ gov_gate_capture() {
     | (if $r.milestones.pageInfo.hasNextPage
        then ["unread", "the list of open milestones was truncated"] | @tsv
        else empty end),
-      ( $r.milestones.nodes[]
-        | (["milestone", .title] | @tsv),
+      ( $r.milestones.nodes[] | .title as $t
+        | (["milestone", $t] | @tsv),
           (if .issues.pageInfo.hasNextPage
-           then ["unread", ("the issues of \"" + .title + "\" were truncated")] | @tsv
+           then ["unread", ("the issues of \"" + $t + "\" were truncated")] | @tsv
            else empty end),
-          ( .issues.nodes[] | issuerows ) ),
+          ( .issues.nodes[] | issuerows($t) ) ),
       (if $r.marked.pageInfo.hasNextPage
        then ["unread", "the list of issues carrying the release-gate role was truncated"] | @tsv
        else empty end),
-      ( $r.marked.nodes[] | issuerows )' 2>/dev/null
+      ( $r.marked.nodes[] | issuerows(null) )' 2>/dev/null
 }
 
 # release_gate_projection <marker-label> <capture> — THE gate answer, once.
@@ -4983,8 +4983,9 @@ cmd_reconcile() {
   return 0
 }
 
-# milestone_snapshot — every open milestone WITH its issue hierarchy, read in
-# ONE request so it describes ONE moment.
+# milestone_snapshot — every open milestone WITH its issue hierarchy AND the
+# evidence its release gate is judged on, read in ONE request so it describes
+# ONE moment.
 #
 # ONE CAPTURE, and it FAILS LOUDLY. Reading the milestones twice — once for the
 # active one, once for the completed ones — meant a request that failed between
@@ -5002,15 +5003,29 @@ cmd_reconcile() {
 # CONTINUE and routed to `spark next`, which then reported there was no leaf to
 # select. Two authorities, one question, two answers (#602).
 #
-# Reading the counts and the hierarchy in separate requests would rebuild the
-# same defect out of two moments instead of two rules, so they arrive together.
+# AND SO IS THE GATE. "Is there work left" and "is this milestone's gate the
+# one thing left" are two halves of a single recommendation, and assembling
+# them from two reads would let a milestone close between them — a release
+# recommended over work that had just appeared. The rows the release-gate
+# projection judges (#605) are emitted here beside the hierarchy rows, so both
+# projections run over the same instant. The RULE still has one home: nothing
+# here decides which issue is the gate.
+#
+# Issues arrive in EVERY state, because the role is structural issue metadata —
+# a gate that has closed is still the gate, and reading only open issues let it
+# vanish and leave its milestone looking like one that never had one. Work,
+# though, is open work: `leaf` and `container` are emitted for open issues only,
+# so a closed issue is never counted as something left to do.
 #
 # Emits, and every row is a fact rather than a judgment:
 #
+#   milestone <title>                   an open milestone being judged
 #   ms        <title> <open-issue-count>
-#   container <title> <number>          an open issue that carries sub-issues
+#   container <title> <number>          an OPEN issue that carries sub-issues
 #   sub       <title> <parent> <number> a sub-issue of it, in declared order
-#   leaf      <title> <number>          an open issue that carries none
+#   leaf      <title> <number>          an OPEN issue that carries none
+#   issue     <number> <milestone> <parent> <state>
+#   label     <number> <name>           one record per label, never joined
 #   unread    <reason>                  a surface that could not be read whole
 #
 # `unread` exists because a truncated page and an empty one are different
@@ -5028,15 +5043,18 @@ milestone_snapshot() {
           pageInfo{ hasNextPage }
           nodes{
             title
-            issues(first:100, states:OPEN){
+            issues(first:100){
               pageInfo{ hasNextPage }
               nodes{
                 number
+                state
+                parent{ number }
                 subIssues(first:50){
                   totalCount
                   pageInfo{ hasNextPage }
                   nodes{ number }
                 }
+                labels(first:50){ pageInfo{ hasNextPage } nodes{ name } }
               }
             }
           }
@@ -5047,25 +5065,31 @@ milestone_snapshot() {
     | (if $m.pageInfo.hasNextPage
        then ["unread", "the open milestone list was truncated"] | @tsv else empty end),
       ( $m.nodes[] | .title as $t
-        | (if .issues.pageInfo.hasNextPage
-           then ["unread", ("the open issues of \"" + $t + "\" were truncated")] | @tsv
+        | (["milestone", $t] | @tsv),
+          (if .issues.pageInfo.hasNextPage
+           then ["unread", ("the issues of \"" + $t + "\" were truncated")] | @tsv
            else empty end),
-          (["ms", $t, (.issues.nodes | length | tostring)] | @tsv),
-          ( .issues.nodes[] | .number as $n
-            | if .subIssues.totalCount > 0
-              then (["container", $t, ($n|tostring)] | @tsv),
-                   (if .subIssues.pageInfo.hasNextPage
-                    then ["unread", ("the sub-issues of #" + ($n|tostring) + " were truncated")] | @tsv
-                    else empty end),
-                   (.subIssues.nodes[] | ["sub", $t, ($n|tostring), (.number|tostring)] | @tsv)
-              else ["leaf", $t, ($n|tostring)] | @tsv
-              end ) )' 2>/dev/null
+          (["ms", $t, ([.issues.nodes[] | select(.state == "OPEN")] | length | tostring)] | @tsv),
+          ( .issues.nodes[] | . as $i | ($i.number | tostring) as $n
+            | (["issue", $n, $t,
+                ($i.parent.number // "" | tostring), $i.state] | @tsv),
+              (if $i.labels.pageInfo.hasNextPage
+               then ["unread", ("the labels of #" + $n + " were truncated")] | @tsv
+               else empty end),
+              ( $i.labels.nodes[] | ["label", $n, .name] | @tsv ),
+              (if $i.subIssues.pageInfo.hasNextPage
+               then ["unread", ("the sub-issues of #" + $n + " were truncated")] | @tsv
+               else empty end),
+              ( $i.subIssues.nodes[] | ["sub", $t, $n, (.number | tostring)] | @tsv ),
+              (if $i.state != "OPEN" then empty
+               elif $i.subIssues.totalCount > 0 then ["container", $t, $n] | @tsv
+               else ["leaf", $t, $n] | @tsv end) ) )' 2>/dev/null
 }
 
 # The PURE PROJECTIONS over a snapshot. One rule, one place, whoever asks — the
 # capture may fail, a projection cannot.
 
-# ms_inventory_of <snapshot> — `title <TAB> actionable-leaf-count <TAB> gate`.
+# ms_inventory_of <snapshot> <marker> — `title <TAB> leaves <TAB> gate`.
 #
 # The count is LEAF WORK, not GitHub's raw open-issue count, because the
 # question every caller is really asking is "is there anything here to do".
@@ -5076,12 +5100,30 @@ milestone_snapshot() {
 #   leaves > 0              work to do            an active course
 #   leaves = 0, gate open   done, not released    a certification course
 #   leaves = 0, no gate     nothing left at all   a closed-out course
+#
+# THE GATE COLUMN IS NOT RECOGNISED HERE. It is whatever the release-gate
+# projection names over this same snapshot (#605) — the governed role, not the
+# open issue that happens to carry sub-issues. Reading the shape would make an
+# ordinary parent the release boundary in any milestone that has one, which is
+# the whole reason that fact has its own authority. A contested aspect (two
+# marked gates) is carried as `?`: there is no single number to name, and a
+# milestone whose boundary is ambiguous is certainly not one with nothing left.
 ms_inventory_of() {
-  printf '%s\n' "$1" | awk -F'\t' '
-    $1 == "ms"        { seen[$2] = 1 }
-    $1 == "leaf"      { n[$2]++ }
-    $1 == "container" { if (!(($2) in g)) g[$2] = $3 }
-    END { for (t in seen) printf "%s\t%d\t%s\n", t, n[t], (t in g ? g[t] : "") }'
+  local snap="$1" marker="${2:-}" gates=""
+  if [ -n "$marker" ]; then
+    gates="$(release_gate_projection "$marker" "$snap" | awk -F'\t' '
+      $2 == "" || $1 == "none" { next }
+      $1 == "many"             { printf "%s\t?\n", $2; next }
+                               { printf "%s\t%s\n", $2, $3 }')"
+  fi
+  printf '%s\n' "$snap" | awk -F'\t' -v G="$gates" '
+    BEGIN {
+      n = split(G, gl, "\n")
+      for (i = 1; i <= n; i++) { split(gl[i], f, "\t"); if (f[1] != "") g[f[1]] = f[2] }
+    }
+    $1 == "ms"   { seen[$2] = 1 }
+    $1 == "leaf" { c[$2]++ }
+    END { for (t in seen) printf "%s\t%d\t%s\n", t, c[t], (t in g ? g[t] : "") }'
 }
 
 # ms_open_count_of <snapshot> <title> — GitHub'"'"'s raw open-issue count, kept as a
@@ -5096,21 +5138,25 @@ leaves_of() {
   printf '%s\n' "$1" | awk -F'\t' -v t="$2" '$1 == "leaf" && $2 == t { print $3 }'
 }
 
-# gate_of <snapshot> <title> — the milestone'"'"'s release-readiness container.
+# containers_of <snapshot> <title> — every open issue in the milestone that
+# carries sub-issues, one per line.
 #
-# The evidence is structural and already the repository'"'"'s own rule: it is the
-# open issue that carries sub-issues, it is never itself selectable, and its
-# sub-issue order IS the delivery-order authority. A milestone with no such
-# issue simply has no gate, and behaves as it always did.
-gate_of() {
-  printf '%s\n' "$1" | awk -F'\t' -v t="$2" '$1 == "container" && $2 == t { print $3; exit }'
+# A CONTAINER IS NOT A GATE. This answers the hierarchy question — a parent has
+# no branch and no PR of its own, so it is never offered as work — and nothing
+# more. Which container is the release gate is a different question with a
+# different authority (the governed role, #605), and answering the second with
+# the first one'"'"'s evidence is what made an ordinary parent the delivery-order
+# authority, decided by whatever order GitHub returned issues in.
+containers_of() {
+  printf '%s\n' "$1" | awk -F'\t' -v t="$2" '$1 == "container" && $2 == t { print $3 }'
 }
 
-# suborder_of <snapshot> <title> — the gate'"'"'s sub-issues, in declared order.
+# suborder_of <snapshot> <title> <gate> — the gate'"'"'s sub-issues, in declared
+# order. The gate is passed IN, resolved by the projection that owns that fact.
 suborder_of() {
-  local g; g="$(gate_of "$1" "$2")"
-  [ -n "$g" ] || return 0
-  printf '%s\n' "$1" | awk -F'\t' -v t="$2" -v g="$g" '$1 == "sub" && $2 == t && $3 == g { print $4 }'
+  [ -n "${3:-}" ] || return 0
+  printf '%s\n' "$1" | awk -F'\t' -v t="$2" -v g="$3" \
+    '$1 == "sub" && $2 == t && $3 == g { print $4 }'
 }
 
 # snapshot_unread <snapshot> — the surfaces that could not be read whole.
@@ -5121,9 +5167,15 @@ snapshot_unread() {
 # milestone_inventory — the inventory projection over a fresh capture. Kept so
 # callers that want only the inventory do not each learn the snapshot'"'"'s shape.
 milestone_inventory() {
-  local snap
+  local snap model="" marker=""
   snap="$(milestone_snapshot)" || return 1
-  ms_inventory_of "$snap"
+  # The gate column is governed data, so the model comes with it. A model that
+  # does not resolve, or does not govern the aspect, leaves the column empty —
+  # which is the same answer as "this milestone has no gate", and is why the
+  # verbs that need the difference ask the projection directly.
+  model="$(resolve_governance 2>/dev/null)" || model=""
+  [ -z "$model" ] || marker="$(release_gate_label "$model")" || marker=""
+  ms_inventory_of "$snap" "$marker"
 }
 
 # priority_members <model> — the priority family's members, ONE PER LINE, in
@@ -5172,11 +5224,6 @@ completed_in_inventory() {
 leaves_in_inventory() {
   printf '%s\n' "$1" | awk -F'\t' -v t="$2" '$1 == t { print $2 + 0; found = 1 }
                                              END { if (!found) print 0 }'
-}
-
-# gate_in_inventory <inventory> <title> — its release gate, or empty.
-gate_in_inventory() {
-  printf '%s\n' "$1" | awk -F'\t' -v t="$2" '$1 == t { print $3; exit }'
 }
 
 # current_milestone [inventory] — the one answer to "which course is currently
@@ -5251,7 +5298,23 @@ course_evidence() {
       "$(printf '%s\n' "$unread" | awk 'NF { printf "%s%s", (n++ ? "; " : ""), $0 }')"
     return 0
   fi
-  inv="$(ms_inventory_of "$snap")"
+  # WHICH ISSUE IS THE GATE IS NOT THIS VERB'S TO WORK OUT (#605). The model
+  # declares the role, one projection judges it, and `course` reads that
+  # judgment over the snapshot it already holds. Recognising the gate by its
+  # shape here — the open issue carrying sub-issues — would be a second
+  # implementation of a governed fact, and it would name an ordinary parent as
+  # the release boundary in any milestone that has one.
+  local model="" marker="" mrc=0
+  if ! model="$(resolve_governance 2>/dev/null)"; then
+    printf 'readable\tno\treason\tthe governance model does not resolve, so which issue is the release gate cannot be established\n'
+    return 0
+  fi
+  marker="$(release_gate_label "$model")" || mrc=$?
+  if [ "$mrc" -eq 2 ]; then
+    printf 'readable\tno\treason\tthe model declares a release-gate aspect whose locator names no declared member, so no issue can carry the role\n'
+    return 0
+  fi
+  inv="$(ms_inventory_of "$snap" "$marker")"
   printf 'readable\tyes\n'
   # The SHARED projections, on the inventory captured above. Not a local copy of
   # the selection rules — `next` and `course` must give one answer, and they do
@@ -5263,7 +5326,38 @@ course_evidence() {
   # do, and whether a release gate is waiting. These are what separate "keep
   # going" from "this is finished and unreleased".
   printf 'active_leaves\t%s\n' "$(leaves_in_inventory "$inv" "$act")"
-  printf 'active_gate\t%s\n' "$(gate_in_inventory "$inv" "$act")"
+  # The gate, and its VALIDITY, from the one projection. A gate reported broken
+  # is not a gate to certify: a milestone whose gate closed before its work, or
+  # that carries two of them, or that leaves open issues outside the gate's
+  # hierarchy, must never yield a release recommendation. So an invalid gate is
+  # carried as its own fact and the identity stays empty — the closure branch
+  # cannot fire on a boundary that does not hold.
+  if [ -n "$act" ] && [ "$mrc" -eq 0 ]; then
+    local grow="" gv="" gms="" gg="" gc="" gn="" grendered="" gkind=""
+    grow="$(release_gate_projection "$marker" "$snap" \
+      | awk -F'\t' -v m="$act" '$2 == m { print; exit }')"
+    if [ -n "$grow" ]; then
+      IFS="$(printf '\t')" read -r gv gms gg gc gn <<EOF_COURSE_GATE
+$grow
+EOF_COURSE_GATE
+      grendered="$(release_gate_render "$marker" "$gv" "$gms" "$gg" "$gc" "$gn")"
+      gkind="$(printf '%s\n' "$grendered" | awk -F'\t' '{ print $2; exit }')"
+      if [ "$gkind" = "!" ]; then
+        printf 'active_gate_invalid\t%s\n' \
+          "$(printf '%s\n' "$grendered" | awk -F'\t' '{ print $3 " " $4; exit }')"
+        printf 'active_gate\t\n'
+      else
+        case "$gv" in
+          ok|settled) printf 'active_gate\t%s\n' "$gg" ;;
+          *)          printf 'active_gate\t\n' ;;
+        esac
+      fi
+    else
+      printf 'active_gate\t\n'
+    fi
+  else
+    printf 'active_gate\t\n'
+  fi
   printf 'completed\t%s\n' \
     "$(completed_milestones "$inv" | awk 'NF { printf "%s%s", (n++ ? ", " : ""), $0 }')"
 
@@ -5311,7 +5405,7 @@ cmd_course() {
   local ev
   ev="$(course_evidence "$root")"
 
-  local k v readable=no reason='' active='' completed='' agate=''
+  local k v readable=no reason='' active='' completed='' agate='' agatebad=''
   local mech=0 tdec=0 tunread=0 spent=0 sdec=0 sunread=0 aleaves=0
   while IFS=$'\t' read -r k v _; do
     case "$k" in
@@ -5319,6 +5413,7 @@ cmd_course() {
       active) active="$v" ;;
       active_leaves) aleaves="$v" ;;
       active_gate) agate="$v" ;;
+      active_gate_invalid) agatebad="$v" ;;
       completed) completed="$v" ;;
       truth_mechanical) mech="$v" ;;
       truth_decisions) tdec="$v" ;;
@@ -5341,6 +5436,17 @@ EOF
     course="NOT ASSESSED"
     why="$reason"
     route="restore the reader, then re-run"
+  elif [ -n "$active" ] && [ -n "$agatebad" ]; then
+    # MOST CONSTRAINING FIRST, and nothing constrains a course more than its own
+    # release boundary contradicting the repository. It is one of the truth
+    # pass's mechanical findings and would reach REPAIR through the count below
+    # anyway — but a count is not a reason, and this is the one finding that
+    # decides whether anything can be certified at all. Nothing is closable
+    # across a boundary that does not hold, and this is a known bad state, never
+    # an unreadable one.
+    course="REPAIR CURRENT COURSE"
+    why="\"$active\" cannot be closed or certified: $agatebad"
+    route="spark governance validate, then repair the gate"
   elif [ "$mech" -gt 0 ]; then
     course="REPAIR CURRENT COURSE"
     why="the truth pass reports $mech mechanically invalid finding(s); a course cannot rest on state the repository cannot hold"
@@ -5370,7 +5476,7 @@ EOF
     route="spark next"
   elif [ -n "$completed" ]; then
     course="CLOSE / RELEASE COMPLETED COURSE"
-    why="no milestone has open work, and $completed is open with none left; the boundary is what remains"
+    why="no milestone has open leaf work, and $completed is open with none left; the boundary is what remains"
     route="release certification, not new feature work"
   else
     course="PLAN A NEW COURSE"
@@ -8340,7 +8446,7 @@ cmd_next() {
   ev="${ev}priofamily	priority	$(printf '%s\n' "$prio_members" | awk 'NF { printf "%s%s", (n++ ? ", " : ""), $0 }')
 "
 
-  # ONE GATE ANSWER, FOR EVERY CONSUMER.
+  # ONE GATE ANSWER, FOR EVERY CONSUMER, OVER ONE MOMENT.
   #
   # These were one rule and are two facts. The model says a parent is a
   # container that closes last, and separately that the release gate's
@@ -8350,13 +8456,12 @@ cmd_next() {
   # parent became a release gate and which one won depended on the order
   # GitHub happened to return issues in (#605).
   #
-  # Identity now comes from the model-declared role, and selectability from the
-  # hierarchy — neither borrows the other's evidence. And identity is read from
-  # the SAME projection governance renders, not from this verb's own open-issue
-  # rows: searching the open list for the marker made a closed gate look like a
-  # milestone that never had one, so the two verbs could hold opposite views of
-  # the same repository at the same moment. A gate answer that depends on which
-  # verb you asked is the defect, whatever each answer says.
+  # Identity comes from the model-declared role, selectability from the
+  # hierarchy, and BOTH from the snapshot `course` reads — so the two verbs
+  # cannot hold opposite views of one repository, and the answer they share
+  # describes a single instant. The per-issue sub-issue probes are gone with
+  # it: a failed one returned empty and was indistinguishable from "carries
+  # none", so an unreadable hierarchy could silently offer a container as work.
   gate=""; order_list=""
   local gate_label_n="" gate_rc_n=0
   gate_label_n="$(release_gate_label "$gov_model_n")" || gate_rc_n=$?
@@ -8369,21 +8474,26 @@ cmd_next() {
     red "  Inspect it with: spark governance inspect"
     return 4
   fi
+  local snap containers=""
+  if ! snap="$(milestone_snapshot)"; then
+    yellow "not assessed: the milestone hierarchy could not be read, so the gate and"
+    yellow "  the delivery order are both unknown — never assumed absent"
+    return 3
+  fi
+  local snap_unread
+  snap_unread="$(snapshot_unread "$snap")"
+  if [ -n "$snap_unread" ]; then
+    yellow "not assessed: the milestone hierarchy came back truncated, so the delivery"
+    yellow "  order cannot be read whole:"
+    printf '%s\n' "$snap_unread" | while IFS= read -r l; do
+      [ -n "$l" ] || continue
+      red "    $l"
+    done
+    return 3
+  fi
   if [ "$gate_rc_n" -eq 0 ]; then
-    local gate_cap_n="" gate_unread_n="" grow="" gv gms gg gc gn rendered gkind
-    if ! gate_cap_n="$(gov_gate_capture "$gate_label_n")" || [ -z "$gate_cap_n" ]; then
-      yellow "not assessed: the release-gate evidence could not be read, so whether this"
-      yellow "  milestone has a gate — and which issue it is — is unknown. An unread"
-      yellow "  surface is never \"no release gate\"."
-      return 3
-    fi
-    gate_unread_n="$(printf '%s\n' "$gate_cap_n" | awk -F'\t' '$1 == "unread" { print $2; exit }')"
-    if [ -n "$gate_unread_n" ]; then
-      yellow "not assessed: $gate_unread_n, so the release gate could not be established"
-      yellow "  — a truncated read is never \"no release gate\"."
-      return 3
-    fi
-    grow="$(release_gate_projection "$gate_label_n" "$gate_cap_n" \
+    local grow="" gv gms gg gc gn rendered gkind
+    grow="$(release_gate_projection "$gate_label_n" "$snap" \
       | awk -F'\t' -v m="$ms" '$2 == m { print; exit }')"
     if [ -z "$grow" ]; then
       yellow "not assessed: \"$ms\" is not among the open milestones GitHub returned, so"
@@ -8409,37 +8519,14 @@ EOF_GATE_ROW
     fi
     case "$gv" in ok|settled) gate="$gg" ;; esac
   fi
-  if [ -n "$gate" ]; then
-    # The order is the gate's OWN sub-issue order. A failed read is never "no
-    # order": that inversion would silently promote priority ranking over an
-    # order the human declared.
-    if ! order_list="$(gh api "repos/{owner}/{repo}/issues/$gate/sub_issues" --paginate \
-        --jq '.[].number' 2>/dev/null)"; then
-      yellow "NOT ASSESSED: #$gate is the release gate, but its sub-issue order could not"
-      yellow "  be read — an unread order is never \"no order\"."
-      return 3
-    fi
-  fi
+  # The order is the gate's OWN sub-issue order, from the same snapshot. A gate
+  # with no order is not an error: absence is a known state.
+  order_list="$(suborder_of "$snap" "$ms" "$gate")"
   # A PARENT IS NOT SELECTABLE, gate or not. That is the hierarchy rule and it
   # applies to every container: an issue with children has no branch and no PR
   # of its own. Sourced from the hierarchy, because it is a different question
   # from which container is the gate.
-  local containers=""
-  while IFS=$'\t' read -r kind n title; do
-    [ "$kind" = "issue" ] || continue
-    [ -n "$n" ] || continue
-    local subs
-    if ! subs="$(gh api "repos/{owner}/{repo}/issues/$n/sub_issues" --paginate \
-        --jq '.[].number' 2>/dev/null)"; then
-      yellow "NOT ASSESSED: whether #$n carries sub-issues could not be read, and a failed"
-      yellow "  read is never \"carries none\" — that would offer a container as work."
-      return 3
-    fi
-    [ -n "$subs" ] && containers="${containers}${n}
-"
-  done <<EOF_ROWS
-$rows
-EOF_ROWS
+  containers="$(containers_of "$snap" "$ms")"
   if [ -z "$gate" ]; then
     ev="${ev}ordernone	this milestone declares no release gate, so no explicit order exists
 "
