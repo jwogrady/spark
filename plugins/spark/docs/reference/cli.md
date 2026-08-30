@@ -1950,6 +1950,48 @@ is the same invalidator `evidence` tracks.
 Exit codes: `0` routed, `1` usage or unknown task kind, `2` refused (effort
 churn, or nothing above the strongest class), `5` human decision boundary.
 
+## `spark ci [handoff|status|resume] --run <id>`
+
+Records the boundary where local work is finished and only GitHub is still
+changing, so a run can stop there instead of polling, and resume without
+replaying the episode.
+
+| Action | What it does |
+|---|---|
+| `handoff --pr <n> --head <sha>` | Records the PR, the exact certified HEAD, the required checks and their state; writes `pr`, `head_sha`, `certified_at` and `ci_state` into the run's telemetry |
+| `status` | One read, compared against the recorded snapshot |
+| `resume` | What to do next, from live check state |
+
+`--head` is mandatory on `handoff`. Without it a later resume cannot tell
+whether CI answered about the certified work or about something pushed since,
+and a green rollup for a newer commit is not evidence about an older one.
+
+### Verdicts
+
+| Verdict | Exit | Meaning |
+|---|---|---|
+| `READY` | 0 | Every required check passed on the certified head — do not re-run local certification |
+| `CHANGES REQUIRED` | 2 | CI failed; the failing set is printed from GitHub, not rediscovered by replay |
+| `PENDING` | 4 | CI has not answered yet |
+| `NOT ASSESSED` | 1 | The rollup could not be read |
+
+**Pending is not a failure.** Reporting one would send someone to debug work
+that is correct and merely unfinished elsewhere. **An unreadable rollup is an
+unknown, never a pass** — resolving it to "nothing is failing" is how an
+unchecked commit gets merged. A PR with **no checks registered** is reported
+separately from one that could not be read: both refuse to become a pass, but
+they send an operator to different places.
+
+### Polling is counted, not forbidden
+
+Every live read goes through one counted path, whichever verb asked for it —
+`resume` is the default action, so a guarantee that held only for `status` would
+be one nobody reached. `status` exits `3` and reports `NO TRANSITION` when the
+rollup is unchanged (that read produced no new information), and both verbs keep
+the poll and unchanged counts and record the read as a remote request in the
+run's telemetry. A poll loop therefore appears as spend where `budget` already
+watches for it, rather than needing an alarm of its own.
+
 ## `spark version`
 
 Prints the Spark plugin version, read from `.claude-plugin/plugin.json`.
