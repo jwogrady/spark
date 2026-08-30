@@ -58,6 +58,7 @@ telemetry|cmd_telemetry|Record and render run telemetry bound to an exact PR HEA
 budget|cmd_budget|Bound an autonomous run: declare its convergence condition and envelope, then check before expensive work
 evidence|cmd_evidence|Capture an authoritative fact once and share it, with explicit bounds and named invalidation
 route|cmd_route|Select the lowest-cost adequate execution class for a task, and escalate deliberately
+ci|cmd_ci|Hand off at the CI boundary and resume on a transition, instead of polling
 orient|cmd_orient|Classify this repo as new, existing, or ambiguous before setup; --set records the decision
 hub|cmd_hub|Report the memory hub this project declares and where the value came from; --set records it (or none)
 labels|cmd_labels|Compare this repo'\''s GitHub labels against the declared issue taxonomy; --apply creates the missing ones
@@ -8199,7 +8200,7 @@ cmd_footprint() {
 # What was not recorded reports as NOT ASSESSED. A missing provider metric is an
 # unknown, and an unknown rendered as a number is a lie the operator would then
 # optimize against.
-TELEMETRY_KEYS="run_id attempt trigger pr head_sha actions_run provider model routing_reason effort preflight_tokens input_tokens output_tokens cache_write_tokens cache_read_tokens cache_reason tool_schema_tokens cost_usd wall_seconds tool_calls api_requests full_suite_runs targeted_checks iterations batch_usage compaction_events context_before context_after failing_before failing_after verdict overhead_ms"
+TELEMETRY_KEYS="run_id attempt trigger pr head_sha actions_run provider model routing_reason effort preflight_tokens input_tokens output_tokens cache_write_tokens cache_read_tokens cache_reason tool_schema_tokens cost_usd wall_seconds tool_calls api_requests full_suite_runs targeted_checks iterations batch_usage compaction_events context_before context_after failing_before failing_after verdict overhead_ms certified_at ci_state"
 
 # Counts and measurements are integers. A field that must be a number and is not
 # is a recording error: taking it anyway would put a value in a comparison column
@@ -9654,6 +9655,265 @@ EOF
       ;;
     *)
       red "unknown route action: $action"; echo "$usage_line"; return 1 ;;
+  esac
+}
+
+# ---------------------------------------------------------------------------
+# spark ci — hand off at the CI boundary instead of polling (#636)
+#
+# When local certification is finished and a PR is pushed, the only thing still
+# changing is GitHub. An agent that sits in `gh pr checks` burns wall time and
+# remote calls to re-learn the same answer, and stays occupied while having no
+# productive work left.
+#
+#   local work complete -> record the boundary -> STOP -> resume on a transition
+#
+# The boundary is recorded so stopping is safe: the PR, the exact HEAD, the
+# required checks and their state at handoff. Resuming then needs no replay of
+# the episode, because the question "what changed?" is answered against that
+# snapshot rather than against memory.
+#
+# A pending check is NOT a failure. It is an unfinished external fact, and a
+# run that reports FAIL because CI has not answered yet would send someone to
+# debug their own correct work.
+#
+# And an unchanged read is recorded as exactly that. Polling is not forbidden --
+# it is COUNTED, so the waste is visible in the same telemetry that already
+# knows how many remote calls this run has made.
+CI_FIELDS="pr head required state digest polls unchanged certified_at observed_at"
+
+ci_dir()  { printf '%s/.spark/ci' "$1"; }
+ci_file() { printf '%s/.spark/ci/%s.tsv' "$1" "$2"; }
+
+ci_get() {
+  [ -f "$1" ] || return 0
+  awk -F'\t' -v k="$2" '$1 == k { v = $2 } END { if (v != "") print v }' "$1"
+}
+
+ci_load() {
+  local f="$1" k v
+  for k in $CI_FIELDS; do eval "civ_$k=''"; done
+  [ -f "$f" ] || return 0
+  while IFS=$'\t' read -r k v; do
+    case " $CI_FIELDS " in *" $k "*) eval "civ_$k=\$v" ;; esac
+  done < "$f"
+  return 0
+}
+
+ci_write() {
+  local f="$1" k v
+  mkdir -p "$(dirname "$f")" || return 1
+  {
+    for k in $CI_FIELDS; do
+      eval "v=\$civ_$k"
+      if [ -n "$v" ]; then printf '%s\t%s\n' "$k" "$v"; fi
+    done
+  } > "$f"
+}
+
+# ci_live <pr> — one read of the live check rollup as "<name> <state>" lines,
+# or the literal __unreadable__. Never guessed: a rollup that cannot be read is
+# an unknown, and an unknown that renders as "passing" would authorize a merge.
+ci_live() {
+  local out
+  command -v gh >/dev/null 2>&1 || { printf '__unreadable__'; return 0; }
+  out="$(gh pr view "$1" --json statusCheckRollup \
+        --jq '.statusCheckRollup[] | [(.name // .context), (.conclusion // .state)] | @tsv' 2>/dev/null)" \
+    || { printf '__unreadable__'; return 0; }
+  [ -n "$out" ] || { printf '__unreadable__'; return 0; }
+  printf '%s' "$out" | LC_ALL=C sort
+}
+
+# ci_verdict <lines> — the state of the whole rollup: pending until every
+# required check has answered, then passing or failing.
+ci_verdict() {
+  printf '%s\n' "$1" | awk -F'\t' '
+    NF == 0 { next }
+    {
+      s = toupper($2)
+      if (s == "SUCCESS" || s == "NEUTRAL" || s == "SKIPPED") { pass++ }
+      else if (s == "PENDING" || s == "QUEUED" || s == "IN_PROGRESS" || s == "EXPECTED" || s == "") { pend++ }
+      else { fail++ }
+      n++
+    }
+    END {
+      if (n == 0) { print "unreadable"; exit }
+      if (fail > 0) { print "failing"; exit }
+      if (pend > 0) { print "pending"; exit }
+      print "passing"
+    }'
+}
+
+ci_failing_set() {
+  printf '%s\n' "$1" | awk -F'\t' '
+    NF == 0 { next }
+    {
+      s = toupper($2)
+      if (s != "SUCCESS" && s != "NEUTRAL" && s != "SKIPPED" && s != "PENDING" &&
+          s != "QUEUED" && s != "IN_PROGRESS" && s != "EXPECTED" && s != "") print "  " $1 " — " $2
+    }'
+}
+
+cmd_ci() {
+  local usage_line="usage: spark ci [handoff|status|resume] --run <id> [--pr <n>] [--head <sha>] [--json]"
+  local action=""
+  case "${1:-}" in
+    handoff|status|resume) action="$1"; shift ;;
+    *) action="resume" ;;
+  esac
+
+  local run="" pr="" head="" json=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --run)   shift; run="${1:-}" ;;
+      --run=*) run="${1#--run=}" ;;
+      --pr)    shift; pr="${1:-}" ;;
+      --pr=*)  pr="${1#--pr=}" ;;
+      --head)  shift; head="${1:-}" ;;
+      --head=*) head="${1#--head=}" ;;
+      --json)  json=1 ;;
+      -h|--help) echo "$usage_line"; return 0 ;;
+      *) red "unknown option: $1"; echo "$usage_line"; return 1 ;;
+    esac
+    shift
+  done
+
+  local top
+  top="$(git_root)"; if [ -z "$top" ]; then
+    red "spark ci needs a git repo — run it from inside the project."
+    return 1
+  fi
+  [ -n "$run" ] || run="${SPARK_RUN_ID:-current}"
+  if ! tm_valid_run "$run"; then
+    red "invalid run id: '$run'"; return 1
+  fi
+
+  local file; file="$(ci_file "$top" "$run")"
+  ci_load "$file"
+
+  case "$action" in
+    handoff)
+      case "$pr" in ''|*[!0-9]*) red "spark ci handoff needs --pr <number>"; return 1 ;; esac
+      if [ -z "$head" ]; then
+        red "spark ci handoff needs --head <sha> — the exact commit the local certification covered"
+        yellow "  without it, a later resume cannot tell whether CI answered about this work or newer work."
+        return 1
+      fi
+      local lines verdict
+      lines="$(ci_live "$pr")"
+      if [ "$lines" = "__unreadable__" ]; then
+        civ_state="unreadable"; civ_required=""; civ_digest=""
+      else
+        civ_state="$(ci_verdict "$lines")"
+        civ_required="$(printf '%s\n' "$lines" | awk -F'\t' 'NF { printf "%s%s", (n++ ? "," : ""), $1 }')"
+        civ_digest="$(printf '%s' "$lines" | cksum | awk '{ print $1 }')"
+      fi
+      civ_pr="$pr"; civ_head="$head"
+      civ_polls=0; civ_unchanged=0
+      civ_certified_at="$(date -u +%FT%TZ)"
+      civ_observed_at="$civ_certified_at"
+      ci_write "$file" || { red "could not write $file"; return 1; }
+      "$SPARK_ROOT/bin/spark" telemetry record --run "$run" \
+        pr="$pr" head_sha="$head" certified_at="$civ_certified_at" ci_state="$civ_state" >/dev/null 2>&1 || true
+
+      if [ -n "$json" ]; then
+        printf '{"run":"%s","pr":%s,"head":"%s","state":"%s","checks":"%s"}\n' \
+          "$run" "$pr" "$head" "$civ_state" "$civ_required"
+      else
+        green "handoff recorded — local certification is complete for $head"
+        printf '  %-12s #%s\n' pr "$pr"
+        printf '  %-12s %s\n' checks "${civ_required:-NOT ASSESSED}"
+        printf '  %-12s %s\n' state "$civ_state"
+        echo
+        echo "Nothing local remains. Stop here and resume on a CI transition —"
+        echo "re-reading an unchanged rollup buys the same answer at the same price."
+      fi
+      ;;
+
+    status)
+      [ -f "$file" ] || { red "no CI handoff recorded for run '$run'"; return 1; }
+      local lines verdict newdigest
+      lines="$(ci_live "$civ_pr")"
+      civ_polls="$(( ${civ_polls:-0} + 1 ))"
+      civ_observed_at="$(date -u +%FT%TZ)"
+      if [ "$lines" = "__unreadable__" ]; then
+        ci_write "$file"
+        yellow "NOT ASSESSED — the check rollup could not be read"
+        echo "  an unreadable rollup is an unknown, never a pass"
+        return 1
+      fi
+      verdict="$(ci_verdict "$lines")"
+      newdigest="$(printf '%s' "$lines" | cksum | awk '{ print $1 }')"
+      # Each remote read is a remote read. Counting it here is what makes a
+      # polling loop show up as spend rather than as diligence.
+      "$SPARK_ROOT/bin/spark" telemetry record --run "$run" \
+        api_requests="$civ_polls" ci_state="$verdict" >/dev/null 2>&1 || true
+
+      if [ "$newdigest" = "$civ_digest" ]; then
+        civ_unchanged="$(( ${civ_unchanged:-0} + 1 ))"
+        civ_state="$verdict"
+        ci_write "$file"
+        yellow "NO TRANSITION — this read produced no new information (${civ_unchanged} unchanged of ${civ_polls} reads)"
+        echo "  state is still '$verdict'; waiting is free, asking again is not"
+        return 3
+      fi
+      civ_digest="$newdigest"; civ_state="$verdict"
+      ci_write "$file"
+      green "TRANSITION — the rollup changed; state is now '$verdict'"
+      return 0
+      ;;
+
+    resume)
+      [ -f "$file" ] || { red "no CI handoff recorded for run '$run'"; return 1; }
+      local lines verdict
+      lines="$(ci_live "$civ_pr")"
+      if [ "$lines" = "__unreadable__" ]; then
+        yellow "NOT ASSESSED — the check rollup could not be read"
+        echo "  an unreadable rollup is an unknown, never a pass"
+        return 1
+      fi
+      verdict="$(ci_verdict "$lines")"
+      civ_state="$verdict"; civ_observed_at="$(date -u +%FT%TZ)"
+      ci_write "$file"
+
+      if [ -n "$json" ]; then
+        printf '{"run":"%s","pr":%s,"head":"%s","state":"%s","polls":%s,"unchanged":%s}\n' \
+          "$run" "$civ_pr" "$civ_head" "$verdict" "${civ_polls:-0}" "${civ_unchanged:-0}"
+      fi
+
+      case "$verdict" in
+        pending)
+          # Deliberately not a failure. A run that reported FAIL here would send
+          # someone to debug work that is correct and simply unfinished elsewhere.
+          [ -z "$json" ] && {
+            yellow "PENDING — CI has not answered yet for $civ_head"
+            echo "  this is not a failure and not a reason to poll; resume on the transition"
+          }
+          return 4 ;;
+        failing)
+          [ -z "$json" ] && {
+            red "CHANGES REQUIRED — CI failed on $civ_head"
+            echo "  the failing set, from GitHub rather than from replaying the episode:"
+            ci_failing_set "$lines"
+            echo "  repair these; do not re-run the whole local certification to find them"
+          }
+          return 2 ;;
+        passing)
+          [ -z "$json" ] && {
+            green "READY — every required check passed on $civ_head"
+            echo "  local certification already covered this commit; do not re-run it"
+            if [ "${civ_unchanged:-0}" -gt 0 ]; then
+              yellow "  note: ${civ_unchanged} of ${civ_polls} reads produced no new information"
+            fi
+          }
+          return 0 ;;
+        *)
+          yellow "NOT ASSESSED — the rollup state could not be classified"
+          return 1 ;;
+      esac
+      ;;
+    *)
+      red "unknown ci action: $action"; echo "$usage_line"; return 1 ;;
   esac
 }
 
