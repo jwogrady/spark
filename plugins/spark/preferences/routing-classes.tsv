@@ -1,0 +1,49 @@
+# Spark routing policy — capability and cost classes.
+#
+# This file is CONFIGURATION, not product truth. Model names, effort levels,
+# availability and prices change; the routing SEMANTICS do not. A project
+# overrides this wholesale with .spark/routing-classes.tsv, and nothing in
+# bin/spark names a provider model — the code resolves classes, this file says
+# what a class currently means.
+#
+# Records:
+#   class     <name>  <rank>  <description>
+#   model     <class> <model-id>  <effort>
+#   route     <task>  <class>     <why>
+#   escalate  <from>  <to>        <rule>
+#
+# Ranks order the classes from cheapest to strongest. Rank 9 is reserved for the
+# human boundary, which is not a strength tier at all — it is the point where
+# routing stops.
+
+class	deterministic	0	Tool-only work with a right answer no model improves
+class	routine	1	Scoped classification and review a small model handles well
+class	normal	2	Ordinary coding and reasoning
+class	complex	3	Architecture, hard diagnosis, conflicting evidence
+class	human	9	A decision boundary — never routed to a model
+
+# The cheapest adequate class is the default; strength is bought deliberately.
+model	deterministic	-	-
+model	routine	claude-haiku-4-5-20251001	low
+model	normal	claude-sonnet-5	medium
+model	complex	claude-opus-5	high
+
+route	lint	deterministic	A linter's answer is not improved by reasoning about it
+route	format	deterministic	Formatting is mechanical
+route	verify	deterministic	A test suite reports; it does not deliberate
+route	classify	routine	Sorting known categories is scoped work
+route	review	routine	Routine review reads a bounded diff against stated criteria
+route	triage	routine	Bounded classification against existing evidence
+route	implement	normal	Ordinary coding work
+route	repair	normal	A known failing set with located causes
+route	debug	complex	Diagnosis with the cause still unknown
+route	architecture	complex	Cross-cutting design whose cost of being wrong is high
+route	governance	complex	Interpreting the contract, where a wrong reading propagates
+route	release-decision	human	Release authority belongs to the human
+route	decision-required	human	The whole point of the verdict is that a person decides
+
+# Escalation is a rule, not an instinct. Every step is one rank at a time, so a
+# run cannot leap to the strongest class on its first disappointment.
+escalate	deterministic	routine	A deterministic path that could not decide
+escalate	routine	normal	A cheap attempt that failed on scope or ambiguity
+escalate	normal	complex	Conflicting evidence, or a normal attempt that failed

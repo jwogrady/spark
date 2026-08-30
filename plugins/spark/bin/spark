@@ -57,6 +57,7 @@ footprint|cmd_footprint|Measure Spark'\''s context footprint per surface (--json
 telemetry|cmd_telemetry|Record and render run telemetry bound to an exact PR HEAD SHA (record/show/relay/compare/list)
 budget|cmd_budget|Bound an autonomous run: declare its convergence condition and envelope, then check before expensive work
 evidence|cmd_evidence|Capture an authoritative fact once and share it, with explicit bounds and named invalidation
+route|cmd_route|Select the lowest-cost adequate execution class for a task, and escalate deliberately
 orient|cmd_orient|Classify this repo as new, existing, or ambiguous before setup; --set records the decision
 hub|cmd_hub|Report the memory hub this project declares and where the value came from; --set records it (or none)
 labels|cmd_labels|Compare this repo'\''s GitHub labels against the declared issue taxonomy; --apply creates the missing ones
@@ -9304,6 +9305,355 @@ EOF
       ;;
     *)
       red "unknown evidence action: $action"; echo "$usage_line"; return 1 ;;
+  esac
+}
+
+# ---------------------------------------------------------------------------
+# spark route — capability, cost and escalation policy (#575)
+#
+# Sending every task to the strongest model wastes money and latency; sending
+# everything to the cheapest risks correctness. Neither is a policy. This makes
+# the tradeoff governed DATA: the code resolves classes, and the policy file
+# says what a class currently means.
+#
+# Nothing here names a provider model. Model ids, effort levels, availability
+# and prices are configuration that changes underneath a stable semantics; a
+# model id compiled into routing logic becomes product truth the day it ships
+# and a lie the day the model is retired.
+#
+# Two rules matter more than the arithmetic:
+#
+#   * The human class is not a strength tier. Escalation walks one rank at a
+#     time and STOPS at the decision boundary — a DECISION REQUIRED that could
+#     be escalated into an autonomous attempt is not a boundary at all.
+#   * A failed cheap attempt is still spend. The comparison that decides whether
+#     a two-stage route was worth it must carry the wasted attempt, or "start
+#     cheap and escalate" wins every argument by not counting its losses.
+ROUTE_POLICY_BASENAME="routing-classes.tsv"
+
+# route_policy_file — the project's override, else the shipped default. One
+# file, wholly replaced, because a half-overridden policy is harder to reason
+# about than a different one.
+route_policy_file() {
+  local top="$1"
+  if [ -n "$top" ] && [ -f "$top/.spark/$ROUTE_POLICY_BASENAME" ]; then
+    printf '%s' "$top/.spark/$ROUTE_POLICY_BASENAME"
+    return 0
+  fi
+  printf '%s' "$SPARK_ROOT/preferences/$ROUTE_POLICY_BASENAME"
+}
+
+route_rows() {  # route_rows <file> <kind> — comment-stripped records of one kind
+  awk -F'\t' -v want="$2" '/^[[:space:]]*(#|$)/ { next } $1 == want' "$1"
+}
+
+route_class_rank() { route_rows "$1" class | awk -F'\t' -v c="$2" '$2 == c { print $3; exit }'; }
+route_class_desc() { route_rows "$1" class | awk -F'\t' -v c="$2" '$2 == c { print $4; exit }'; }
+route_model()      { route_rows "$1" model | awk -F'\t' -v c="$2" '$2 == c { print $3; exit }'; }
+route_effort()     { route_rows "$1" model | awk -F'\t' -v c="$2" '$2 == c { print $4; exit }'; }
+
+# The rank reserved for the point where routing stops rather than strengthens.
+ROUTE_HUMAN_RANK=9
+
+rt_dir()    { printf '%s/.spark/routing' "$1"; }
+rt_run()    { printf '%s/.spark/routing/%s.tsv' "$1" "$2"; }
+rt_ledger() { printf '%s/.spark/routing/ledger.tsv' "$1"; }
+
+rt_get() {
+  [ -f "$1" ] || return 0
+  awk -F'\t' -v k="$2" '$1 == k { v = $2 } END { if (v != "") print v }' "$1"
+}
+
+cmd_route() {
+  local usage_line="usage: spark route [policy|select|escalate|attempt|benchmark] [--task <kind>] [--run <id>] [--reason <text>] [--outcome pass|fail] [--json] [--rebuild-cache]"
+  local action=""
+  case "${1:-}" in
+    policy|select|escalate|attempt|benchmark) action="$1"; shift ;;
+    *) action="policy" ;;
+  esac
+
+  local task="" run="" reason="" outcome="" json="" rebuild=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --task)    shift; task="${1:-}" ;;
+      --task=*)  task="${1#--task=}" ;;
+      --run)     shift; run="${1:-}" ;;
+      --run=*)   run="${1#--run=}" ;;
+      --reason)  shift; reason="${1:-}" ;;
+      --reason=*) reason="${1#--reason=}" ;;
+      --outcome) shift; outcome="${1:-}" ;;
+      --outcome=*) outcome="${1#--outcome=}" ;;
+      --json)    json=1 ;;
+      --rebuild-cache) rebuild=1 ;;
+      -h|--help) echo "$usage_line"; return 0 ;;
+      *) red "unknown option: $1"; echo "$usage_line"; return 1 ;;
+    esac
+    shift
+  done
+
+  local top policy
+  top="$(git_root)"
+  policy="$(route_policy_file "$top")"
+  if [ ! -f "$policy" ]; then
+    red "no routing policy at $policy"
+    return 1
+  fi
+
+  case "$action" in
+    policy)
+      if [ -n "$json" ]; then
+        local first=1 c r d
+        printf '{"policy":"%s","classes":[' "$policy"
+        while IFS=$'\t' read -r _ c r d; do
+          [ "$first" -eq 1 ] && first=0 || printf ','
+          printf '{"class":"%s","rank":%s,"model":"%s","effort":"%s"}' \
+            "$c" "$r" "$(route_model "$policy" "$c")" "$(route_effort "$policy" "$c")"
+        done < <(route_rows "$policy" class)
+        printf ']}\n'
+        return 0
+      fi
+      echo "Spark routing policy — $policy"
+      echo
+      printf '  %-16s %5s %-30s %s\n' class rank model effort
+      local c r d cm ce
+      while IFS=$'\t' read -r _ c r d; do
+        cm="$(route_model "$policy" "$c")"; ce="$(route_effort "$policy" "$c")"
+        # A class with no model row is not misconfigured — it is the boundary
+        # where routing stops, and printing an empty column would read as one.
+        if [ -z "$cm" ]; then cm="(not routed to a model)"; ce="—"; fi
+        printf '  %-16s %5s %-30s %s\n' "$c" "$r" "$cm" "$ce"
+      done < <(route_rows "$policy" class)
+      echo
+      echo "task routes"
+      route_rows "$policy" route | awk -F'\t' '{ printf "  %-20s %-16s %s\n", $2, $3, $4 }'
+      echo
+      echo "escalation rules (one rank at a time)"
+      route_rows "$policy" escalate | awk -F'\t' '{ printf "  %-16s -> %-16s %s\n", $2, $3, $4 }'
+      ;;
+
+    select)
+      if [ -z "$task" ]; then
+        red "spark route select needs --task <kind>"
+        echo "  known kinds: $(route_rows "$policy" route | awk -F'\t' '{ printf "%s%s", (n++ ? ", " : ""), $2 }')"
+        return 1
+      fi
+      local class why
+      class="$(route_rows "$policy" route | awk -F'\t' -v t="$task" '$2 == t { print $3; exit }')"
+      why="$(route_rows "$policy" route | awk -F'\t' -v t="$task" '$2 == t { print $4; exit }')"
+      if [ -z "$class" ]; then
+        red "no route declared for task kind '$task'"
+        echo "  known kinds: $(route_rows "$policy" route | awk -F'\t' '{ printf "%s%s", (n++ ? ", " : ""), $2 }')"
+        return 1
+      fi
+      local rank model effort
+      rank="$(route_class_rank "$policy" "$class")"
+      model="$(route_model "$policy" "$class")"
+      effort="$(route_effort "$policy" "$class")"
+
+      # The decision boundary is not a cheap tier to be upgraded past. Routing
+      # reports that a person owns this and declines to name a model at all.
+      if [ "$rank" = "$ROUTE_HUMAN_RANK" ]; then
+        if [ -n "$json" ]; then
+          printf '{"task":"%s","class":"%s","model":null,"effort":null,"reason":"%s","autonomous":false}\n' \
+            "$task" "$class" "$why"
+        else
+          yellow "DECISION REQUIRED — '$task' routes to the human class"
+          echo "  $why"
+          echo "  no model is selected: this boundary is not a capability tier to escalate past"
+        fi
+        return 5
+      fi
+
+      # Effort is a cache invalidator. Changing it mid-conversation silently
+      # rebuilds the prefix, which is a cost that does not appear on the line
+      # item that motivated the change.
+      local tfile prev
+      if [ -n "$run" ] && [ -n "$top" ]; then
+        tfile="$(tm_file "$top" "$run")"
+        prev="$(tm_get "$tfile" effort)"
+        if [ -n "$prev" ] && [ "$prev" != "$effort" ] && [ -z "$rebuild" ]; then
+          red "STOP — run '$run' is already at effort '$prev'; routing '$task' would move it to '$effort'"
+          echo "  changing effort mid-conversation invalidates the cached prefix."
+          echo "  route this between work units, or pass --rebuild-cache to accept the rebuild."
+          return 2
+        fi
+        mkdir -p "$(rt_dir "$top")" 2>/dev/null || true
+        {
+          printf 'class\t%s\n' "$class"
+          printf 'task\t%s\n' "$task"
+        } > "$(rt_run "$top" "$run")" 2>/dev/null || true
+        # The route and its reason belong in the run's telemetry, so cost and
+        # cache effect are read beside the decision that caused them.
+        "$SPARK_ROOT/bin/spark" telemetry record --run "$run" \
+          model="$model" effort="$effort" routing_reason="$why" >/dev/null 2>&1 || true
+      fi
+
+      if [ -n "$json" ]; then
+        printf '{"task":"%s","class":"%s","model":"%s","effort":"%s","reason":"%s","autonomous":true}\n' \
+          "$task" "$class" "$model" "$effort" "$why"
+      else
+        green "route: $task -> $class"
+        printf '  %-10s %s\n' model "$model"
+        printf '  %-10s %s\n' effort "$effort"
+        printf '  %-10s %s\n' reason "$why"
+        echo "  the cheapest adequate class for this kind of work; strength is bought deliberately"
+      fi
+      ;;
+
+    escalate)
+      if [ -z "$run" ]; then red "spark route escalate needs --run <id>"; return 1; fi
+      if [ -z "$reason" ]; then
+        red "escalation needs --reason: what evidence showed the cheaper path was insufficient"
+        yellow "  escalating without a recorded cause is just starting at the top one step later."
+        return 1
+      fi
+      [ -n "$top" ] || { red "spark route escalate needs a git repo"; return 1; }
+      local rfile from
+      rfile="$(rt_run "$top" "$run")"
+      from="$(rt_get "$rfile" class)"
+      if [ -z "$from" ]; then
+        red "run '$run' has no selected route to escalate from"
+        return 1
+      fi
+      local frank; frank="$(route_class_rank "$policy" "$from")"
+      if [ "$frank" = "$ROUTE_HUMAN_RANK" ]; then
+        red "STOP — run '$run' is at the human decision boundary"
+        echo "  a decision that belongs to a person is not escalated by spending more on a model"
+        return 5
+      fi
+      local to rule
+      to="$(route_rows "$policy" escalate | awk -F'\t' -v f="$from" '$2 == f { print $3; exit }')"
+      rule="$(route_rows "$policy" escalate | awk -F'\t' -v f="$from" '$2 == f { print $4; exit }')"
+      if [ -z "$to" ]; then
+        red "no escalation declared from '$from' — it is already the strongest routed class"
+        echo "  a run that cannot converge at the top class is a human decision, not a bigger model"
+        return 2
+      fi
+      local trank; trank="$(route_class_rank "$policy" "$to")"
+      if [ "$trank" = "$ROUTE_HUMAN_RANK" ]; then
+        red "STOP — escalation from '$from' reaches the human decision boundary"
+        echo "  the run stops here for a person; it does not attempt the decision autonomously"
+        return 5
+      fi
+      local model effort
+      model="$(route_model "$policy" "$to")"
+      effort="$(route_effort "$policy" "$to")"
+      {
+        printf 'class\t%s\n' "$to"
+        printf 'task\t%s\n' "$(rt_get "$rfile" task)"
+        printf 'escalated_from\t%s\n' "$from"
+        printf 'escalation_reason\t%s\n' "$reason"
+      } > "$rfile"
+      "$SPARK_ROOT/bin/spark" telemetry record --run "$run" \
+        model="$model" effort="$effort" routing_reason="escalated from $from: $reason" >/dev/null 2>&1 || true
+      if [ -n "$json" ]; then
+        printf '{"run":"%s","from":"%s","to":"%s","model":"%s","effort":"%s","reason":"%s"}\n' \
+          "$run" "$from" "$to" "$model" "$effort" "$reason"
+      else
+        yellow "ESCALATED — $from -> $to"
+        printf '  %-10s %s\n' rule "$rule"
+        printf '  %-10s %s\n' reason "$reason"
+        printf '  %-10s %s (%s)\n' now "$model" "$effort"
+      fi
+      ;;
+
+    attempt)
+      if [ -z "$run" ]; then red "spark route attempt needs --run <id>"; return 1; fi
+      case "$outcome" in
+        pass|fail) ;;
+        *) red "spark route attempt needs --outcome pass|fail"; return 1 ;;
+      esac
+      [ -n "$top" ] || { red "spark route attempt needs a git repo"; return 1; }
+      local rfile class efrom cost wall
+      rfile="$(rt_run "$top" "$run")"
+      class="$(rt_get "$rfile" class)"
+      [ -n "$class" ] || { red "run '$run' has no selected route"; return 1; }
+      efrom="$(rt_get "$rfile" escalated_from)"
+      # Cost and latency come from the run's telemetry — the routing ledger
+      # never re-measures what the run already recorded.
+      cost="$(tm_get "$(tm_file "$top" "$run")" cost_usd)"
+      wall="$(tm_get "$(tm_file "$top" "$run")" wall_seconds)"
+      mkdir -p "$(rt_dir "$top")" || { red "could not create $(rt_dir "$top")"; return 1; }
+      printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+        "$run" "$class" "$outcome" "${cost:-}" "${wall:-}" "${efrom:-}" >> "$(rt_ledger "$top")"
+      green "attempt recorded: $run $class $outcome (cost ${cost:-NOT ASSESSED}, wall ${wall:-NOT ASSESSED}s)"
+      ;;
+
+    benchmark)
+      [ -n "$top" ] || { red "spark route benchmark needs a git repo"; return 1; }
+      local ledger; ledger="$(rt_ledger "$top")"
+      if [ ! -f "$ledger" ]; then
+        yellow "no routing attempts recorded — nothing to compare"
+        return 0
+      fi
+      # Cost per COMPLETED task, not price per token: a cheap class that fails
+      # half its attempts is not cheap, and the failures are what make the
+      # difference visible.
+      local report
+      report="$(awk -F'\t' '
+        {
+          cls = $2; out = $3; cost = $4; wall = $5; from = $6
+          att[cls]++
+          if (cost != "") { csum[cls] += cost; chave[cls] = 1 }
+          if (wall != "") { wsum[cls] += wall }
+          if (out == "pass") ok[cls]++
+          if (from != "") {
+            path = from "->" cls
+            patt[path]++
+            if (cost != "") { pcost[path] += cost }
+            if (out == "pass") pok[path]++
+            wasted[path] = from
+          }
+          if (out == "fail" && cost != "") failcost[cls] += cost
+          order[cls] = 1
+        }
+        END {
+          for (c in order) {
+            printf "class\t%s\t%d\t%d\t%s\t%s\n", c, att[c], ok[c],
+              (chave[c] ? sprintf("%.4f", csum[c]) : ""), (ok[c] > 0 && chave[c] ? sprintf("%.4f", csum[c] / ok[c]) : "")
+          }
+          for (p in patt) {
+            split(p, parts, "->")
+            f = parts[1]
+            total = pcost[p] + failcost[f]
+            printf "path\t%s\t%d\t%d\t%.4f\t%s\n", p, patt[p], pok[p], total,
+              (pok[p] > 0 ? sprintf("%.4f", total / pok[p]) : "")
+          }
+        }
+      ' "$ledger" | LC_ALL=C sort)"
+
+      if [ -n "$json" ]; then
+        local first=1 kind name a s tot per
+        printf '{"rows":['
+        while IFS=$'\t' read -r kind name a s tot per; do
+          [ -n "$kind" ] || continue
+          [ "$first" -eq 1 ] && first=0 || printf ','
+          printf '{"kind":"%s","name":"%s","attempts":%s,"successes":%s,"cost":%s,"cost_per_completed":%s}' \
+            "$kind" "$name" "$a" "$s" "${tot:-null}" "${per:-null}"
+        done <<EOF
+$report
+EOF
+        printf ']}\n'
+        return 0
+      fi
+
+      echo "Spark routing benchmark — cost per COMPLETED task"
+      printf '  %-32s %9s %10s %10s %18s\n' route attempts successes cost 'cost/completed'
+      local kind name a s tot per
+      while IFS=$'\t' read -r kind name a s tot per; do
+        [ -n "$kind" ] || continue
+        printf '  %-32s %9s %10s %10s %18s\n' \
+          "$([ "$kind" = path ] && printf '%s (two-stage)' "$name" || printf '%s' "$name")" \
+          "$a" "$s" "${tot:-NOT ASSESSED}" "${per:-NOT ASSESSED}"
+      done <<EOF
+$report
+EOF
+      echo
+      echo "A two-stage route carries the cost of the cheap attempt that failed."
+      echo "Without that, starting cheap always looks cheaper than it was."
+      ;;
+    *)
+      red "unknown route action: $action"; echo "$usage_line"; return 1 ;;
   esac
 }
 
