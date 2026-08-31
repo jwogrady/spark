@@ -27,6 +27,12 @@
 # GitHub state, so its wall time is NOT reproducible and is reported as
 # observational. Each path's mode is determined by measurement — whether it
 # actually invoked gh — rather than by a hand-maintained list that could drift.
+#
+# COVERAGE. The command hot paths are measured here. The suite paths are measured
+# by the runner itself, which reports elapsed seconds and the slowest suites for
+# a full run and for a targeted subset — so they are not duplicated here. Exit
+# codes are ignored: this measures what a path COSTS, and a path that reports a
+# finding is not thereby slower.
 set -uo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -119,6 +125,7 @@ measure "brief --short"       "$SPARK" brief --short
 measure "footprint"           "$SPARK" footprint
 measure "governance"          "$SPARK" governance
 measure "governance validate" "$SPARK" governance validate
+measure "triage"              "$SPARK" triage
 measure "doctor"              "$SPARK" doctor
 if [ -n "$with_remote" ]; then
   measure "next"   "$SPARK" next
