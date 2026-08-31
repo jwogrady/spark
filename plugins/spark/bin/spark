@@ -915,37 +915,49 @@ cmd_doctor() {
   if [ -f "$stab" ]; then
     echo
     echo "CLI compatibility classification (VERBS vs cli-stability.tsv):"
-    local cls_ok=1 verb cls n rv
-    for verb in $(printf '%s\n' "$VERBS" | awk -F'|' 'NF{print $1}'); do
-      n="$(awk -F'\t' -v v="$verb" '/^[[:space:]]*(#|$)/ {next} $1 == v {c++} END {print c+0}' "$stab")"
-      if [ "$n" -eq 0 ]; then
-        red "  ✗ verb '$verb' ships with no compatibility classification"
-        errors=$((errors+1)); cls_ok=0; continue
-      fi
-      if [ "$n" -gt 1 ]; then
-        red "  ✗ verb '$verb' carries $n classifications — exactly one is required"
-        errors=$((errors+1)); cls_ok=0; continue
-      fi
-      cls="$(awk -F'\t' -v v="$verb" '/^[[:space:]]*(#|$)/ {next} $1 == v {print $2; exit}' "$stab")"
-      case "$cls" in
-        stable|compatible-with-migration|advisory|internal|experimental) ;;
-        unclassified)
-          red "  ✗ verb '$verb' is unclassified — it needs an explicit compatibility decision"
-          errors=$((errors+1)); cls_ok=0 ;;
-        *)
-          red "  ✗ verb '$verb' carries unknown class '$cls'"
-          errors=$((errors+1)); cls_ok=0 ;;
+    # ONE pass, not one per verb. The first version of this check spawned two
+    # awk processes for every shipped verb plus one per stability row — roughly
+    # ninety processes to answer a question the file can answer once (#609
+    # measured doctor at 937 externals, and this was a visible slice of them).
+    local cls_ok=1 kind subject detail
+    local cls_problems
+    cls_problems="$(VERB_LIST="$(printf '%s\n' "$VERBS" | awk -F'|' 'NF{print $1}')" \
+      awk -F'\t' '
+        BEGIN {
+          n = split(ENVIRON["VERB_LIST"], v, "\n")
+          for (i = 1; i <= n; i++) if (v[i] != "") { want[v[i]] = 1; ord[++m] = v[i] }
+        }
+        /^[[:space:]]*(#|$)/ { next }
+        NF >= 2 { cnt[$1]++; cls[$1] = $2 }
+        END {
+          for (i = 1; i <= m; i++) {
+            k = ord[i]
+            if (!(k in cnt))  { print "missing\t" k; continue }
+            if (cnt[k] > 1)   { print "dup\t" k "\t" cnt[k]; continue }
+            c = cls[k]
+            if (c == "unclassified") { print "unclassified\t" k; continue }
+            if (c != "stable" && c != "compatible-with-migration" && \
+                c != "advisory" && c != "internal" && c != "experimental")
+              print "unknown\t" k "\t" c
+          }
+          # A classification for a verb that no longer ships is stale data
+          # wearing the shape of a promise.
+          for (k in cnt) if (!(k in want)) print "stale\t" k
+        }
+      ' "$stab")"
+    while IFS=$'\t' read -r kind subject detail; do
+      [ -n "$kind" ] || continue
+      case "$kind" in
+        missing)      red "  ✗ verb '$subject' ships with no compatibility classification" ;;
+        dup)          red "  ✗ verb '$subject' carries $detail classifications — exactly one is required" ;;
+        unclassified) red "  ✗ verb '$subject' is unclassified — it needs an explicit compatibility decision" ;;
+        unknown)      red "  ✗ verb '$subject' carries unknown class '$detail'" ;;
+        stale)        red "  ✗ cli-stability.tsv classifies '$subject', which no longer ships" ;;
       esac
-    done
-    # A classification for a verb that no longer ships is stale data wearing the
-    # shape of a promise.
-    while IFS=$'\t' read -r rv _; do
-      case "$rv" in ''|'#'*) continue ;; esac
-      if ! printf '%s\n' "$VERBS" | awk -F'|' -v v="$rv" 'NF && $1 == v {f=1} END {exit !f}'; then
-        red "  ✗ cli-stability.tsv classifies '$rv', which no longer ships"
-        errors=$((errors+1)); cls_ok=0
-      fi
-    done < "$stab"
+      errors=$((errors+1)); cls_ok=0
+    done <<EOF
+$cls_problems
+EOF
     # The prose renders the data. Where they disagree, the prose is wrong.
     if [ -f "$SPARK_ROOT/docs/reference/stability.md" ]; then
       local doc_names tsv_stable
@@ -973,12 +985,17 @@ cmd_doctor() {
   if [ -f "$prefs" ] && [ -f "$prefdoc" ]; then
     echo
     echo "Preference-key vocabulary (defaults.json vs reference/engineering-preferences.md):"
-    local pk_ok=1 pk
+    # The reference is read ONCE and matched in the shell, rather than grepping
+    # the same file again per key (#609).
+    local pk_ok=1 pk prefdoc_body
+    prefdoc_body="$(cat "$prefdoc")"
     for pk in $(grep -o '"[a-z_.-]*":' "$prefs" | tr -d '":' | LC_ALL=C sort -u); do
-      if ! grep -q -- "$pk" "$prefdoc"; then
-        red "  ✗ preference key '$pk' ships but is absent from the reference vocabulary"
-        errors=$((errors+1)); pk_ok=0
-      fi
+      case "$prefdoc_body" in
+        *"$pk"*) ;;
+        *)
+          red "  ✗ preference key '$pk' ships but is absent from the reference vocabulary"
+          errors=$((errors+1)); pk_ok=0 ;;
+      esac
     done
     if [ "$pk_ok" -eq 1 ]; then
       green "  ✓ every shipped preference key appears in the reference vocabulary"

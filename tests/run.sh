@@ -17,13 +17,18 @@ fails=0 suites=0
 assert_pass=0 assert_fail=0
 as_json=""
 timings=""
+only=""
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --json) as_json=1 ;;
+    --json)   as_json=1 ;;
+    --only)   shift; only="${1:-}" ;;
+    --only=*) only="${1#--only=}" ;;
     -h|--help)
-      echo "usage: run.sh [--json]"
-      echo "  Runs every suite once and reports suites, assertions and per-suite seconds."
+      echo "usage: run.sh [--json] [--only <substring>]"
+      echo "  Runs suites once and reports suites, assertions and per-suite seconds."
+      echo "  --only runs the matching subset: the cheap targeted path for repair,"
+      echo "  as distinct from full certification."
       exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
@@ -41,8 +46,13 @@ run_start="$(now_s)"
 
 for suite in "$here"/test-*.sh; do
   [ -e "$suite" ] || { echo "no test suites found"; exit 1; }
-  suites=$((suites + 1))
   name="$(basename "$suite")"
+  # A targeted run is the repair path: cheap enough to use between changes,
+  # which is what keeps full certification for the boundary it belongs to.
+  if [ -n "$only" ]; then
+    case "$name" in *"$only"*) ;; *) continue ;; esac
+  fi
+  suites=$((suites + 1))
   echo "== $name"
   s0="$(now_s)"
   # The suite's output is streamed AND captured: the log stays readable while
@@ -71,10 +81,25 @@ fi
 
 elapsed=$(( $(now_s) - run_start ))
 
+# One invocation is one execution, however many summaries are read from it. That
+# is what lets run telemetry tell a single run with several projections apart
+# from several actual runs — the number below counts executions, never views.
+kind="full"; [ -n "$only" ] && kind="targeted"
+if [ -n "${SPARK_RUN_ID:-}" ]; then
+  spark_bin="$here/../plugins/spark/bin/spark"
+  if [ -x "$spark_bin" ]; then
+    field="full_suite_runs"; [ "$kind" = "targeted" ] && field="targeted_checks"
+    prior="$("$spark_bin" telemetry show --run "$SPARK_RUN_ID" --json 2>/dev/null \
+      | sed -n "s/.*\"$field\":\([0-9]*\).*/\1/p")"
+    case "$prior" in ''|*[!0-9]*) prior=0 ;; esac
+    "$spark_bin" telemetry record --run "$SPARK_RUN_ID" "$field=$((prior + 1))" >/dev/null 2>&1 || true
+  fi
+fi
+
 if [ -n "$as_json" ]; then
   echo
-  printf '{"suites":%s,"suites_failed":%s,"assertions_passed":%s,"assertions_failed":%s,"seconds":%s,"slowest":[' \
-    "$suites" "$fails" "$assert_pass" "$assert_fail" "$elapsed"
+  printf '{"kind":"%s","executions":1,"suites":%s,"suites_failed":%s,"assertions_passed":%s,"assertions_failed":%s,"seconds":%s,"slowest":[' \
+    "$kind" "$suites" "$fails" "$assert_pass" "$assert_fail" "$elapsed"
   printf '%s' "$timings" | LC_ALL=C sort -t'	' -k2,2nr | head -n 5 | awk -F'\t' '
     NF { printf "%s{\"suite\":\"%s\",\"seconds\":%s}", (n++ ? "," : ""), $1, $2 }'
   printf ']}\n'

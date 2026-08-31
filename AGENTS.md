@@ -140,7 +140,11 @@ issue PR → `master` (ADR-0027, and the delivery section of
    One run reports suites, assertion totals and elapsed seconds together, and
    `--json` adds the five slowest suites. **Never run it again to derive another
    summary of the same result** — a second projection must not cost a second
-   execution.
+   execution. Use `--only <substring>` for the cheap targeted path while
+   repairing, and reserve the full run for an intentional certification
+   boundary. `tests/bench.sh` records the hot-path baseline — wall time, external
+   processes, parser invocations and remote requests — so an optimization is
+   argued from two measurements rather than from an impression.
 7. Behavior changes ride your Conventional Commit types — Release Please builds
    `CHANGELOG.md` from them. Never hand-edit the changelog.
 

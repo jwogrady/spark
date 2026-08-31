@@ -1757,6 +1757,14 @@ so a workflow can export the id once instead of threading it through each call.
 `record`+`show` cycles against `TELEMETRY_OVERHEAD_MS` (default 400), exiting
 non-zero when over budget, in the same spirit as `footprint --timing`.
 
+`full_suite_runs` and `targeted_checks` have a producer: when `SPARK_RUN_ID` is
+set, the repository's test runner increments one of them per invocation — the
+full field for a whole run, the targeted field for a subset. **One invocation is
+one execution however many summaries are read from it**, so these fields
+distinguish a single run projected several ways from several actual runs, which
+is the difference a convergence budget needs in order to see repeated expensive
+verification for what it is.
+
 ### The field schema
 
 `run_id`, `attempt`, `trigger`, `pr`, `head_sha`, `actions_run`; `provider`,
