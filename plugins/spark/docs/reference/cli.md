@@ -2071,6 +2071,40 @@ becoming decoration:
    stand alone would have traded a large file for a duplication problem, which
    is the worse of the two.
 
+## `spark repo [status|bind|handoff] [--to <owner/name>] [--yes] [--json]`
+
+Reports the repository identity Spark's mutation authority is bound to, and
+performs an explicit handoff to another repository.
+
+Identity is built from canonical git facts — root, normalized origin locator,
+HEAD and branch — so an SSH and an HTTPS remote for the same repository compare
+equal, because they are one repository.
+
+| Action | What it does |
+|---|---|
+| `status` | The resolved identity and the binding; exits `4` when this repository is not the bound one |
+| `bind` | Records the binding for this project |
+| `handoff --to <owner/name> --yes` | Rebinds authority, re-resolving root, locator, HEAD and branch afterwards |
+
+### Discovery is not authorization
+
+Finding a prompt's issue numbers in another repository is evidence about what
+the prompt refers to. It is **not** permission to write there. The `PreToolUse`
+guard resolves the repository a command would actually change — through
+`git -C`, `--git-dir`, an absolute path, or `gh --repo` — and refuses a mutation
+aimed at any repository other than the bound one.
+
+It fails closed by recognising **read-only** shapes and treating everything else
+as mutation-capable: a deny-list of write verbs is only as complete as its
+author's imagination. Reads across repositories stay allowed, because evidence
+gathering is not mutation.
+
+`handoff` requires `--yes`. Without it the command refuses and says so —
+a rebind is a human act, and its absence is what allowed the original incident.
+
+This is an additional authority dimension, not a replacement: force-push and
+trunk-push protections are unchanged.
+
 ## `spark version`
 
 Prints the Spark plugin version, read from `.claude-plugin/plugin.json`.
