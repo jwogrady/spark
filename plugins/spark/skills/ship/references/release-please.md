@@ -13,7 +13,7 @@
 1. **Confirm the milestone is actually done** — zero open issues, validation
    green on trunk (the milestone gate posts exactly this readiness signal when
    configured). A docs-truth pass (`spark-audit` assess) belongs here: a
-   release publishes the repo's claims. This is also a natural provenance
+   release publishes the repo's claims. This is also a natural knowledge
    boundary (ADR-0028): would the milestone's outcome still be true and useful
    if this implementation disappeared? A "no" needs no ceremony; a "yes" hands
    the evidence to [`knowledge`](../../knowledge/SKILL.md) — once per

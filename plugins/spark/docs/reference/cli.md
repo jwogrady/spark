@@ -551,10 +551,10 @@ says it is. It recommends and routes; that is the whole of its authority.
 ## `spark hub [--set <owner/repo|url|none>]`
 
 Reports the memory hub this project declares — the one repository designated
-as the durable authority for its cross-project provenance — and the preference
+as the durable authority for its cross-project knowledge — and the preference
 tier the value came from. The model behind the pointer (hub/spoke ownership,
-the promotion chain, what may and may not live in a hub) is decided in
-ADR-0028; this verb only records and resolves the pointer.
+the knowledge-promotion chain, what may and may not live in a hub) is decided
+in ADR-0028; this verb only records and resolves the pointer.
 
 Bare, it resolves `project.memory-hub` through the normal three-tier
 preference resolution and prints one of four truthful states:

@@ -45,7 +45,7 @@ identically.
    - Anything reviewers should look at closely.
 6. **Report the PR URL** back to the user.
 7. **Ask the promotion question once.** Issue completion is a natural
-   provenance boundary (ADR-0028): would this work still be true and useful if
+   knowledge boundary (ADR-0028): would this work still be true and useful if
    the implementation disappeared and were rebuilt? A "no" needs no ceremony —
    the common case. A "yes" hands the evidence to
    [`knowledge`](../knowledge/SKILL.md), which classifies and promotes; ship

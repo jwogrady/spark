@@ -153,7 +153,7 @@ is treated as an explicit human re-set. See
 
 ### Cross-project memory
 One optional **project-tier** fact points at the repository that owns this
-project's cross-project provenance — the memory-hub/spoke model is decided in
+project's cross-project knowledge — the memory-hub/spoke model is decided in
 ADR-0028, not restated here.
 - `project.memory-hub` — a provider-neutral repository locator (`owner/repo`,
   a URL, or an scp-style git address), or the literal `none` to declare the
