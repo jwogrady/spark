@@ -85,6 +85,46 @@ fix	keep label names out of @csv on the created path	bug" \
 * keep label names out of [@tsv](https://github.com/tsv) on the created path ([f45426c](https://x/f45426c))" \
   "omission: fix: keep label names out of @csv on the created path"
 
+# --- #615: an AUTHOR-written Markdown link is part of the subject's identity.
+# The unwrap is scoped to Release Please's generated @mention/#ref decoration;
+# a general `[text](url)` unwrap erased authored links too, so a note that
+# DROPPED the link normalized equal to the subject and passed as a complete
+# match. The authored link now survives normalization, so a note missing it is
+# a true omission — and the finding names the subject with its link intact.
+check 1 "a note that drops an authored link is an omission" \
+"fix	update [operator guide](https://docs.example/good)	bug" \
+"## Bug Fixes
+* update operator guide ([abc](https://x/abc))" \
+  "omission: fix: update [operator guide](https://docs.example/good)"
+
+# --- #615: a note that REDIRECTS an authored link to a different destination is
+# not the same subject — a wrong doc/security/migration link must not pass as
+# truthful notes.
+check 1 "a note that changes an authored link destination is an omission" \
+"fix	update [operator guide](https://docs.example/good)	bug" \
+"## Bug Fixes
+* update [operator guide](https://docs.example/wrong) ([abc](https://x/abc))" \
+  "omission: fix: update [operator guide](https://docs.example/good)"
+
+# --- #615: narrowing the unwrap does not stop tolerating a faithfully-rendered
+# subject: the authored link preserved verbatim still matches.
+check 0 "a note that preserves the authored link passes" \
+"fix	update [operator guide](https://docs.example/good)	bug" \
+"## Bug Fixes
+* update [operator guide](https://docs.example/good) ([abc](https://x/abc))" \
+  "core subject-omission check passed"
+
+# --- #615: duplicate detection keys on the WHOLE authored link, not its visible
+# text alone. Two distinct changes whose link text matches but whose
+# destinations differ are not one bullet, and must not raise a false duplicate.
+check 0 "distinct authored links with equal text are not a duplicate" \
+"fix	see [guide](https://docs.example/a)	bug
+fix	see [guide](https://docs.example/b)	bug" \
+"## Bug Fixes
+* see [guide](https://docs.example/a) ([abc](https://x/abc))
+* see [guide](https://docs.example/b) ([def](https://x/def))" \
+  "core subject-omission check passed"
+
 # --- omission: a visible feat is missing from the notes.
 check 1 "missing feature flagged" \
 "feat	surface milestone-gated readiness	feature
