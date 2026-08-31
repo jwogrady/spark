@@ -2014,6 +2014,36 @@ the poll and unchanged counts and record the read as a remote request in the
 run's telemetry. A poll loop therefore appears as spend where `budget` already
 watches for it, rather than needing an alarm of its own.
 
+## Runtime layout and the extension boundary
+
+You do not need this to *use* Spark. You need it to add to it.
+
+```
+bin/spark      the dispatcher: the verb table, and the primitives every verb
+               needs — colour, git root, JSON validity, preferences resolution
+lib/<name>.sh  a domain whose helpers are used by no verb outside it
+```
+
+**There is no build step.** `lib/*.sh` is the shipped implementation, not a
+generated artifact, so source and behaviour cannot drift apart and there is
+nothing to regenerate after an edit.
+
+Executing `spark` loads only the module the chosen verb needs; **sourcing** it
+loads every module, so a consumer of the runtime never has to know which file
+owns which function.
+
+Two rules govern where new code goes, and both exist to stop a split from
+becoming decoration:
+
+1. **A module is earned, not declared.** It exists because a cluster of helpers
+   is genuinely used by one group of verbs and nothing else — a fact the
+   reference graph shows, not a directory someone thought looked tidy. A new
+   verb starts in the dispatcher and moves out when its helpers cluster.
+2. **One canonical implementation per fact.** A module may own a producer; it
+   may never restate one. A module that copied a shared primitive so it could
+   stand alone would have traded a large file for a duplication problem, which
+   is the worse of the two.
+
 ## `spark version`
 
 Prints the Spark plugin version, read from `.claude-plugin/plugin.json`.

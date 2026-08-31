@@ -207,3 +207,33 @@ gate_cap() {
   printf '{"data":{"repository":{"milestones":{"pageInfo":{"hasNextPage":%s},"nodes":[%s]},"marked":{"pageInfo":{"hasNextPage":%s},"nodes":[%s]}}}}' \
     "${MILESTONES_TRUNCATED:-false}" "$1" "${MARKED_TRUNCATED:-false}" "${2:-}"
 }
+
+# mutant_runtime <sed-expression> — a COMPLETE copy of the plugin whose shipped
+# shell sources have had the expression applied, echoing the path to its
+# bin/spark and setting MUTANT_CHANGED to 1 when something actually changed.
+#
+# The mutation is applied wherever the shipped source lives — the dispatcher and
+# every runtime module. A control that edited only bin/spark used to work by
+# accident and stopped discriminating the moment a domain moved into lib/,
+# silently passing while proving nothing. That is exactly the divergence between
+# a focused component and the assembled runtime that these controls exist to
+# catch, so the helper closes it rather than each suite having to remember.
+MUTANT_PATH=""
+MUTANT_CHANGED=0
+mutant_runtime() {
+  local expr="$1" dest="$WORK/mutant-plugin" f rel orig
+  rm -rf "$dest"
+  cp -r "$WORK/plugin" "$dest"
+  MUTANT_CHANGED=0
+  for f in "$dest/bin/spark" "$dest"/lib/*.sh; do
+    [ -f "$f" ] || continue
+    rel="${f#"$dest"/}"
+    orig="$WORK/plugin/$rel"
+    sed -i "$expr" "$f" 2>/dev/null || true
+    cmp -s "$f" "$orig" || MUTANT_CHANGED=1
+  done
+  chmod +x "$dest/bin/spark" 2>/dev/null || true
+  # Returned through globals, not stdout: a command substitution would run this
+  # in a subshell and MUTANT_CHANGED would never reach the caller.
+  MUTANT_PATH="$dest/bin/spark"
+}

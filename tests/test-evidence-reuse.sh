@@ -149,10 +149,9 @@ fi
 # --- MUTATION CONTROL --------------------------------------------------------
 # Stop noticing drift: serve every capture as if it were fresh. The staleness
 # fixture must go red — reuse without invalidation is the bug, not the feature.
-MUT="$WORK/plugin/bin/spark-mutant"
-sed 's|^  \[ "$2" = "$3" \] && return 0$|  return 0|' "$SPARK" > "$MUT"
-chmod +x "$MUT"
-if ! cmp -s "$SPARK" "$MUT"; then ok
+mutant_runtime 's|^  \[ "$2" = "$3" \] && return 0$|  return 0|'
+MUT="$MUTANT_PATH"
+if [ "$MUTANT_CHANGED" = "1" ]; then ok
 else bad "MUTATION control changed nothing — it proves nothing"; fi
 
 mgot=0
