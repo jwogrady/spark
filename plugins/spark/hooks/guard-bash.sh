@@ -360,4 +360,76 @@ while [ "$i" -lt "$n" ]; do
   i=$k
 done
 
+# --- Repository boundary (#623) ----------------------------------------------
+#
+# Discovery is not authorization. A session bound to one project once found a
+# prompt's issue numbers in a sibling repository and carried on writing there,
+# routing around the worktree boundary with `git -C` and absolute paths.
+#
+# The authority here is the RESOLVED REPOSITORY IDENTITY, not the spelling of a
+# command: `git -C`, `--git-dir` and a `gh --repo` write all reach a different
+# repository by different syntax, and comparing canonical locators covers them
+# together instead of chasing each form.
+#
+# It FAILS CLOSED by allow-listing reads rather than deny-listing writes. A
+# deny-list is only as complete as its author's imagination, and the one write
+# verb nobody thought of is exactly the one that crosses the boundary. Reading
+# another repository stays legitimate — evidence gathering is not mutation — so
+# recognised read-only commands pass untouched.
+guard_lib="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" 2>/dev/null && pwd || true)"
+if [ -n "${guard_lib:-}" ] && [ -f "$guard_lib/repository.sh" ]; then
+  # shellcheck source=/dev/null
+  . "$guard_lib/repository.sh"
+
+  guard_bound_locator() {
+    local top b
+    top="$(git rev-parse --show-toplevel 2>/dev/null)" || return 0
+    b="$(repo_bound_locator "$top")"
+    if [ -n "$b" ]; then printf '%s' "$b"; return 0; fi
+    repo_locator_normalize "$(git -C "$top" remote get-url origin 2>/dev/null || true)"
+  }
+
+  # Recognised read-only shapes. Anything not listed is treated as capable of
+  # mutation, because that is the safe direction to be wrong in.
+  guard_is_read_only() {
+    case "$1" in
+      *" -X POST"*|*" -X PATCH"*|*" -X PUT"*|*" -X DELETE"*|\
+      *" --method POST"*|*" --method PATCH"*|*" --method PUT"*|*" --method DELETE"*)
+        return 1 ;;
+    esac
+    case "$1" in
+      *" log"*|*" status"*|*" show "*|*" diff"*|*" rev-parse"*|*" ls-files"*|\
+      *" cat-file"*|*" describe"*|*" remote -v"*|*" config --get"*|*" rev-list"*|\
+      *" for-each-ref"*|*" ls-remote"*|*" blame"*|*" shortlog"*)
+        return 0 ;;
+      *"pr list"*|*"pr view"*|*"pr checks"*|*"pr diff"*|*"issue list"*|*"issue view"*|\
+      *"repo view"*|*"release list"*|*"release view"*|*"label list"*|*"run list"*|\
+      *"run view"*|*"search "*|*"gh api "*)
+        return 0 ;;
+    esac
+    return 1
+  }
+
+  guard_target_locator=""
+  guard_path_target="$(repo_target_of_command "$cmd" 2>/dev/null || true)"
+  if [ -n "${guard_path_target:-}" ]; then
+    guard_target_locator="$(repo_locator_normalize "$(git -C "$guard_path_target" remote get-url origin 2>/dev/null || true)")"
+  fi
+  if [ -z "$guard_target_locator" ]; then
+    guard_gh_target="$(repo_gh_repo_of_command "$cmd" 2>/dev/null || true)"
+    case "${guard_gh_target:-}" in
+      "") ;;
+      */*/*) guard_target_locator="$guard_gh_target" ;;
+      */*)   guard_target_locator="github.com/$guard_gh_target" ;;
+    esac
+  fi
+
+  if [ -n "$guard_target_locator" ] && ! guard_is_read_only "$cmd"; then
+    guard_bound="$(guard_bound_locator)"
+    if [ -n "$guard_bound" ] && [ "$guard_bound" != "$guard_target_locator" ]; then
+      block "repository boundary: this would change $guard_target_locator, but mutation authority is bound to $guard_bound. Finding a prompt's objects in another repository is evidence about what the prompt means, never permission to write there. Reads across repositories are allowed; if a write is genuinely intended, hand off explicitly with 'spark repo handoff --to <owner/name> --yes'."
+    fi
+  fi
+fi
+
 exit 0

@@ -238,7 +238,9 @@ mutant_runtime() {
   rm -rf "$dest"
   cp -r "$src" "$dest"
   MUTANT_CHANGED=0
-  for f in "$dest/bin/spark" "$dest"/lib/*.sh; do
+  # Hooks are shipped source too: a control that mutated only bin/ and lib/
+  # would silently stop discriminating for anything enforced in a hook.
+  for f in "$dest/bin/spark" "$dest"/lib/*.sh "$dest"/hooks/*.sh; do
     [ -f "$f" ] || continue
     rel="${f#"$dest"/}"
     orig="$src/$rel"

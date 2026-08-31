@@ -62,7 +62,7 @@ SPARK_LOADED_MODULES=""
 # The module set is DECLARED, not globbed. A glob over a missing lib/ matches
 # nothing and reports success, so an absent runtime would look like a runtime
 # with no modules — the one failure that must never pass quietly.
-SPARK_MODULES="execution planning"
+SPARK_MODULES="execution planning repository"
 
 # spark_module_for <verb> — the module owning a verb, or empty for a verb the
 # dispatcher implements itself.
@@ -70,6 +70,7 @@ spark_module_for() {
   case "$1" in
     telemetry|budget|evidence|route|ci) printf 'execution' ;;
     plan) printf 'planning' ;;
+    repo) printf 'repository' ;;
   esac
 }
 
@@ -172,6 +173,7 @@ triage|cmd_triage|Establish what is true about an existing repository, read-only
 reconcile|cmd_reconcile|Turn the Triage evidence into an approval-gated reconciliation slate; proposes, never applies
 course|cmd_course|Derive which objective is coherent to pursue next; read-only, recommends and routes
 next|cmd_next|Select the next eligible milestone issue from live GitHub metadata
+repo|cmd_repo|Show the bound repository identity, or hand mutation authority to another repository
 help|usage|Show this help'
 
 usage() {
