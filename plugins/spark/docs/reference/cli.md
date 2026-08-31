@@ -1716,8 +1716,11 @@ Measures Spark's context footprint — the bytes each always-loaded surface
 (marketplace catalog, skill descriptions, hook output) costs a session — and
 reports per surface, with `--json` for the machine-readable shape. `--timing`
 is the opt-in hard latency gate: it measures the hot paths (the PreToolUse
-guard, `brief --short`) against their budgets and exits non-zero when one is
-exceeded. Doctor itself runs no timing — the aggregate context-footprint
+guard, `brief --short`, `doctor`, and `governance validate`) against their
+budgets and exits non-zero when one is exceeded. `governance validate` is gated
+because an autonomous loop calls it repeatedly, and a path nobody measures is a
+path nobody notices getting slower; its budget carries deliberate headroom over
+the measured figure rather than pinning today's number as a target. Doctor itself runs no timing — the aggregate context-footprint
 total it reports is advisory (warn-only), and this gate is the only latency
 enforcement.
 
