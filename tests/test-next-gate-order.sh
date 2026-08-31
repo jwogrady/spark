@@ -157,9 +157,11 @@ esac
 #
 # Reintroduce direct-children-only projection by removing the recursion, on a
 # copy of the real script. The nested fixture must then fail.
-mutant1="$WORK/mutant-nested.sh"
-sed 's|if (isparent\[c\]) walk(c); else print c|print c|' "$script" > "$mutant1"
-if ! cmp -s "$script" "$mutant1"; then ok; else bad "mutation 1 changed nothing — the control proves nothing"; fi
+# A complete plugin copy: a lone binary sourced from elsewhere would resolve
+# its runtime modules against the wrong root.
+mutant_runtime 's|if (isparent\[c\]) walk(c); else print c|print c|'
+mutant1="$MUTANT_PATH"
+if [ "$MUTANT_CHANGED" = "1" ]; then ok; else bad "mutation 1 changed nothing — the control proves nothing"; fi
 
 m1_out="$(bash -c '. "$1" >/dev/null 2>&1; suborder_of "$2" "$3" 900 | tr "\n" " "' \
   _ "$mutant1" "$NESTED" "$MS" 2>/dev/null | sed 's/ $//')"
@@ -174,11 +176,10 @@ assert_eq "mutation 1: direct-child-only projection returns the containers, not 
 #
 # Restore the priority-first sort key, again on a copy of the real script. The
 # flat fixture must then select the P1 over the earlier-positioned P2.
-mutant2="$WORK/mutant-priority.sh"
 # `%` as the delimiter: the key itself is `|`-separated, so `|` cannot be one.
-sed 's%cand="${cand}${rorder}|${rprio}|${rnum}|%cand="${cand}${rprio}|${rorder}|${rnum}|%' \
-  "$script" > "$mutant2"
-if ! cmp -s "$script" "$mutant2"; then ok; else bad "mutation 2 changed nothing — the control proves nothing"; fi
+mutant_runtime 's%cand="${cand}${rorder}|${rprio}|${rnum}|%cand="${cand}${rprio}|${rorder}|${rnum}|%'
+mutant2="$MUTANT_PATH"
+if [ "$MUTANT_CHANGED" = "1" ]; then ok; else bad "mutation 2 changed nothing — the control proves nothing"; fi
 
 m2_out="$(bash -c '. "$1" >/dev/null 2>&1; printf "%s" "$2" | next_select 2>&1' \
   _ "$mutant2" "$FLAT_EV2" 2>/dev/null)"

@@ -152,6 +152,15 @@ There is no build step or package manager — this repo is Bash plus Markdown.
 The validation gates are `spark doctor`, `bash -n`, and the behavioral suites
 under `tests/`.
 
+The core runtime is `plugins/spark/bin/spark` (the dispatcher and the primitives
+every verb needs) plus `plugins/spark/lib/*.sh` (a domain whose helpers no other
+verb uses). Executing loads only the selected verb's module; sourcing loads all
+of them. `lib/*.sh` is shipped source, not generated — there is still no build
+step. Add a new verb to the dispatcher and move it into a module when its
+helpers genuinely cluster; never restate a shared primitive to let a module
+stand alone. `tests/structure.sh` reports the reference graph these decisions
+are made from.
+
 ## Coding Standards
 
 - Scripts are POSIX-friendly Bash, zero runtime dependencies — they must work in

@@ -234,10 +234,9 @@ fi
 # --- MUTATION CONTROL --------------------------------------------------------
 # Remove the schema allowlist — the one guard standing between the telemetry
 # stream and a pasted transcript. The leak fixture must go red.
-MUT="$WORK/plugin/bin/spark-mutant"
-sed 's|if ! tm_is_key "$key"; then|if false; then|' "$SPARK" > "$MUT"
-chmod +x "$MUT"
-if ! cmp -s "$SPARK" "$MUT"; then ok
+mutant_runtime 's|if ! tm_is_key "$key"; then|if false; then|'
+MUT="$MUTANT_PATH"
+if [ "$MUTANT_CHANGED" = "1" ]; then ok
 else bad "MUTATION control changed nothing — it proves nothing"; fi
 
 if "$MUT" telemetry record --run mut transcript=hello >/dev/null 2>&1; then ok

@@ -168,10 +168,9 @@ assert_contains "including the model it names"           "some-other-model" "$OV
 # Stop carrying the failed attempt into the two-stage total. The economics
 # fixture must go red: without it, starting cheap always looks cheaper.
 rm -f "$WORK/proj/.spark/routing-classes.tsv"
-MUT="$WORK/plugin/bin/spark-mutant"
-sed 's|total = pcost\[p\] + failcost\[f\]|total = pcost[p]|' "$SPARK" > "$MUT"
-chmod +x "$MUT"
-if ! cmp -s "$SPARK" "$MUT"; then ok
+mutant_runtime 's|total = pcost\[p\] + failcost\[f\]|total = pcost[p]|'
+MUT="$MUTANT_PATH"
+if [ "$MUTANT_CHANGED" = "1" ]; then ok
 else bad "MUTATION control changed nothing — it proves nothing"; fi
 
 MB="$("$MUT" route benchmark)"

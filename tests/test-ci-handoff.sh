@@ -191,10 +191,9 @@ fi
 # Stop comparing against the recorded snapshot, so every read looks like a
 # transition. The no-transition fixture must go red — reporting news where
 # there is none is precisely what makes a polling loop feel productive.
-MUT="$WORK/plugin/bin/spark-mutant"
-sed 's|if \[ "$newdigest" = "$civ_digest" \]; then|if false; then|' "$SPARK" > "$MUT"
-chmod +x "$MUT"
-if ! cmp -s "$SPARK" "$MUT"; then ok
+mutant_runtime 's|if \[ "$newdigest" = "$civ_digest" \]; then|if false; then|'
+MUT="$MUTANT_PATH"
+if [ "$MUTANT_CHANGED" = "1" ]; then ok
 else bad "MUTATION control changed nothing — it proves nothing"; fi
 
 mgot=0

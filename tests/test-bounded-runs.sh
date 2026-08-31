@@ -172,10 +172,9 @@ fi
 # --- MUTATION CONTROL --------------------------------------------------------
 # Remove the escalation: let a stalled run keep buying the same verification.
 # The no-progress fixture must go red — that boundary is the whole issue.
-MUT="$WORK/plugin/bin/spark-mutant"
-sed 's|if \[ "${bgv_no_progress_runs}" -gt "${bgv_max_no_progress:-$BUDGET_DEFAULT_NO_PROGRESS}" \]; then|if false; then|' "$SPARK" > "$MUT"
-chmod +x "$MUT"
-if ! cmp -s "$SPARK" "$MUT"; then ok
+mutant_runtime 's|if \[ "${bgv_no_progress_runs}" -gt "${bgv_max_no_progress:-$BUDGET_DEFAULT_NO_PROGRESS}" \]; then|if false; then|'
+MUT="$MUTANT_PATH"
+if [ "$MUTANT_CHANGED" = "1" ]; then ok
 else bad "MUTATION control changed nothing — it proves nothing"; fi
 
 "$SPARK" budget declare --run m1 --convergence "green" --max-no-progress 1 >/dev/null

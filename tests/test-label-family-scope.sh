@@ -222,9 +222,11 @@ esac
 # --- MUTATION CONTROL --------------------------------------------------------
 # Restore whole-set replacement inside the one producer: stop preserving the
 # live labels the plan does not own. The regression fixture must go red.
-MUT="$WORK/mutant-spark"
-sed 's|else if (!owned \&\& !(l in art)) print l|else if (0) print l|' "$SPARK" > "$MUT"
-if ! cmp -s "$SPARK" "$MUT"; then ok
+# The mutant is a COMPLETE plugin copy: sourcing a lone binary from outside the
+# plugin tree would resolve its runtime modules to the wrong root.
+mutant_runtime 's|else if (!owned \&\& !(l in art)) print l|else if (0) print l|'
+MUT="$MUTANT_PATH"
+if [ "$MUTANT_CHANGED" = "1" ]; then ok
 else bad "MUTATION control changed nothing — it proves nothing"; fi
 mtarget="$(bash -c '. "$1"; plan_label_scope "$2" "$3" "$4" target' _ "$MUT" "$model" "$BS_PLAN" "$BS_LIVE")"
 case $'\n'"$mtarget"$'\n' in
