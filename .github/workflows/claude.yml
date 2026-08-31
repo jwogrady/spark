@@ -81,7 +81,6 @@ jobs:
       contents: read
       issues: write
       pull-requests: read
-      id-token: write
     steps:
       - name: Checkout PR head (read-only, no persisted credential)
         if: needs.resolve.outputs.is_pr == 'true'
@@ -93,6 +92,12 @@ jobs:
       - name: Run Claude Code
         uses: anthropics/claude-code-action@v1
         with:
+          # Pin the action to the RESTRICTED workflow token. Without this the v1
+          # action requests an OIDC token and exchanges it with Anthropic for a
+          # GitHub App token defaulting to contents/pull_requests/issues WRITE —
+          # a second, write-capable credential this lane must never hold. The
+          # job also drops id-token: write so the OIDC exchange cannot run.
+          github_token: ${{ github.token }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
             You are woken by a trusted human @claude mention in the Spark
@@ -114,17 +119,12 @@ jobs:
           set -euo pipefail
           git add -A
           git diff --binary "$HEAD_SHA" > "$RUNNER_TEMP/change.patch" || true
-          if [ -s "$RUNNER_TEMP/change.patch" ]; then
-            sha256sum "$RUNNER_TEMP/change.patch" | awk '{print $1}' > "$RUNNER_TEMP/change.patch.sha256"
-          fi
       - name: Upload change artifact
         if: needs.resolve.outputs.is_pr == 'true' && needs.resolve.outputs.publication_authorized == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: claude-change
-          path: |
-            ${{ runner.temp }}/change.patch
-            ${{ runner.temp }}/change.patch.sha256
+          path: ${{ runner.temp }}/change.patch
           if-no-files-found: ignore
           retention-days: 1
 
@@ -158,7 +158,10 @@ jobs:
       - name: Validate and publish
         env:
           CTX_REPO: ${{ github.repository }}
-          CTX_PR: ${{ needs.resolve.outputs.pr_number }}
+          # From the EVENT, not the resolver — so the publisher's PR-number
+          # check compares two independent producers (event vs resolved API),
+          # and cannot be fooled by resolver drift where both sides agree.
+          CTX_PR: ${{ github.event.issue.number }}
           REPO: ${{ needs.resolve.outputs.repository }}
           PR_NUMBER: ${{ needs.resolve.outputs.pr_number }}
           HEAD_REPO: ${{ needs.resolve.outputs.head_repo }}

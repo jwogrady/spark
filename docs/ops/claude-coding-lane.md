@@ -49,6 +49,7 @@ These are absences of capability, not promises of good behaviour.
 |---|---|
 | **Hold the deploy key** | The key is referenced only in the publisher job; Claude's job never receives it. |
 | **Push directly** | Claude's job has `contents: read` and checks out with `persist-credentials: false` — there is no write credential in the runner. |
+| **Mint a second write token** | `anthropics/claude-code-action@v1`, given no `github_token`, requests an OIDC token and exchanges it with Anthropic for a GitHub App token that defaults to `contents`/`pull_requests` **write**. The workflow forecloses this: it passes the restricted `${{ github.token }}` explicitly, so the action uses that read-only token, and the job drops `id-token: write` so the OIDC exchange cannot run at all. Anthropic auth still uses `CLAUDE_CODE_OAUTH_TOKEN`, not workload identity. |
 | **Cannot merge** | The only write credential in the whole lane is an SSH deploy key. A deploy key authenticates Git transport only; it cannot authenticate to GitHub's REST or GraphQL API, and the merge endpoints live only there. No job holds a token that can merge. |
 | **Publish to `master`** | The publisher pushes only the resolved feature ref, and the `spark-trunk` ruleset independently protects the default branch. The default branch can never be the publication target. |
 | **Change workflow or guardrail files** | The publisher rejects any patch that touches `.github/workflows/**` or the lane's own `.github/scripts/claude-lane/**` helpers, by the resulting Git tree's paths and modes — before it pushes. |

@@ -60,6 +60,8 @@ assert_contains "a refspec-tricked head ref refuses" \
   "refused:malformed-head-ref" "$(cl_resolve_publication true a/b a/b 'feat/x:refs/heads/master' master 0123456789abcdef0123456789abcdef01234567)"
 assert_contains "incomplete identity refuses" \
   "refused:incomplete-identity" "$(cl_resolve_publication true '' a/b feat/x master 0123456789abcdef0123456789abcdef01234567)"
+assert_contains "a missing default_branch fails closed" \
+  "refused:incomplete-identity" "$(cl_resolve_publication true a/b a/b feat/x '' 0123456789abcdef0123456789abcdef01234567)"
 
 # cl_check_identity: the publisher's independent second gate.
 if cl_check_identity a/b a/b 5 5 a/b feat/x master; then ok; else bad "matching identity must pass"; fi
@@ -67,6 +69,10 @@ assert_contains "a swapped repo is caught at publish" \
   "identity:repo-mismatch" "$(cl_check_identity a/b x/y 5 5 a/b feat/x master 2>&1 || true)"
 assert_contains "a fork head is caught at publish too" \
   "identity:fork-head" "$(cl_check_identity a/b a/b 5 5 x/y feat/x master 2>&1 || true)"
+assert_contains "the publisher fails closed on a missing default_branch" \
+  "identity:no-default-branch" "$(cl_check_identity a/b a/b 5 5 a/b feat/x '' 2>&1 || true)"
+assert_contains "an independent PR-number mismatch is caught" \
+  "identity:pr-mismatch" "$(cl_check_identity a/b a/b 5 6 a/b feat/x master 2>&1 || true)"
 
 # cl_check_stale_head: fresh passes, moved refuses.
 if cl_check_stale_head abc abc; then ok; else bad "a fresh head must pass"; fi
@@ -170,6 +176,21 @@ PY
   case "$CLAUDE_TXT" in *CLAUDE_PUBLISH_DEPLOY_KEY*) bad "the deploy key must never be referenced in Claude's job" ;; *) ok ;; esac
   assert_contains "Claude's checkout persists no credential" "persist-credentials" "$CLAUDE_TXT"
 
+  # -- the SECOND credential authority. Read-only job permissions are NOT enough:
+  # claude-code-action@v1, given no github_token, requests an OIDC token and
+  # exchanges it for a GitHub App token defaulting to contents/pull_requests
+  # WRITE. So the action must be pinned to the restricted workflow token, and the
+  # job must not grant id-token: write (which is what enables the OIDC exchange).
+  WFBODY="$(cat "$WF")"
+  assert_contains "the Claude action is pinned to the restricted workflow token" \
+    'github_token: ${{ github.token }}' "$WFBODY"
+  case "$CP" in *"('id-token', 'write')"*) bad "id-token: write lets the action mint its default write-capable App token via OIDC" ;; *) ok ;; esac
+  # No alternate repository-write bearer credential: the only secrets in Claude's
+  # job are the Anthropic OAuth token; the GitHub credential is the read-only
+  # workflow token.
+  case "$CLAUDE_TXT" in *secrets.CLAUDE_CODE_OAUTH_TOKEN*) ok ;; *) bad "Claude should authenticate to Anthropic via the OAuth token" ;; esac
+  case "$CLAUDE_TXT" in *PAT*|*PERSONAL*|*secrets.GH_TOKEN*|*secrets.GITHUB_PAT*) bad "no alternate write bearer credential belongs in Claude's job" ;; *) ok ;; esac
+
   # -- the publisher is the ONLY writer path, and holds no contents: write token
   PP="$(pyq 'sorted((jobs["publish"].get("permissions") or {}).items())')"
   case "$PP" in *"('contents', 'write')"*) bad "the publisher's GITHUB_TOKEN must not hold contents: write; publication is via the deploy key" ;; *) ok ;; esac
@@ -177,6 +198,13 @@ PY
   assert_contains "the publisher alone references the deploy-key secret" "CLAUDE_PUBLISH_DEPLOY_KEY" "$PUB_TXT"
   assert_contains "the publisher runs trusted default-branch code" "trusted/.github/scripts/claude-lane/publish.sh" "$PUB_TXT"
   assert_contains "the publisher gates on publication_authorized" "publication_authorized" "$PUB_TXT"
+  # -- CTX_PR comes from the EVENT, independent of the resolver, so the
+  # publisher's PR-number recheck compares two producers, not one with itself.
+  assert_contains "CTX_PR is sourced from the event, independent of the resolver" \
+    'CTX_PR: ${{ github.event.issue.number }}' "$WFBODY"
+  # -- the unverified patch digest is gone: a digest by the same untrusted
+  # producer proves nothing, and the publisher never checked it.
+  case "$WFBODY" in *change.patch.sha256*) bad "the unused patch digest must be removed — it establishes no independent property" ;; *) ok ;; esac
 
   # -- one production reviewer: no OTHER workflow reviews every PR automatically
   autoreviewers=0
@@ -223,6 +251,17 @@ if [ "$have_py" -eq 1 ]; then
   case "$base_if" in *issue.author_association*) bad "real gate already carries the bypass" ;; *) ok ;; esac
   case "$mut_if" in *issue.author_association*) ok ;; *) bad "association mutation control did not inject the bypass" ;; esac
 fi
+
+# (4) Remove the explicit github_token pin => the second-token assertion flips.
+real_pin="$(cat "$WF")"
+mut_pin="$(printf '%s\n' "$real_pin" | grep -v 'github_token: ')"
+case "$real_pin" in *'github_token: ${{ github.token }}'*) ok ;; *) bad "the real workflow must pin github_token" ;; esac
+case "$mut_pin" in *'github_token: ${{ github.token }}'*) bad "github_token mutation control did not remove the pin" ;; *) ok ;; esac
+
+# (5) Source CTX_PR from the resolver instead of the event => independence lost.
+mut_ctx="$(printf '%s\n' "$real_pin" | sed 's/CTX_PR: ${{ github.event.issue.number }}/CTX_PR: ${{ needs.resolve.outputs.pr_number }}/')"
+case "$real_pin" in *'CTX_PR: ${{ github.event.issue.number }}'*) ok ;; *) bad "the real workflow must source CTX_PR from the event" ;; esac
+case "$mut_ctx" in *'CTX_PR: ${{ github.event.issue.number }}'*) bad "CTX_PR mutation control did not change the source" ;; *) ok ;; esac
 
 # ============================================================================
 # OPERATOR DOCUMENTATION — truthful boundary

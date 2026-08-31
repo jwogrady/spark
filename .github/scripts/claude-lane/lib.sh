@@ -22,7 +22,10 @@ cl_resolve_publication() {
   local is_pr="$1" head_repo="$2" base_repo="$3" head_ref="$4" default_branch="$5" head_sha="$6"
 
   [ "$is_pr" = "true" ]  || { echo "refused:not-a-pr"; return 1; }
-  [ -n "$head_repo" ] && [ -n "$head_ref" ] && [ -n "$head_sha" ] && [ -n "$base_repo" ] \
+  # default_branch is required identity: without it the head_ref != default_branch
+  # check below cannot prove the target is not the default branch, so a missing
+  # value must refuse rather than pass by vacuous comparison.
+  [ -n "$head_repo" ] && [ -n "$head_ref" ] && [ -n "$head_sha" ] && [ -n "$base_repo" ] && [ -n "$default_branch" ] \
     || { echo "refused:incomplete-identity"; return 1; }
 
   # A head SHA is 40 (sha1) or 64 (sha256) lowercase hex. Anything else is a
@@ -58,6 +61,7 @@ cl_check_identity() {
   [ -n "$pr" ]   && [ "$pr" = "$xpr" ]           || { echo "identity:pr-mismatch";     return 1; }
   [ "$head_repo" = "$repo" ]                      || { echo "identity:fork-head";       return 1; }
   [ -n "$head_ref" ]                             || { echo "identity:no-head-ref";     return 1; }
+  [ -n "$default_branch" ]                       || { echo "identity:no-default-branch"; return 1; }
   [ "$head_ref" != "$default_branch" ]           || { echo "identity:head-is-default"; return 1; }
   return 0
 }
