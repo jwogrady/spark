@@ -121,18 +121,27 @@ has_feature_label() { # has_feature_label <comma-separated-labels>
 # normalized subject.
 #
 # notes_normalize: lowercase; drop linkified refs `([x](url))`; linkified
-# `[#12](url)` -> `#12`; UNWRAP any remaining inline link `[text](url)` to its
-# text; drop trailing `, closes …` metadata; drop bare `(#N)` refs (anywhere —
-# conventional-changelog linkifies mid-subject refs too); squeeze whitespace.
+# `[#12](url)` -> `#12`; unwrap a generated `@mention` autolink `[@user](url)`
+# -> `@user`; drop trailing `, closes …` metadata; drop bare `(#N)` refs
+# (anywhere — conventional-changelog linkifies mid-subject refs too); squeeze
+# whitespace.
 #
-# The general unwrap exists because Release Please linkifies more than refs. A
+# The mention unwrap exists because Release Please linkifies more than refs. A
 # subject containing `@tsv` renders as `[@tsv](https://github.com/tsv)`, so the
 # bullet and the commit subject stopped being equal and a present entry was
 # reported as an OMISSION — a blocking finding, on a release whose notes were
 # in fact complete. A false red is worse here than a missed one: the operator
 # is told to reconcile something that needs no reconciling, and learns to ship
-# past the colour. Any autolinked token has the same shape, so the rule is
-# general rather than a special case for mentions. `--keep-scope` skips the leading `**scope:** ` strip —
+# past the colour.
+#
+# The unwrap is scoped to the decoration Release Please GENERATES — ref
+# autolinks (above) and `@mention` autolinks — and is deliberately NOT a general
+# `[text](url)` unwrap. A general unwrap also erased AUTHOR-written links from
+# the commit subject, so a note that dropped that link, or pointed it somewhere
+# else, normalized equal to the subject and passed as a complete match (#615).
+# An author's link is part of the subject's identity; only generated token
+# decoration is folded away, and a `@`-prefixed link text is the reliable signal
+# for it. `--keep-scope` skips the leading `**scope:** ` strip —
 # duplicate detection (below) needs scope kept, since two commits scoped to
 # different components ("**docs:** add examples" / "**cli:** add examples")
 # are genuinely different changes that happen to share description text; only
@@ -144,7 +153,7 @@ notes_normalize() {
   out="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E \
     -e 's/\(\[[^]]*\]\([^)]*\)\)//g' \
     -e 's/\[(#[0-9]+)\]\([^)]*\)/\1/g' \
-    -e 's/\[([^]]*)\]\([^)]*\)/\1/g' \
+    -e 's/\[(@[^]]*)\]\([^)]*\)/\1/g' \
     -e 's/,? *closes .*$//' \
     -e 's/\(#[0-9]+\)//g')"
   [ -n "$keep_scope" ] || out="$(printf '%s' "$out" | sed -E 's/^\*\*[^*]+\*\* *//')"
