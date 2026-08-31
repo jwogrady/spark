@@ -156,6 +156,17 @@ inspection is never recorded automatically — the `--set` is the human's call.
 The existing-repository entry motion, first arrow only: **establish what is true,
 read-only, and stop before anything mutates.**
 
+Read-only means read-only at the repository boundary. A project's own validation
+command is treated as **mutation-capable** until observed otherwise — a script
+named `validate`, `test`, `build`, `lint` or `check` says nothing about its side
+effects, and one found in the field ran a build that rewrote a tracked file. Such
+a command is therefore never run in place: it runs in a disposable worktree and
+the source is proven unchanged afterwards, covering refs, the index, and
+untracked output as well as tracked content. Where that isolation cannot be
+established the result is reported **NOT ASSESSED with the risk named**, never
+run anyway. A genuine failure from a safe command remains ordinary evidence and
+is not hidden by the rule.
+
 ```
 existing repository
   → establish truth read-only
