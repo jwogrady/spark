@@ -55,6 +55,32 @@ into the spoke, and a project with no hub (or an explicit `none`) is simply
 standalone. See (developer-only)
 [ADR-0028 — cross-project memory hubs](https://github.com/jwogrady/spark/blob/master/docs/adr/0028-cross-project-memory-hubs.md).
 
+### provenance
+
+The change-over-time record: **how** the current state came to be. Owned by Git
+and GitHub — commits, PRs, issues, releases, tags — and *cited* from
+current-state documents, never transcribed into them. Repository code and docs
+own current state and durable meaning; a second maintained account of the same
+chronology is **provenance leakage**, a finding class `audit` reports in both
+modes. `provenance` names change history alone: promoting durable meaning is
+[knowledge promotion](#knowledge-promotion). See (developer-only)
+[ADR-0031 — the repository owns current state; Git and GitHub own provenance](https://github.com/jwogrady/spark/blob/master/docs/adr/0031-state-provenance-ownership.md).
+
+### knowledge promotion
+
+Extracting durable **meaning** from evidence and promoting that meaning to the
+authority that owns it — the operator store (Project → Operator) or a
+configured [memory hub](#memory-hub--spoke) (Project → related Project). The
+`knowledge` skill owns the motion and is its only writer; `ship` and the
+lifecycle only ask the question at a natural boundary. The classification test
+is the deletion test — *would this still be useful and true if this
+implementation disappeared and were rebuilt?* — and a "yes" is a candidate, not
+write authority. Evidence stays in GitHub and is cited; it is never copied into
+the destination. Earlier Spark releases called this flow *provenance
+promotion*; that name is retained only where it records history, because
+`provenance` now names change history alone. See (developer-only)
+[ADR-0028 — cross-project memory hubs](https://github.com/jwogrady/spark/blob/master/docs/adr/0028-cross-project-memory-hubs.md).
+
 ### carry-in / carry-through / carry-forward
 
 The three motions of information across the layers, and the architecture's
