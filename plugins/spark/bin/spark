@@ -450,6 +450,11 @@ FOOTPRINT_PLUGIN_MAX_BYTES="${FOOTPRINT_PLUGIN_MAX_BYTES:-102000}"
 LATENCY_GUARD_MS="${LATENCY_GUARD_MS:-150}"
 LATENCY_BRIEF_MS="${LATENCY_BRIEF_MS:-600}"
 LATENCY_DOCTOR_MS="${LATENCY_DOCTOR_MS:-6000}"
+# Measured at 2371 ms on the reference machine (#609), so the budget carries
+# real headroom rather than pinning today's number as a target. It is gated
+# because an autonomous loop calls it repeatedly, and a path nobody measures is
+# a path nobody notices getting slower.
+LATENCY_GOVERNANCE_MS="${LATENCY_GOVERNANCE_MS:-4000}"
 
 # Lint one SKILL.md's frontmatter and size. The description is the only thing
 # Claude sees when choosing a skill, so its quality is checked here — and both
@@ -8115,6 +8120,7 @@ fp_median3_ms() {
 fp_hot_guard()  { printf '%s' '{"tool_input":{"command":"ls -la"}}' | bash "$SPARK_ROOT/hooks/guard-bash.sh"; }
 fp_hot_brief()  { "$SPARK_ROOT/bin/spark" brief --short; }
 fp_hot_doctor() { "$SPARK_ROOT/bin/spark" doctor; }
+fp_hot_governance() { "$SPARK_ROOT/bin/spark" governance validate; }
 
 # fp_over_budget <ms> <budget> — pure comparison, factored out so the enforcement
 # rule is unit-testable without a stopwatch. Over budget → return 0 (true).
@@ -8123,18 +8129,21 @@ fp_over_budget() { [ "$1" -gt "$2" ]; }
 # fp_latency <as_json> — measure the three hot paths (median of 3), compare to
 # the LATENCY_*_MS budgets, print human or JSON, and return 1 if any is over.
 fp_latency() {
-  local as_json="$1" gms bms dms over=0 unmeasured=0
+  local as_json="$1" gms bms dms vms over=0 unmeasured=0
   gms=$(fp_median3_ms fp_hot_guard)  || gms=""
   bms=$(fp_median3_ms fp_hot_brief)  || bms=""
   dms=$(fp_median3_ms fp_hot_doctor) || dms=""
+  vms=$(fp_median3_ms fp_hot_governance) || vms=""
   # An unmeasured path (no ms clock) never fails the gate; only a real
   # over-budget measurement does.
   [ -z "$gms" ] && unmeasured=1 || { [ "$gms" -gt "$LATENCY_GUARD_MS" ]  && over=1; }
   [ -z "$bms" ] && unmeasured=1 || { [ "$bms" -gt "$LATENCY_BRIEF_MS" ]  && over=1; }
   [ -z "$dms" ] && unmeasured=1 || { [ "$dms" -gt "$LATENCY_DOCTOR_MS" ] && over=1; }
+  [ -z "$vms" ] && unmeasured=1 || { [ "$vms" -gt "$LATENCY_GOVERNANCE_MS" ] && over=1; }
   if [ -n "$as_json" ]; then
-    printf '{"method":"median-of-3 wall-clock ms (null = no ms-resolution clock)","paths":{"guard":{"ms":%s,"budget":%s},"brief":{"ms":%s,"budget":%s},"doctor":{"ms":%s,"budget":%s}}}\n' \
-      "${gms:-null}" "$LATENCY_GUARD_MS" "${bms:-null}" "$LATENCY_BRIEF_MS" "${dms:-null}" "$LATENCY_DOCTOR_MS"
+    printf '{"method":"median-of-3 wall-clock ms (null = no ms-resolution clock)","paths":{"guard":{"ms":%s,"budget":%s},"brief":{"ms":%s,"budget":%s},"doctor":{"ms":%s,"budget":%s},"governance":{"ms":%s,"budget":%s}}}\n' \
+      "${gms:-null}" "$LATENCY_GUARD_MS" "${bms:-null}" "$LATENCY_BRIEF_MS" "${dms:-null}" "$LATENCY_DOCTOR_MS" \
+      "${vms:-null}" "$LATENCY_GOVERNANCE_MS"
   else
     echo "Hot-path latency (median of 3, wall-clock ms — machine-dependent, not exact)"
     printf '  %-10s %8s %9s\n' path ms budget
@@ -8145,6 +8154,7 @@ fp_latency() {
     fp_lat_row guard  "$gms" "$LATENCY_GUARD_MS"
     fp_lat_row brief  "$bms" "$LATENCY_BRIEF_MS"
     fp_lat_row doctor "$dms" "$LATENCY_DOCTOR_MS"
+    fp_lat_row governance "$vms" "$LATENCY_GOVERNANCE_MS"
     [ "$unmeasured" -eq 1 ] && echo "  (no ms-resolution clock on this host — install GNU date or python3 to measure)"
   fi
   [ "$over" -eq 0 ]
