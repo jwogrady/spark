@@ -38,12 +38,12 @@
 # What was not recorded reports as NOT ASSESSED. A missing provider metric is an
 # unknown, and an unknown rendered as a number is a lie the operator would then
 # optimize against.
-TELEMETRY_KEYS="run_id attempt trigger pr head_sha actions_run provider model routing_reason effort preflight_tokens input_tokens output_tokens cache_write_tokens cache_read_tokens cache_reason tool_schema_tokens cost_usd wall_seconds tool_calls api_requests full_suite_runs targeted_checks iterations batch_usage compaction_events context_before context_after failing_before failing_after verdict overhead_ms certified_at ci_state"
+TELEMETRY_KEYS="run_id attempt trigger pr head_sha actions_run provider model routing_reason effort preflight_tokens input_tokens output_tokens cache_write_tokens cache_read_tokens cache_reason tool_schema_tokens cost_usd wall_seconds tool_calls api_requests full_suite_runs targeted_checks iterations batch_usage compaction_events context_before context_after failing_before failing_after verdict overhead_ms certified_at ci_state runtime_source_bytes runtime_modules_loaded"
 
 # Counts and measurements are integers. A field that must be a number and is not
 # is a recording error: taking it anyway would put a value in a comparison column
 # that cannot be compared.
-TELEMETRY_INT_KEYS="attempt pr preflight_tokens input_tokens output_tokens cache_write_tokens cache_read_tokens tool_schema_tokens wall_seconds tool_calls api_requests full_suite_runs targeted_checks iterations compaction_events context_before context_after failing_before failing_after overhead_ms"
+TELEMETRY_INT_KEYS="attempt pr preflight_tokens input_tokens output_tokens cache_write_tokens cache_read_tokens tool_schema_tokens wall_seconds tool_calls api_requests full_suite_runs targeted_checks iterations compaction_events context_before context_after failing_before failing_after overhead_ms runtime_source_bytes"
 
 # The verdict vocabulary is closed and matches the lifecycle's own answers, so a
 # run's outcome is comparable across runs. NOT ASSESSED is a legitimate verdict —
