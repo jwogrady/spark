@@ -220,15 +220,28 @@ gate_cap() {
 # catch, so the helper closes it rather than each suite having to remember.
 MUTANT_PATH=""
 MUTANT_CHANGED=0
+MUTANT_TMPDIR=""
 mutant_runtime() {
-  local expr="$1" dest="$WORK/mutant-plugin" f rel orig
+  local expr="$1" src dest f rel orig
+  # Prefer the sandbox copy. Suites that source the runtime directly never call
+  # sandbox_init, so fall back to the real plugin rather than requiring every
+  # caller to sandbox purely to own a mutant.
+  if [ -n "${WORK:-}" ] && [ -d "${WORK:-}/plugin" ]; then
+    src="$WORK/plugin"; dest="$WORK/mutant-plugin"
+  else
+    if [ -z "$MUTANT_TMPDIR" ]; then
+      MUTANT_TMPDIR="$(mktemp -d)"
+      trap 'rm -rf "$MUTANT_TMPDIR"' EXIT
+    fi
+    src="$repo_root/plugins/spark"; dest="$MUTANT_TMPDIR/mutant-plugin"
+  fi
   rm -rf "$dest"
-  cp -r "$WORK/plugin" "$dest"
+  cp -r "$src" "$dest"
   MUTANT_CHANGED=0
   for f in "$dest/bin/spark" "$dest"/lib/*.sh; do
     [ -f "$f" ] || continue
     rel="${f#"$dest"/}"
-    orig="$WORK/plugin/$rel"
+    orig="$src/$rel"
     sed -i "$expr" "$f" 2>/dev/null || true
     cmp -s "$f" "$orig" || MUTANT_CHANGED=1
   done
