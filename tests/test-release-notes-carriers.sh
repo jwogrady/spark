@@ -67,6 +67,25 @@ uniq_rc() { printf '%s\n' "$1" | notes_carrier_check_unique >/dev/null 2>&1 && e
 [ "$(uniq_rc "$(printf '%s\t%s\n%s\t%s' "$A" "$B" "$C" "$A")")" = "0" ] \
   && ok || bad "two independent pairs are accepted"
 
+# --- a directed CYCLE is rejected (#508) -------------------------------------
+# Uniqueness alone accepts A<->B: every carrier and every original appears once.
+# But collapsing that pair appends BOTH originals to the drop list, erasing the
+# whole logical change from the release-note input with no error. A carrier
+# chain that loops back on itself is malformed metadata, NOT ASSESSED.
+[ "$(uniq_rc "$(printf '%s\t%s\n%s\t%s' "$A" "$B" "$B" "$A")")" = "2" ] \
+  && ok || bad "a two-node carrier cycle A<->B is rejected"
+[ "$(uniq_rc "$(printf '%s\t%s\n%s\t%s\n%s\t%s' "$A" "$B" "$B" "$C" "$C" "$A")")" = "2" ] \
+  && ok || bad "a three-node carrier cycle A->B->C->A is rejected"
+# ...and a valid acyclic CHAIN A->B->C is preserved, never mistaken for a cycle.
+[ "$(uniq_rc "$(printf '%s\t%s\n%s\t%s' "$A" "$B" "$B" "$C")")" = "0" ] \
+  && ok || bad "an acyclic carrier chain A->B->C is accepted"
+# ...and the message names the cycle so the declaration is repairable.
+cyc_err="$(printf '%s\t%s\n%s\t%s' "$A" "$B" "$B" "$A" | notes_carrier_check_unique 2>&1 >/dev/null || true)"
+case "$cyc_err" in
+  *"directed cycle"*"$(printf '%s' "$A" | cut -c1-8)"*) ok ;;
+  *) bad "the cycle error must name the cycle and its shas ($cyc_err)" ;;
+esac
+
 # --- the real v0.20 topology, end to end ------------------------------------
 # The ORIGINAL sits on a branch opened before the release tag and merged after
 # it: genuinely unreleased (not an ancestor of the tag), yet dated before the
@@ -250,6 +269,39 @@ rc=0
 ( cd "$fix" && NOTES_CARRIER_LEDGER=".carriers.tsv" \
     notes_component_commits_tsv "o/r" "core" "v1.0.0..$head3" ) >/dev/null 2>&1 || rc=$?
 [ "$rc" -eq 2 ] && ok || bad "a malformed trailer must not be assessed (got $rc)"
+
+# --- #508 end to end: a carrier cycle reaches the collector as the existing
+# NOT-ASSESSED path (exit 2), never an empty/partial passing TSV. This range
+# predates every trailer commit in the fixture, so the ledger is the only source
+# and the loop is a clean two-node ledger cycle.
+notassessed "a two-node ledger carrier cycle" \
+  "$(printf '%s\t%s\n%s\t%s' "$carrier" "$orig" "$orig" "$carrier")"
+printf '%s\t%s\n%s\t%s\n' "$carrier" "$orig" "$orig" "$carrier" > "$fix/.carriers.tsv"
+cyc_e2e="$( ( cd "$fix" && NOTES_CARRIER_LEDGER=".carriers.tsv" \
+    notes_component_commits_tsv "o/r" "core" "v1.0.0..$head_sha" ) 2>&1 >/dev/null || true )"
+case "$cyc_e2e" in
+  *"directed cycle"*) ok ;;
+  *) bad "the collector must report a carrier cycle as such ($cyc_e2e)" ;;
+esac
+
+# --- #508 criterion: the cycle is caught on the UNIFIED set from BOTH sites.
+# One edge is declared in a Changelog-Carrier-For trailer, the reverse edge in
+# the ledger. A fresh baseline tag scopes the range to just these two commits so
+# no earlier declaration contaminates the pair set.
+gitc tag v1.9.0
+seed core.txt 'docs: cross-site carrier' '2026-01-04T08:00:00'
+xa="$(gitc rev-parse HEAD)"
+date +%s%N > "$fix/core.txt"; gitc add -A
+GIT_AUTHOR_DATE='2026-01-04T09:00:00' GIT_COMMITTER_DATE='2026-01-04T09:00:00' \
+  gitc commit -q -m "docs: cross-site carrier
+
+Changelog-Carrier-For: $xa"
+headx="$(gitc rev-parse HEAD)"
+printf '%s\t%s\n' "$xa" "$(gitc rev-parse HEAD)" > "$fix/.carriers.tsv"  # ledger xa->xb; trailer xb->xa
+rc=0
+( cd "$fix" && NOTES_CARRIER_LEDGER=".carriers.tsv" \
+    notes_component_commits_tsv "o/r" "core" "v1.9.0..$headx" ) >/dev/null 2>&1 || rc=$?
+[ "$rc" -eq 2 ] && ok || bad "a cycle split across ledger and trailer must be caught (got $rc)"
 
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

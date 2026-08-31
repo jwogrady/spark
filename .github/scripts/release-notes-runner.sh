@@ -201,14 +201,39 @@ notes_carrier_ledger_rows() { # <file> -> rows
 
 # Reject ambiguity: a carrier declared twice, or one original claimed by two
 # carriers. Either way the mapping is not a function and cannot be trusted.
+# Then reject a directed CYCLE: A carries B while B carries A (directly or
+# through a longer chain) is not a repair history, and collapsing it drops every
+# member from the release-note input — a whole logical change vanishes with no
+# error (#508). The rows here are the unified set from BOTH declaration sites
+# (ledger + trailers), so the cycle check sees a loop however it was assembled.
 notes_carrier_check_unique() { # rows on stdin -> rows; rc 2 on conflict
-  local rows dup
+  local rows dup cycle
   rows="$(cat)"
   [ -n "$rows" ] || return 0
   dup="$(printf '%s\n' "$rows" | cut -f1 | sort | uniq -d | head -n1)"
   if [ -n "$dup" ]; then echo "carrier: $dup is declared as a carrier more than once" >&2; return 2; fi
   dup="$(printf '%s\n' "$rows" | cut -f2 | sort | uniq -d | head -n1)"
   if [ -n "$dup" ]; then echo "carrier: $dup is claimed by more than one carrier" >&2; return 2; fi
+  # Uniqueness now holds, so every node has out-degree <=1 and in-degree <=1: the
+  # graph is disjoint simple paths and simple cycles. Walk forward from every
+  # root (a carrier that is no one's original — in-degree 0); a path cannot enter
+  # a cycle without giving some node a second incoming edge, which uniqueness has
+  # already ruled out, so every non-cycle carrier is reached. Any carrier left
+  # unvisited is therefore on a cycle, which we then trace to name its members.
+  cycle="$(printf '%s\n' "$rows" | awk -F'\t' '
+    { succ[$1]=$2; carrier[$1]=1; isorig[$2]=1 }
+    END {
+      for (c in carrier) if (!(c in isorig)) { n=c; while ((n in succ) && !seen[n]) { seen[n]=1; n=succ[n] } }
+      for (c in carrier) if (!seen[c]) {
+        path=substr(c,1,8); n=succ[c]; steps=0
+        while (n!=c && (n in succ) && steps<100000) { path=path " -> " substr(n,1,8); n=succ[n]; steps++ }
+        print path " -> " substr(c,1,8); exit
+      }
+    }')"
+  if [ -n "$cycle" ]; then
+    echo "carrier: declared relationships form a directed cycle ($cycle) — a carrier chain cannot loop back on itself" >&2
+    return 2
+  fi
   printf '%s\n' "$rows"
 }
 
