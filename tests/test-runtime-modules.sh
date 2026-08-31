@@ -93,6 +93,41 @@ for f in tm_valid_run bg_over ev_drift route_rows ci_verdict red git_root; do
   esac
 done
 
+# --- a broken runtime must not source "successfully" -------------------------
+# Sourcing that half-loads leaves a partial API while reporting success, and the
+# caller then fails somewhere unrelated with a missing-function error that says
+# nothing about the cause. Three ways it can be broken, all of which once passed
+# silently:
+src_rc() { # src_rc <plugin-dir>
+  local rc=0
+  bash -c '. "$1" >/dev/null 2>&1' _ "$1/bin/spark" || rc=$?
+  printf '%s' "$rc"
+}
+
+INTACT="$WORK/plugin"
+[ "$(src_rc "$INTACT")" = "0" ] && ok || bad "sourcing an intact runtime must succeed"
+
+GONE="$WORK/plugin-modgone"
+rm -rf "$GONE"; cp -r "$WORK/plugin" "$GONE"; rm -f "$GONE/lib/execution.sh"
+[ "$(src_rc "$GONE")" != "0" ] && ok || bad "sourcing must fail when a declared module is missing"
+
+# The declared module list matters here: a glob over a removed lib/ matches
+# nothing and would report success, so an absent runtime would look like a
+# runtime that simply has no modules.
+NOLIBDIR="$WORK/plugin-nolibdir"
+rm -rf "$NOLIBDIR"; cp -r "$WORK/plugin" "$NOLIBDIR"; rm -rf "$NOLIBDIR/lib"
+[ "$(src_rc "$NOLIBDIR")" != "0" ] && ok || bad "sourcing must fail when the module directory is absent"
+
+# A module that exists but cannot parse is the subtlest case: the file is found,
+# sourcing it fails, and marking it loaded anyway would hide that entirely.
+BROKEN="$WORK/plugin-broken"
+rm -rf "$BROKEN"; cp -r "$WORK/plugin" "$BROKEN"
+printf '\nthis is ( not valid bash\n' >> "$BROKEN/lib/execution.sh"
+[ "$(src_rc "$BROKEN")" != "0" ] && ok || bad "sourcing must fail when a module has a syntax error"
+
+err="$(bash -c '. "$1"' _ "$GONE/bin/spark" 2>&1 || true)"
+assert_contains "and the failure names the incomplete API" "runtime could not be fully loaded" "$err"
+
 # --- the public CLI is unchanged ---------------------------------------------
 # Every verb the table ships must still dispatch. A verb that lost its handler
 # in the move would otherwise only be found by a user.

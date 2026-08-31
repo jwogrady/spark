@@ -59,6 +59,10 @@ check_json() {
 # behaviour cannot diverge and there is no generated artifact to keep honest.
 SPARK_LIB="$SPARK_ROOT/lib"
 SPARK_LOADED_MODULES=""
+# The module set is DECLARED, not globbed. A glob over a missing lib/ matches
+# nothing and reports success, so an absent runtime would look like a runtime
+# with no modules — the one failure that must never pass quietly.
+SPARK_MODULES="execution"
 
 # spark_module_for <verb> — the module owning a verb, or empty for a verb the
 # dispatcher implements itself.
@@ -77,16 +81,23 @@ spark_load_module() {
     red "spark: runtime module '$m' is missing at $f" >&2
     return 1
   fi
+  # The result of sourcing is CHECKED. Marking the module loaded regardless
+  # would swallow a syntax error in it: the file appears loaded, the functions
+  # do not exist, and the caller fails later with a missing-command error that
+  # points nowhere near the cause. (A module therefore ends with a definition,
+  # never with a command whose status could be mistaken for a load failure.)
   # shellcheck source=/dev/null
-  . "$f"
+  if ! . "$f"; then
+    red "spark: runtime module '$m' failed to load from $f" >&2
+    return 1
+  fi
   SPARK_LOADED_MODULES="$SPARK_LOADED_MODULES $m"
 }
 
 spark_load_all_modules() {
-  local f
-  for f in "$SPARK_LIB"/*.sh; do
-    [ -f "$f" ] || continue
-    spark_load_module "$(basename "$f" .sh)" || return 1
+  local m
+  for m in $SPARK_MODULES; do
+    spark_load_module "$m" || return 1
   done
   return 0
 }
@@ -9247,5 +9258,12 @@ EOF
 else
   # Sourced: expose the whole runtime, so a consumer never has to know which
   # module owns which function.
-  spark_load_all_modules || true
+  #
+  # A failure here is REPORTED, never swallowed. Sourcing that half-loads leaves
+  # a partial API while claiming success, and the caller then fails somewhere
+  # unrelated with a missing-function error that says nothing about the cause.
+  if ! spark_load_all_modules; then
+    red "spark: the runtime could not be fully loaded; the API is incomplete" >&2
+    return 1
+  fi
 fi

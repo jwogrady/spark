@@ -27,17 +27,25 @@ here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "$here/.." && pwd)"
 F="$root/plugins/spark/bin/spark"
 as_json=""
+as_raw=""
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --json) as_json=1 ;;
+    # The scanner's own rows, so its correctness can be asserted against a
+    # fixture whose answer is known by construction rather than inferred from a
+    # summary of the real executable.
+    --raw)  as_raw=1 ;;
     -h|--help)
       echo "usage: structure.sh [--json]"
       echo "  Reports the structural baseline of the core executable: size,"
       echo "  function distribution, shared vs verb-local functions (by textual"
       echo "  reference, not call graph), and top-level global state."
       exit 0 ;;
-    *) echo "unknown option: $1" >&2; exit 2 ;;
+    -*) echo "unknown option: $1" >&2; exit 2 ;;
+    # An explicit target, so the scanner can be exercised against a fixture
+    # whose correct answer is known by construction.
+    *) F="$1" ;;
   esac
   if [ "$#" -gt 0 ]; then shift; fi
 done
@@ -45,17 +53,28 @@ done
 [ -f "$F" ] || { echo "core executable not found at $F" >&2; exit 2; }
 
 ANALYSIS="$(awk '
-  # ---- pass: record function ranges and bodies -----------------------------
+  # ---- record function ranges and bodies -----------------------------------
+  # A function ENDS at a closing brace in column zero, or on its own line for a
+  # one-liner. Without that, `cur` never clears: every line after the first
+  # function is charged to it, and the top-level-assignment rule never fires
+  # again — which silently reports almost no globals and inflates both sizes and
+  # references with text that belongs to no function at all.
   /^[a-z_][a-z0-9_]*\(\)[[:space:]]*\{/ {
     name = $0; sub(/\(\).*/, "", name)
-    cur = name; start[name] = NR; order[++nf] = name
-    len[name] = 0
+    order[++nf] = name; start[name] = NR
+    len[name] = 1; body[name] = $0
+    # `red() { ...; }` opens and closes on one line.
+    cur = ($0 ~ /\}[[:space:]]*$/) ? "" : name
     next
   }
-  cur != "" { len[cur]++; body[cur] = body[cur] "\n" $0 }
-  # A top-level assignment is global state. Function-local ones are declared
-  # with `local`, so an assignment at column zero is the coupling that matters.
-  /^[A-Za-z_][A-Za-z0-9_]*=/ && cur == "" { g = $0; sub(/=.*/, "", g); globals[g] = 1 }
+  cur != "" {
+    len[cur]++; body[cur] = body[cur] "\n" $0
+    if ($0 ~ /^\}[[:space:]]*$/) { end[cur] = NR; cur = "" }
+    next
+  }
+  # Reached only OUTSIDE a function body, which is what makes this a top-level
+  # assignment rather than any assignment that happens to start a line.
+  /^[A-Za-z_][A-Za-z0-9_]*=/ { g = $0; sub(/=.*/, "", g); globals[g] = 1 }
   END {
     # ---- which functions each function references --------------------------
     for (i = 1; i <= nf; i++) {
@@ -63,7 +82,10 @@ ANALYSIS="$(awk '
       for (j = 1; j <= nf; j++) {
         t = order[j]
         if (t == f) continue
-        if (body[f] ~ ("(^|[^A-Za-z0-9_])" t "([^A-Za-z0-9_]|$)")) refs[f, t] = 1
+        if (body[f] ~ ("(^|[^A-Za-z0-9_])" t "([^A-Za-z0-9_]|$)")) {
+          refs[f, t] = 1
+          refsof[f] = refsof[f] " " t
+        }
       }
     }
     # ---- verbs are the cmd_* entry points ----------------------------------
@@ -90,10 +112,15 @@ ANALYSIS="$(awk '
 
     printf "SIZE\t%d\t%d\n", nf, 0
     for (i = 1; i <= nf; i++) printf "FUNC\t%s\t%d\n", order[i], len[order[i]]
+    for (i = 1; i <= nf; i++)
+      printf "RANGE\t%s\t%d\t%d\n", order[i], start[order[i]], (order[i] in end ? end[order[i]] : start[order[i]])
+    for (i = 1; i <= nf; i++) printf "REFS\t%s\t%s\n", order[i], refsof[order[i]]
     for (t in nusers) printf "USED\t%s\t%d\t%s\n", t, nusers[t], usedby[t]
     for (g in globals) printf "GLOBAL\t%s\n", g
   }
 ' "$F")"
+
+if [ -n "$as_raw" ]; then printf '%s\n' "$ANALYSIS"; exit 0; fi
 
 fn_count="$(printf '%s\n' "$ANALYSIS" | awk -F'\t' '$1=="SIZE"{print $2}')"
 bytes="$(wc -c < "$F" | tr -d ' ')"
