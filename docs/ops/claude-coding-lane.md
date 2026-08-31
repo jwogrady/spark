@@ -2,58 +2,83 @@
 
 Development-only prose. Not shipped with the plugin.
 
+The lane lets a trusted human ask Claude, by an `@claude` mention, to propose a
+code change on a pull request — and it publishes that change to the PR's own
+feature branch **without ever giving Claude a credential that can push or
+merge.** It is built as three jobs with separated authority so that "cannot
+merge" is a mechanical fact, not a promise in a prompt.
+
 ## How it is invoked
 
-A **trusted human** mentions `@claude` — in an issue comment, a PR review
-comment, a PR review body, or a new issue. Nothing else wakes it.
+A **trusted human** — `OWNER`, `MEMBER`, or `COLLABORATOR` — writes a comment
+containing `@claude` on an issue or a pull request. Both conditions are
+required, and both are checked on the **actual commenter** (not the issue or PR
+author) in the resolver job's `if:`, which GitHub evaluates before any runner
+starts. A comment from anyone else, or a comment without the mention, reaches
+nothing.
 
-Both conditions are required. A trusted human who did not ask for Claude does
-not get it, and a mention from an untrusted account never reaches the job.
+## The three jobs
 
-## What it may write
+1. **resolve** — read-only. Admits only the trusted commenter, then derives the
+   immutable identity of the work: repository, PR number, head repository, head
+   ref, and the exact head SHA, fetched from GitHub rather than guessed from the
+   comment payload. A fork head, a missing identity, or a head that is the
+   default branch refuses publication here.
+2. **claude** — reasons and proposes. It holds **no `contents: write` and no
+   deploy key**, so it physically cannot push and cannot merge. It reads the
+   exact resolved head, edits its checkout, and emits the change as a patch — a
+   data artifact, nothing more.
+3. **publish** — the only writer. It validates the patch against the resolved
+   identity and a forbidden-path/mode gate, then fast-forwards the exact feature
+   branch using a Git-only SSH **deploy key**.
 
-Commits pushed to **the pull request's own feature branch**, plus comments on
-the pull request or issue. That is the whole surface.
+## What Claude can do
 
-## What it can never do
+- Wake on a trusted `@claude` mention.
+- Read the repository and the pull request.
+- Reason about the request and propose the smallest correct change.
+- Converse and report on the issue or pull request.
+- Cause a validated change to reach the PR's feature branch **through the
+  isolated publisher, once the lane is armed.**
 
-It can never merge, never change the workflows that govern it, and never touch
-rulesets, secrets or repository administration.
+## What Claude can never do
 
-| | Why it is structural |
+These are absences of capability, not promises of good behaviour.
+
+| | Why it is mechanical |
 |---|---|
-| **Never merge** | No permission grants it. Merging is the owner's act |
-| **Never change workflows** | `workflows: write` is not granted, so GitHub itself rejects a push touching `.github/workflows/**`. A lane that could edit its own guardrails would have none |
-| **Never change rulesets, secrets or administration** | `administration` and `secrets` are not granted |
-| **Never review automatically** | It wakes on a mention, never on every pull request. Automatic independent review belongs to #584 — two automatic reviewers would duplicate cost, context and findings without a governed reason |
+| **Hold the deploy key** | The key is referenced only in the publisher job; Claude's job never receives it. |
+| **Push directly** | Claude's job has `contents: read` and checks out with `persist-credentials: false` — there is no write credential in the runner. |
+| **Cannot merge** | The only write credential in the whole lane is an SSH deploy key. A deploy key authenticates Git transport only; it cannot authenticate to GitHub's REST or GraphQL API, and the merge endpoints live only there. No job holds a token that can merge. |
+| **Publish to `master`** | The publisher pushes only the resolved feature ref, and the `spark-trunk` ruleset independently protects the default branch. The default branch can never be the publication target. |
+| **Change workflow or guardrail files** | The publisher rejects any patch that touches `.github/workflows/**` or the lane's own `.github/scripts/claude-lane/**` helpers, by the resulting Git tree's paths and modes — before it pushes. |
+| **Change rulesets, secrets, or administration** | No job holds `administration` or secrets access, and the deploy key has no API surface to reach them. |
 
-These are absences of capability, not promises of good behaviour. The
-distinction matters: a promise is only as good as the prompt, and prompts can be
-argued with.
+The publisher also refuses a **stale head**: if the branch moved while Claude
+was working, it refuses rather than silently rebasing onto new work.
 
-## The association gate is the security boundary
+## Ordinary issue
 
-`issue_comment` fires for anyone who can type a comment, and this job holds
-`contents: write`. Without a gate, any account able to comment could reach a
-write-capable path — the classic escalation shape.
-
-So the job runs only for `OWNER`, `MEMBER` or `COLLABORATOR`, and that check
-lives in the job's `if:` condition, where GitHub evaluates it **before any step
-runs and before credentials exist in the runner**. A step-level check would run
-after the runner already held a token.
-
-Fork pull requests are refused as the first step, before checkout. Untrusted
-head code must never execute where a write token is available.
-
-## What is deliberately not here
-
-There is **no `workflow_run` trigger**. Waking this lane from a reviewer's
-verdict is the reviewer → writer handoff, and #585 owns it. Landing it here
-would enable an automation path this issue is not authorised to turn on.
+A trusted `@claude` mention on a normal issue (one with no pull request) wakes
+Claude for **conversation only**. There is no feature branch, none is invented,
+the publisher job is not authorized, and no code is pushed.
 
 ## Arming it
 
-The workflow requires the `CLAUDE_CODE_OAUTH_TOKEN` secret. Until the repository
-owner adds it, the surface exists and the job cannot run. That ordering is
-deliberate: the boundary lands and is reviewed first, and arming it is a separate
-human act.
+The lane lands **unarmed**: the boundary exists, and nothing publishes until a
+human completes these steps after review and merge.
+
+1. Create a **repository-scoped SSH deploy key** for `jwogrady/spark` with
+   **write access enabled**.
+2. Store **only the private key** in the Actions secret
+   `CLAUDE_PUBLISH_DEPLOY_KEY`. Put it nowhere else — never in Claude's job or
+   environment.
+3. Add the `CLAUDE_CODE_OAUTH_TOKEN` secret the Claude job needs to run.
+4. **Do not** substitute a bearer token with `Contents: write` for the deploy
+   key. A bearer token would restore the merge capability the deploy key exists
+   to withhold.
+
+Until the deploy key is present, the publisher cannot authenticate and nothing
+is published. Until `CLAUDE_CODE_OAUTH_TOKEN` is present, Claude does not run at
+all. The lane is not live before both arming steps succeed, and a live end-to-end
+test (a real `@claude` comment on a test PR) should follow arming.
