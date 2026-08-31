@@ -137,6 +137,10 @@ issue PR → `master` (ADR-0027, and the delivery section of
 5. Syntax-check shell scripts (`bash -n <file>`) before pushing.
 6. Run `tests/run.sh` when changing enforcement hooks or other tested scripts —
    it executes every `tests/test-*.sh` suite and fails non-zero on any failure.
+   One run reports suites, assertion totals and elapsed seconds together, and
+   `--json` adds the five slowest suites. **Never run it again to derive another
+   summary of the same result** — a second projection must not cost a second
+   execution.
 7. Behavior changes ride your Conventional Commit types — Release Please builds
    `CHANGELOG.md` from them. Never hand-edit the changelog.
 
