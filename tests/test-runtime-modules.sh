@@ -143,6 +143,55 @@ EOF
 if [ -z "$missing" ]; then ok
 else bad "verbs no longer dispatch:$missing"; fi
 
+# --- the source actually loaded is observable --------------------------------
+# The reduction has to be visible in the run record, not only to a person
+# reading a PR. Opt-in through SPARK_RUN_ID.
+loaded_of() { # loaded_of <run>
+  "$SPARK" telemetry show --run "$1" --json 2>/dev/null \
+    | sed -n 's/.*"runtime_modules_loaded":"\([^"]*\)".*/\1/p'
+}
+bytes_of() { # bytes_of <run>
+  "$SPARK" telemetry show --run "$1" --json 2>/dev/null \
+    | sed -n 's/.*"runtime_source_bytes":\([0-9]*\).*/\1/p'
+}
+
+SPARK_RUN_ID=rt-core   "$SPARK" version        >/dev/null 2>&1
+SPARK_RUN_ID=rt-exec   "$SPARK" telemetry list >/dev/null 2>&1
+SPARK_RUN_ID=rt-plan   "$SPARK" plan --help    >/dev/null 2>&1
+
+assert_contains "a core verb loads no module"        "none"      "$(loaded_of rt-core)"
+assert_contains "a module verb names what it loaded" "execution" "$(loaded_of rt-exec)"
+assert_contains "plan loads the planning module"     "planning"  "$(loaded_of rt-plan)"
+
+# The figure is MECHANICALLY DERIVED, not estimated: it must equal the sum of
+# the files actually read, to the byte. An approximation here would invite the
+# token-cost claim this field deliberately refuses to make.
+disp_b="$(wc -c < "$WORK/plugin/bin/spark" | tr -d ' ')"
+exec_b="$(wc -c < "$WORK/plugin/lib/execution.sh" | tr -d ' ')"
+plan_b="$(wc -c < "$WORK/plugin/lib/planning.sh" | tr -d ' ')"
+
+[ "$(bytes_of rt-core)" = "$disp_b" ] && ok \
+  || bad "a core verb's source bytes must equal the dispatcher exactly (got $(bytes_of rt-core), want $disp_b)"
+[ "$(bytes_of rt-exec)" = "$(( disp_b + exec_b ))" ] && ok \
+  || bad "an execution verb's bytes must equal dispatcher+execution exactly"
+[ "$(bytes_of rt-plan)" = "$(( disp_b + plan_b ))" ] && ok \
+  || bad "plan's bytes must equal dispatcher+planning exactly"
+
+# The reduction itself: a core verb reads strictly less than a module verb.
+if [ "$(bytes_of rt-core)" -lt "$(bytes_of rt-exec)" ]; then ok
+else bad "a core verb must load strictly less source than a module verb"; fi
+
+# No token figure is derived from bytes anywhere: that is a different
+# measurement, and a constant divisor would dress a guess as a cost claim.
+if grep -qE 'runtime_source_bytes.*/ *[0-9]+|tokens.*runtime_source_bytes' "$WORK/plugin/bin/spark"; then
+  bad "source bytes must not be converted into a token estimate"
+else ok; fi
+
+# Recording goes through this same executable, so the guard against infinite
+# recursion is load-bearing rather than decorative.
+if grep -q 'SPARK_RECORDING' "$WORK/plugin/bin/spark"; then ok
+else bad "the nested-recording guard must exist"; fi
+
 # --- MUTATION CONTROL --------------------------------------------------------
 # Make every verb claim it needs the execution module. The split would still
 # "work" in the happy path and would have bought nothing — every invocation

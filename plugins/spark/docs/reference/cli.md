@@ -2019,9 +2019,11 @@ watches for it, rather than needing an alarm of its own.
 You do not need this to *use* Spark. You need it to add to it.
 
 ```
-bin/spark      the dispatcher: the verb table, and the primitives every verb
-               needs — colour, git root, JSON validity, preferences resolution
-lib/<name>.sh  a domain whose helpers are used by no verb outside it
+bin/spark          the dispatcher: the verb table, and the primitives every verb
+                   needs — colour, git root, JSON validity, preferences,
+                   governance model resolution
+lib/execution.sh   telemetry, budget, evidence, route, ci
+lib/planning.sh    plan
 ```
 
 **There is no build step.** `lib/*.sh` is the shipped implementation, not a
@@ -2030,7 +2032,14 @@ nothing to regenerate after an edit.
 
 Executing `spark` loads only the module the chosen verb needs; **sourcing** it
 loads every module, so a consumer of the runtime never has to know which file
-owns which function.
+owns which function. A module that is declared but missing or unparseable is an
+error, not a quiet partial load.
+
+With `SPARK_RUN_ID` set, each invocation records `runtime_source_bytes` and
+`runtime_modules_loaded` into the run's telemetry — the source it actually read,
+in bytes, and which modules. **Bytes are reported as bytes**: no token figure is
+derived from them, because that is a different measurement and a constant
+divisor would turn a filesystem number into a cost claim.
 
 Two rules govern where new code goes, and both exist to stop a split from
 becoming decoration:
