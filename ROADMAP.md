@@ -294,6 +294,12 @@ cut, deliberately. The implementation is first published inside the cumulative
 `v0.19.0`. The tag history is owned by
 [`docs/releases/v0.17.md`](docs/releases/v0.17.md).
 
+The heading keeps the milestone's own name. The flow it delivered is now called
+**knowledge promotion** (#477): `provenance` names change-over-time history
+owned by Git and GitHub (ADR-0031), so the name of the shipped capability moved
+while milestone #14, its release records, and its proof directory keep the name
+they were recorded under.
+
 A Spark-managed spoke stays lean while durable cross-project learning is
 deliberately promoted — with GitHub evidence and human judgment — into one
 designated memory-hub repository. GitHub milestone #14 is the version
