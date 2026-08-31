@@ -114,11 +114,36 @@ chmod +x "$SB/../plugins/spark/bin/spark"
 SPARK_RUN_ID=bench-run bash "$SB/run.sh" --only alpha >/dev/null 2>&1 || true
 calls="$(awk "/telemetry record/ { n++ } END { print n+0 }" "$TELLOG")"
 [ "$calls" = "1" ] && ok || bad "one execution must record exactly one telemetry increment (got $calls)"
-assert_contains "a targeted run records a targeted check" "targeted_checks" "$(cat "$TELLOG")"
+assert_contains "a targeted run counts a targeted check" "targeted_checks=1" "$(cat "$TELLOG")"
+assert_contains "and no full-suite execution"            "full_suite_runs=0" "$(cat "$TELLOG")"
 
 : > "$TELLOG"
 SPARK_RUN_ID=bench-run bash "$SB/run.sh" >/dev/null 2>&1 || true
-assert_contains "a full run records a full-suite execution" "full_suite_runs" "$(cat "$TELLOG")"
+assert_contains "a full run counts a full-suite execution" "full_suite_runs=1" "$(cat "$TELLOG")"
+
+# DURABILITY: the count is derived from an append-only log, so a second
+# execution increments even though nothing re-read a prior telemetry value. A
+# read-modify-write would lose one of two overlapping runs; this cannot.
+: > "$TELLOG"
+SPARK_RUN_ID=bench-run bash "$SB/run.sh" >/dev/null 2>&1 || true
+assert_contains "a second execution increments durably" "full_suite_runs=2" "$(cat "$TELLOG")"
+
+# Even with the telemetry binary failing every call, the execution is still
+# durably logged — so a transient recording failure cannot silently erase it.
+LOG="$SB/../.spark/telemetry/bench-run.executions"
+if [ -f "$LOG" ]; then
+  n="$(awk '$1 == "full" { n++ } END { print n+0 }' "$LOG")"
+  [ "$n" = "2" ] && ok || bad "the execution log must hold every execution (got $n)"
+else
+  bad "the append-only execution log must exist at $LOG"
+fi
+
+# A recording that cannot happen must SAY so. Silence here would leave the
+# "telemetry distinguishes executions" claim resting on a number never written.
+mv "$SB/../plugins/spark/bin/spark" "$SB/../plugins/spark/bin/spark.hidden"
+ERR="$(SPARK_RUN_ID=bench-run bash "$SB/run.sh" --only alpha 2>&1 >/dev/null || true)"
+assert_contains "a missing recorder is reported, not swallowed" "NOT recorded" "$ERR"
+mv "$SB/../plugins/spark/bin/spark.hidden" "$SB/../plugins/spark/bin/spark"
 
 # Reading the same result again must record nothing further — a projection is
 # not an execution.

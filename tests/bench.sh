@@ -1,24 +1,32 @@
 #!/usr/bin/env bash
 # Spark hot-path baseline (#609).
 #
-# Wall time alone hides the interesting costs. A command can be fast and still be
-# wasteful — forking awk four hundred times, re-parsing the same model on every
-# call, or making the same remote request twice. So this records four dimensions
-# per path:
+# Wall time alone hides the costs worth finding. A command can be quick and
+# still fork awk four hundred times, re-read the same file per item, or reach
+# the network twice. So this records more than elapsed time.
 #
-#   wall ms      median of N runs, not one anecdotal sample
-#   externals    total external processes spawned (the subprocess cost)
-#   parsers      awk/sed/grep/cut/tr invocations (the repeated-parsing cost)
-#   remote       gh invocations (the remote-request cost)
+# WHAT THE COUNTS ACTUALLY ARE. They are produced by prepending counting shims
+# to PATH for a fixed list of binaries, so each is an invocation count for THAT
+# LIST — not a complete accounting:
 #
-# The last three are counted by prepending a directory of counting shims to PATH.
-# Each shim records its invocation and then execs the real binary, so the
-# measured command behaves exactly as it normally would — the numbers describe a
-# real run, not an instrumented approximation of one.
+#   shimmed    invocations of the shimmed binaries only. A LOWER BOUND on
+#              subprocesses: anything not on the list, and every fork a shimmed
+#              program makes internally, is invisible here.
+#   parsers    the awk/sed/grep/cut/tr subset of the above. The repeated-parsing
+#              signal, and the one these names measure most honestly.
+#   gh         invocations of the gh binary. NOT a count of HTTP requests: one
+#              invocation may make several, and a request issued by anything
+#              other than gh is not counted at all.
 #
-# Baselines are machine-dependent by nature. This prints the environment it
-# measured so a later comparison is against a stated machine rather than an
-# implied one, and so a number that moved can be told from a machine that did.
+# They are named for what they count. A number called "external processes" or
+# "remote requests" would claim an accounting this mechanism does not perform,
+# and a baseline that overstates its own precision is worse than a coarse one,
+# because the next person optimises against it.
+#
+# OFFLINE VERSUS LIVE. A path that invokes gh depends on the network and on live
+# GitHub state, so its wall time is NOT reproducible and is reported as
+# observational. Each path's mode is determined by measurement — whether it
+# actually invoked gh — rather than by a hand-maintained list that could drift.
 set -uo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -37,9 +45,15 @@ while [ "$#" -gt 0 ]; do
     --with-remote) with_remote=1 ;;
     -h|--help)
       echo "usage: bench.sh [--json] [--runs N] [--with-remote]"
-      echo "  Measures Spark hot paths: wall ms, external processes, parser"
-      echo "  invocations, and remote requests. --with-remote adds paths that"
-      echo "  need GitHub and are therefore not reproducible offline."
+      echo
+      echo "  Measures Spark hot paths: median wall ms, plus invocation counts for"
+      echo "  a fixed list of shimmed binaries (a lower bound, not a full"
+      echo "  subprocess accounting) and for gh (invocations, not HTTP requests)."
+      echo
+      echo "  Paths that invoke gh depend on live GitHub and are reported as"
+      echo "  observational: their wall time is not a reproducible baseline."
+      echo "  --with-remote additionally measures next and course, which exist"
+      echo "  only to query GitHub."
       exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
@@ -65,8 +79,6 @@ for t in $SHIMMED; do
 done
 
 now_ms() {
-  # date +%s%N is GNU; fall back to seconds when it is unavailable so the tool
-  # still reports something honest on a host without it.
   local n; n="$(date +%s%N 2>/dev/null)"
   case "$n" in
     *N*|'') echo "$(( $(date +%s) * 1000 ))" ;;
@@ -91,12 +103,15 @@ measure() { # measure <label> <command...>
   local counts="$TMP/counts.$label"
   : > "$counts"
   BENCH_COUNT="$counts" PATH="$TMP/bin:$PATH" "$@" >/dev/null 2>&1
-  local ext par rem
-  ext="$(wc -l < "$counts" | tr -d ' ')"
+  local shimmed par ghn mode
+  shimmed="$(wc -l < "$counts" | tr -d ' ')"
   par="$(awk -v p="$PARSERS" '{ if (index(p, " " $1 " ")) n++ } END { print n+0 }' "$counts")"
-  rem="$(awk '$1 == "gh" { n++ } END { print n+0 }' "$counts")"
+  ghn="$(awk '$1 == "gh" { n++ } END { print n+0 }' "$counts")"
+  # Mode is measured, not declared: a path that reached gh is live, whatever it
+  # was assumed to be.
+  if [ "$ghn" -gt 0 ]; then mode="live"; else mode="offline"; fi
 
-  rows="${rows}${label}	${ms}	${ext}	${par}	${rem}
+  rows="${rows}${label}	${ms}	${shimmed}	${par}	${ghn}	${mode}
 "
 }
 
@@ -113,10 +128,13 @@ fi
 env_line="$(uname -s) $(uname -r) | bash ${BASH_VERSION%%(*} | runs=$RUNS"
 
 if [ -n "$as_json" ]; then
-  printf '{"environment":"%s","paths":[' "$env_line"
+  printf '{"environment":"%s",' "$env_line"
+  printf '"counts_are":{"shimmed":"invocations of a fixed shim list; a lower bound on subprocesses",'
+  printf '"parsers":"awk/sed/grep/cut/tr invocations","gh":"gh invocations, not HTTP requests"},'
+  printf '"paths":['
   printf '%s' "$rows" | awk -F'\t' '
-    NF { printf "%s{\"path\":\"%s\",\"ms\":%s,\"externals\":%s,\"parsers\":%s,\"remote\":%s}",
-         (n++ ? "," : ""), $1, $2, $3, $4, $5 }'
+    NF { printf "%s{\"path\":\"%s\",\"ms\":%s,\"shimmed_external_invocations\":%s,\"parser_invocations\":%s,\"gh_invocations\":%s,\"mode\":\"%s\"}",
+         (n++ ? "," : ""), $1, $2, $3, $4, $5, $6 }'
   printf ']}\n'
   exit 0
 fi
@@ -124,9 +142,13 @@ fi
 echo "Spark hot-path baseline"
 echo "  $env_line"
 echo
-printf '  %-22s %8s %11s %9s %8s\n' path "ms" externals parsers remote
-printf '%s' "$rows" | awk -F'\t' 'NF { printf "  %-22s %8s %11s %9s %8s\n", $1, $2, $3, $4, $5 }'
+printf '  %-22s %8s %10s %9s %6s %9s\n' path "ms" shimmed parsers gh mode
+printf '%s' "$rows" | awk -F'\t' 'NF { printf "  %-22s %8s %10s %9s %6s %9s\n", $1, $2, $3, $4, $5, $6 }'
 echo
-echo "externals = external processes spawned; parsers = awk/sed/grep/cut/tr;"
-echo "remote = gh invocations. Wall time is machine-dependent — compare against"
-echo "a baseline from the same machine, never against another host's numbers."
+echo "shimmed = invocations of a fixed shim list — a LOWER BOUND on subprocesses,"
+echo "not a full accounting. parsers = the awk/sed/grep/cut/tr subset. gh = gh"
+echo "invocations, NOT HTTP requests: one invocation may make several."
+echo
+echo "mode=live means the path invoked gh, so its wall time depends on the network"
+echo "and on live GitHub state. Live rows are observational, not a reproducible"
+echo "baseline; compare offline rows against the same machine, never across hosts."

@@ -86,13 +86,35 @@ elapsed=$(( $(now_s) - run_start ))
 # from several actual runs — the number below counts executions, never views.
 kind="full"; [ -n "$only" ] && kind="targeted"
 if [ -n "${SPARK_RUN_ID:-}" ]; then
-  spark_bin="$here/../plugins/spark/bin/spark"
-  if [ -x "$spark_bin" ]; then
-    field="full_suite_runs"; [ "$kind" = "targeted" ] && field="targeted_checks"
-    prior="$("$spark_bin" telemetry show --run "$SPARK_RUN_ID" --json 2>/dev/null \
-      | sed -n "s/.*\"$field\":\([0-9]*\).*/\1/p")"
-    case "$prior" in ''|*[!0-9]*) prior=0 ;; esac
-    "$spark_bin" telemetry record --run "$SPARK_RUN_ID" "$field=$((prior + 1))" >/dev/null 2>&1 || true
+  # One execution must produce exactly one DURABLE increment, so the count is
+  # derived from an append-only log rather than read-modify-written. A short
+  # append is atomic on POSIX; a read-then-write pair silently loses an
+  # execution whenever two runners overlap, which would quietly falsify the
+  # claim that telemetry can tell executions from projections.
+  #
+  # And a recording that fails says so. Swallowing the error would leave the
+  # same claim resting on a number that was never written.
+  # The runner's own parent IS the repository root by construction, so asking
+  # git for it only adds a way to fail.
+  top="$(cd "$here/.." && pwd)"
+  spark_bin="$top/plugins/spark/bin/spark"
+  if [ ! -x "$spark_bin" ]; then
+    echo "run.sh: SPARK_RUN_ID is set but this execution was NOT recorded" >&2
+    echo "  (plugins/spark/bin/spark is missing or not executable)" >&2
+  else
+    log_dir="$top/.spark/telemetry"
+    log="$log_dir/$SPARK_RUN_ID.executions"
+    if ! mkdir -p "$log_dir" 2>/dev/null ||
+       ! printf '%s\t%s\n' "$kind" "$(date -u +%FT%TZ 2>/dev/null)" >> "$log" 2>/dev/null; then
+      echo "run.sh: this execution was NOT recorded — could not append to $log" >&2
+    else
+      n_full="$(awk -F'\t' '$1 == "full" { n++ } END { print n+0 }' "$log")"
+      n_targ="$(awk -F'\t' '$1 == "targeted" { n++ } END { print n+0 }' "$log")"
+      if ! "$spark_bin" telemetry record --run "$SPARK_RUN_ID" \
+             "full_suite_runs=$n_full" "targeted_checks=$n_targ" >/dev/null 2>&1; then
+        echo "run.sh: execution logged at $log but telemetry record FAILED" >&2
+      fi
+    fi
   fi
 fi
 
