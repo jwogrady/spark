@@ -10059,6 +10059,127 @@ cmd_ci() {
   esac
 }
 
+# ---------------------------------------------------------------------------
+# Read-only assessment safety (#626)
+#
+# A repository's validation command is not observational just because it is
+# called `validate`. Dogfooding found one whose `validate` ran a build that
+# rewrote a TRACKED file — so a read-only assessment that ran it would have
+# mutated the repository it was only supposed to describe.
+#
+# The rule this encodes: project scripts are UNTRUSTED with respect to mutation
+# until observed otherwise. Not distrusted by name — `test`, `build`, `lint`,
+# `check` and `validate` carry no information about side effects, and a name
+# allowlist would simply be the same mistake written down.
+#
+# So a read-only motion never runs the command in place. It runs it in a
+# disposable worktree and proves the source is byte-for-byte unchanged
+# afterwards:
+#
+#   snapshot source -> isolate at HEAD -> run there -> re-snapshot -> compare
+#
+# Three outcomes, and the third is the one that makes it honest: when isolation
+# cannot be established, the answer is NOT ASSESSED with the risk named. Running
+# in place because isolation was inconvenient is exactly the failure this
+# prevents, and an unverifiable command is not a passing one.
+
+# ro_snapshot <root> — a fingerprint of everything a read-only motion promises
+# not to disturb. Tracked content alone is not enough: a command that leaves
+# untracked build output, moves a ref, or stages something has still mutated the
+# repository a reader will next observe.
+ro_snapshot() {
+  local root="$1"
+  {
+    git -C "$root" rev-parse HEAD 2>/dev/null || echo "__nohead__"
+    git -C "$root" show-ref 2>/dev/null || true
+    # --porcelain covers staged, unstaged and untracked in one stable listing.
+    git -C "$root" status --porcelain --untracked-files=all 2>/dev/null || echo "__nostatus__"
+  } | cksum | awk '{ print $1 "-" $2 }'
+}
+
+# ro_isolate <root> <dest> — a disposable worktree at HEAD, or non-zero when one
+# cannot be made. Detached so nothing can move a branch under the source.
+ro_isolate() {
+  git -C "$1" worktree add --detach --quiet "$2" HEAD 2>/dev/null
+}
+
+ro_release() {
+  git -C "$1" worktree remove --force "$2" >/dev/null 2>&1 || rm -rf "$2"
+  git -C "$1" worktree prune >/dev/null 2>&1 || true
+}
+
+# ro_probe <root> <command> — run a repository verification command without
+# letting it touch the source tree.
+#
+# Echoes evidence rows, then a verdict row:
+#   isolation  <established|unavailable>
+#   mutating   <yes|no|unknown>   did the command dirty its own worktree?
+#   command    <exit code>
+#   source     <unchanged|CHANGED>
+#   verdict    <PASS|FAIL|NOT ASSESSED> <reason>
+#
+# Returns 0 PASS, 1 FAIL (the command genuinely failed — ordinary evidence that
+# the safety rule must not hide), 3 NOT ASSESSED.
+ro_probe() {
+  local root="$1" cmd="$2"
+  local before after iso rc mutating="unknown" isolation="unavailable"
+
+  before="$(ro_snapshot "$root")"
+  iso="$(mktemp -d 2>/dev/null)" || iso=""
+
+  if [ -z "$iso" ] || ! ro_isolate "$root" "$iso/wt"; then
+    [ -n "$iso" ] && rm -rf "$iso"
+    printf 'isolation\tunavailable\n'
+    printf 'mutating\tunknown\n'
+    printf 'source\tunchanged\n'
+    printf 'verdict\tNOT ASSESSED\tthe command was not run: no disposable worktree could be created, and a project validation command may write tracked files\n'
+    return 3
+  fi
+  isolation="established"
+
+  # The command runs in the copy. Its exit status is real evidence; its side
+  # effects are confined to a directory that is about to be deleted.
+  ( cd "$iso/wt" && eval "$cmd" ) >/dev/null 2>&1
+  rc=$?
+
+  if [ -n "$(git -C "$iso/wt" status --porcelain --untracked-files=all 2>/dev/null)" ]; then
+    mutating="yes"
+  else
+    mutating="no"
+  fi
+
+  ro_release "$root" "$iso/wt"
+  rm -rf "$iso"
+
+  after="$(ro_snapshot "$root")"
+
+  printf 'isolation\t%s\n' "$isolation"
+  printf 'mutating\t%s\n' "$mutating"
+  printf 'command\t%s\n' "$rc"
+
+  if [ "$before" != "$after" ]; then
+    # The isolation leaked. Report it as unassessed rather than as a pass: the
+    # evidence is no longer about the state the motion started from.
+    printf 'source\tCHANGED\n'
+    printf 'verdict\tNOT ASSESSED\tthe source worktree changed while the command ran in isolation; its result cannot be trusted as read-only evidence\n'
+    return 3
+  fi
+  printf 'source\tunchanged\n'
+
+  if [ "$rc" -ne 0 ]; then
+    # A genuine failure is ordinary evidence. The safety rule exists to stop
+    # mutation, never to soften a real red result.
+    printf 'verdict\tFAIL\tthe command failed in isolation (exit %s); this is a real result, not a safety refusal\n' "$rc"
+    return 1
+  fi
+  if [ "$mutating" = "yes" ]; then
+    printf 'verdict\tPASS\tthe command succeeded, and is mutation-capable — it wrote to its worktree, so it was never run in place\n'
+  else
+    printf 'verdict\tPASS\tthe command succeeded and wrote nothing\n'
+  fi
+  return 0
+}
+
 # state (#210, schema shrunk by #347): the mechanical half of the work-state
 # write. Everything git and GitHub can answer — branch, PR, issue, lifecycle
 # position — is DERIVED at read time by brief/resume, never stored: a stored
