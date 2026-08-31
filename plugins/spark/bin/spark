@@ -8049,6 +8049,19 @@ RAW_ROWS
   # NAME THE AUTHORITY THAT DECIDED. Two different facts can pick an issue, and
   # an operator who cannot tell which one did cannot tell whether the recorded
   # course was followed.
+  #
+  # A priority band (and, under a gate, the recorded order) narrows the slate;
+  # when more than one candidate is still equal on every ranking key, the winner
+  # was chosen by the deterministic issue-number fallback — lowest number first —
+  # not by priority or order alone. `cands > 1` counts the whole slate, so it
+  # over-claimed a tiebreak whenever any second candidate existed — and in the
+  # no-gate branch it named an explicit order the milestone declares absent.
+  # `tie_n` counts only the candidates equal to the winner on priority and order,
+  # which is the band the issue number actually had to break.
+  local tie_n
+  tie_n="$(printf '%s' "$cand" | awk 'NF' \
+    | awk -F'|' -v p="$(printf '%s' "$pick" | cut -d'|' -f4)" -v o="$pick_order" \
+        '$4 == p && $5 == o' | wc -l | tr -d ' ')"
   if [ "$ord_authority" -eq 1 ] && [ "$pick_order" != "999" ]; then
     printf 'reason    first eligible issue in the release-gate sub-issue order'
     if [ "$cands" -gt 1 ]; then
@@ -8056,13 +8069,15 @@ RAW_ROWS
     fi
   elif [ "$ord_authority" -eq 1 ]; then
     printf 'reason    no eligible issue carries a recorded position'
-    if [ "$cands" -gt 1 ]; then
+    if [ "$tie_n" -gt 1 ]; then
+      printf '; priority ranks the unordered work and the lowest issue number broke the %s tie' "$pick_prio"
+    elif [ "$cands" -gt 1 ]; then
       printf '; ranked by priority among unordered work'
     fi
   else
     printf 'reason    highest-priority eligible issue'
-    if [ "$cands" -gt 1 ]; then
-      printf '; the explicit sub-issue order broke the %s tie' "$pick_prio"
+    if [ "$tie_n" -gt 1 ]; then
+      printf '; the lowest issue number broke the %s tie' "$pick_prio"
     fi
   fi
   printf '\n'
