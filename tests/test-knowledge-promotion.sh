@@ -66,4 +66,46 @@ assert_flat_contains_all "$agents/00-intake.md" "intake evidence" \
 # constellation.
 assert_no_constellation_names "$root"
 
+# --- the terminology split (#477) ------------------------------------------
+# `provenance` names change-over-time history; the flow that carries durable
+# meaning is `knowledge promotion`. Both halves are pinned: the canonical
+# glossary must define each term, and no *current* shipped surface may name the
+# promotion flow or its classification boundary `provenance`.
+
+glossary="$root/plugins/spark/docs/glossary.md"
+
+# One canonical definition each, cross-linked to the deciding ADR.
+assert_flat_contains_all "$glossary" "provenance is change history" \
+  '### provenance' 'change-over-time' 'Git and GitHub' 'cited' 'ADR-0031'
+
+assert_flat_contains_all "$glossary" "knowledge promotion is durable meaning" \
+  '### knowledge promotion' 'durable' 'memory hub' 'deletion test' 'ADR-0028'
+
+# The old name is explained exactly where a reader meets it, not erased.
+assert_flat_contains_all "$glossary" "historical name explained once" \
+  'provenance.promotion'
+
+# No current shipped surface names the promotion flow `provenance`. Checked per
+# file so a failure names the file that regressed. The audit companion's
+# `provenance leakage` finding class is the *correct* sense and is untouched.
+for f in \
+  "$root/plugins/spark/skills/ship/SKILL.md" \
+  "$root/plugins/spark/skills/ship/references/release-please.md" \
+  "$root/plugins/spark/skills/knowledge/references/hub-promotion.md" \
+  "$root/plugins/spark/docs/reference/cli.md" \
+  "$root/plugins/spark/docs/reference/engineering-preferences.md"; do
+  assert_flat_lacks "$f" "no provenance-as-meaning in $(basename "$f")" \
+    'provenance.(promotion|boundary)|cross-project provenance'
+done
+
+# The decision record carries the current term and discloses the rename.
+adr="$root/docs/adr/0028-cross-project-memory-hubs.md"
+assert_flat_contains_all "$adr" "ADR-0028 uses the current term" \
+  'Spark owns knowledge promotion' 'Terminology refined by' '#477' 'ADR-0031'
+
+# Historical records keep the name they were recorded under — the rename must
+# not be applied retroactively to evidence.
+assert_flat_contains_all "$root/docs/releases/v0.17.md" \
+  "v0.17 record keeps its milestone name" 'Provenance promotion'
+
 finish
