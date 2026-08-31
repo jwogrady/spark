@@ -1293,6 +1293,24 @@ Names the one next eligible issue in a milestone, derived entirely from live
 GitHub metadata, and explains why it was chosen. Read-only: it changes no
 label, milestone, priority, dependency, issue state, or branch.
 
+### Existing implementation
+
+Before the handoff says "start coding", it reports whether someone already did.
+Any **open** PR that declares a closing reference (`Closes`/`Fixes`/`Resolves
+#N`) is surfaced with its number, branch and exact HEAD SHA. A PR that merely
+*mentions* the issue is reported separately as **heuristic** and never promoted:
+the release PR lists every issue in its changelog, so treating mentions as
+implementations would report work in flight for an entire milestone.
+
+An open PR is **evidence to inspect, never approval**, correctness, merge
+readiness, or a claim on ownership. When two PRs both declare they close the
+issue, both are reported and neither is chosen — competing implementations are a
+person's decision.
+
+Absence is claimed only after a complete bounded read. A failed query, or a list
+that reaches its scan bound, reports **NOT ASSESSED** rather than "none found".
+Discovery is read-only and issues no mutating call.
+
 Two questions, two authorities, deliberately kept apart:
 
 - **Hard prerequisites** come from GitHub's **native `blocked-by` graph**. An

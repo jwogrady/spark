@@ -8073,6 +8073,116 @@ RAW_ROWS
   return 0
 }
 
+# next_impl_prs <issue-number> — open pull requests that may already implement
+# this issue (#628).
+#
+# Duplicate implementation happened twice in v0.23: an issue was known, an open
+# PR already implemented it, and nothing surfaced that before a second branch
+# was cut. The PR was always mechanically discoverable; nobody was asked to look.
+#
+# Two strengths of evidence, kept apart because conflating them is how a passing
+# mention becomes an authority:
+#
+#   direct     the PR DECLARES a closing reference — Closes/Fixes/Resolves #N.
+#              That is the mechanism GitHub itself uses to link a PR to an
+#              issue, so it is the strongest signal available without a
+#              write-scoped API.
+#   heuristic  the issue number merely appears — in the branch name, the title,
+#              or the body without a closing keyword. Worth showing, never worth
+#              trusting: a PR that says "similar to #N" is not implementing N.
+#
+# An open PR is EVIDENCE TO INSPECT, never approval, correctness, merge
+# readiness, or a claim on ownership. This function reads and reports; it
+# selects nothing and mutates nothing.
+#
+# Emits TSV rows:
+#   direct     <TAB> pr <TAB> branch <TAB> head <TAB> title
+#   heuristic  <TAB> pr <TAB> branch <TAB> head <TAB> why
+#   unassessed <TAB> reason
+NEXT_PR_SCAN_LIMIT="${NEXT_PR_SCAN_LIMIT:-100}"
+
+next_impl_prs() {
+  local issue="$1" raw n
+  command -v gh >/dev/null 2>&1 || {
+    printf 'unassessed\tgh is unavailable, so open implementation PRs could not be read\n'
+    return 0
+  }
+  raw="$(gh pr list --state open --limit "$NEXT_PR_SCAN_LIMIT" \
+        --json number,headRefName,headRefOid,title,body \
+        --jq '.[] | [(.number|tostring), .headRefName, .headRefOid, .title,
+                     ((.body // "") | gsub("[\n\t]"; " "))] | @tsv' 2>/dev/null)" \
+    || {
+      printf 'unassessed\tthe open pull request list could not be read\n'
+      return 0
+    }
+
+  # A complete read is the only basis for saying "none". Hitting the scan limit
+  # means the answer may be past the boundary, which is an unknown rather than
+  # an absence.
+  n="$(printf '%s' "$raw" | awk 'NF' | wc -l | tr -d ' ')"
+  if [ "$n" -ge "$NEXT_PR_SCAN_LIMIT" ]; then
+    printf 'unassessed\tthe open pull request list reached the %s-entry scan bound, so absence cannot be claimed\n' \
+      "$NEXT_PR_SCAN_LIMIT"
+    return 0
+  fi
+
+  printf '%s\n' "$raw" | awk -F'\t' -v issue="$issue" '
+    NF < 4 { next }
+    {
+      num = $1; branch = $2; head = $3; title = $4; body = ($5 == "" ? "" : $5)
+      hay = title " " body
+      # GitHubs own closing-reference vocabulary, case-insensitive, requiring the
+      # issue number to end at a non-digit so #61 never matches #611.
+      if (match(tolower(hay), "(close[sd]?|fix(e[sd])?|resolve[sd]?)[: ]*#" issue "([^0-9]|$)")) {
+        printf "direct\t%s\t%s\t%s\t%s\n", num, branch, head, title
+        next
+      }
+      why = ""
+      if (branch ~ ("(^|[^0-9])" issue "([^0-9]|$)")) why = "the branch name carries the issue number"
+      else if (match(hay, "#" issue "([^0-9]|$)"))    why = "the issue number is mentioned without a closing reference"
+      if (why != "") printf "heuristic\t%s\t%s\t%s\t%s\n", num, branch, head, why
+    }'
+}
+
+# next_report_impl_prs <issue> — render the discovery for the handoff.
+next_report_impl_prs() {
+  local issue="$1" rows direct_n heur_n un
+  rows="$(next_impl_prs "$issue")"
+
+  un="$(printf '%s\n' "$rows" | awk -F'\t' '$1 == "unassessed" { print $2; exit }')"
+  if [ -n "$un" ]; then
+    echo
+    yellow "existing implementation: NOT ASSESSED — $un"
+    echo "  absence is not established; check open PRs before cutting a branch"
+    return 0
+  fi
+
+  direct_n="$(printf '%s\n' "$rows" | awk -F'\t' '$1 == "direct" { n++ } END { print n+0 }')"
+  heur_n="$(printf '%s\n' "$rows" | awk -F'\t' '$1 == "heuristic" { n++ } END { print n+0 }')"
+  [ "$direct_n" -eq 0 ] && [ "$heur_n" -eq 0 ] && return 0
+
+  echo
+  if [ "$direct_n" -gt 0 ]; then
+    yellow "existing implementation: $direct_n open PR(s) declare they close #$issue"
+    printf '%s\n' "$rows" | awk -F'\t' '$1 == "direct" {
+      printf "  PR #%s  %s\n           %s\n           %s\n", $2, $5, $3, $4 }'
+    if [ "$direct_n" -gt 1 ]; then
+      echo "  MORE THAN ONE. These are competing implementations; reconcile them"
+      echo "  deliberately — nothing here chooses between them."
+    fi
+    echo "  Inspect before starting: an open PR is evidence, never approval,"
+    echo "  correctness, merge readiness, or a claim on ownership."
+  fi
+  if [ "$heur_n" -gt 0 ]; then
+    echo
+    echo "possible association ($heur_n) — HEURISTIC, not authority:"
+    printf '%s\n' "$rows" | awk -F'\t' '$1 == "heuristic" {
+      printf "  PR #%s  %s — %s\n", $2, $3, $5 }'
+    echo "  A mention is not an implementation. Confirm before treating as work in flight."
+  fi
+  return 0
+}
+
 # next_route — map one selected issue's canonical metadata to the Spark lane
 # that owns it, and name any mandatory human gate BEFORE anything mutates
 # (#437).
@@ -8491,6 +8601,8 @@ EOF_ROWS3
 
   echo
   next_route "$sn" "$scat" "$sthemes" "$taxo"
+  # Before the handoff says "start coding", say whether someone already did.
+  next_report_impl_prs "${sn#'#'}"
 }
 
 # Dispatch only when executed, not when sourced — sourcing (e.g. from behavioral
