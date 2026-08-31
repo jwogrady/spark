@@ -31,6 +31,20 @@ sel() {
   ok
 }
 
+# sel_absent <desc> <evidence> <needle-that-must-NOT-appear> ...
+# The discriminating half of a reason assertion: a message can name the right
+# authority and still smuggle a false one alongside it, so the guard that a
+# wrong claim is gone is asserted directly, not inferred from a positive match.
+sel_absent() {
+  local desc="$1" ev="$2"; shift 2
+  local out rc=0 needle
+  out="$(printf '%s' "$ev" | next_select 2>&1)" || rc=$?
+  for needle in "$@"; do
+    case "$out" in *"$needle"*) bad "$desc — output wrongly contains '$needle'"; return 0 ;; esac
+  done
+  ok
+}
+
 bash -n "$script" && ok || bad "bash -n spark"
 
 # --- THE AUTHORITATIVE ORDER OUTRANKS PRIORITY (#611).
@@ -84,6 +98,39 @@ issue	27	-	1	1	P0	0	P0
 " \
   "selected  #27" "highest-priority eligible issue" "ranked by priority"
 
+# --- #622: with NO gate, an equal top-priority tie is broken by the
+# deterministic issue-number fallback, NOT by an explicit order the milestone
+# declares absent. The reason must name the fallback that actually decided and
+# must not credit an authority its own note reports does not exist.
+sel 0 "no gate, equal-priority tie names the issue-number fallback" \
+"ordernone	this milestone declares no release gate, so no explicit order exists
+issue	11	-	1	1	P0	0	second
+issue	10	-	1	1	P0	0	first
+" \
+  "selected  #10" "highest-priority eligible issue" \
+  "the lowest issue number broke the P0 tie"
+sel_absent "no gate, equal-priority tie never credits an absent order" \
+"ordernone	this milestone declares no release gate, so no explicit order exists
+issue	11	-	1	1	P0	0	second
+issue	10	-	1	1	P0	0	first
+" \
+  "explicit sub-issue order broke"
+
+# --- #622: with NO gate and UNEQUAL priority, priority alone decides — no tie
+# remained, so no tiebreak clause is claimed at all.
+sel 0 "no gate, unequal priority names priority as the sole authority" \
+"ordernone	this milestone declares no release gate, so no explicit order exists
+issue	10	-	1	1	P0	0	winner
+issue	11	-	1	1	P1	0	loser
+" \
+  "selected  #10" "highest-priority eligible issue"
+sel_absent "no gate, unequal priority claims no tiebreak" \
+"ordernone	this milestone declares no release gate, so no explicit order exists
+issue	10	-	1	1	P0	0	winner
+issue	11	-	1	1	P1	0	loser
+" \
+  "broke the"
+
 # --- a higher-priority BLOCKED issue never outranks a lower-priority eligible
 # one. This is the whole point of separating the two authorities.
 sel 0 "a blocked P0 does not outrank an eligible P2" \
@@ -98,7 +145,9 @@ sel 0 "unordered same-priority ties fall back to issue number" \
 "issue	41	-	1	1	P1	0	higher number
 issue	40	-	1	1	P1	0	lower number
 " \
-  "selected  #40" "order     not recorded"
+  "selected  #40" "order     not recorded" \
+  "no eligible issue carries a recorded position" \
+  "the lowest issue number broke the P1 tie"
 
 # --- the order position counts places in the ORDER RECORD, not candidates
 # left on the slate. Found the first time `spark next` ran for real: six of
