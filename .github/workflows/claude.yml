@@ -1,0 +1,175 @@
+# The Claude coding lane (#583) — split authority.
+#
+# A trusted human mentions @claude on an issue or PR. From there the work is
+# split across three jobs so that no single credential can both reason over
+# untrusted input and publish code:
+#
+#   resolve  — trusted gate + deterministic identity. Read-only. Its job `if:`
+#              admits ONLY a trusted commenter (the actual comment author) who
+#              wrote @claude, before any runner starts.
+#   claude   — reasons and proposes. Has NO repository-write credential and no
+#              deploy key, so it cannot push and cannot merge; it emits a patch
+#              as a data artifact.
+#   publish  — the only writer. Holds a Git-only SSH deploy key (no API, so no
+#              merge), validates the patch against the resolver's pinned identity
+#              and a forbidden-path/mode gate, and fast-forwards the exact PR
+#              feature branch or refuses.
+#
+# UNARMED until a human adds the CLAUDE_PUBLISH_DEPLOY_KEY secret (a write deploy
+# key for THIS repo) and CLAUDE_CODE_OAUTH_TOKEN. Absent either, the boundary
+# exists and nothing publishes. See docs/ops/claude-coding-lane.md.
+#
+# Deliberately absent: workflow_run (the reviewer->writer handoff is #585's);
+# any pull_request trigger (automatic review is #584's). This lane wakes on an
+# explicit human mention only.
+name: Claude Code
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions: {}
+
+jobs:
+  resolve:
+    # The trust gate. Evaluated before any runner starts, on the actual
+    # commenter's association — never the issue/PR author's — and requires an
+    # explicit @claude mention. Both, not either.
+    if: >-
+      (
+        github.event.comment.author_association == 'OWNER' ||
+        github.event.comment.author_association == 'MEMBER' ||
+        github.event.comment.author_association == 'COLLABORATOR'
+      ) && contains(github.event.comment.body, '@claude')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+    outputs:
+      publication_authorized: ${{ steps.resolve.outputs.publication_authorized }}
+      repository: ${{ steps.resolve.outputs.repository }}
+      issue_number: ${{ steps.resolve.outputs.issue_number }}
+      is_pr: ${{ steps.resolve.outputs.is_pr }}
+      pr_number: ${{ steps.resolve.outputs.pr_number }}
+      head_repo: ${{ steps.resolve.outputs.head_repo }}
+      head_ref: ${{ steps.resolve.outputs.head_ref }}
+      head_sha: ${{ steps.resolve.outputs.head_sha }}
+      default_branch: ${{ steps.resolve.outputs.default_branch }}
+    steps:
+      # Trusted code only: the default-branch commit that defined this workflow.
+      - name: Checkout trusted default branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Resolve event identity
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT_ISSUE_NUMBER: ${{ github.event.issue.number }}
+          EVENT_IS_PR: ${{ github.event.issue.pull_request != null }}
+        run: bash .github/scripts/claude-lane/resolve.sh
+
+  claude:
+    # Reasons and proposes. No contents: write, no deploy key — it physically
+    # cannot push or merge. It reads the exact resolved head and emits a patch.
+    needs: resolve
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+    steps:
+      - name: Checkout PR head (read-only, no persisted credential)
+        if: needs.resolve.outputs.is_pr == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.head_sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Run Claude Code
+        uses: anthropics/claude-code-action@v1
+        with:
+          # Pin the action to the RESTRICTED workflow token. Without this the v1
+          # action requests an OIDC token and exchanges it with Anthropic for a
+          # GitHub App token defaulting to contents/pull_requests/issues WRITE —
+          # a second, write-capable credential this lane must never hold. The
+          # job also drops id-token: write so the OIDC exchange cannot run.
+          github_token: ${{ github.token }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            You are woken by a trusted human @claude mention in the Spark
+            repository. You have NO write credential: you cannot push and cannot
+            merge, and you must not try. Propose the smallest correct change by
+            editing this checkout — a separate deterministic publisher validates
+            and publishes it to the feature branch. Never open a new pull
+            request. Never assign a milestone, priority, or backlog disposition
+            to make a check go green. If the request needs a project judgment
+            (scope, priority, release placement), reply naming the decision and
+            the admissible options, and stop — a recommendation is not authority.
+            If you cannot assess something, say what and why; NOT ASSESSED is
+            never a pass.
+      - name: Capture the proposed change as a data artifact
+        if: needs.resolve.outputs.is_pr == 'true' && needs.resolve.outputs.publication_authorized == 'true'
+        env:
+          HEAD_SHA: ${{ needs.resolve.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          git add -A
+          git diff --binary "$HEAD_SHA" > "$RUNNER_TEMP/change.patch" || true
+      - name: Upload change artifact
+        if: needs.resolve.outputs.is_pr == 'true' && needs.resolve.outputs.publication_authorized == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-change
+          path: ${{ runner.temp }}/change.patch
+          if-no-files-found: ignore
+          retention-days: 1
+
+  publish:
+    # The only writer. A Git-only deploy key (no API => no merge), scoped to this
+    # repo, referenced in NO other job. Runs trusted validation code from the
+    # default branch over the untrusted patch, then fast-forwards or refuses.
+    needs: [resolve, claude]
+    if: needs.resolve.outputs.publication_authorized == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout trusted default branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: trusted
+          persist-credentials: false
+      - name: Checkout PR head (data only, never executed)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.head_sha }}
+          path: target
+          persist-credentials: false
+      - name: Download change artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: claude-change
+          path: artifact
+      - name: Validate and publish
+        env:
+          CTX_REPO: ${{ github.repository }}
+          # From the EVENT, not the resolver — so the publisher's PR-number
+          # check compares two independent producers (event vs resolved API),
+          # and cannot be fooled by resolver drift where both sides agree.
+          CTX_PR: ${{ github.event.issue.number }}
+          REPO: ${{ needs.resolve.outputs.repository }}
+          PR_NUMBER: ${{ needs.resolve.outputs.pr_number }}
+          HEAD_REPO: ${{ needs.resolve.outputs.head_repo }}
+          HEAD_REF: ${{ needs.resolve.outputs.head_ref }}
+          HEAD_SHA: ${{ needs.resolve.outputs.head_sha }}
+          DEFAULT_BRANCH: ${{ needs.resolve.outputs.default_branch }}
+          PATCH: ${{ github.workspace }}/artifact/change.patch
+          TRUSTED_DIR: ${{ github.workspace }}/trusted
+          TARGET_DIR: ${{ github.workspace }}/target
+          DEPLOY_KEY: ${{ secrets.CLAUDE_PUBLISH_DEPLOY_KEY }}
+        run: bash trusted/.github/scripts/claude-lane/publish.sh
