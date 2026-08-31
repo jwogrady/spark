@@ -79,6 +79,54 @@ bash "$SB/run.sh" >/dev/null 2>&1 || rc=$?
 assert_contains "suite output still reaches the log" "  10 passed, 0 failed" "$OUT"
 assert_contains "and each suite is announced"        "== test-alpha.sh" "$OUT"
 
+# --- the targeted path is the cheap one --------------------------------------
+# #558 prefers targeted checks during repair and reserves full certification for
+# a boundary. That preference only means something if the runner can actually
+# run a subset.
+OUT="$(bash "$SB/run.sh" --only alpha --json 2>&1)"
+JSON="$(printf '%s\n' "$OUT" | grep -E '^\{')"
+assert_contains "a targeted run reports only the matching suite" '"suites":1' "$JSON"
+assert_contains "and names itself targeted"                      '"kind":"targeted"' "$JSON"
+assert_contains "carrying only that suite's assertions"          '"assertions_passed":10' "$JSON"
+case "$OUT" in *"test-beta.sh"*) bad "--only must not run non-matching suites" ;; *) ok ;; esac
+
+FULLJSON="$(bash "$SB/run.sh" --json 2>&1 | grep -E '^\{')" || true
+assert_contains "a full run names itself full" '"kind":"full"' "$FULLJSON"
+
+# --- one invocation is one execution, however many summaries are read --------
+assert_contains "an execution counts itself once" '"executions":1' "$JSON"
+
+# The telemetry hand-off: each runner invocation records exactly one execution,
+# which is what lets run telemetry tell one run with several projections apart
+# from several actual runs.
+mkdir -p "$SB/../plugins/spark/bin"
+TELLOG="$WORK/telemetry.calls"
+: > "$TELLOG"
+cat > "$SB/../plugins/spark/bin/spark" <<TELSTUB
+#!/usr/bin/env bash
+if [ "\$2" = "record" ] || [ "\$1" = "telemetry" ] && [ "\$2" = "record" ]; then
+  printf '%s\n' "\$*" >> "$TELLOG"
+fi
+exit 0
+TELSTUB
+chmod +x "$SB/../plugins/spark/bin/spark"
+
+SPARK_RUN_ID=bench-run bash "$SB/run.sh" --only alpha >/dev/null 2>&1 || true
+calls="$(awk "/telemetry record/ { n++ } END { print n+0 }" "$TELLOG")"
+[ "$calls" = "1" ] && ok || bad "one execution must record exactly one telemetry increment (got $calls)"
+assert_contains "a targeted run records a targeted check" "targeted_checks" "$(cat "$TELLOG")"
+
+: > "$TELLOG"
+SPARK_RUN_ID=bench-run bash "$SB/run.sh" >/dev/null 2>&1 || true
+assert_contains "a full run records a full-suite execution" "full_suite_runs" "$(cat "$TELLOG")"
+
+# Reading the same result again must record nothing further — a projection is
+# not an execution.
+: > "$TELLOG"
+printf '%s\n' "$JSON" | grep -q '"suites"' && ok || bad "the captured JSON should still be readable"
+calls="$(awk "/telemetry record/ { n++ } END { print n+0 }" "$TELLOG")"
+[ "$calls" = "0" ] && ok || bad "re-reading a captured result must not record an execution (got $calls)"
+
 # --- MUTATION CONTROL ---------------------------------------------------------
 # Stop accumulating assertions across suites, so the totals no longer come from
 # the captured evidence. The aggregate fixture must go red.
