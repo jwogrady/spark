@@ -99,6 +99,7 @@ jobs:
           # job also drops id-token: write so the OIDC exchange cannot run.
           github_token: ${{ github.token }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          show_full_output: true
           prompt: |
             You are woken by a trusted human @claude mention in the Spark
             repository. You have NO write credential: you cannot push and cannot
