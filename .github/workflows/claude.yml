@@ -57,7 +57,6 @@ jobs:
       head_sha: ${{ steps.resolve.outputs.head_sha }}
       default_branch: ${{ steps.resolve.outputs.default_branch }}
     steps:
-      # Trusted code only: the default-branch commit that defined this workflow.
       - name: Checkout trusted default branch
         uses: actions/checkout@v4
         with:
@@ -73,8 +72,6 @@ jobs:
         run: bash .github/scripts/claude-lane/resolve.sh
 
   claude:
-    # Reasons and proposes. No contents: write, no deploy key — it physically
-    # cannot push or merge. It reads the exact resolved head and emits a patch.
     needs: resolve
     runs-on: ubuntu-latest
     permissions:
@@ -92,13 +89,9 @@ jobs:
       - name: Run Claude Code
         uses: anthropics/claude-code-action@v1
         with:
-          # Pin the action to the RESTRICTED workflow token. Without this the v1
-          # action requests an OIDC token and exchanges it with Anthropic for a
-          # GitHub App token defaulting to contents/pull_requests/issues WRITE —
-          # a second, write-capable credential this lane must never hold. The
-          # job also drops id-token: write so the OIDC exchange cannot run.
           github_token: ${{ github.token }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          show_full_output: true
           prompt: |
             You are woken by a trusted human @claude mention in the Spark
             repository. You have NO write credential: you cannot push and cannot
@@ -129,9 +122,6 @@ jobs:
           retention-days: 1
 
   publish:
-    # The only writer. A Git-only deploy key (no API => no merge), scoped to this
-    # repo, referenced in NO other job. Runs trusted validation code from the
-    # default branch over the untrusted patch, then fast-forwards or refuses.
     needs: [resolve, claude]
     if: needs.resolve.outputs.publication_authorized == 'true'
     runs-on: ubuntu-latest
@@ -158,9 +148,6 @@ jobs:
       - name: Validate and publish
         env:
           CTX_REPO: ${{ github.repository }}
-          # From the EVENT, not the resolver — so the publisher's PR-number
-          # check compares two independent producers (event vs resolved API),
-          # and cannot be fooled by resolver drift where both sides agree.
           CTX_PR: ${{ github.event.issue.number }}
           REPO: ${{ needs.resolve.outputs.repository }}
           PR_NUMBER: ${{ needs.resolve.outputs.pr_number }}
