@@ -122,6 +122,33 @@ the stale-release-PR trap.
 This policy governs the project being built. Spark's own version is a separate
 line (already past `0.1.0`).
 
+## A Crossroad is a missing authority, not a feeling
+
+The autonomous loop's costliest stop is not running past a real human boundary —
+it is inventing one. A genuine Crossroad exists only when the next motion needs
+an authority a durable surface reserves to the human: a **new authority grant**,
+a **materially different product/governance semantic**, an **unresolved
+human-owned release policy**, a **destructive or irreversible external action**,
+or another **durable `DECISION REQUIRED`**. Before emitting `DECISION REQUIRED`,
+an agent must be able to name the exact missing authority and cite the durable
+surface that reserves it.
+
+Everything else continues. Activating an implementation the owning issue already
+authorized is not a new grant merely because it goes live on merge. Substituting
+one form of evidence for another — an independent exact-HEAD review standing in
+for a bootstrap that cannot review itself — is a verification question, not a
+governance decision. Co-authorship, operator courtesy, perceived
+presumptuousness, and general "this feels consequential" are never authority. If
+no reserved authority is actually missing and acceptance is true, the agent
+continues the already-authorized close-out — a routine merge under standing
+authority, with exact-head protection — and a completed PR does not end the
+session: it flows into owning-issue reconciliation and the next executable work.
+
+This governs only the human-handoff decision. It changes nothing about `UNKNOWN`
+/ `NOT ASSESSED` never being a pass, stale-head protection, independent review,
+or CI — those stop work on their own evidence. `spark crossroad` encodes the
+distinction mechanically.
+
 ## The loop closes
 
 Shipped work that reveals a new problem doesn't get bolted onto the current PR —

@@ -548,6 +548,43 @@ says it is. It recommends and routes; that is the whole of its authority.
 
 `--tsv` emits the gathered evidence plus a `course` and a `route` line.
 
+## `spark crossroad <kind> [authority] [surface]`
+
+Classify a proposed stop before handing off to the human. The autonomous
+orchestrator's costliest stop mistake is not running past a real boundary — it
+is inventing one (#690). A genuine Crossroad exists only when the next motion
+needs an authority a durable surface reserves to the human.
+
+`crossroad` admits a stop **only** for a recognised boundary kind that also
+**names** the missing authority and **cites** the durable surface reserving it.
+Everything else continues. It exits `0` to continue and `3` at a genuine
+`DECISION REQUIRED`.
+
+| Kind | Verdict |
+| --- | --- |
+| `new-authority`, `product-governance-semantics`, `release-policy`, `destructive-external`, `decision-required` | **`DECISION REQUIRED`** — but only when both `authority` and `surface` are named |
+| `activate-authorized`, `evidence-substitution`, `co-authorship`, `operator-courtesy`, `presumptuousness`, `consequentiality`, `general-caution` | **`CONTINUE`** — never an authority boundary |
+
+Activating a capability the owning issue already authorized is not a new grant
+merely because it goes live on merge. Substituting one form of evidence for
+another — an independent exact-HEAD review standing in for a bootstrap that
+cannot self-review — is a verification question, not a governance decision. And
+co-authorship, operator courtesy, perceived presumptuousness, or general caution
+are never authority.
+
+A boundary kind with no named authority or cited surface **continues**: you must
+be able to name the exact reserved authority, and point at the durable surface
+that reserves it, before you stop. This changes nothing about `UNKNOWN` / `NOT
+ASSESSED`, stale-head protection, review, or CI — those stop work on their own
+evidence; `crossroad` governs only the human-handoff decision.
+
+```
+$ spark crossroad activate-authorized
+CONTINUE                                    # exit 0
+$ spark crossroad new-authority "a write-capable deploy key" "AGENTS.md guardrails"
+DECISION REQUIRED                           # exit 3
+```
+
 ## `spark hub [--set <owner/repo|url|none>]`
 
 Reports the memory hub this project declares — the one repository designated

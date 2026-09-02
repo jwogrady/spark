@@ -1814,3 +1814,73 @@ cmd_ci() {
       red "unknown ci action: $action"; echo "$usage_line"; return 1 ;;
   esac
 }
+
+# ---------------------------------------------------------------------------
+# Crossroad classification (#690)
+#
+# The autonomous orchestrator's most expensive stop mistake is not running past a
+# real human boundary — it is INVENTING one. A genuine Crossroad exists only when
+# the next motion needs an authority a durable surface reserves to the human.
+# Activating an implementation the owning issue already authorized is not a new
+# grant; substituting one form of evidence for another (an independent exact-HEAD
+# review standing in for a bootstrap that cannot self-review) is a verification
+# question, not a governance decision; and social caution — co-authorship,
+# perceived presumptuousness, "this feels consequential" — is never authority.
+#
+# So a stop is admitted ONLY for a recognised boundary kind that also NAMES the
+# missing authority and CITES the durable surface reserving it. Everything else
+# continues. This fails toward CONTINUE on purpose: the defect (#688) was a false
+# stop, so an unnamed or unrecognised reason must never manufacture one. It does
+# not touch UNKNOWN/NOT ASSESSED, stale-head protection, review, or CI — those
+# stop work on their own evidence; this governs only the human-handoff decision.
+
+# Kinds that ARE human-owned boundaries — a real stop, but only when the missing
+# authority is named and its reserving surface cited.
+XR_BOUNDARY_KINDS="new-authority product-governance-semantics release-policy destructive-external decision-required"
+# Kinds that are NOT authority boundaries — activating already-authorized work,
+# verification/evidence mechanics, or social/psychological caution. These continue.
+XR_NON_BOUNDARY_KINDS="activate-authorized evidence-substitution co-authorship operator-courtesy presumptuousness consequentiality general-caution"
+
+# xr_stop_check <kind> [authority] [surface]
+# Echoes the verdict on the first line — CONTINUE or DECISION REQUIRED — then the
+# reason. Returns 0 for CONTINUE, 3 for a genuine DECISION REQUIRED Crossroad.
+xr_stop_check() {
+  local kind="${1:-}" authority="${2:-}" surface="${3:-}"
+  case " $XR_NON_BOUNDARY_KINDS " in
+    *" $kind "*)
+      echo "CONTINUE"
+      echo "reason: '$kind' is not an authority boundary — activating already-authorized work, evidence substitution, or social caution is never a human gate; continue the authorized close-out"
+      return 0 ;;
+  esac
+  case " $XR_BOUNDARY_KINDS " in
+    *" $kind "*)
+      if [ -n "$authority" ] && [ -n "$surface" ]; then
+        echo "DECISION REQUIRED"
+        echo "missing authority: $authority — reserved to the human by $surface (kind: $kind)"
+        return 3
+      fi
+      echo "CONTINUE"
+      echo "reason: a '$kind' stop must NAME the specific missing human authority AND cite the durable surface reserving it; neither was given, so continue rather than manufacture a Crossroad"
+      return 0 ;;
+  esac
+  echo "CONTINUE"
+  echo "reason: unrecognised stop kind '$kind' — name the exact reserved authority and its durable surface, or continue"
+  return 0
+}
+
+# cmd_crossroad <kind> [authority] [surface] — expose xr_stop_check on the CLI so
+# an agent can check itself before a human handoff. Exits 0 to continue, 3 at a
+# genuine Crossroad.
+cmd_crossroad() {
+  if [ "$#" -eq 0 ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    echo "usage: spark crossroad <kind> [authority] [surface]"
+    echo "  boundary kinds (stop only when authority AND surface are named):"
+    echo "    $XR_BOUNDARY_KINDS"
+    echo "  non-boundary kinds (always continue):"
+    echo "    $XR_NON_BOUNDARY_KINDS"
+    return 0
+  fi
+  local rc=0
+  xr_stop_check "$@" || rc=$?
+  return "$rc"
+}
