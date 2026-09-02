@@ -377,6 +377,14 @@ fi
 [ "$reinvoked" = 0 ] && ok || bad "a consumed-but-unfinalized HEAD must never be re-invoked"
 # And a bare reservation alone is neither consumed nor a final marker (resumable).
 printf '%s\n' "$sm_res" | orl_has_consumed 700 sha700 && bad "a bare reservation must not read as consumed" || ok
+# TOCTOU (#692): terminal-green at the ci step, but a re-run makes a check pending
+# before the paid call. The ask-step re-validation sees non-terminal and DEFERS —
+# the model is not invoked on the stale terminal snapshot; the reservation stays
+# resumable for the next completion event.
+printf '%s\n' "$green"   | orl_checks_terminal $REQ || bad "TOCTOU precondition: ci step saw terminal"
+if printf '%s\n' "$pending" | orl_checks_terminal $REQ; then
+  bad "a check that went pending before the call must defer, not invoke"
+else ok; fi
 
 # Static workflow facts: the workflow fetches, delegates to the tested helper, and
 # enforces the flag; the derived logic itself is proven by the fixtures above.
@@ -398,9 +406,13 @@ haswf "resolves the target PR and HEAD from either event" 'Resolve target PR and
 haswf "serializes by exact HEAD SHA"                  'openai-review-\$\{\{ github.event.pull_request.head.sha'
 haswf "checks terminality with the tested helper"     'orl_checks_terminal \$required'
 haswf "requires all required checks green to pass"    'orl_checks_passed \$required'
-haswf "a non-green terminal HEAD cannot pass"         'CI_PASSED'
+haswf "a non-green terminal HEAD cannot pass"         '! orl_checks_passed \$required'
 haswf "the guard skips a consumed HEAD, resumes only a bare reservation" 'orl_has_consumed'
+haswf "defers (fail closed) when comments are unreadable" 'comments-unreadable-defer'
 haswf "records the paid call as consumed before making it" 'orl_invoked "\$PR" "\$HEAD_SHA"'
+haswf "re-validates terminal checks immediately before the call" '! orl_checks_terminal \$required'
+haswf "a re-run to pending before the call defers"    'defer=true'
+haswf "does not finalize a deferred review"           "steps.ask.outputs.defer != 'true'"
 haswf "reviews only when checks are terminal"         "steps.ci.outputs.terminal == 'true'"
 haswf "paginates the check-runs API"                  'check-runs\?per_page=100'
 haswf "normalizes paginated comments into one array"  "jq -s 'add"

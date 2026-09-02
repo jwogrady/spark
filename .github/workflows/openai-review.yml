@@ -102,13 +102,19 @@ jobs:
             exit 0
           fi
 
-          # Fetch every page once. gh --paginate emits one JSON array PER PAGE, so
-          # normalize the pages into a single array — otherwise a reservation found
-          # after page one yields a multiline id and resumption silently breaks. Only
-          # claims authored by the trusted Actions producer count; marker-shaped text
-          # from contributors is inert.
-          gh api --paginate "repos/$REPO/issues/$PR/comments?per_page=100" \
-            > /tmp/rev/comments.raw.json 2>/dev/null || echo '[]' > /tmp/rev/comments.raw.json
+          # Fetch every page once. FAIL CLOSED: if the comments cannot be read, an
+          # existing invoked/final marker would look absent and a second paid call
+          # could be made — so defer without claiming or invoking, and let a later
+          # event retry. gh --paginate emits one JSON array PER PAGE, so normalize
+          # the pages into a single array — otherwise a reservation found after page
+          # one yields a multiline id and resumption silently breaks. Only claims
+          # authored by the trusted Actions producer count; contributor text is inert.
+          if ! gh api --paginate "repos/$REPO/issues/$PR/comments?per_page=100" \
+               > /tmp/rev/comments.raw.json 2>/dev/null; then
+            echo "already=true" >> "$GITHUB_OUTPUT"
+            echo "reason=comments-unreadable-defer" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           jq -s 'add // []' /tmp/rev/comments.raw.json > /tmp/rev/comments.json
           jq -r '.[] | [.user.login, (.performed_via_github_app.slug // ""), .body] | @tsv' \
             /tmp/rev/comments.json > /tmp/rev/comment-claims.tsv
@@ -171,16 +177,13 @@ jobs:
             if orl_checks_terminal $required < /tmp/rev/checks.txt; then terminal=true; break; fi
             [ "$attempt" -lt 6 ] && sleep 20 || true
           done
+          # Only gate whether to gather+consider this HEAD; the ask step re-validates
+          # terminality AND greenness immediately before the paid call (the snapshot
+          # here can go stale), so green is decided there, not cached.
           if [ "$terminal" = "true" ]; then
             echo "terminal=true" >> "$GITHUB_OUTPUT"
-            if orl_checks_passed $required < /tmp/rev/checks.txt; then
-              echo "passed=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "passed=false" >> "$GITHUB_OUTPUT"
-            fi
           else
             echo "terminal=false" >> "$GITHUB_OUTPUT"
-            echo "passed=false" >> "$GITHUB_OUTPUT"
             echo "Required checks not yet terminal for $HEAD_SHA; the reservation stays pending until a completion event resumes it."
           fi
 
@@ -279,17 +282,29 @@ jobs:
           PR: ${{ steps.target.outputs.pr }}
           REPO: ${{ github.repository }}
           HEAD_SHA: ${{ steps.target.outputs.head_sha }}
-          CI_PASSED: ${{ steps.ci.outputs.passed }}
           RESERVATION_ID: ${{ steps.guard.outputs.reservation_id }}
         run: |
           set -euo pipefail
           . .github/scripts/openai-review/lib.sh
+          required="docs-truth doctor gate tests"
 
-          # This step runs only when the required checks are terminal (its `if`).
-          # Terminal but not all green: a failed or cancelled required check means
-          # this exact HEAD is not mergeable-green, so it cannot PASS. Finalize
-          # NOT ASSESSED without spending the model call.
-          if [ "${CI_PASSED:-false}" != "true" ]; then
+          # Re-validate the required checks IMMEDIATELY before consuming the paid
+          # call — the ci step's terminal/green snapshot is now stale: a check could
+          # have been re-run or gone pending since (#692 TOCTOU). Re-fetch the full
+          # paginated set into checks.txt (so the reviewed evidence reflects THIS
+          # snapshot too). If a check is no longer terminal, DEFER — write no verdict
+          # and leave the reservation resumable for the next completion event.
+          gh api --paginate "repos/$REPO/commits/$HEAD_SHA/check-runs?per_page=100" \
+            --jq '.check_runs[] | "\(.name): \(.status)/\(.conclusion // "pending")"' \
+            > /tmp/rev/checks.txt 2>/dev/null || : > /tmp/rev/checks.txt
+          if ! orl_checks_terminal $required < /tmp/rev/checks.txt; then
+            echo "defer=true" >> "$GITHUB_OUTPUT"
+            echo "A required check became non-terminal before invocation; deferring, reservation stays resumable."
+            exit 0
+          fi
+          # Terminal but not all green: a failed/cancelled required check means this
+          # HEAD cannot PASS. Finalize NOT ASSESSED without spending the model call.
+          if ! orl_checks_passed $required < /tmp/rev/checks.txt; then
             printf 'NOT ASSESSED\n\nOne or more required checks are not green on this exact HEAD, so it cannot pass review. This is not a pass; fix the failing checks.\n' > /tmp/rev/verdict.md
             printf '0' > /tmp/rev/latency.txt
             exit 0
@@ -362,7 +377,7 @@ jobs:
           fi
 
       - name: Finalize the reserved review
-        if: steps.guard.outputs.already != 'true' && steps.ci.outputs.terminal == 'true'
+        if: steps.guard.outputs.already != 'true' && steps.ci.outputs.terminal == 'true' && steps.ask.outputs.defer != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ steps.target.outputs.pr }}
