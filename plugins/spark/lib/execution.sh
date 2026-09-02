@@ -1575,6 +1575,11 @@ ci_live() {
         --jq '"__civ_head__\t" + (.headRefOid // ""), (.statusCheckRollup[] | [(.name // .context), (.conclusion // .status // .state)] | @tsv)' 2>/dev/null)" \
     || { CI_LIVE_LINES="__unreadable__"; return 0; }
   CI_LIVE_HEAD="$(printf '%s\n' "$raw" | awk -F'\t' '$1=="__civ_head__"{print $2; exit}')"
+  # A coherent observation MUST carry the head the rollup describes. A missing or
+  # empty headRefOid — even alongside readable check rows — is not a usable
+  # observation: without the head, the rollup cannot be bound to the certified
+  # commit, so it is unreadable, never evidence (#658).
+  [ -n "$CI_LIVE_HEAD" ] || { CI_LIVE_LINES="__unreadable__"; return 0; }
   local out
   out="$(printf '%s\n' "$raw" | awk -F'\t' '$1!="__civ_head__" && NF{print}')"
   # No checks at all is a different fact from being unable to ask, and a caller
@@ -1644,23 +1649,26 @@ ci_observe() {
   ci_live "$civ_pr"
   CI_OBS_LINES="$CI_LIVE_LINES"
   CI_OBS_HEAD="$CI_LIVE_HEAD"                 # the head the rollup actually described
-  CI_OBS_SENT="$(ci_sentinel_state "$CI_OBS_LINES")"
+  CI_OBS_SENT=""                             # defined on every path (stale returns early)
   civ_polls="$(( ${civ_polls:-0} + 1 ))"
   civ_observed_at="$(date -u +%FT%TZ)"
   civ_observed_head="$CI_OBS_HEAD"           # record which head this observation covered
-  if [ -n "$CI_OBS_SENT" ]; then
-    CI_OBS_VERDICT="$CI_OBS_SENT"; CI_OBS_CHANGED=1
-    civ_state="$CI_OBS_SENT"
-    ci_write "$file"
-    return 0
-  fi
-  # The rollup describes CI_OBS_HEAD. If the PR has moved off the certified commit,
-  # those checks are NOT evidence for civ_head — never classify them as the
-  # certified head's verdict, and never let a green replacement head report the old
-  # head READY (#658). This is its own terminal outcome: re-certify the new head.
+  # A readable head that has moved off the certified commit is STALE — decided
+  # BEFORE any sentinel classification, so a moved PR whose new head has no checks
+  # yet is reported stale, not "no checks" (#658). Those checks are not evidence
+  # for civ_head; a green replacement head must never report the old head READY.
+  # An UNREADABLE head (CI_OBS_HEAD empty) cannot be compared and falls through to
+  # the sentinel path below.
   if [ -n "$CI_OBS_HEAD" ] && [ "$CI_OBS_HEAD" != "$civ_head" ]; then
     CI_OBS_VERDICT="stale"; CI_OBS_CHANGED=1
     civ_state="stale"
+    ci_write "$file"
+    return 0
+  fi
+  CI_OBS_SENT="$(ci_sentinel_state "$CI_OBS_LINES")"
+  if [ -n "$CI_OBS_SENT" ]; then
+    CI_OBS_VERDICT="$CI_OBS_SENT"; CI_OBS_CHANGED=1
+    civ_state="$CI_OBS_SENT"
     ci_write "$file"
     return 0
   fi
@@ -1732,10 +1740,19 @@ cmd_ci() {
       fi
       local lines verdict sent
       ci_live "$pr"; lines="$CI_LIVE_LINES"
-      # The certification must cover the PR's CURRENT head. If a readable live head
-      # differs from the supplied --head, recording it would let CI for newer work
-      # masquerade as this commit's evidence (#658). Refuse, and name both SHAs.
-      if [ -n "$CI_LIVE_HEAD" ] && [ "$CI_LIVE_HEAD" != "$head" ]; then
+      # The certification must cover the PR's CURRENT head, so the live head must be
+      # readable to verify --head against it. An unreadable head is not "assume it
+      # matches" — without it a later resume cannot tell this commit's CI from work
+      # pushed since, so refuse to record an unverifiable certification (#658).
+      if [ -z "$CI_LIVE_HEAD" ]; then
+        red "spark ci handoff: could not read the PR's current head — refusing to record an unverifiable certification"
+        yellow "  retry once GitHub answers; a certification that cannot be bound to a commit is not one."
+        return 1
+      fi
+      # If a readable live head differs from the supplied --head, recording it would
+      # let CI for newer work masquerade as this commit's evidence. Refuse, and name
+      # both SHAs.
+      if [ "$CI_LIVE_HEAD" != "$head" ]; then
         red "spark ci handoff: --head $head is not the PR's current head ($CI_LIVE_HEAD)"
         yellow "  certify the commit the PR actually points at, or re-run local certification on it."
         return 1

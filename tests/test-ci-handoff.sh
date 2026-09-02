@@ -43,6 +43,10 @@ exit 0
 STUB
 chmod +x "$WORK/bin/gh"
 export PATH="$WORK/bin:$PATH"
+# Real GitHub always answers with a headRefOid; the stub emits one when GH_HEAD is
+# set. Default it to the head the fixtures below certify (abc123) so a coherent
+# observation exists; the #658 fixtures vary it to move or hide the head.
+export GH_HEAD=abc123
 
 rc() {
   local want="$1" desc="$2" got=0; shift 3
@@ -215,7 +219,22 @@ rc 1 "handoff refuses a --head that is not the current head" -- "$SPARK" ci hand
 assert_contains "handoff names both heads" "not the PR's current head" \
   "$("$SPARK" ci handoff --run stale2 --pr 42 --head not-current 2>&1 || true)"
 rc 0 "handoff accepts the PR's current head" -- "$SPARK" ci handoff --run stale3 --pr 42 --head current-head
-unset GH_HEAD                                    # leave the environment clean for later fixtures
+# A moved head whose new head has NO checks yet is STALE, not "no checks": the
+# stale decision precedes sentinel classification.
+printf 'EMPTY\n' > "$GH_ROLLUP"; export GH_HEAD=h2-newhead
+rc 5 "a moved head with no checks is stale, not nochecks" -- "$SPARK" ci resume --run stale
+assert_contains "reported stale, not a nochecks sentinel" '"state":"stale"' \
+  "$("$SPARK" ci resume --run stale --json 2>/dev/null || true)"
+# A response carrying checks but NO head is not a coherent observation: unreadable,
+# never a pass, and handoff refuses to record against it.
+green_; unset GH_HEAD
+rc 1 "checks with no readable head are unreadable, never a pass" -- "$SPARK" ci resume --run stale
+assert_contains "an unreadable head is not a pass" "never a pass" \
+  "$("$SPARK" ci resume --run stale 2>&1 || true)"
+rc 1 "handoff refuses when the current head is unreadable" -- "$SPARK" ci handoff --run stale4 --pr 42 --head anything
+assert_contains "and names the unverifiable certification" "could not read the PR's current head" \
+  "$("$SPARK" ci handoff --run stale4 --pr 42 --head anything 2>&1 || true)"
+export GH_HEAD=abc123                            # restore the coherent default for later fixtures
 
 # --- MUTATION CONTROL --------------------------------------------------------
 # Stop comparing against the recorded snapshot, so every read looks like a
