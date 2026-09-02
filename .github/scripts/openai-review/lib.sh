@@ -108,6 +108,26 @@ orl_has_consumed() { # expected_pr expected_head
   return 1
 }
 
+# Does this exact PR + HEAD need FAIL-CLOSED recovery? A scheduled sweep calls this
+# for the live head of each open PR: a reservation or invoked marker exists (the
+# review was claimed or its model call consumed) but NO final verdict was ever
+# recorded — so the normal completion path stranded it (retries exhausted, a run
+# killed after invoking, or a transient fetch failure). Recovery finalizes NOT
+# ASSESSED without invoking the model, guaranteeing every reservation eventually
+# reaches a terminal disposition (#692). Returns 0 (recover) or 1 (nothing to do).
+# The caller applies a grace window and the exact-head/trusted checks; this decides
+# the disposition from the marker state. stdin is TSV: login<TAB>app-slug<TAB>body.
+orl_needs_recovery() { # expected_pr expected_head
+  local claims; claims="$(cat)"
+  [ -n "$1" ] && [ -n "$2" ] || return 1
+  # A final verdict already exists → nothing to recover.
+  printf '%s\n' "$claims" | orl_has_final_marker "$1" "$2" && return 1
+  # An invoked marker (call consumed, never finalized) with no final → recover.
+  printf '%s\n' "$claims" | orl_has_consumed "$1" "$2" && return 0
+  # A bare reservation with no final verdict → recover.
+  printf '%s\n' "$claims" | orl_has_trusted_claim "$1" "$2"
+}
+
 # Human-facing routing. #585, not reviewer prose, owns automatic writer handoff.
 orl_route() { # verdict
   case "$1" in

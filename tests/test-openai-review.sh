@@ -129,6 +129,22 @@ spoof_invoked="attacker	github-actions	$(orl_invoked 688 abc123)"
 printf '%b\n' "$spoof_invoked"   | orl_has_consumed 688 abc123 && bad "a spoofed-login invoked marker must not count" || ok
 printf '%b\n' "github-actions[bot]	github-actions	$(orl_invoked 688 def456)" | orl_has_consumed 688 abc123 && bad "a wrong-HEAD invoked marker must not count" || ok
 
+# Fail-closed recovery (#692): the scheduled sweep finalizes NOT ASSESSED for a
+# reservation/invoked marker that never reached a final verdict — guaranteeing a
+# terminal disposition when the completion path stranded (retries exhausted, a run
+# killed after invoking, a transient fetch failure). A finalized HEAD or a HEAD with
+# no trusted claim needs nothing.
+res_only="github-actions[bot]	github-actions	$(orl_reservation 688 abc123)"
+inv_only="github-actions[bot]	github-actions	$(orl_reservation 688 abc123) $(orl_invoked 688 abc123)"
+printf '%b\n' "$inv_only"     | orl_needs_recovery 688 abc123 && ok || bad "invoked-but-unfinalized must be recovered"
+printf '%b\n' "$res_only"     | orl_needs_recovery 688 abc123 && ok || bad "a stranded bare reservation must be recovered"
+printf '%b\n' "$trusted_final" | orl_needs_recovery 688 abc123 && bad "a finalized HEAD must NOT be recovered" || ok
+printf '%b\n' "$res_only
+github-actions[bot]	github-actions	$(orl_marker PASS 688 abc123)" | orl_needs_recovery 688 abc123 && bad "a reservation that WAS finalized must not be recovered" || ok
+printf '' | orl_needs_recovery 688 abc123 && bad "no claim → nothing to recover" || ok
+printf '%b\n' "$res_only"     | orl_needs_recovery 688 zzz999 && bad "recovery must bind the exact HEAD" || ok
+printf '%b\n' "attacker	github-actions	$(orl_reservation 688 abc123)" | orl_needs_recovery 688 abc123 && bad "a spoofed-login reservation must not trigger recovery" || ok
+
 case "$(orl_route PASS)" in *"not merge authority"*) ok ;; *) bad "PASS route" ;; esac
 case "$(orl_route "CHANGES REQUIRED")" in *"#585"*"do not merge"*) ok ;; *) bad "CHANGES route" ;; esac
 case "$(orl_route "DECISION REQUIRED")" in *"@jwogrady"*) ok ;; *) bad "DECISION route" ;; esac
@@ -412,7 +428,12 @@ haswf "defers (fail closed) when comments are unreadable" 'comments-unreadable-d
 haswf "records the paid call as consumed before making it" 'orl_invoked "\$PR" "\$HEAD_SHA"'
 haswf "re-validates terminal checks immediately before the call" '! orl_checks_terminal \$required'
 haswf "a re-run to pending before the call defers"    'defer=true'
-haswf "does not finalize a deferred review"           "steps.ask.outputs.defer != 'true'"
+haswf "does not finalize a deferred review"           'steps.ask.outputs.defer !='
+haswf "finalizes even if the ask step errored (fail closed)" '!cancelled\(\)'
+haswf "a scheduled sweep recovers stranded reservations" "cron: '17,47"
+haswf "recovery decides disposition with the tested helper" 'orl_needs_recovery'
+haswf "recovery never invokes the model (no curl in it)"    'scheduled recovery finalized NOT ASSESSED without invoking'
+haswf "recovery honours a grace window"               'grace=1800'
 haswf "reviews only when checks are terminal"         "steps.ci.outputs.terminal == 'true'"
 haswf "paginates the check-runs API"                  'check-runs\?per_page=100'
 haswf "normalizes paginated comments into one array"  "jq -s 'add"

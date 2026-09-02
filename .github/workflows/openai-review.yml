@@ -17,19 +17,27 @@ on:
   workflow_run:
     workflows: [validate, docs-truth, milestone-gate]
     types: [completed]
+  # Durable safety net: a scheduled sweep guarantees every reserved HEAD eventually
+  # reaches a terminal disposition even if the completion path stranded it (retries
+  # exhausted, a run killed after invoking, a transient fetch failure). It finalizes
+  # NOT ASSESSED fail-closed, never invoking the model (#692).
+  schedule:
+    - cron: '17,47 * * * *'
 
 # Serialize by exact HEAD SHA — reliably present in BOTH event payloads — so a
 # pull_request_target run and a workflow_run run for the same commit never overlap,
 # and the paid model call is invoked at most once per exact HEAD. Do not cancel an
 # in-flight run: cancellation after the paid call could let a replacement re-invoke it.
 concurrency:
-  group: openai-review-${{ github.event.pull_request.head.sha || github.event.workflow_run.head_sha }}
+  group: openai-review-${{ github.event.pull_request.head.sha || github.event.workflow_run.head_sha || github.run_id }}
   cancel-in-progress: false
 
 permissions: {}
 
 jobs:
   openai-review:
+    # Event-driven review; the scheduled sweep is the separate recover job.
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -376,8 +384,12 @@ jobs:
             printf 'NOT ASSESSED\n\nThe reviewer returned no readable text, so this change was not reviewed.\n' > /tmp/rev/verdict.md
           fi
 
+      # Runs even if the Ask step ERRORED (!cancelled): if the model call was
+      # consumed (invoked marker written) but the run then failed, this still
+      # finalizes a terminal disposition — an empty/unwritten verdict.md normalizes
+      # to NOT ASSESSED — so the HEAD is never left invoked-but-unfinalized (#692).
       - name: Finalize the reserved review
-        if: steps.guard.outputs.already != 'true' && steps.ci.outputs.terminal == 'true' && steps.ask.outputs.defer != 'true'
+        if: '!cancelled() && steps.guard.outputs.already != ''true'' && steps.ci.outputs.terminal == ''true'' && steps.ask.outputs.defer != ''true'''
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ steps.target.outputs.pr }}
@@ -430,3 +442,68 @@ jobs:
             echo "latency_s=$latency"
             echo "total_tokens=$tokens"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # Scheduled fail-closed recovery (#692): guarantee a terminal disposition for any
+  # reserved HEAD the event-driven path stranded — retries exhausted, a run killed
+  # after invoking, or a transient fetch failure. It NEVER invokes the model; it
+  # only finalizes NOT ASSESSED for a reservation/invoked marker that, after a grace
+  # window well past the completion + retry window, still has no final verdict on the
+  # PR's LIVE head. This is the durable retry the completion trigger alone cannot
+  # promise; the grace window keeps it from racing a normal in-flight review.
+  recover:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: openai-review-recover
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: read
+    steps:
+      - name: Checkout trusted base implementation
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Finalize stranded reservations fail-closed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          . .github/scripts/openai-review/lib.sh
+          grace=1800   # 30 min: well past the completion + retry window
+          now="$(date +%s)"
+          tab="$(printf '\t')"
+          gh api --paginate "repos/$REPO/pulls?state=open&per_page=100" \
+            --jq '.[] | "\(.number)\t\(.head.sha)"' > /tmp/prs.txt 2>/dev/null || : > /tmp/prs.txt
+          while IFS="$tab" read -r pr head; do
+            [ -n "$pr" ] && [ -n "$head" ] || continue
+            # Fail closed: if comments are unreadable, skip this PR (retry next sweep).
+            gh api --paginate "repos/$REPO/issues/$pr/comments?per_page=100" \
+              > /tmp/c.raw 2>/dev/null || continue
+            jq -s 'add // []' /tmp/c.raw > /tmp/c.json
+            jq -r '.[] | [.user.login, (.performed_via_github_app.slug // ""), .body] | @tsv' \
+              /tmp/c.json > /tmp/c.tsv
+            orl_needs_recovery "$pr" "$head" < /tmp/c.tsv || continue
+            # Locate the reservation comment (id + created_at) for this exact head.
+            needle="<!-- $ORL_RESERVATION_TAG pr=$pr head=$head -->"
+            row="$(jq -r --arg l "$ORL_TRUSTED_LOGIN" --arg a "$ORL_TRUSTED_APP" --arg n "$needle" \
+              '[.[] | select(.user.login==$l) | select((.performed_via_github_app.slug // "")==$a) | select(.body|contains($n)) | "\(.id)\t\(.created_at)"] | (.[0] // "")' \
+              /tmp/c.json)"
+            [ -n "$row" ] || continue
+            cid="${row%%"$tab"*}"; created="${row#*"$tab"}"
+            created_epoch="$(date -d "$created" +%s 2>/dev/null || echo 0)"
+            [ "$created_epoch" -gt 0 ] || continue
+            [ $(( now - created_epoch )) -ge "$grace" ] || continue
+            # Fail-closed terminal disposition, no model call.
+            note="This exact HEAD was reserved but the reviewer never finalized a verdict before the completion path was exhausted, so a scheduled recovery finalized NOT ASSESSED without invoking the model. This is not a pass; push a new commit or re-request review."
+            body="$(printf '%s\n\n%s' "$(orl_marker 'NOT ASSESSED' "$pr" "$head")" "$note")"
+            # A single PATCH failure must not abort the sweep, but it is logged and
+            # retried on the next scheduled run — never silently swallowed.
+            if ! gh api --method PATCH "repos/$REPO/issues/comments/$cid" -f body="$body" >/dev/null; then
+              echo "recovery PATCH failed for PR $pr ($head); the next sweep retries."
+            fi
+          done < /tmp/prs.txt
