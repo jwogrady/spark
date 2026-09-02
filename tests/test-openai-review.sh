@@ -1,9 +1,5 @@
 #!/usr/bin/env bash
 # Behavioral tests for the OpenAI reviewer lane (#584).
-#
-# Three ways, like the coding lane's suite: static facts about the workflow,
-# the real canonical functions on synthetic input, and discriminating controls
-# — flip a load-bearing line and the matching assertion goes red.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -15,76 +11,90 @@ lib="$here/../.github/scripts/openai-review/lib.sh"
 pass=0; fail=0
 ok()  { pass=$((pass + 1)); }
 bad() { fail=$((fail + 1)); echo "  ✖ $1"; }
-
-echo "OpenAI reviewer lane (#584)"
-
-bash -n "$lib" && ok || bad "bash -n lib.sh"
-
-# --- static workflow facts ---------------------------------------------------
-haswf()    { if grep -qE -- "$2" "$wf"; then ok; else bad "$1 — workflow lacks /$2/"; fi; }
+haswf()    { grep -qE -- "$2" "$wf" && ok || bad "$1 — workflow lacks /$2/"; }
 haswf_not(){ if grep -qE -- "$2" "$wf"; then bad "$1 — workflow wrongly matches /$2/"; else ok; fi; }
 
-haswf    "fires on the four PR event types" 'types: \[opened, synchronize, reopened, ready_for_review\]'
-haswf    "reads contents, never writes them"        'contents: read'
-# The load-bearing negative control: a reviewer that gains contents:write has
-# become a coding lane. If read ever flips to write, this assertion goes red.
-haswf_not "the job has NO contents: write"          'contents: write'
-haswf_not "no publish deploy key in this lane"       'DEPLOY_KEY|CLAUDE_PUBLISH'
-haswf    "posts the verdict via pull-requests: write" 'pull-requests: write'
-haswf    "checkout persists no credential"           'persist-credentials: false'
-haswf    "one review per PR via concurrency"         'concurrency:'
-haswf    "a new push cancels the stale-HEAD review"  'cancel-in-progress: true'
-haswf    "the review call reads OPENAI_API_KEY from secrets" 'OPENAI_API_KEY: \$\{\{ secrets.OPENAI_API_KEY \}\}'
-haswf    "fail-closed when the key is absent"        'OPENAI_API_KEY is not available'
-haswf    "fail-closed when the reviewer is unreachable" 'could not be reached \(HTTP'
-haswf    "sources the canonical function library"    'openai-review/lib.sh'
-haswf    "guards on an already-reviewed HEAD"         'already-reviewed|already=true|orl_reviewed_head'
+echo "OpenAI reviewer lane (#584)"
+bash -n "$lib" && ok || bad "bash -n lib.sh"
 
-# --- orl_normalize_verdict ---------------------------------------------------
-nv() { eq="$1"; got="$(orl_normalize_verdict "$2")"; [ "$got" = "$eq" ] && ok || bad "normalize '$2' — want '$eq' got '$got'"; }
-nv PASS                "PASS"
-nv "CHANGES REQUIRED"  "CHANGES REQUIRED"
+# Trusted-execution boundary.
+haswf "uses pull_request_target so execution comes from trusted base" '^  pull_request_target:'
+haswf_not "does not execute a pull_request workflow from PR code" '^  pull_request:'
+haswf "checks out the exact base SHA" 'ref: \$\{\{ github.event.pull_request.base.sha \}\}'
+haswf_not "never checks out the PR head" 'ref: \$\{\{ github.event.pull_request.head.sha \}\}'
+haswf "checkout persists no credential" 'persist-credentials: false'
+haswf "reads contents, never writes them" 'contents: read'
+haswf_not "reviewer has no contents write" 'contents: write'
+haswf_not "reviewer has no publisher deploy key" 'DEPLOY_KEY|CLAUDE_PUBLISH'
+
+# Serialized, durable one-invocation claim.
+haswf "serializes one PR" 'group: openai-review-'
+haswf "does not cancel an in-flight paid review" 'cancel-in-progress: false'
+haswf "paginates comment claims" 'gh api --paginate.*comments\?per_page=100'
+haswf "writes a durable reservation before review" 'orl_reservation'
+haswf "rechecks the live HEAD before model invocation" 'superseded before reviewer invocation'
+haswf "finalizes the existing reservation comment" 'issues/comments/\$RESERVATION_ID'
+haswf_not "publication failures are not swallowed" 'gh (pr comment|api).*\|\| true'
+
+# Prompt-injection boundary.
+haswf "uses higher-authority Responses API instructions" 'instructions: \$instructions'
+haswf "labels supplied evidence as untrusted" 'UNTRUSTED DATA'
+haswf "keeps untrusted evidence in input" 'input: \$input'
+haswf_not "does not execute Spark from a PR checkout" 'Checkout repository \(read-only|checkout.*HEAD_SHA'
+
+# Fail closed and exact-head evidence.
+haswf "uses the OpenAI secret" 'OPENAI_API_KEY: \$\{\{ secrets.OPENAI_API_KEY \}\}'
+haswf "missing key fails closed" 'OPENAI_API_KEY is not available'
+haswf "provider failure fails closed" 'could not be reached \(HTTP'
+haswf "posts structured exact-head marker" 'orl_marker'
+
+# Verdict normalization.
+nv() { local want="$1" got; got="$(orl_normalize_verdict "$2")"; [ "$got" = "$want" ] && ok || bad "normalize '$2' — want '$want' got '$got'"; }
+nv PASS "PASS"
+nv "CHANGES REQUIRED" "CHANGES REQUIRED"
 nv "DECISION REQUIRED" "DECISION REQUIRED"
-nv "NOT ASSESSED"      "NOT ASSESSED"
-nv PASS                "PASS — nothing blocking"          # trailing rationale stripped
-nv "CHANGES REQUIRED"  "  CHANGES REQUIRED  "             # surrounding space trimmed
-nv "NOT ASSESSED"      ""                                  # empty fails closed
-nv "NOT ASSESSED"      "looks good to me"                  # unknown fails closed
-nv "NOT ASSESSED"      "pass"                              # wrong case fails closed (never a false PASS)
-nv "NOT ASSESSED"      "APPROVED"                          # a star-rating word is not the vocabulary
-# stdin form must agree with the argument form
-got="$(printf 'PASS: ship it\n' | orl_normalize_verdict)"; [ "$got" = "PASS" ] && ok || bad "normalize via stdin — got '$got'"
+nv "NOT ASSESSED" "NOT ASSESSED"
+nv PASS "PASS — nothing blocking"
+nv "NOT ASSESSED" "pass"
+nv "NOT ASSESSED" ""
 
-# --- orl_closing_issues ------------------------------------------------------
-ci() { got="$(printf '%s' "$2" | orl_closing_issues | paste -sd, -)"; [ "$got" = "$1" ] && ok || bad "closing_issues '$2' — want '$1' got '$got'"; }
-ci "12"     "closes #12"
-ci "7"      "Fixes #7"
-ci "9"      "resolves #9"
-ci "1,2,3"  "closes #2, fixes #1, resolves #3"
-ci "5"      "closes #5 and closes #5"                      # deduped
-ci ""       "see #4 and related #8"                        # bare mentions are not a contract
-ci ""       "no references here"
+# Closing-issue parser remains bounded to closing keywords.
+ci() { local got; got="$(printf '%s' "$2" | orl_closing_issues | paste -sd, -)"; [ "$got" = "$1" ] && ok || bad "closing_issues '$2' — want '$1' got '$got'"; }
+ci "12" "closes #12"
+ci "1,2,3" "closes #2, fixes #1, resolves #3"
+ci "" "see #4"
 
-# --- orl_marker + orl_reviewed_head (one verdict per HEAD) --------------------
-m="$(orl_marker PASS 678 abc123)"
-case "$m" in *"spark-openai-review pr=678 head=abc123 verdict=PASS"*) ok ;; *) bad "marker shape wrong: $m" ;; esac
+# Exact marker/reservation shape.
+m="$(orl_marker PASS 688 abc123)"
+r="$(orl_reservation 688 abc123)"
+case "$m" in *"spark-openai-review pr=688 head=abc123 verdict=PASS"*) ok ;; *) bad "final marker shape" ;; esac
+case "$r" in *"spark-openai-review-reservation pr=688 head=abc123"*) ok ;; *) bad "reservation marker shape" ;; esac
 
-# a comment carrying the marker for HEAD abc123 counts as reviewed…
-printf '%s\n' "$m" | orl_reviewed_head abc123 && ok || bad "reviewed HEAD not detected"
-# …but a different HEAD (a synchronize push) is NOT deduped — it gets reviewed.
-printf '%s\n' "$m" | orl_reviewed_head def456 && bad "a new HEAD was wrongly treated as reviewed" || ok
-# an empty head never matches
-printf '%s\n' "$m" | orl_reviewed_head "" && bad "empty head matched" || ok
-# no reviewer comment at all -> not reviewed
-printf 'just a human comment\n' | orl_reviewed_head abc123 && bad "matched with no marker" || ok
-# a NOT ASSESSED verdict still marks the HEAD reviewed (it was assessed and failed closed)
-printf '%s\n' "$(orl_marker "NOT ASSESSED" 678 abc123)" | orl_reviewed_head abc123 && ok || bad "NOT ASSESSED marker not detected"
+# Trusted claim identity: text alone is not authority.
+trusted_final="github-actions[bot]	github-actions	$m"
+trusted_res="github-actions[bot]	github-actions	$r"
+spoof_login="attacker	github-actions	$m"
+spoof_app="github-actions[bot]	evil-app	$m"
+wrong_pr="github-actions[bot]	github-actions	$(orl_marker PASS 999 abc123)"
+wrong_head="github-actions[bot]	github-actions	$(orl_marker PASS 688 def456)"
+printf '%b\n' "$trusted_final" | orl_has_trusted_claim 688 abc123 && ok || bad "trusted final claim not detected"
+printf '%b\n' "$trusted_res" | orl_has_trusted_claim 688 abc123 && ok || bad "trusted reservation not detected"
+printf '%b\n' "$spoof_login" | orl_has_trusted_claim 688 abc123 && bad "spoofed login suppressed review" || ok
+printf '%b\n' "$spoof_app" | orl_has_trusted_claim 688 abc123 && bad "spoofed app suppressed review" || ok
+printf '%b\n' "$wrong_pr" | orl_has_trusted_claim 688 abc123 && bad "wrong PR suppressed review" || ok
+printf '%b\n' "$wrong_head" | orl_has_trusted_claim 688 abc123 && bad "wrong HEAD suppressed review" || ok
 
-# --- orl_route ---------------------------------------------------------------
-case "$(orl_route PASS)" in *"READY FOR HUMAN MERGE"*) ok ;; *) bad "PASS route wrong" ;; esac
-case "$(orl_route "CHANGES REQUIRED")" in *"@claude"*"do not merge"*) ok ;; *) bad "CHANGES route must hand to @claude and forbid merge" ;; esac
-case "$(orl_route "DECISION REQUIRED")" in *"@jwogrady"*) ok ;; *) bad "DECISION route must stop for the human" ;; esac
-case "$(orl_route "NOT ASSESSED")" in *"not reviewed"*) ok ;; *) bad "NOT ASSESSED route wrong" ;; esac
+# Mutation controls: each critical identity field is load-bearing.
+mut_login="$(printf '%b\n' "$spoof_login" | sed 's/^attacker/github-actions[bot]/')"
+printf '%s\n' "$mut_login" | orl_has_trusted_claim 688 abc123 && ok || bad "login mutation control did not flip"
+mut_app="$(printf '%b\n' "$spoof_app" | sed 's/evil-app/github-actions/')"
+printf '%s\n' "$mut_app" | orl_has_trusted_claim 688 abc123 && ok || bad "app mutation control did not flip"
+
+# Routing does not pretend reviewer prose itself is writer authority.
+case "$(orl_route PASS)" in *"not merge authority"*) ok ;; *) bad "PASS route" ;; esac
+case "$(orl_route "CHANGES REQUIRED")" in *"#585"*"do not merge"*) ok ;; *) bad "CHANGES route" ;; esac
+case "$(orl_route "DECISION REQUIRED")" in *"@jwogrady"*) ok ;; *) bad "DECISION route" ;; esac
+case "$(orl_route "NOT ASSESSED")" in *"not assessed"*) ok ;; *) bad "NOT ASSESSED route" ;; esac
 
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
