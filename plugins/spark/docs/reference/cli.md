@@ -577,8 +577,8 @@ are never authority.
 
 A boundary kind with no named authority or cited surface is **`INVALID`**, not
 `CONTINUE` and not `DECISION REQUIRED`: reporting `CONTINUE` there would let a
-machine caller run past a real boundary because a field was omitted or misspelled
-(the fail-open defect #696 closed). `INVALID` halts automated mutation until the
+machine caller run past a real boundary because a field was omitted or
+misspelled. `INVALID` halts automated mutation until the
 claim is completed — name the exact reserved authority and cite the durable
 surface, which yields `DECISION REQUIRED` — or the kind is corrected to a
 recognised non-boundary; it never manufactures a human handoff on its own. The
@@ -598,7 +598,7 @@ $ spark crossroad new-authority "a write-capable deploy key" "AGENTS.md guardrai
 DECISION REQUIRED                           # exit 3 — boundary, both fields named
 $ spark crossroad destructive-external
 INVALID                                     # exit 2 — boundary, claim incomplete
-$ spark crossroad release_polcy "v0.23 approval" "#480"
+$ spark crossroad release_polcy "v0.23 approval" "the release gate"
 INVALID                                     # exit 2 — unrecognised kind (typo)
 ```
 
