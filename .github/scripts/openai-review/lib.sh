@@ -11,6 +11,7 @@
 
 ORL_MARKER_TAG="spark-openai-review"
 ORL_RESERVATION_TAG="spark-openai-review-reservation"
+ORL_INVOKED_TAG="spark-openai-review-invoked"
 ORL_TRUSTED_LOGIN="github-actions[bot]"
 ORL_TRUSTED_APP="github-actions"
 
@@ -42,6 +43,16 @@ orl_reservation() { # pr head_sha
   printf '<!-- %s pr=%s head=%s -->' "$ORL_RESERVATION_TAG" "$1" "$2"
 }
 
+# Durable "the paid model call has been consumed for this exact PR + HEAD" marker.
+# Written into the reservation comment IMMEDIATELY BEFORE the model call, so that if
+# the run dies after the call but before the final verdict is finalized, a later
+# completion event sees the call was already consumed and does not invoke the model
+# a second time. It carries no verdict, so #585 (which reads verdict markers) never
+# mistakes it for a review outcome (#692).
+orl_invoked() { # pr head_sha
+  printf '<!-- %s pr=%s head=%s -->' "$ORL_INVOKED_TAG" "$1" "$2"
+}
+
 # Has the trusted reviewer producer already claimed this exact PR + HEAD?
 # stdin is TSV: login<TAB>app-slug<TAB>comment-body, one comment per line.
 # Text alone is never authority: both GitHub identity fields must match, and the
@@ -57,6 +68,83 @@ orl_has_trusted_claim() { # expected_pr expected_head
     esac
   done
   return 1
+}
+
+# Has the trusted producer posted a FINAL verdict marker (not merely a reservation)
+# for this exact PR + HEAD? A reservation means "claimed, review may still be
+# pending"; a final marker means "reviewed, terminal verdict recorded". The two are
+# distinguished so a HEAD reserved before its CI was terminal can RESUME once the
+# checks complete, while a HEAD already reviewed is never reviewed twice (#692).
+# stdin is TSV: login<TAB>app-slug<TAB>comment-body, one comment per line.
+orl_has_final_marker() { # expected_pr expected_head
+  local want_pr="$1" want_head="$2" login app body
+  [ -n "$want_pr" ] && [ -n "$want_head" ] || return 1
+  while IFS=$'\t' read -r login app body; do
+    [ "$login" = "$ORL_TRUSTED_LOGIN" ] || continue
+    [ "$app" = "$ORL_TRUSTED_APP" ] || continue
+    case "$body" in
+      *"<!-- $ORL_MARKER_TAG pr=$want_pr head=$want_head verdict="*) return 0 ;;
+    esac
+  done
+  return 1
+}
+
+# Has the paid model call already been CONSUMED for this exact PR + HEAD — either
+# invoked (pre-call marker) or fully reviewed (final verdict marker)? The guard
+# skips on this, so once the call is started it is never started again, even if a
+# prior run died between the call and finalization (concurrency stops overlap, not
+# a sequential retry after failure). Only a bare reservation with NEITHER of these
+# is resumable (#692). stdin is TSV: login<TAB>app-slug<TAB>comment-body.
+orl_has_consumed() { # expected_pr expected_head
+  local want_pr="$1" want_head="$2" login app body
+  [ -n "$want_pr" ] && [ -n "$want_head" ] || return 1
+  while IFS=$'\t' read -r login app body; do
+    [ "$login" = "$ORL_TRUSTED_LOGIN" ] || continue
+    [ "$app" = "$ORL_TRUSTED_APP" ] || continue
+    case "$body" in
+      *"<!-- $ORL_INVOKED_TAG pr=$want_pr head=$want_head -->"*|*"<!-- $ORL_MARKER_TAG pr=$want_pr head=$want_head verdict="*) return 0 ;;
+    esac
+  done
+  return 1
+}
+
+# Does this exact PR + HEAD need FAIL-CLOSED recovery? A scheduled sweep calls this
+# for the live head of each open PR. Recovery is deliberately narrow: it fires ONLY
+# for an INVOKED marker with no final verdict — the paid model call was consumed but
+# the run died before finalizing (a job kill, or an error the !cancelled finalize
+# could not catch). That case is CI-independent: there is nothing left to review,
+# only a fail-closed NOT ASSESSED to record, and no active review can touch a
+# consumed HEAD (the guard skips it). A BARE reservation is NOT finalized here:
+# finalizing it blind would recreate the pre-terminal freeze #692 removes — instead
+# it is RE-DISPATCHED for review (see orl_needs_redispatch). Returns 0 (recover) or
+# 1 (nothing to do). The caller adds a grace window (from the INVOCATION time) so
+# the invoking run is long finished. stdin is TSV: login<TAB>app-slug<TAB>body.
+orl_needs_recovery() { # expected_pr expected_head
+  local claims; claims="$(cat)"
+  [ -n "$1" ] && [ -n "$2" ] || return 1
+  # A final verdict already exists → nothing to recover.
+  printf '%s\n' "$claims" | orl_has_final_marker "$1" "$2" && return 1
+  # An INVOKED marker (call consumed) with no final verdict → recover. A bare
+  # reservation (never invoked) is handled by orl_needs_redispatch instead.
+  printf '%s\n' "$claims" | orl_has_consumed "$1" "$2"
+}
+
+# Does this exact PR + HEAD need durable RE-DISPATCH? A BARE reservation — claimed
+# but the model call NOT yet consumed and NO final verdict — means the event-driven
+# completion path may have stranded a reserved-but-unconsumed live HEAD (its last
+# workflow_run event hit prolonged propagation delay or a transient read failure).
+# The scheduled sweep re-dispatches the review for it rather than finalising it
+# blind (which would freeze a pre-terminal disposition) or ignoring it (which would
+# strand it). The re-dispatched run resumes through the normal guard — the
+# consumed-check and HEAD-SHA concurrency keep at-most-once — and reviews or defers
+# on the current terminality. Returns 0 (re-dispatch) or 1 (#692). stdin is TSV.
+orl_needs_redispatch() { # expected_pr expected_head
+  local claims; claims="$(cat)"
+  [ -n "$1" ] && [ -n "$2" ] || return 1
+  # Consumed (invoked or finalised) → not a bare reservation → no re-dispatch.
+  printf '%s\n' "$claims" | orl_has_consumed "$1" "$2" && return 1
+  # A bare reservation with no final verdict → re-dispatch.
+  printf '%s\n' "$claims" | orl_has_trusted_claim "$1" "$2"
 }
 
 # Human-facing routing. #585, not reviewer prose, owns automatic writer handoff.
@@ -165,4 +253,53 @@ orl_build_evidence() {
     esac
     printf 'CHANGED FILE MANIFEST: %s. The file list follows in the untrusted manifest section; a capped or unavailable manifest also blocks PASS.\n' "$manifest_state"
   } > "$out/completeness.txt"
+}
+
+# orl_checks_terminal <required-name>...  — stdin: check lines "name: status/conclusion".
+# Returns 0 only when EVERY required check is present and EVERY run reported for it
+# has status "completed". A required check that is missing, or that has ANY run
+# still queued/in_progress (a re-run may add a second, non-terminal entry for the
+# same name in unspecified order), makes the set non-terminal. Fail closed: the
+# reviewer must consume a terminal exact-HEAD CI snapshot, never a pending one (#692).
+orl_checks_terminal() { # <required...>
+  local input name found line rest status
+  input="$(cat)"
+  for name in "$@"; do
+    found=0
+    while IFS= read -r line; do
+      case "$line" in "$name: "*)
+        found=1
+        rest="${line#"$name": }"; status="${rest%%/*}"
+        [ "$status" = "completed" ] || return 1 ;;
+      esac
+    done <<INNER
+$input
+INNER
+    [ "$found" = 1 ] || return 1
+  done
+  return 0
+}
+
+# orl_checks_passed <required-name>...  — stdin: check lines "name: status/conclusion".
+# Returns 0 only when EVERY required check is present and EVERY run reported for it
+# is exactly "completed/success". Any non-terminal, failed, cancelled, timed-out,
+# or missing run makes the set not-passed. A model PASS on a HEAD whose required
+# checks are not all green is downgraded, so a failed or cancelled required check
+# can never publish PASS (#692).
+orl_checks_passed() { # <required...>
+  local input name found line rest
+  input="$(cat)"
+  for name in "$@"; do
+    found=0
+    while IFS= read -r line; do
+      case "$line" in "$name: "*)
+        found=1; rest="${line#"$name": }"
+        case "$rest" in completed/success) ;; *) return 1 ;; esac ;;
+      esac
+    done <<INNER
+$input
+INNER
+    [ "$found" = 1 ] || return 1
+  done
+  return 0
 }

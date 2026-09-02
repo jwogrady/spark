@@ -22,7 +22,9 @@ bash -n "$lib" && ok || bad "bash -n lib.sh"
 # Trusted-execution boundary.
 haswf "uses pull_request_target so execution comes from trusted base" '^  pull_request_target:'
 haswf_not "does not execute a pull_request workflow from PR code" '^  pull_request:'
-haswf "checks out the exact base SHA" 'ref: \$\{\{ github.event.pull_request.base.sha \}\}'
+# The checkout ref is the trusted base: base.sha for a PR event, the default
+# branch for a workflow_run event (also trusted) — never the PR head.
+haswf "checks out the trusted base SHA" 'ref: \$\{\{ github.event.pull_request.base.sha \|\| github.event.repository.default_branch \}\}'
 haswf_not "never checks out the PR head" 'ref: \$\{\{ github.event.pull_request.head.sha \}\}'
 haswf "checkout persists no credential" 'persist-credentials: false'
 haswf "reads contents, never writes them" 'contents: read'
@@ -104,6 +106,59 @@ mut_login="$(printf '%b\n' "$spoof_login" | sed 's/^attacker/github-actions[bot]
 printf '%s\n' "$mut_login" | orl_has_trusted_claim 688 abc123 && ok || bad "login mutation control did not flip"
 mut_app="$(printf '%b\n' "$spoof_app" | sed 's/evil-app/github-actions/')"
 printf '%s\n' "$mut_app" | orl_has_trusted_claim 688 abc123 && ok || bad "app mutation control did not flip"
+
+# Final marker vs bare reservation (#692): a reservation means "claimed, review may
+# be pending" (RESUMABLE); a final marker means "reviewed" (never review twice).
+# orl_has_final_marker must fire ONLY on the marker, so a pending reservation does
+# not suppress the resume that reviews the HEAD once its checks are terminal.
+printf '%b\n' "$trusted_final" | orl_has_final_marker 688 abc123 && ok || bad "a trusted final marker must be detected"
+printf '%b\n' "$trusted_res"   | orl_has_final_marker 688 abc123 && bad "a bare reservation must NOT count as a final marker (it must stay resumable)" || ok
+printf '%b\n' "$spoof_login"   | orl_has_final_marker 688 abc123 && bad "a spoofed-login marker must not count" || ok
+printf '%b\n' "$spoof_app"     | orl_has_final_marker 688 abc123 && bad "a spoofed-app marker must not count" || ok
+printf '%b\n' "$wrong_head"    | orl_has_final_marker 688 abc123 && bad "a wrong-HEAD marker must not count" || ok
+
+# Consumed = invoked OR reviewed (#692). The paid call is recorded BEFORE it is
+# made, so a run that dies between the call and finalization still leaves an invoked
+# marker; the guard skips on orl_has_consumed, so the model is never invoked twice.
+# A bare reservation is NOT consumed → it remains resumable.
+trusted_invoked="github-actions[bot]	github-actions	$(orl_invoked 688 abc123)"
+printf '%b\n' "$trusted_invoked" | orl_has_consumed 688 abc123 && ok || bad "an invoked marker must count as consumed (no re-invocation)"
+printf '%b\n' "$trusted_final"   | orl_has_consumed 688 abc123 && ok || bad "a final verdict marker must count as consumed"
+printf '%b\n' "$trusted_res"     | orl_has_consumed 688 abc123 && bad "a bare reservation must NOT count as consumed (stay resumable)" || ok
+spoof_invoked="attacker	github-actions	$(orl_invoked 688 abc123)"
+printf '%b\n' "$spoof_invoked"   | orl_has_consumed 688 abc123 && bad "a spoofed-login invoked marker must not count" || ok
+printf '%b\n' "github-actions[bot]	github-actions	$(orl_invoked 688 def456)" | orl_has_consumed 688 abc123 && bad "a wrong-HEAD invoked marker must not count" || ok
+
+# The scheduled sweep partitions a stranded live HEAD (#692): a CONSUMED-but-
+# unfinalized marker → finalize NOT ASSESSED (no re-invoke); a BARE reservation →
+# durable RE-DISPATCH of the review (never blind-finalized, which would freeze;
+# never ignored, which would strand). The two are mutually exclusive.
+res_only="github-actions[bot]	github-actions	$(orl_reservation 688 abc123)"
+inv_only="github-actions[bot]	github-actions	$(orl_reservation 688 abc123) $(orl_invoked 688 abc123)"
+# --- Case A: orl_needs_recovery (consumed-but-unfinalized → NOT ASSESSED) ---
+printf '%b\n' "$inv_only"     | orl_needs_recovery 688 abc123 && ok || bad "invoked-but-unfinalized must be recovered"
+printf '%b\n' "$res_only"     | orl_needs_recovery 688 abc123 && bad "a BARE reservation must NOT be finalized by recovery" || ok
+printf '%b\n' "$trusted_final" | orl_needs_recovery 688 abc123 && bad "a finalized HEAD must NOT be recovered" || ok
+printf '%b\n' "$inv_only
+github-actions[bot]	github-actions	$(orl_marker PASS 688 abc123)" | orl_needs_recovery 688 abc123 && bad "an invoked marker that WAS finalized must not be recovered" || ok
+printf '' | orl_needs_recovery 688 abc123 && bad "no claim → nothing to recover" || ok
+printf '%b\n' "$inv_only"     | orl_needs_recovery 688 zzz999 && bad "recovery must bind the exact HEAD" || ok
+printf '%b\n' "attacker	github-actions	$(orl_reservation 688 abc123) $(orl_invoked 688 abc123)" | orl_needs_recovery 688 abc123 && bad "a spoofed-login invoked marker must not trigger recovery" || ok
+# --- Case B: orl_needs_redispatch (bare reservation → durable resumption) ---
+# This is the reviewed final-event-retry-exhaustion / stranded-bare-reservation path.
+printf '%b\n' "$res_only"     | orl_needs_redispatch 688 abc123 && ok || bad "a stranded bare reservation must be re-dispatched"
+printf '%b\n' "$inv_only"     | orl_needs_redispatch 688 abc123 && bad "an invoked (consumed) HEAD must NOT be re-dispatched" || ok
+printf '%b\n' "$trusted_final" | orl_needs_redispatch 688 abc123 && bad "a finalized HEAD must NOT be re-dispatched" || ok
+printf '' | orl_needs_redispatch 688 abc123 && bad "no claim → nothing to re-dispatch" || ok
+printf '%b\n' "$res_only"     | orl_needs_redispatch 688 zzz999 && bad "re-dispatch must bind the exact HEAD" || ok
+printf '%b\n' "attacker	github-actions	$(orl_reservation 688 abc123)" | orl_needs_redispatch 688 abc123 && bad "a spoofed-login reservation must not trigger re-dispatch" || ok
+# Mutual exclusivity: recovery and re-dispatch never both fire for one state.
+for st in "$res_only" "$inv_only" "$trusted_final"; do
+  rec=0; red=0
+  printf '%b\n' "$st" | orl_needs_recovery 688 abc123 && rec=1 || true
+  printf '%b\n' "$st" | orl_needs_redispatch 688 abc123 && red=1 || true
+  [ $(( rec + red )) -le 1 ] && ok || bad "recovery and re-dispatch must be mutually exclusive for one state"
+done
 
 case "$(orl_route PASS)" in *"not merge authority"*) ok ;; *) bad "PASS route" ;; esac
 case "$(orl_route "CHANGES REQUIRED")" in *"#585"*"do not merge"*) ok ;; *) bad "CHANGES route" ;; esac
@@ -252,6 +307,156 @@ orl_build_evidence "$be/diff.raw" 1 200000 "$be/m0.txt" 1 0 "$be"
 orl_build_evidence "$be/diff.raw" 1 200000 "$be/m0.txt" 0 0 "$be"
 [ "$(cat "$be/truncated")" = 1 ] && ok || bad "a failed manifest fetch must block PASS"
 
+# --- terminal-CI gate (#692): the paid review consumes TERMINAL, GREEN CI -------
+# The reviewer must not freeze a pre-terminal CI snapshot; a pending required
+# check defers (no verdict), and a failed one can never PASS.
+REQ="docs-truth doctor gate tests"
+green="docs-truth: completed/success
+doctor: completed/success
+gate: completed/success
+tests: completed/success"
+pending="docs-truth: completed/success
+doctor: completed/success
+gate: in_progress/pending
+tests: queued/pending"
+failed="docs-truth: completed/success
+doctor: completed/failure
+gate: completed/success
+tests: completed/success"
+cancelled="docs-truth: completed/success
+doctor: completed/cancelled
+gate: completed/success
+tests: completed/success"
+missing="docs-truth: completed/success
+doctor: completed/success
+gate: completed/success"
+# terminal: every required check reached "completed" (pass OR fail); the reviewer
+# may run. pending / missing are NOT terminal → defer, fail closed.
+printf '%s\n' "$green"     | orl_checks_terminal $REQ && ok || bad "all-completed checks must be terminal"
+printf '%s\n' "$failed"    | orl_checks_terminal $REQ && ok || bad "a completed-but-failed set is still terminal"
+printf '%s\n' "$cancelled" | orl_checks_terminal $REQ && ok || bad "a completed-but-cancelled set is still terminal"
+printf '%s\n' "$pending"   | orl_checks_terminal $REQ && bad "a pending required check must NOT be terminal" || ok
+printf '%s\n' "$missing"   | orl_checks_terminal $REQ && bad "a missing required check must NOT be terminal" || ok
+printf '' | orl_checks_terminal $REQ && bad "an empty check set must NOT be terminal" || ok
+# A re-run can add a SECOND entry for the same name in unspecified order. If ANY
+# run for a required check is still non-terminal, the set is not terminal — the
+# predicate scans every line, not just the first (independent-review hardening).
+rerun="docs-truth: completed/success
+doctor: completed/success
+gate: completed/success
+tests: completed/success
+tests: in_progress/pending"
+printf '%s\n' "$rerun" | orl_checks_terminal $REQ && bad "a re-run pending entry must make the set non-terminal" || ok
+printf '%s\n' "$rerun" | orl_checks_passed  $REQ && bad "a re-run pending entry must not be passed" || ok
+# passed: every required check is completed/success. Only green passes; a failed,
+# cancelled, pending, or missing check is not-passed → a PASS is downgraded.
+printf '%s\n' "$green"     | orl_checks_passed $REQ && ok || bad "all-green checks must be passed"
+printf '%s\n' "$failed"    | orl_checks_passed $REQ && bad "a failed required check must NOT be passed" || ok
+printf '%s\n' "$cancelled" | orl_checks_passed $REQ && bad "a cancelled required check must NOT be passed" || ok
+printf '%s\n' "$pending"   | orl_checks_passed $REQ && bad "a pending required check must NOT be passed" || ok
+printf '%s\n' "$missing"   | orl_checks_passed $REQ && bad "a missing required check must NOT be passed" || ok
+# End to end (#692): pending CI defers (never a terminal verdict); once terminal
+# and green, a PASS stands; terminal-but-failed downgrades a PASS to NOT ASSESSED.
+if printf '%s\n' "$pending" | orl_checks_terminal $REQ; then bad "pending must defer, not review"; else ok; fi
+if printf '%s\n' "$green" | orl_checks_terminal $REQ && printf '%s\n' "$green" | orl_checks_passed $REQ; then
+  [ "$(orl_enforce_completeness PASS 0)" = "PASS" ] && ok || bad "terminal-green complete evidence must let PASS stand"
+else bad "terminal-green must be reviewable and passed"; fi
+if printf '%s\n' "$failed" | orl_checks_passed $REQ; then bad "failed CI must not be passed"; else
+  # the workflow maps not-passed → NOT ASSESSED for a would-be PASS
+  ok
+fi
+# Criterion-7 transition: each event checks terminality ONCE; the pending events
+# defer (no verdict, reservation stays pending) and the completion event that first
+# sees terminal-green reviews. Modelled as the sequence of per-event outcomes: the
+# decision stays "defer" until the terminal snapshot, then becomes "review" once.
+seq_reviewed=0
+for snap in "$pending" "$pending" "$green"; do
+  if printf '%s\n' "$snap" | orl_checks_terminal $REQ; then seq_reviewed=$((seq_reviewed + 1)); fi
+done
+[ "$seq_reviewed" = 1 ] && ok || bad "pending→pending→green must become reviewable exactly once, got $seq_reviewed"
+
+# --- deterministic workflow state-machine proof (#692) ------------------------
+# Model the FULL lifecycle — reservation → defer (CI pending) → retry exhaustion →
+# scheduled RE-DISPATCH → resumed review → finalization — with functions that apply
+# the REAL guard / ci-gate / recovery predicates to an accumulating comment set and
+# CI state. Proves: pending CI reaches exactly ONE terminal disposition, the model
+# is invoked at most once, a superseded head is rejected, and recovery can neither
+# re-invoke nor overwrite a real verdict.
+tab="$(printf '\t')"
+sm_comments=""; sm_ci="pending"; sm_invocations=0; sm_live=""
+sm_add() {
+  if [ -z "$sm_comments" ]; then sm_comments="github-actions[bot]${tab}github-actions${tab}$1"
+  else sm_comments="$sm_comments
+github-actions[bot]${tab}github-actions${tab}$1"; fi
+}
+sm_ci_lines() {
+  if [ "$sm_ci" = green ]; then
+    printf 'docs-truth: completed/success\ndoctor: completed/success\ngate: completed/success\ntests: completed/success\n'
+  else
+    printf 'docs-truth: completed/success\ndoctor: completed/success\ngate: in_progress/pending\ntests: queued/pending\n'
+  fi
+}
+# One review run (pull_request_target / workflow_run / workflow_dispatch resume),
+# faithfully applying the guard (superseded → skip; consumed → skip; else claim),
+# the terminal-CI gate, the green re-validation, and the consume→finalize sequence.
+sm_review() { # <pr> <head>
+  local pr="$1" head="$2"
+  [ "$head" = "$sm_live" ] || return 0
+  if printf '%s\n' "$sm_comments" | orl_has_consumed "$pr" "$head"; then return 0; fi
+  if ! printf '%s\n' "$sm_comments" | orl_has_trusted_claim "$pr" "$head"; then
+    sm_add "$(orl_reservation "$pr" "$head")"
+  fi
+  if ! sm_ci_lines | orl_checks_terminal $REQ; then return 0; fi
+  if ! sm_ci_lines | orl_checks_passed $REQ; then sm_add "$(orl_marker 'NOT ASSESSED' "$pr" "$head")"; return 0; fi
+  sm_add "$(orl_invoked "$pr" "$head")"; sm_invocations=$((sm_invocations + 1))
+  sm_add "$(orl_marker PASS "$pr" "$head")"
+}
+# One scheduled recovery sweep for the live head: consumed-but-unfinalized →
+# finalize NOT ASSESSED (atomic re-validate first); bare reservation → re-dispatch.
+sm_sweep() { # <pr>
+  local pr="$1" head="$sm_live"
+  if printf '%s\n' "$sm_comments" | orl_needs_recovery "$pr" "$head"; then
+    if printf '%s\n' "$sm_comments" | orl_has_final_marker "$pr" "$head"; then return 0; fi
+    sm_add "$(orl_marker 'NOT ASSESSED' "$pr" "$head")"; return 0
+  fi
+  if printf '%s\n' "$sm_comments" | orl_needs_redispatch "$pr" "$head"; then sm_review "$pr" "$head"; fi
+}
+# Lifecycle A: CI pending across pr_target + both workflow_run events (retry
+# exhaustion) → all defer; no verdict; a stranded bare reservation.
+sm_live=h900
+sm_review 900 h900; sm_review 900 h900; sm_review 900 h900
+[ "$sm_invocations" = 0 ] && ok || bad "SM: pending CI must not invoke the model"
+printf '%s\n' "$sm_comments" | orl_has_final_marker 900 h900 && bad "SM: no verdict may exist while CI pending" || ok
+printf '%s\n' "$sm_comments" | orl_needs_redispatch 900 h900 && ok || bad "SM: a stranded bare reservation must be re-dispatchable"
+before=$sm_invocations; sm_review 900 supersededhead
+[ "$sm_invocations" = "$before" ] && ok || bad "SM: a superseded head must not drive review"
+# CI becomes terminal; the scheduled sweep re-dispatches → resumed review finalizes.
+sm_ci=green; sm_sweep 900
+[ "$sm_invocations" = 1 ] && ok || bad "SM: exactly one model invocation after re-dispatch, got $sm_invocations"
+printf '%s\n' "$sm_comments" | orl_has_final_marker 900 h900 && ok || bad "SM: a terminal disposition must exist after re-dispatch"
+# Duplicate completion events + more sweeps must not re-invoke or overwrite.
+sm_review 900 h900; sm_review 900 h900; sm_sweep 900; sm_sweep 900
+[ "$sm_invocations" = 1 ] && ok || bad "SM: duplicate events/sweeps must not re-invoke, got $sm_invocations"
+printf '%s\n' "$sm_comments" | grep -q 'verdict=PASS' && ok || bad "SM: the PASS verdict must stand"
+printf '%s\n' "$sm_comments" | grep -q 'verdict=NOT ASSESSED' && bad "SM: recovery/redispatch must not overwrite a real verdict" || ok
+
+# Lifecycle B: a run consumed the call then died before finalizing. Recovery reaches
+# a terminal disposition once, invokes nothing, and cannot be overwritten again.
+sm_comments=""; sm_ci=green; sm_invocations=0; sm_live=h901
+sm_add "$(orl_reservation 901 h901)"; sm_add "$(orl_invoked 901 h901)"
+sm_sweep 901
+printf '%s\n' "$sm_comments" | orl_has_final_marker 901 h901 && ok || bad "SM: consumed-but-unfinalized must recover to a terminal disposition"
+[ "$sm_invocations" = 0 ] && ok || bad "SM: recovery must not invoke the model"
+sm_sweep 901
+[ "$(printf '%s\n' "$sm_comments" | grep -c 'pr=901 head=h901 verdict=')" -ge 1 ] && ok || bad "SM: recovery finalized a verdict once"
+
+# TOCTOU (#692): terminal-green at the ci step, but a re-run makes a check pending
+# before the paid call → the ask re-validation defers; no invocation on stale state.
+printf '%s\n' "$green"   | orl_checks_terminal $REQ || bad "TOCTOU precondition: ci step saw terminal"
+if printf '%s\n' "$pending" | orl_checks_terminal $REQ; then
+  bad "a check that went pending before the call must defer, not invoke"
+else ok; fi
+
 # Static workflow facts: the workflow fetches, delegates to the tested helper, and
 # enforces the flag; the derived logic itself is proven by the fixtures above.
 haswf "retrieves every path via uncapped GraphQL"     'files\(first:100,after:\$endCursor\)'
@@ -265,6 +470,58 @@ haswf "always supplies the manifest as untrusted data" 'UNTRUSTED CHANGED-FILE M
 haswf "enforces completeness on the verdict"          'orl_enforce_completeness "\$model_verdict"'
 haswf "an unreadable completeness flag fails closed"   'cat /tmp/rev/truncated 2>/dev/null \|\| echo 1'
 haswf_not "no silent head -c bound without detection" 'head -c 200000 /tmp/rev/diff.txt'
+# Terminal-CI continuation (#692): check terminality once; resume via completion.
+haswf "re-fires on required-check completion"         'workflow_run:'
+haswf "watches the required-check workflows"          'workflows: \[validate, docs-truth, milestone-gate\]'
+haswf "resolves the target PR and HEAD from either event" 'Resolve target PR and HEAD'
+haswf "serializes by exact HEAD SHA"                  'openai-review-\$\{\{ github.event.pull_request.head.sha'
+haswf "checks terminality with the tested helper"     'orl_checks_terminal \$required'
+haswf "requires all required checks green to pass"    'orl_checks_passed \$required'
+haswf "a non-green terminal HEAD cannot pass"         '! orl_checks_passed \$required'
+haswf "the guard skips a consumed HEAD, resumes only a bare reservation" 'orl_has_consumed'
+haswf "defers (fail closed) when comments are unreadable" 'comments-unreadable-defer'
+haswf "records the paid call as consumed before making it" 'orl_invoked "\$PR" "\$HEAD_SHA"'
+haswf "re-validates terminal checks immediately before the call" '! orl_checks_terminal \$required'
+haswf "a re-run to pending before the call defers"    'defer=true'
+haswf "does not finalize a deferred review"           'steps.ask.outputs.defer !='
+# The model payload must carry the RE-VALIDATED pre-invocation check snapshot, not a
+# stale one (#692): in the Ask step the checks re-fetch precedes the input.txt
+# assembly, and there is NO redundant check-run fetch in the Gather step, so no
+# stale "first snapshot" exists to leak into the request.
+ask_ln="$(grep -n 'name: Ask the reviewer' "$wf" | head -1 | cut -d: -f1)"
+gather_ln="$(grep -n 'name: Gather untrusted' "$wf" | head -1 | cut -d: -f1)"
+refetch_ln="$(awk -v s="$ask_ln" 'NR>s && /> \/tmp\/rev\/checks.txt/ {print NR; exit}' "$wf")"
+input_ln="$(awk -v s="$ask_ln" 'NR>s && /> \/tmp\/rev\/input.txt/ {print NR; exit}' "$wf")"
+{ [ -n "$refetch_ln" ] && [ -n "$input_ln" ] && [ "$refetch_ln" -lt "$input_ln" ]; } \
+  && ok || bad "Ask must re-fetch checks BEFORE assembling input.txt (payload must be the revalidated snapshot)"
+gather_fetch="$(awk -v s="$gather_ln" -v e="$ask_ln" 'NR>s && NR<e && /> \/tmp\/rev\/checks.txt/ {print NR; exit}' "$wf")"
+[ -z "$gather_fetch" ] && ok || bad "the gather step must not redundantly fetch checks (single revalidated source in Ask)"
+# Behavioral: assembling input AFTER the re-fetch carries the revalidated snapshot,
+# never the earlier one — models the initial≠pre-invocation snapshot case.
+sd="$(mktemp -d)"
+printf 'gate: in_progress/pending\n' > "$sd/checks.txt"          # a stale earlier snapshot
+printf 'docs-truth: completed/success\ndoctor: completed/success\ngate: completed/success\ntests: completed/success\n' > "$sd/checks.txt"  # the re-fetch overwrites it
+{ echo "=== CHECK DATA FOR EXACT HEAD ==="; cat "$sd/checks.txt"; } > "$sd/input.txt"   # input assembled AFTER
+grep -q 'gate: completed/success' "$sd/input.txt" && ok || bad "the payload must contain the revalidated snapshot"
+grep -q 'gate: in_progress/pending' "$sd/input.txt" && bad "the payload must NOT contain the stale snapshot" || ok
+rm -rf "$sd"
+haswf "finalizes even if the ask step errored (fail closed)" '!cancelled\(\)'
+haswf "a scheduled sweep recovers stranded reservations" "cron: '17,47"
+haswf "recovery decides disposition with the tested helper" 'orl_needs_recovery'
+haswf "recovery never invokes the model (no curl in it)"    'without invoking the model again'
+haswf "recovery honours a grace window"               'grace=1800'
+haswf "graces the invoked case from the invocation time" '\.updated_at'
+haswf "atomically re-validates before overwriting a verdict" 'live_body='
+haswf "durably re-dispatches a stranded bare reservation" 'orl_needs_redispatch'
+haswf "re-dispatch resumes the review via workflow_dispatch" 'gh workflow run openai-review.yml -f pr='
+haswf "supports a workflow_dispatch resume trigger"   '^  workflow_dispatch:'
+haswf "bounds the invoking run so recovery cannot race it" 'timeout-minutes: 20'
+haswf "bounds the model call duration"                'curl -sS --max-time'
+haswf "reviews only when checks are terminal"         "steps.ci.outputs.terminal == 'true'"
+haswf "paginates the check-runs API"                  'check-runs\?per_page=100'
+haswf "normalizes paginated comments into one array"  "jq -s 'add"
+haswf "absorbs check-runs propagation lag with a short retry" 'for attempt in 1 2 3 4 5 6'
+haswf_not "no bounded-wait timeout that can freeze a verdict" 'ci-not-terminal-timeout'
 
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
