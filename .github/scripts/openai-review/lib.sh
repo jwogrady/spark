@@ -68,3 +68,28 @@ orl_route() { # verdict
     *)                    echo "The change was **not assessed**. This is not a pass." ;;
   esac
 }
+
+# orl_is_truncated <orig_bytes> <budget> — was the diff cut to fit the budget?
+# Returns 0 (truncated) when the original diff is larger than the budget, and
+# also 0 (fail closed) when either value is non-numeric — an unreadable size must
+# never be treated as a complete diff. The check is purely on size, so it fires
+# whatever the cut lands on: a mid-line cut or a split multi-byte character all
+# leave the original larger than the budget (#693).
+orl_is_truncated() { # <orig_bytes> <budget>
+  case "$1" in ''|*[!0-9]*) return 0 ;; esac
+  case "$2" in ''|*[!0-9]*) return 0 ;; esac
+  [ "$1" -gt "$2" ]
+}
+
+# orl_enforce_completeness <verdict> <truncated> — a PASS on a TRUNCATED diff is
+# not a pass. The reviewer never saw the whole change, so a prefix-only PASS is
+# downgraded to NOT ASSESSED. Any other verdict — a real defect found, a decision
+# owed, or an already-NOT ASSESSED — is returned unchanged. This is the mechanical
+# guarantee that a blocker beyond the diff bound can never yield PASS (#693).
+orl_enforce_completeness() { # <verdict> <truncated>
+  if [ "${2:-0}" = "1" ] && [ "$1" = "PASS" ]; then
+    printf 'NOT ASSESSED'
+  else
+    printf '%s' "$1"
+  fi
+}

@@ -110,5 +110,40 @@ case "$(orl_route "CHANGES REQUIRED")" in *"#585"*"do not merge"*) ok ;; *) bad 
 case "$(orl_route "DECISION REQUIRED")" in *"@jwogrady"*) ok ;; *) bad "DECISION route" ;; esac
 case "$(orl_route "NOT ASSESSED")" in *"not assessed"*) ok ;; *) bad "NOT ASSESSED route" ;; esac
 
+# --- diff completeness (#693): a truncated diff can never PASS ----------------
+# Truncation detection is size-based, so it fires wherever the cut lands.
+orl_is_truncated 200001 200000 && ok || bad "a diff over budget must be truncated"
+orl_is_truncated 200000 200000 && bad "a diff at exactly the budget is not truncated" || ok
+orl_is_truncated 5 200000 && bad "a small diff is not truncated" || ok
+# A byte cut inside a line, and inside a multi-byte character, both leave the
+# original larger than the budget — so both are detected as truncated.
+orl_is_truncated 200050 200000 && ok || bad "a mid-line cut (over budget) must be truncated"
+orl_is_truncated 200003 200000 && ok || bad "a split multi-byte char (over budget) must be truncated"
+# Unreadable size fails closed to truncated — never treated as a complete diff.
+orl_is_truncated "" 200000 && ok || bad "an unreadable size must fail closed to truncated"
+orl_is_truncated abc 200000 && ok || bad "a non-numeric size must fail closed to truncated"
+
+# The mechanical guarantee: a model PASS on a truncated diff is downgraded.
+[ "$(orl_enforce_completeness PASS 1)" = "NOT ASSESSED" ] && ok || bad "PASS on a truncated diff must become NOT ASSESSED"
+[ "$(orl_enforce_completeness PASS 0)" = "PASS" ] && ok || bad "PASS on a complete diff must stand"
+# A real defect or decision found in the shown prefix is still valid when truncated.
+[ "$(orl_enforce_completeness "CHANGES REQUIRED" 1)" = "CHANGES REQUIRED" ] && ok || bad "CHANGES REQUIRED must survive truncation"
+[ "$(orl_enforce_completeness "DECISION REQUIRED" 1)" = "DECISION REQUIRED" ] && ok || bad "DECISION REQUIRED must survive truncation"
+[ "$(orl_enforce_completeness "NOT ASSESSED" 1)" = "NOT ASSESSED" ] && ok || bad "NOT ASSESSED stays NOT ASSESSED"
+
+# The acceptance scenario: a blocker after the 200000-byte boundary. The diff is
+# over budget (truncated=1), so even a model PASS cannot publish PASS.
+late_blocker_orig=200015
+if orl_is_truncated "$late_blocker_orig" 200000; then
+  [ "$(orl_enforce_completeness PASS 1)" = "NOT ASSESSED" ] && ok || bad "a late blocker must not be able to PASS"
+else bad "a diff with a late blocker past the bound must be truncated"; fi
+
+# Static workflow facts: truncation is detected, disclosed, and enforced.
+haswf "detects truncation with the tested helper"     'orl_is_truncated "\$orig_bytes" "\$budget"'
+haswf "fetches the complete changed-file manifest"    'pulls/\$PR/files'
+haswf "discloses diff completeness to the model"      'DIFF COMPLETENESS'
+haswf "enforces completeness on the verdict"          'orl_enforce_completeness "\$model_verdict"'
+haswf_not "no silent head -c bound without detection" 'head -c 200000 /tmp/rev/diff.txt'
+
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
