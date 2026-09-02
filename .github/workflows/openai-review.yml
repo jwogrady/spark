@@ -10,12 +10,20 @@ name: OpenAI Review
 on:
   pull_request_target:
     types: [opened, synchronize, reopened, ready_for_review]
+  # Required-check completion re-fires the lane so a HEAD reserved while its CI was
+  # still pending resumes and is reviewed from terminal state (#692). These are the
+  # workflows that produce the required checks — never this reviewer itself, so
+  # there is no self-trigger loop.
+  workflow_run:
+    workflows: [validate, docs-truth, milestone-gate]
+    types: [completed]
 
-# Serialize all events for one PR. Do not cancel an in-flight run: cancellation
-# after the paid model call could otherwise cause a replacement run to invoke it
-# again. A stale-head check immediately before invocation handles newer pushes.
+# Serialize by exact HEAD SHA — reliably present in BOTH event payloads — so a
+# pull_request_target run and a workflow_run run for the same commit never overlap,
+# and the paid model call is invoked at most once per exact HEAD. Do not cancel an
+# in-flight run: cancellation after the paid call could let a replacement re-invoke it.
 concurrency:
-  group: openai-review-${{ github.event.pull_request.number }}
+  group: openai-review-${{ github.event.pull_request.head.sha || github.event.workflow_run.head_sha }}
   cancel-in-progress: false
 
 permissions: {}
@@ -30,20 +38,57 @@ jobs:
       checks: read
       actions: read
     steps:
+      # Both event types are supported: pull_request_target (a push/open) and
+      # workflow_run (a required-check workflow finished). Resolve the target PR and
+      # exact HEAD from whichever fired; workflow_run.pull_requests can be empty, so
+      # fall back to resolving the open PR from the head SHA. No PR → nothing to do.
+      - name: Resolve target PR and HEAD
+        id: target
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          PR_NUM: ${{ github.event.pull_request.number }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          WR_HEAD: ${{ github.event.workflow_run.head_sha }}
+          WR_PR: ${{ github.event.workflow_run.pull_requests[0].number }}
+        run: |
+          set -euo pipefail
+          pr=""; head=""
+          if [ "$EVENT" = "pull_request_target" ]; then
+            pr="$PR_NUM"; head="$PR_HEAD"
+          else
+            head="$WR_HEAD"; pr="$WR_PR"
+            if [ -z "$pr" ] && [ -n "$head" ]; then
+              pr="$(gh api "repos/$REPO/commits/$head/pulls" \
+                --jq '[.[] | select(.state=="open")] | (.[0].number // "")' 2>/dev/null || echo "")"
+            fi
+          fi
+          if [ -z "$pr" ] || [ -z "$head" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "No open PR/HEAD to review for event=$EVENT; skipping."
+            exit 0
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "pr=$pr" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$head" >> "$GITHUB_OUTPUT"
+
       - name: Checkout trusted base implementation
+        if: steps.target.outputs.skip != 'true'
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
+          ref: ${{ github.event.pull_request.base.sha || github.event.repository.default_branch }}
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Claim exact PR HEAD before invocation
+      - name: Claim exact PR HEAD, resuming a pending reservation
         id: guard
+        if: steps.target.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          PR: ${{ github.event.pull_request.number }}
+          PR: ${{ steps.target.outputs.pr }}
           REPO: ${{ github.repository }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_SHA: ${{ steps.target.outputs.head_sha }}
         run: |
           set -euo pipefail
           . .github/scripts/openai-review/lib.sh
@@ -57,79 +102,80 @@ jobs:
             exit 0
           fi
 
-          # Fetch every page. Only claims authored by the trusted Actions producer
-          # count; marker-shaped text from contributors is inert.
+          # Fetch every page once. Only claims authored by the trusted Actions
+          # producer count; marker-shaped text from contributors is inert.
           gh api --paginate "repos/$REPO/issues/$PR/comments?per_page=100" \
-            --jq '.[] | [.user.login, (.performed_via_github_app.slug // ""), .body] | @tsv' \
-            > /tmp/rev/comment-claims.tsv
-          if orl_has_trusted_claim "$PR" "$HEAD_SHA" < /tmp/rev/comment-claims.tsv; then
+            > /tmp/rev/comments.json 2>/dev/null || echo '[]' > /tmp/rev/comments.json
+          jq -r '.[] | [.user.login, (.performed_via_github_app.slug // ""), .body] | @tsv' \
+            /tmp/rev/comments.json > /tmp/rev/comment-claims.tsv
+
+          # A FINAL verdict marker means this exact HEAD was already reviewed —
+          # never review it twice.
+          if orl_has_final_marker "$PR" "$HEAD_SHA" < /tmp/rev/comment-claims.tsv; then
             echo "already=true" >> "$GITHUB_OUTPUT"
-            echo "reason=trusted-claim-exists" >> "$GITHUB_OUTPUT"
+            echo "reason=already-reviewed" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          reservation="$(orl_reservation "$PR" "$HEAD_SHA")"
-          reservation_id="$(gh api --method POST "repos/$REPO/issues/$PR/comments" \
-            -f body="$reservation" --jq '.id')"
+          # A bare reservation (no final marker) means this HEAD was CLAIMED but not
+          # yet reviewed — a prior run reserved it while CI was still pending. RESUME
+          # by reusing that reservation instead of posting a second one, so a
+          # completion event can finish the review from terminal state (#692).
+          needle="<!-- $ORL_RESERVATION_TAG pr=$PR head=$HEAD_SHA -->"
+          reservation_id="$(jq -r --arg l "$ORL_TRUSTED_LOGIN" --arg a "$ORL_TRUSTED_APP" --arg n "$needle" \
+            '[.[] | select(.user.login==$l) | select((.performed_via_github_app.slug // "")==$a) | select(.body|contains($n)) | .id] | (.[0] // "") | tostring' \
+            /tmp/rev/comments.json)"
+          if [ -z "$reservation_id" ]; then
+            reservation="$(orl_reservation "$PR" "$HEAD_SHA")"
+            reservation_id="$(gh api --method POST "repos/$REPO/issues/$PR/comments" \
+              -f body="$reservation" --jq '.id')"
+          fi
           [ -n "$reservation_id" ]
           echo "already=false" >> "$GITHUB_OUTPUT"
           echo "reservation_id=$reservation_id" >> "$GITHUB_OUTPUT"
 
       # The one paid review must consume a TERMINAL exact-HEAD CI snapshot, never a
-      # pending one that could freeze a pre-terminal verdict (#692). The lane fires
-      # on pull_request_target before required checks are necessarily terminal, so
-      # wait here — bounded, and abandoned if a newer push supersedes this HEAD —
-      # until every required check has completed. No verdict is produced from a
-      # pending snapshot; the reviewer either sees terminal evidence or, only on a
-      # genuine timeout/supersession, finalizes NOT ASSESSED (never a pass).
-      - name: Wait for terminal required checks
+      # pending one that could freeze a pre-terminal verdict (#692). Check the
+      # required checks ONCE: if they are terminal, review now; if not, produce NO
+      # verdict and stop — the reservation stays pending and the workflow_run
+      # completion event resumes this exact HEAD once the checks finish. This
+      # completion-driven continuation, not a bounded wait, is what guarantees a
+      # pending snapshot can never become the permanent signal.
+      - name: Check required checks are terminal
         id: ci
         if: steps.guard.outputs.already != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          PR: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_SHA: ${{ steps.target.outputs.head_sha }}
         run: |
           set -euo pipefail
           . .github/scripts/openai-review/lib.sh
           mkdir -p /tmp/rev
           required="docs-truth doctor gate tests"
-          deadline=$(( $(date +%s) + 1500 ))   # ~25 min ceiling; CI is minutes
-          terminal=false; reason=""
-          while :; do
-            gh api "repos/$REPO/commits/$HEAD_SHA/check-runs" \
-              --jq '.check_runs[] | "\(.name): \(.status)/\(.conclusion // "pending")"' \
-              > /tmp/rev/checks.txt 2>/dev/null || : > /tmp/rev/checks.txt
-            if orl_checks_terminal $required < /tmp/rev/checks.txt; then
-              terminal=true; break
+          gh api "repos/$REPO/commits/$HEAD_SHA/check-runs" \
+            --jq '.check_runs[] | "\(.name): \(.status)/\(.conclusion // "pending")"' \
+            > /tmp/rev/checks.txt 2>/dev/null || : > /tmp/rev/checks.txt
+          if orl_checks_terminal $required < /tmp/rev/checks.txt; then
+            echo "terminal=true" >> "$GITHUB_OUTPUT"
+            if orl_checks_passed $required < /tmp/rev/checks.txt; then
+              echo "passed=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "passed=false" >> "$GITHUB_OUTPUT"
             fi
-            # A newer push supersedes this HEAD: stop waiting on a stale head. The
-            # queued run for the new HEAD reviews it; this one finalizes NOT ASSESSED.
-            live_head="$(gh api "repos/$REPO/pulls/$PR" --jq '.head.sha' 2>/dev/null || echo "")"
-            if [ -n "$live_head" ] && [ "$live_head" != "$HEAD_SHA" ]; then
-              reason="superseded-while-waiting"; break
-            fi
-            if [ "$(date +%s)" -ge "$deadline" ]; then
-              reason="ci-not-terminal-timeout"; break
-            fi
-            sleep 30
-          done
-          echo "terminal=$terminal" >> "$GITHUB_OUTPUT"
-          [ -n "$reason" ] && echo "reason=$reason" >> "$GITHUB_OUTPUT" || true
-          if [ "$terminal" = "true" ] && orl_checks_passed $required < /tmp/rev/checks.txt; then
-            echo "passed=true" >> "$GITHUB_OUTPUT"
           else
+            echo "terminal=false" >> "$GITHUB_OUTPUT"
             echo "passed=false" >> "$GITHUB_OUTPUT"
+            echo "Required checks not yet terminal for $HEAD_SHA; the reservation stays pending until the completion event resumes it."
           fi
 
       - name: Gather untrusted review evidence as data
-        if: steps.guard.outputs.already != 'true'
+        if: steps.guard.outputs.already != 'true' && steps.ci.outputs.terminal == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          PR: ${{ github.event.pull_request.number }}
+          PR: ${{ steps.target.outputs.pr }}
           REPO: ${{ github.repository }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_SHA: ${{ steps.target.outputs.head_sha }}
         run: |
           set -euo pipefail
           . .github/scripts/openai-review/lib.sh
@@ -211,28 +257,18 @@ jobs:
 
       - name: Ask the reviewer
         id: ask
-        if: steps.guard.outputs.already != 'true'
+        if: steps.guard.outputs.already != 'true' && steps.ci.outputs.terminal == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          PR: ${{ github.event.pull_request.number }}
+          PR: ${{ steps.target.outputs.pr }}
           REPO: ${{ github.repository }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          CI_TERMINAL: ${{ steps.ci.outputs.terminal }}
+          HEAD_SHA: ${{ steps.target.outputs.head_sha }}
           CI_PASSED: ${{ steps.ci.outputs.passed }}
-          CI_REASON: ${{ steps.ci.outputs.reason }}
         run: |
           set -euo pipefail
 
-          # Terminal, coherent exact-HEAD CI is a precondition of the paid review
-          # (#692). If the required checks never reached terminal (a genuine timeout
-          # or a supersession while waiting), finalize NOT ASSESSED without paying —
-          # a pending or abandoned snapshot is never a pass.
-          if [ "${CI_TERMINAL:-false}" != "true" ]; then
-            printf 'NOT ASSESSED\n\nThe required checks did not reach a terminal state for this exact HEAD (%s), so no coherent exact-HEAD evidence was available to review. This is not a pass.\n' "${CI_REASON:-not-terminal}" > /tmp/rev/verdict.md
-            printf '0' > /tmp/rev/latency.txt
-            exit 0
-          fi
+          # This step runs only when the required checks are terminal (its `if`).
           # Terminal but not all green: a failed or cancelled required check means
           # this exact HEAD is not mergeable-green, so it cannot PASS. Finalize
           # NOT ASSESSED without spending the model call.
@@ -298,12 +334,12 @@ jobs:
           fi
 
       - name: Finalize the reserved review
-        if: steps.guard.outputs.already != 'true'
+        if: steps.guard.outputs.already != 'true' && steps.ci.outputs.terminal == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          PR: ${{ github.event.pull_request.number }}
+          PR: ${{ steps.target.outputs.pr }}
           REPO: ${{ github.repository }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_SHA: ${{ steps.target.outputs.head_sha }}
           RESERVATION_ID: ${{ steps.guard.outputs.reservation_id }}
         run: |
           set -euo pipefail

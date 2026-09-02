@@ -22,7 +22,9 @@ bash -n "$lib" && ok || bad "bash -n lib.sh"
 # Trusted-execution boundary.
 haswf "uses pull_request_target so execution comes from trusted base" '^  pull_request_target:'
 haswf_not "does not execute a pull_request workflow from PR code" '^  pull_request:'
-haswf "checks out the exact base SHA" 'ref: \$\{\{ github.event.pull_request.base.sha \}\}'
+# The checkout ref is the trusted base: base.sha for a PR event, the default
+# branch for a workflow_run event (also trusted) — never the PR head.
+haswf "checks out the trusted base SHA" 'ref: \$\{\{ github.event.pull_request.base.sha \|\| github.event.repository.default_branch \}\}'
 haswf_not "never checks out the PR head" 'ref: \$\{\{ github.event.pull_request.head.sha \}\}'
 haswf "checkout persists no credential" 'persist-credentials: false'
 haswf "reads contents, never writes them" 'contents: read'
@@ -104,6 +106,16 @@ mut_login="$(printf '%b\n' "$spoof_login" | sed 's/^attacker/github-actions[bot]
 printf '%s\n' "$mut_login" | orl_has_trusted_claim 688 abc123 && ok || bad "login mutation control did not flip"
 mut_app="$(printf '%b\n' "$spoof_app" | sed 's/evil-app/github-actions/')"
 printf '%s\n' "$mut_app" | orl_has_trusted_claim 688 abc123 && ok || bad "app mutation control did not flip"
+
+# Final marker vs bare reservation (#692): a reservation means "claimed, review may
+# be pending" (RESUMABLE); a final marker means "reviewed" (never review twice).
+# orl_has_final_marker must fire ONLY on the marker, so a pending reservation does
+# not suppress the resume that reviews the HEAD once its checks are terminal.
+printf '%b\n' "$trusted_final" | orl_has_final_marker 688 abc123 && ok || bad "a trusted final marker must be detected"
+printf '%b\n' "$trusted_res"   | orl_has_final_marker 688 abc123 && bad "a bare reservation must NOT count as a final marker (it must stay resumable)" || ok
+printf '%b\n' "$spoof_login"   | orl_has_final_marker 688 abc123 && bad "a spoofed-login marker must not count" || ok
+printf '%b\n' "$spoof_app"     | orl_has_final_marker 688 abc123 && bad "a spoofed-app marker must not count" || ok
+printf '%b\n' "$wrong_head"    | orl_has_final_marker 688 abc123 && bad "a wrong-HEAD marker must not count" || ok
 
 case "$(orl_route PASS)" in *"not merge authority"*) ok ;; *) bad "PASS route" ;; esac
 case "$(orl_route "CHANGES REQUIRED")" in *"#585"*"do not merge"*) ok ;; *) bad "CHANGES route" ;; esac
@@ -283,6 +295,16 @@ printf '%s\n' "$cancelled" | orl_checks_terminal $REQ && ok || bad "a completed-
 printf '%s\n' "$pending"   | orl_checks_terminal $REQ && bad "a pending required check must NOT be terminal" || ok
 printf '%s\n' "$missing"   | orl_checks_terminal $REQ && bad "a missing required check must NOT be terminal" || ok
 printf '' | orl_checks_terminal $REQ && bad "an empty check set must NOT be terminal" || ok
+# A re-run can add a SECOND entry for the same name in unspecified order. If ANY
+# run for a required check is still non-terminal, the set is not terminal — the
+# predicate scans every line, not just the first (independent-review hardening).
+rerun="docs-truth: completed/success
+doctor: completed/success
+gate: completed/success
+tests: completed/success
+tests: in_progress/pending"
+printf '%s\n' "$rerun" | orl_checks_terminal $REQ && bad "a re-run pending entry must make the set non-terminal" || ok
+printf '%s\n' "$rerun" | orl_checks_passed  $REQ && bad "a re-run pending entry must not be passed" || ok
 # passed: every required check is completed/success. Only green passes; a failed,
 # cancelled, pending, or missing check is not-passed → a PASS is downgraded.
 printf '%s\n' "$green"     | orl_checks_passed $REQ && ok || bad "all-green checks must be passed"
@@ -300,10 +322,10 @@ if printf '%s\n' "$failed" | orl_checks_passed $REQ; then bad "failed CI must no
   # the workflow maps not-passed → NOT ASSESSED for a would-be PASS
   ok
 fi
-# Criterion-7 transition: the poll observes pending snapshots then a terminal-green
-# one. The decision must stay "defer" until the terminal snapshot, then flip once
-# to "review" — modelled here as the exact sequence of predicate outcomes the
-# wait-loop consumes across iterations.
+# Criterion-7 transition: each event checks terminality ONCE; the pending events
+# defer (no verdict, reservation stays pending) and the completion event that first
+# sees terminal-green reviews. Modelled as the sequence of per-event outcomes: the
+# decision stays "defer" until the terminal snapshot, then becomes "review" once.
 seq_reviewed=0
 for snap in "$pending" "$pending" "$green"; do
   if printf '%s\n' "$snap" | orl_checks_terminal $REQ; then seq_reviewed=$((seq_reviewed + 1)); fi
@@ -323,14 +345,17 @@ haswf "always supplies the manifest as untrusted data" 'UNTRUSTED CHANGED-FILE M
 haswf "enforces completeness on the verdict"          'orl_enforce_completeness "\$model_verdict"'
 haswf "an unreadable completeness flag fails closed"   'cat /tmp/rev/truncated 2>/dev/null \|\| echo 1'
 haswf_not "no silent head -c bound without detection" 'head -c 200000 /tmp/rev/diff.txt'
-# Terminal-CI gate (#692): wait for terminal checks, gate the paid call on them.
-haswf "waits for terminal required checks"            'Wait for terminal required checks'
-haswf "gates the review on the terminal helper"       'orl_checks_terminal \$required'
+# Terminal-CI continuation (#692): check terminality once; resume via completion.
+haswf "re-fires on required-check completion"         'workflow_run:'
+haswf "watches the required-check workflows"          'workflows: \[validate, docs-truth, milestone-gate\]'
+haswf "resolves the target PR and HEAD from either event" 'Resolve target PR and HEAD'
+haswf "serializes by exact HEAD SHA"                  'openai-review-\$\{\{ github.event.pull_request.head.sha'
+haswf "checks terminality with the tested helper"     'orl_checks_terminal \$required'
 haswf "requires all required checks green to pass"    'orl_checks_passed \$required'
-haswf "the paid call is gated on terminal CI"         'CI_TERMINAL'
 haswf "a non-green terminal HEAD cannot pass"         'CI_PASSED'
-haswf "abandons a superseded HEAD while waiting"      'superseded-while-waiting'
-haswf "a genuine CI timeout finalizes not-a-pass"     'ci-not-terminal-timeout'
+haswf "resumes a pending reservation, never re-reviews" 'orl_has_final_marker'
+haswf "reviews only when checks are terminal"         "steps.ci.outputs.terminal == 'true'"
+haswf_not "no bounded-wait timeout that can freeze a verdict" 'ci-not-terminal-timeout'
 
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

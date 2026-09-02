@@ -59,6 +59,25 @@ orl_has_trusted_claim() { # expected_pr expected_head
   return 1
 }
 
+# Has the trusted producer posted a FINAL verdict marker (not merely a reservation)
+# for this exact PR + HEAD? A reservation means "claimed, review may still be
+# pending"; a final marker means "reviewed, terminal verdict recorded". The two are
+# distinguished so a HEAD reserved before its CI was terminal can RESUME once the
+# checks complete, while a HEAD already reviewed is never reviewed twice (#692).
+# stdin is TSV: login<TAB>app-slug<TAB>comment-body, one comment per line.
+orl_has_final_marker() { # expected_pr expected_head
+  local want_pr="$1" want_head="$2" login app body
+  [ -n "$want_pr" ] && [ -n "$want_head" ] || return 1
+  while IFS=$'\t' read -r login app body; do
+    [ "$login" = "$ORL_TRUSTED_LOGIN" ] || continue
+    [ "$app" = "$ORL_TRUSTED_APP" ] || continue
+    case "$body" in
+      *"<!-- $ORL_MARKER_TAG pr=$want_pr head=$want_head verdict="*) return 0 ;;
+    esac
+  done
+  return 1
+}
+
 # Human-facing routing. #585, not reviewer prose, owns automatic writer handoff.
 orl_route() { # verdict
   case "$1" in
@@ -167,48 +186,51 @@ orl_build_evidence() {
   } > "$out/completeness.txt"
 }
 
-# orl_check_line <required-name> — stdin: check lines "name: status/conclusion".
-# Echoes the FIRST line for the named check, or empty if it is absent. Helper for
-# the terminal/passed predicates below; a check absent from the set is treated as
-# not-yet-reported (fail closed by the callers).
-orl_check_line() { # <name>
-  local want="$1" line
-  while IFS= read -r line; do
-    case "$line" in "$want: "*) printf '%s' "$line"; return 0 ;; esac
-  done
-  return 0
-}
-
 # orl_checks_terminal <required-name>...  — stdin: check lines "name: status/conclusion".
-# Returns 0 only when EVERY required check is present with status "completed". A
-# required check that is missing, queued, in_progress, or otherwise not completed
-# makes the set non-terminal. Fail closed: the reviewer must consume a terminal
-# exact-HEAD CI snapshot, never a pending one (#692).
+# Returns 0 only when EVERY required check is present and EVERY run reported for it
+# has status "completed". A required check that is missing, or that has ANY run
+# still queued/in_progress (a re-run may add a second, non-terminal entry for the
+# same name in unspecified order), makes the set non-terminal. Fail closed: the
+# reviewer must consume a terminal exact-HEAD CI snapshot, never a pending one (#692).
 orl_checks_terminal() { # <required...>
-  local input name line rest status
+  local input name found line rest status
   input="$(cat)"
   for name in "$@"; do
-    line="$(printf '%s\n' "$input" | orl_check_line "$name")"
-    [ -n "$line" ] || return 1
-    rest="${line#"$name": }"; status="${rest%%/*}"
-    [ "$status" = "completed" ] || return 1
+    found=0
+    while IFS= read -r line; do
+      case "$line" in "$name: "*)
+        found=1
+        rest="${line#"$name": }"; status="${rest%%/*}"
+        [ "$status" = "completed" ] || return 1 ;;
+      esac
+    done <<INNER
+$input
+INNER
+    [ "$found" = 1 ] || return 1
   done
   return 0
 }
 
 # orl_checks_passed <required-name>...  — stdin: check lines "name: status/conclusion".
-# Returns 0 only when EVERY required check is "completed/success". A check that is
-# non-terminal, failed, cancelled, timed out, or missing makes the set not-passed.
-# A model PASS on a HEAD whose required checks are not all green is downgraded, so
-# a failed or cancelled required check can never publish PASS (#692).
+# Returns 0 only when EVERY required check is present and EVERY run reported for it
+# is exactly "completed/success". Any non-terminal, failed, cancelled, timed-out,
+# or missing run makes the set not-passed. A model PASS on a HEAD whose required
+# checks are not all green is downgraded, so a failed or cancelled required check
+# can never publish PASS (#692).
 orl_checks_passed() { # <required...>
-  local input name line rest
+  local input name found line rest
   input="$(cat)"
   for name in "$@"; do
-    line="$(printf '%s\n' "$input" | orl_check_line "$name")"
-    [ -n "$line" ] || return 1
-    rest="${line#"$name": }"
-    case "$rest" in completed/success) ;; *) return 1 ;; esac
+    found=0
+    while IFS= read -r line; do
+      case "$line" in "$name: "*)
+        found=1; rest="${line#"$name": }"
+        case "$rest" in completed/success) ;; *) return 1 ;; esac ;;
+      esac
+    done <<INNER
+$input
+INNER
+    [ "$found" = 1 ] || return 1
   done
   return 0
 }
