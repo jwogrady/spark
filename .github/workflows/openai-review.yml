@@ -1,0 +1,227 @@
+# The independent OpenAI reviewer lane (#584) — the single production automatic
+# reviewer for the autonomous loop.
+#
+# SECURITY BOUNDARY: this workflow runs trusted base-branch code via
+# pull_request_target. The PR HEAD, diff, body, issue text, comments, and check
+# results are untrusted DATA only. No executable from the PR checkout is sourced
+# or run while GITHUB_TOKEN or OPENAI_API_KEY is available.
+name: OpenAI Review
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+# Serialize all events for one PR. Do not cancel an in-flight run: cancellation
+# after the paid model call could otherwise cause a replacement run to invoke it
+# again. A stale-head check immediately before invocation handles newer pushes.
+concurrency:
+  group: openai-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  openai-review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: read
+      checks: read
+      actions: read
+    steps:
+      - name: Checkout trusted base implementation
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Claim exact PR HEAD before invocation
+        id: guard
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          . .github/scripts/openai-review/lib.sh
+          mkdir -p /tmp/rev
+
+          # Re-read live identity; queued events may already be stale.
+          live_head="$(gh api "repos/$REPO/pulls/$PR" --jq '.head.sha')"
+          if [ "$live_head" != "$HEAD_SHA" ]; then
+            echo "already=true" >> "$GITHUB_OUTPUT"
+            echo "reason=superseded-before-claim" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Fetch every page. Only claims authored by the trusted Actions producer
+          # count; marker-shaped text from contributors is inert.
+          gh api --paginate "repos/$REPO/issues/$PR/comments?per_page=100" \
+            --jq '.[] | [.user.login, (.performed_via_github_app.slug // ""), .body] | @tsv' \
+            > /tmp/rev/comment-claims.tsv
+          if orl_has_trusted_claim "$PR" "$HEAD_SHA" < /tmp/rev/comment-claims.tsv; then
+            echo "already=true" >> "$GITHUB_OUTPUT"
+            echo "reason=trusted-claim-exists" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          reservation="$(orl_reservation "$PR" "$HEAD_SHA")"
+          reservation_id="$(gh api --method POST "repos/$REPO/issues/$PR/comments" \
+            -f body="$reservation" --jq '.id')"
+          [ -n "$reservation_id" ]
+          echo "already=false" >> "$GITHUB_OUTPUT"
+          echo "reservation_id=$reservation_id" >> "$GITHUB_OUTPUT"
+
+      - name: Gather untrusted review evidence as data
+        if: steps.guard.outputs.already != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          . .github/scripts/openai-review/lib.sh
+          mkdir -p /tmp/rev
+
+          gh api "repos/$REPO/pulls/$PR" -H "Accept: application/vnd.github.v3.diff" \
+            > /tmp/rev/diff.txt 2>/dev/null || echo "(diff unavailable)" > /tmp/rev/diff.txt
+          head -c 200000 /tmp/rev/diff.txt > /tmp/rev/diff.trim && mv /tmp/rev/diff.trim /tmp/rev/diff.txt
+
+          gh api "repos/$REPO/pulls/$PR" --jq '"TITLE: \(.title)\n\nBODY:\n\(.body // "")"' \
+            > /tmp/rev/pr.txt 2>/dev/null || echo "(pr unavailable)" > /tmp/rev/pr.txt
+
+          : > /tmp/rev/issue.txt
+          for n in $(orl_closing_issues < /tmp/rev/pr.txt); do
+            gh api "repos/$REPO/issues/$n" \
+              --jq '"ISSUE #\(.number): \(.title)\nLABELS: \([.labels[].name]|join(","))\nMILESTONE: \(.milestone.title // "none")\n\n\(.body // "")"' \
+              >> /tmp/rev/issue.txt 2>/dev/null || true
+          done
+          [ -s /tmp/rev/issue.txt ] || echo "(no closing issue reference found in the PR body)" > /tmp/rev/issue.txt
+
+          gh api "repos/$REPO/commits/$HEAD_SHA/check-runs" \
+            --jq '.check_runs[] | "\(.name): \(.status)/\(.conclusion // "pending")"' \
+            > /tmp/rev/checks.txt 2>/dev/null || echo "(checks unavailable)" > /tmp/rev/checks.txt
+
+          gh api --paginate "repos/$REPO/issues/$PR/comments?per_page=100" \
+            --jq '.[] | "\(.user.login): \(.body)"' > /tmp/rev/comments-all.txt 2>/dev/null || : > /tmp/rev/comments-all.txt
+          tail -c 40000 /tmp/rev/comments-all.txt > /tmp/rev/comments.txt
+
+          # Deterministic Spark evidence comes from the trusted base checkout,
+          # never the PR HEAD. It describes the governing implementation only;
+          # the PR change itself is inspected as diff/check data above.
+          ./plugins/spark/bin/spark doctor > /tmp/rev/doctor.txt 2>&1 || true
+          ./plugins/spark/bin/spark governance validate --tsv > /tmp/rev/gov.txt 2>&1 || true
+          tail -c 20000 /tmp/rev/gov.txt > /tmp/rev/g.trim && mv /tmp/rev/g.trim /tmp/rev/gov.txt
+
+      - name: Ask the reviewer
+        id: ask
+        if: steps.guard.outputs.already != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          # Last TOCTOU check before any paid invocation. The durable reservation
+          # remains evidence that this old HEAD was claimed, but no stale model
+          # result is produced.
+          live_head="$(gh api "repos/$REPO/pulls/$PR" --jq '.head.sha')"
+          if [ "$live_head" != "$HEAD_SHA" ]; then
+            printf 'NOT ASSESSED\n\nThis HEAD was superseded before reviewer invocation; no model call was made.\n' > /tmp/rev/verdict.md
+            printf '0' > /tmp/rev/latency.txt
+            exit 0
+          fi
+
+          if [ -z "${OPENAI_API_KEY:-}" ]; then
+            printf 'NOT ASSESSED\n\nOPENAI_API_KEY is not available to this run, so no review was performed. An unread surface is not a pass.\n' > /tmp/rev/verdict.md
+            printf '0' > /tmp/rev/latency.txt
+            exit 0
+          fi
+
+          # Binding policy is TRUSTED, committed, base-checkout code. It is read
+          # from the trusted base tree rather than inlined, where a column-0
+          # heredoc body would break this run: block's YAML.
+          cp .github/scripts/openai-review/reviewer-instructions.txt /tmp/rev/instructions.txt
+
+          {
+            echo "=== UNTRUSTED ISSUE CONTRACT DATA ==="; cat /tmp/rev/issue.txt
+            echo; echo "=== UNTRUSTED PULL REQUEST DATA ==="; cat /tmp/rev/pr.txt
+            echo; echo "=== CHECK DATA FOR EXACT HEAD ==="; cat /tmp/rev/checks.txt
+            echo; echo "=== TRUSTED-BASE SPARK DOCTOR EVIDENCE ==="; cat /tmp/rev/doctor.txt
+            echo; echo "=== TRUSTED-BASE SPARK GOVERNANCE EVIDENCE ==="; cat /tmp/rev/gov.txt
+            echo; echo "=== UNTRUSTED EXISTING COMMENT DATA ==="; cat /tmp/rev/comments.txt
+            echo; echo "=== UNTRUSTED PR DIFF DATA ==="; cat /tmp/rev/diff.txt
+          } > /tmp/rev/input.txt
+
+          jq -n --arg m "gpt-5.6-sol" --rawfile instructions /tmp/rev/instructions.txt --rawfile input /tmp/rev/input.txt \
+            '{model: $m, instructions: $instructions, input: $input}' > /tmp/rev/req.json
+
+          metrics=$(curl -sS -o /tmp/rev/resp.json -w '%{http_code} %{time_total}' \
+            https://api.openai.com/v1/responses \
+            -H "Authorization: Bearer $OPENAI_API_KEY" \
+            -H "Content-Type: application/json" \
+            --data @/tmp/rev/req.json) || metrics="000 0"
+          code="${metrics%% *}"
+          printf '%s' "${metrics##* }" > /tmp/rev/latency.txt
+
+          if [ "$code" != "200" ]; then
+            printf 'NOT ASSESSED\n\nThe reviewer could not be reached (HTTP %s), so this change was not reviewed. That is not a pass.\n' "$code" > /tmp/rev/verdict.md
+            exit 0
+          fi
+
+          jq -r '.output_text // ([.output[]?.content[]?.text] | map(select(. != null)) | join("\n")) // ""' \
+            /tmp/rev/resp.json > /tmp/rev/verdict.md 2>/dev/null || : > /tmp/rev/verdict.md
+          if [ ! -s /tmp/rev/verdict.md ]; then
+            printf 'NOT ASSESSED\n\nThe reviewer returned no readable text, so this change was not reviewed.\n' > /tmp/rev/verdict.md
+          fi
+
+      - name: Finalize the reserved review
+        if: steps.guard.outputs.already != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          RESERVATION_ID: ${{ steps.guard.outputs.reservation_id }}
+        run: |
+          set -euo pipefail
+          . .github/scripts/openai-review/lib.sh
+          [ -n "$RESERVATION_ID" ]
+
+          verdict="$(head -1 /tmp/rev/verdict.md | orl_normalize_verdict)"
+          {
+            orl_marker "$verdict" "$PR" "$HEAD_SHA"; echo
+            echo "## Reviewer verdict: $verdict"
+            echo
+            orl_route "$verdict"
+            echo
+            echo "---"
+            echo
+            cat /tmp/rev/verdict.md
+            echo
+            echo "---"
+            echo "_Independent reviewer for HEAD \`$HEAD_SHA\`. It cannot edit code, push, merge, or assign roadmap metadata._"
+          } > /tmp/rev/body.md
+
+          # Finalize the existing durable reservation. Publication failure is a
+          # visible workflow failure; it is never swallowed and never reported as
+          # if a verdict were posted.
+          jq -n --rawfile body /tmp/rev/body.md '{body:$body}' | \
+            gh api --method PATCH "repos/$REPO/issues/comments/$RESERVATION_ID" --input - >/dev/null
+
+          latency="$(cat /tmp/rev/latency.txt 2>/dev/null || echo n/a)"
+          tokens="$(jq -r '.usage.total_tokens // "n/a"' /tmp/rev/resp.json 2>/dev/null || echo n/a)"
+          {
+            echo "verdict=$verdict"
+            echo "head=$HEAD_SHA"
+            echo "model=gpt-5.6-sol"
+            echo "latency_s=$latency"
+            echo "total_tokens=$tokens"
+          } >> "$GITHUB_STEP_SUMMARY"
