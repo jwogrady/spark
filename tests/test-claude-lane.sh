@@ -214,7 +214,7 @@ PY
   for f in "$repo_root"/.github/workflows/*.yml; do
     [ -f "$f" ] || continue
     case "$(basename "$f")" in claude.yml) continue ;; esac
-    if grep -qE '^\s+pull_request:' "$f" && grep -qiE 'review' "$f"; then
+    if grep -qE '^\s+pull_request(_target)?:' "$f" && grep -qiE 'review' "$f"; then
       autoreviewers="${autoreviewers}$(basename "$f") "
     fi
   done

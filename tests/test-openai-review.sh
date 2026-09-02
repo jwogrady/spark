@@ -40,8 +40,15 @@ haswf_not "publication failures are not swallowed" 'gh (pr comment|api).*\|\| tr
 
 # Prompt-injection boundary.
 haswf "uses higher-authority Responses API instructions" 'instructions: \$instructions'
-haswf "labels supplied evidence as untrusted" 'UNTRUSTED DATA'
+haswf "labels supplied evidence as untrusted" 'UNTRUSTED.*DATA'
 haswf "keeps untrusted evidence in input" 'input: \$input'
+# The binding policy is TRUSTED committed code, read from the base checkout — not
+# a column-0 heredoc that breaks the workflow YAML.
+instr="$repo/.github/scripts/openai-review/reviewer-instructions.txt"
+[ -f "$instr" ] && ok || bad "committed reviewer instructions missing"
+grep -qi "UNTRUSTED DATA" "$instr" 2>/dev/null && ok || bad "instructions must declare supplied evidence UNTRUSTED"
+grep -q "PASS | CHANGES REQUIRED | DECISION REQUIRED | NOT ASSESSED" "$instr" 2>/dev/null && ok || bad "instructions must state the closed verdict vocabulary"
+haswf "reads binding policy from the trusted committed file" 'reviewer-instructions.txt'
 
 # Fail closed and exact-head evidence.
 haswf "uses the OpenAI secret" 'OPENAI_API_KEY: \$\{\{ secrets.OPENAI_API_KEY \}\}'
