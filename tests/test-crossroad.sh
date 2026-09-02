@@ -80,8 +80,16 @@ verdict CONTINUE 0 "an empty reason continues"                          ""
 case "$(xr_stop_check activate-authorized)" in
   *"not an authority boundary"*) ok ;; *) bad "continue reason must explain why it is not a boundary" ;;
 esac
+# The unnamed-boundary reason names WHICH value is missing (#691 review), not a
+# blanket "neither was given".
 case "$(xr_stop_check new-authority 2>&1)" in
-  *"must NAME the specific missing human authority"*) ok ;; *) bad "unnamed-boundary reason must demand naming" ;;
+  *"needs a named authority and a cited surface"*) ok ;; *) bad "both-missing reason must say both are missing" ;;
+esac
+case "$(xr_stop_check new-authority "" "AGENTS.md" 2>&1)" in
+  *"needs a named authority,"*) ok ;; *) bad "authority-missing reason must name the authority" ;;
+esac
+case "$(xr_stop_check new-authority "a deploy key" "" 2>&1)" in
+  *"needs a cited surface,"*) ok ;; *) bad "surface-missing reason must name the surface" ;;
 esac
 case "$(xr_stop_check new-authority "deploy key" "AGENTS.md" 2>&1)" in
   *"reserved to the human by AGENTS.md"*) ok ;; *) bad "a real stop must cite the reserving surface" ;;

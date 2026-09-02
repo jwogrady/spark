@@ -552,7 +552,7 @@ says it is. It recommends and routes; that is the whole of its authority.
 
 Classify a proposed stop before handing off to the human. The autonomous
 orchestrator's costliest stop mistake is not running past a real boundary — it
-is inventing one (#690). A genuine Crossroad exists only when the next motion
+is inventing one. A genuine Crossroad exists only when the next motion
 needs an authority a durable surface reserves to the human.
 
 `crossroad` admits a stop **only** for a recognised boundary kind that also

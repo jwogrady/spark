@@ -1865,8 +1865,13 @@ xr_stop_check() {
         echo "missing authority: $authority — reserved to the human by $surface (kind: $kind)"
         return 3
       fi
+      local lack
+      if   [ "$a_named" = 0 ] && [ "$s_named" = 0 ]; then lack="a named authority and a cited surface"
+      elif [ "$a_named" = 0 ];                       then lack="a named authority"
+      else                                                lack="a cited surface"
+      fi
       echo "CONTINUE"
-      echo "reason: a '$kind' stop must NAME the specific missing human authority AND cite the durable surface reserving it; neither was given, so continue rather than manufacture a Crossroad"
+      echo "reason: a '$kind' stop needs $lack, which was not given — name the specific missing human authority and cite the durable surface reserving it, or continue rather than manufacture a Crossroad"
       return 0 ;;
   esac
   echo "CONTINUE"

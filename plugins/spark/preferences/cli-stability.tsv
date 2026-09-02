@@ -79,4 +79,4 @@ evidence	experimental	Introduced in v0.23; contract still under validation
 route	experimental	Introduced in v0.23; contract still under validation
 ci	experimental	Introduced in v0.23; machine-interface defects open (#649)
 repo	experimental	Introduced in v0.23; contract still under validation
-crossroad	experimental	Introduced in v0.23; #690 stop-classification contract under validation
+crossroad	experimental	Introduced in v0.23; stop-classification contract under validation
