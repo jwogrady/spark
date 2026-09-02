@@ -166,3 +166,49 @@ orl_build_evidence() {
     printf 'CHANGED FILE MANIFEST: %s. The file list follows in the untrusted manifest section; a capped or unavailable manifest also blocks PASS.\n' "$manifest_state"
   } > "$out/completeness.txt"
 }
+
+# orl_check_line <required-name> — stdin: check lines "name: status/conclusion".
+# Echoes the FIRST line for the named check, or empty if it is absent. Helper for
+# the terminal/passed predicates below; a check absent from the set is treated as
+# not-yet-reported (fail closed by the callers).
+orl_check_line() { # <name>
+  local want="$1" line
+  while IFS= read -r line; do
+    case "$line" in "$want: "*) printf '%s' "$line"; return 0 ;; esac
+  done
+  return 0
+}
+
+# orl_checks_terminal <required-name>...  — stdin: check lines "name: status/conclusion".
+# Returns 0 only when EVERY required check is present with status "completed". A
+# required check that is missing, queued, in_progress, or otherwise not completed
+# makes the set non-terminal. Fail closed: the reviewer must consume a terminal
+# exact-HEAD CI snapshot, never a pending one (#692).
+orl_checks_terminal() { # <required...>
+  local input name line rest status
+  input="$(cat)"
+  for name in "$@"; do
+    line="$(printf '%s\n' "$input" | orl_check_line "$name")"
+    [ -n "$line" ] || return 1
+    rest="${line#"$name": }"; status="${rest%%/*}"
+    [ "$status" = "completed" ] || return 1
+  done
+  return 0
+}
+
+# orl_checks_passed <required-name>...  — stdin: check lines "name: status/conclusion".
+# Returns 0 only when EVERY required check is "completed/success". A check that is
+# non-terminal, failed, cancelled, timed out, or missing makes the set not-passed.
+# A model PASS on a HEAD whose required checks are not all green is downgraded, so
+# a failed or cancelled required check can never publish PASS (#692).
+orl_checks_passed() { # <required...>
+  local input name line rest
+  input="$(cat)"
+  for name in "$@"; do
+    line="$(printf '%s\n' "$input" | orl_check_line "$name")"
+    [ -n "$line" ] || return 1
+    rest="${line#"$name": }"
+    case "$rest" in completed/success) ;; *) return 1 ;; esac
+  done
+  return 0
+}

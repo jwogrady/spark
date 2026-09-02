@@ -75,6 +75,54 @@ jobs:
           echo "already=false" >> "$GITHUB_OUTPUT"
           echo "reservation_id=$reservation_id" >> "$GITHUB_OUTPUT"
 
+      # The one paid review must consume a TERMINAL exact-HEAD CI snapshot, never a
+      # pending one that could freeze a pre-terminal verdict (#692). The lane fires
+      # on pull_request_target before required checks are necessarily terminal, so
+      # wait here — bounded, and abandoned if a newer push supersedes this HEAD —
+      # until every required check has completed. No verdict is produced from a
+      # pending snapshot; the reviewer either sees terminal evidence or, only on a
+      # genuine timeout/supersession, finalizes NOT ASSESSED (never a pass).
+      - name: Wait for terminal required checks
+        id: ci
+        if: steps.guard.outputs.already != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          . .github/scripts/openai-review/lib.sh
+          mkdir -p /tmp/rev
+          required="docs-truth doctor gate tests"
+          deadline=$(( $(date +%s) + 1500 ))   # ~25 min ceiling; CI is minutes
+          terminal=false; reason=""
+          while :; do
+            gh api "repos/$REPO/commits/$HEAD_SHA/check-runs" \
+              --jq '.check_runs[] | "\(.name): \(.status)/\(.conclusion // "pending")"' \
+              > /tmp/rev/checks.txt 2>/dev/null || : > /tmp/rev/checks.txt
+            if orl_checks_terminal $required < /tmp/rev/checks.txt; then
+              terminal=true; break
+            fi
+            # A newer push supersedes this HEAD: stop waiting on a stale head. The
+            # queued run for the new HEAD reviews it; this one finalizes NOT ASSESSED.
+            live_head="$(gh api "repos/$REPO/pulls/$PR" --jq '.head.sha' 2>/dev/null || echo "")"
+            if [ -n "$live_head" ] && [ "$live_head" != "$HEAD_SHA" ]; then
+              reason="superseded-while-waiting"; break
+            fi
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              reason="ci-not-terminal-timeout"; break
+            fi
+            sleep 30
+          done
+          echo "terminal=$terminal" >> "$GITHUB_OUTPUT"
+          [ -n "$reason" ] && echo "reason=$reason" >> "$GITHUB_OUTPUT" || true
+          if [ "$terminal" = "true" ] && orl_checks_passed $required < /tmp/rev/checks.txt; then
+            echo "passed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "passed=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Gather untrusted review evidence as data
         if: steps.guard.outputs.already != 'true'
         env:
@@ -170,8 +218,29 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          CI_TERMINAL: ${{ steps.ci.outputs.terminal }}
+          CI_PASSED: ${{ steps.ci.outputs.passed }}
+          CI_REASON: ${{ steps.ci.outputs.reason }}
         run: |
           set -euo pipefail
+
+          # Terminal, coherent exact-HEAD CI is a precondition of the paid review
+          # (#692). If the required checks never reached terminal (a genuine timeout
+          # or a supersession while waiting), finalize NOT ASSESSED without paying —
+          # a pending or abandoned snapshot is never a pass.
+          if [ "${CI_TERMINAL:-false}" != "true" ]; then
+            printf 'NOT ASSESSED\n\nThe required checks did not reach a terminal state for this exact HEAD (%s), so no coherent exact-HEAD evidence was available to review. This is not a pass.\n' "${CI_REASON:-not-terminal}" > /tmp/rev/verdict.md
+            printf '0' > /tmp/rev/latency.txt
+            exit 0
+          fi
+          # Terminal but not all green: a failed or cancelled required check means
+          # this exact HEAD is not mergeable-green, so it cannot PASS. Finalize
+          # NOT ASSESSED without spending the model call.
+          if [ "${CI_PASSED:-false}" != "true" ]; then
+            printf 'NOT ASSESSED\n\nOne or more required checks are not green on this exact HEAD, so it cannot pass review. This is not a pass; fix the failing checks.\n' > /tmp/rev/verdict.md
+            printf '0' > /tmp/rev/latency.txt
+            exit 0
+          fi
 
           # Last TOCTOU check before any paid invocation. The durable reservation
           # remains evidence that this old HEAD was claimed, but no stale model

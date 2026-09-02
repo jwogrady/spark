@@ -252,6 +252,64 @@ orl_build_evidence "$be/diff.raw" 1 200000 "$be/m0.txt" 1 0 "$be"
 orl_build_evidence "$be/diff.raw" 1 200000 "$be/m0.txt" 0 0 "$be"
 [ "$(cat "$be/truncated")" = 1 ] && ok || bad "a failed manifest fetch must block PASS"
 
+# --- terminal-CI gate (#692): the paid review consumes TERMINAL, GREEN CI -------
+# The reviewer must not freeze a pre-terminal CI snapshot; a pending required
+# check defers (no verdict), and a failed one can never PASS.
+REQ="docs-truth doctor gate tests"
+green="docs-truth: completed/success
+doctor: completed/success
+gate: completed/success
+tests: completed/success"
+pending="docs-truth: completed/success
+doctor: completed/success
+gate: in_progress/pending
+tests: queued/pending"
+failed="docs-truth: completed/success
+doctor: completed/failure
+gate: completed/success
+tests: completed/success"
+cancelled="docs-truth: completed/success
+doctor: completed/cancelled
+gate: completed/success
+tests: completed/success"
+missing="docs-truth: completed/success
+doctor: completed/success
+gate: completed/success"
+# terminal: every required check reached "completed" (pass OR fail); the reviewer
+# may run. pending / missing are NOT terminal → defer, fail closed.
+printf '%s\n' "$green"     | orl_checks_terminal $REQ && ok || bad "all-completed checks must be terminal"
+printf '%s\n' "$failed"    | orl_checks_terminal $REQ && ok || bad "a completed-but-failed set is still terminal"
+printf '%s\n' "$cancelled" | orl_checks_terminal $REQ && ok || bad "a completed-but-cancelled set is still terminal"
+printf '%s\n' "$pending"   | orl_checks_terminal $REQ && bad "a pending required check must NOT be terminal" || ok
+printf '%s\n' "$missing"   | orl_checks_terminal $REQ && bad "a missing required check must NOT be terminal" || ok
+printf '' | orl_checks_terminal $REQ && bad "an empty check set must NOT be terminal" || ok
+# passed: every required check is completed/success. Only green passes; a failed,
+# cancelled, pending, or missing check is not-passed → a PASS is downgraded.
+printf '%s\n' "$green"     | orl_checks_passed $REQ && ok || bad "all-green checks must be passed"
+printf '%s\n' "$failed"    | orl_checks_passed $REQ && bad "a failed required check must NOT be passed" || ok
+printf '%s\n' "$cancelled" | orl_checks_passed $REQ && bad "a cancelled required check must NOT be passed" || ok
+printf '%s\n' "$pending"   | orl_checks_passed $REQ && bad "a pending required check must NOT be passed" || ok
+printf '%s\n' "$missing"   | orl_checks_passed $REQ && bad "a missing required check must NOT be passed" || ok
+# End to end (#692): pending CI defers (never a terminal verdict); once terminal
+# and green, a PASS stands; terminal-but-failed downgrades a PASS to NOT ASSESSED.
+if printf '%s\n' "$pending" | orl_checks_terminal $REQ; then bad "pending must defer, not review"; else ok; fi
+if printf '%s\n' "$green" | orl_checks_terminal $REQ && printf '%s\n' "$green" | orl_checks_passed $REQ; then
+  [ "$(orl_enforce_completeness PASS 0)" = "PASS" ] && ok || bad "terminal-green complete evidence must let PASS stand"
+else bad "terminal-green must be reviewable and passed"; fi
+if printf '%s\n' "$failed" | orl_checks_passed $REQ; then bad "failed CI must not be passed"; else
+  # the workflow maps not-passed → NOT ASSESSED for a would-be PASS
+  ok
+fi
+# Criterion-7 transition: the poll observes pending snapshots then a terminal-green
+# one. The decision must stay "defer" until the terminal snapshot, then flip once
+# to "review" — modelled here as the exact sequence of predicate outcomes the
+# wait-loop consumes across iterations.
+seq_reviewed=0
+for snap in "$pending" "$pending" "$green"; do
+  if printf '%s\n' "$snap" | orl_checks_terminal $REQ; then seq_reviewed=$((seq_reviewed + 1)); fi
+done
+[ "$seq_reviewed" = 1 ] && ok || bad "pending→pending→green must become reviewable exactly once, got $seq_reviewed"
+
 # Static workflow facts: the workflow fetches, delegates to the tested helper, and
 # enforces the flag; the derived logic itself is proven by the fixtures above.
 haswf "retrieves every path via uncapped GraphQL"     'files\(first:100,after:\$endCursor\)'
@@ -265,6 +323,14 @@ haswf "always supplies the manifest as untrusted data" 'UNTRUSTED CHANGED-FILE M
 haswf "enforces completeness on the verdict"          'orl_enforce_completeness "\$model_verdict"'
 haswf "an unreadable completeness flag fails closed"   'cat /tmp/rev/truncated 2>/dev/null \|\| echo 1'
 haswf_not "no silent head -c bound without detection" 'head -c 200000 /tmp/rev/diff.txt'
+# Terminal-CI gate (#692): wait for terminal checks, gate the paid call on them.
+haswf "waits for terminal required checks"            'Wait for terminal required checks'
+haswf "gates the review on the terminal helper"       'orl_checks_terminal \$required'
+haswf "requires all required checks green to pass"    'orl_checks_passed \$required'
+haswf "the paid call is gated on terminal CI"         'CI_TERMINAL'
+haswf "a non-green terminal HEAD cannot pass"         'CI_PASSED'
+haswf "abandons a superseded HEAD while waiting"      'superseded-while-waiting'
+haswf "a genuine CI timeout finalizes not-a-pass"     'ci-not-terminal-timeout'
 
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
