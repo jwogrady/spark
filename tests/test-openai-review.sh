@@ -144,6 +144,10 @@ haswf "fetches the complete changed-file manifest"    'pulls/\$PR/files'
 haswf "discloses diff completeness to the model"      'DIFF COMPLETENESS'
 haswf "enforces completeness on the verdict"          'orl_enforce_completeness "\$model_verdict"'
 haswf_not "no silent head -c bound without detection" 'head -c 200000 /tmp/rev/diff.txt'
+# A refused/unfetchable diff is treated as truncated, never disclosed as COMPLETE.
+haswf "an unfetched diff forces the truncated branch"  '\[ "\$diff_ok" = "0" \] \|\| orl_is_truncated'
+haswf "discloses an unavailable diff honestly"         'DIFF UNAVAILABLE'
+haswf "an unreadable completeness flag fails closed"   'cat /tmp/rev/truncated 2>/dev/null \|\| echo 1'
 
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

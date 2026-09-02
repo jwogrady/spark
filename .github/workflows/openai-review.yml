@@ -92,20 +92,33 @@ jobs:
           # change: truncation is disclosed as machine-readable completeness
           # evidence, the complete changed-file manifest is always included, and a
           # post-step control forbids PASS on a truncated diff (#693).
-          gh api "repos/$REPO/pulls/$PR" -H "Accept: application/vnd.github.v3.diff" \
-            > /tmp/rev/diff.raw 2>/dev/null || echo "(diff unavailable)" > /tmp/rev/diff.raw
+          # A refused fetch (e.g. GitHub 406 on a very large diff) is itself an
+          # incomplete review, not a complete zero-byte one: capture the outcome
+          # so the sentinel body can never be disclosed as a COMPLETE diff (#693).
+          if gh api "repos/$REPO/pulls/$PR" -H "Accept: application/vnd.github.v3.diff" \
+               > /tmp/rev/diff.raw 2>/dev/null; then
+            diff_ok=1
+          else
+            diff_ok=0
+            echo "(diff unavailable)" > /tmp/rev/diff.raw
+          fi
           orig_bytes="$(wc -c < /tmp/rev/diff.raw | tr -d ' ')"
           budget=200000
           # Every changed filename is represented even when hunks are omitted.
           gh api --paginate "repos/$REPO/pulls/$PR/files?per_page=100" \
             --jq '.[] | "\(.status)\t\(.filename)\t+\(.additions)/-\(.deletions)"' \
             > /tmp/rev/files.txt 2>/dev/null || echo "(file manifest unavailable)" > /tmp/rev/files.txt
-          if orl_is_truncated "$orig_bytes" "$budget"; then
+          if [ "$diff_ok" = "0" ] || orl_is_truncated "$orig_bytes" "$budget"; then
             printf '1' > /tmp/rev/truncated
             head -c "$budget" /tmp/rev/diff.raw > /tmp/rev/diff.txt
             {
-              printf 'DIFF TRUNCATED: showing %s of %s bytes; hunks beyond the bound are OMITTED.\n' "$budget" "$orig_bytes"
-              echo "An incomplete diff can never be PASS. Every changed file is in the manifest; hunks for content past the boundary were not shown."
+              if [ "$diff_ok" = "0" ]; then
+                echo "DIFF UNAVAILABLE: the exact-HEAD diff could not be fetched; NO diff content is present."
+                echo "An unfetchable diff can never be PASS. Every changed file is in the manifest below; no hunks were shown."
+              else
+                printf 'DIFF TRUNCATED: showing %s of %s bytes; hunks beyond the bound are OMITTED.\n' "$budget" "$orig_bytes"
+                echo "An incomplete diff can never be PASS. Every changed file is in the manifest; hunks for content past the boundary were not shown."
+              fi
               echo "--- CHANGED FILE MANIFEST (complete) ---"; cat /tmp/rev/files.txt
             } > /tmp/rev/completeness.txt
           else
@@ -222,11 +235,13 @@ jobs:
           model_verdict="$(head -1 /tmp/rev/verdict.md | orl_normalize_verdict)"
           # A PASS on a truncated diff is not a pass: the whole change was not
           # seen (#693). Downgrade it, and make the body say why.
-          truncated="$(cat /tmp/rev/truncated 2>/dev/null || echo 0)"
+          # Fail closed: an unreadable completeness flag is treated as truncated,
+          # so a missing flag can only ever downgrade a would-be PASS (#693).
+          truncated="$(cat /tmp/rev/truncated 2>/dev/null || echo 1)"
           verdict="$(orl_enforce_completeness "$model_verdict" "$truncated")"
           if [ "$verdict" != "$model_verdict" ]; then
             {
-              printf 'NOT ASSESSED\n\nThe reviewer returned %s, but the exact-HEAD diff exceeded the review budget and was truncated, so the whole change was not seen. A prefix-only pass is not a pass. The changed-file manifest is complete; a full review needs the complete diff.\n' "$model_verdict"
+              printf 'NOT ASSESSED\n\nThe reviewer returned %s, but the exact-HEAD diff was incomplete (it exceeded the review budget and was truncated, or could not be fetched), so the whole change was not seen. A prefix-only pass is not a pass. The changed-file manifest is complete; a full review needs the complete diff.\n' "$model_verdict"
             } > /tmp/rev/verdict.md
           fi
           {
