@@ -114,19 +114,37 @@ orl_has_consumed() { # expected_pr expected_head
 # the run died before finalizing (a job kill, or an error the !cancelled finalize
 # could not catch). That case is CI-independent: there is nothing left to review,
 # only a fail-closed NOT ASSESSED to record, and no active review can touch a
-# consumed HEAD (the guard skips it). A BARE reservation is NOT recovered here: its
-# CI may still be legitimately running, and finalizing it blind would recreate the
-# very pre-terminal freeze #692 removes — it is left to the completion path. Returns
-# 0 (recover) or 1 (nothing to do). The caller adds a grace window so the invoking
-# run is long finished. stdin is TSV: login<TAB>app-slug<TAB>comment-body.
+# consumed HEAD (the guard skips it). A BARE reservation is NOT finalized here:
+# finalizing it blind would recreate the pre-terminal freeze #692 removes — instead
+# it is RE-DISPATCHED for review (see orl_needs_redispatch). Returns 0 (recover) or
+# 1 (nothing to do). The caller adds a grace window (from the INVOCATION time) so
+# the invoking run is long finished. stdin is TSV: login<TAB>app-slug<TAB>body.
 orl_needs_recovery() { # expected_pr expected_head
   local claims; claims="$(cat)"
   [ -n "$1" ] && [ -n "$2" ] || return 1
   # A final verdict already exists → nothing to recover.
   printf '%s\n' "$claims" | orl_has_final_marker "$1" "$2" && return 1
   # An INVOKED marker (call consumed) with no final verdict → recover. A bare
-  # reservation (never invoked) is intentionally left to the completion path.
+  # reservation (never invoked) is handled by orl_needs_redispatch instead.
   printf '%s\n' "$claims" | orl_has_consumed "$1" "$2"
+}
+
+# Does this exact PR + HEAD need durable RE-DISPATCH? A BARE reservation — claimed
+# but the model call NOT yet consumed and NO final verdict — means the event-driven
+# completion path may have stranded a reserved-but-unconsumed live HEAD (its last
+# workflow_run event hit prolonged propagation delay or a transient read failure).
+# The scheduled sweep re-dispatches the review for it rather than finalising it
+# blind (which would freeze a pre-terminal disposition) or ignoring it (which would
+# strand it). The re-dispatched run resumes through the normal guard — the
+# consumed-check and HEAD-SHA concurrency keep at-most-once — and reviews or defers
+# on the current terminality. Returns 0 (re-dispatch) or 1 (#692). stdin is TSV.
+orl_needs_redispatch() { # expected_pr expected_head
+  local claims; claims="$(cat)"
+  [ -n "$1" ] && [ -n "$2" ] || return 1
+  # Consumed (invoked or finalised) → not a bare reservation → no re-dispatch.
+  printf '%s\n' "$claims" | orl_has_consumed "$1" "$2" && return 1
+  # A bare reservation with no final verdict → re-dispatch.
+  printf '%s\n' "$claims" | orl_has_trusted_claim "$1" "$2"
 }
 
 # Human-facing routing. #585, not reviewer prose, owns automatic writer handoff.

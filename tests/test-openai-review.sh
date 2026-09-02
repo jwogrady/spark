@@ -129,21 +129,36 @@ spoof_invoked="attacker	github-actions	$(orl_invoked 688 abc123)"
 printf '%b\n' "$spoof_invoked"   | orl_has_consumed 688 abc123 && bad "a spoofed-login invoked marker must not count" || ok
 printf '%b\n' "github-actions[bot]	github-actions	$(orl_invoked 688 def456)" | orl_has_consumed 688 abc123 && bad "a wrong-HEAD invoked marker must not count" || ok
 
-# Fail-closed recovery (#692), deliberately NARROW: the scheduled sweep finalizes
-# NOT ASSESSED ONLY for an INVOKED marker with no final verdict (the paid call was
-# consumed but the run died before finalizing). A BARE reservation is NOT recovered
-# — its CI may still be legitimately running, and blind-finalizing it would recreate
-# the pre-terminal freeze this issue removes; it stays with the completion path.
+# The scheduled sweep partitions a stranded live HEAD (#692): a CONSUMED-but-
+# unfinalized marker → finalize NOT ASSESSED (no re-invoke); a BARE reservation →
+# durable RE-DISPATCH of the review (never blind-finalized, which would freeze;
+# never ignored, which would strand). The two are mutually exclusive.
 res_only="github-actions[bot]	github-actions	$(orl_reservation 688 abc123)"
 inv_only="github-actions[bot]	github-actions	$(orl_reservation 688 abc123) $(orl_invoked 688 abc123)"
+# --- Case A: orl_needs_recovery (consumed-but-unfinalized → NOT ASSESSED) ---
 printf '%b\n' "$inv_only"     | orl_needs_recovery 688 abc123 && ok || bad "invoked-but-unfinalized must be recovered"
-printf '%b\n' "$res_only"     | orl_needs_recovery 688 abc123 && bad "a BARE reservation must NOT be recovered (its CI may still be running)" || ok
+printf '%b\n' "$res_only"     | orl_needs_recovery 688 abc123 && bad "a BARE reservation must NOT be finalized by recovery" || ok
 printf '%b\n' "$trusted_final" | orl_needs_recovery 688 abc123 && bad "a finalized HEAD must NOT be recovered" || ok
 printf '%b\n' "$inv_only
 github-actions[bot]	github-actions	$(orl_marker PASS 688 abc123)" | orl_needs_recovery 688 abc123 && bad "an invoked marker that WAS finalized must not be recovered" || ok
 printf '' | orl_needs_recovery 688 abc123 && bad "no claim → nothing to recover" || ok
 printf '%b\n' "$inv_only"     | orl_needs_recovery 688 zzz999 && bad "recovery must bind the exact HEAD" || ok
 printf '%b\n' "attacker	github-actions	$(orl_reservation 688 abc123) $(orl_invoked 688 abc123)" | orl_needs_recovery 688 abc123 && bad "a spoofed-login invoked marker must not trigger recovery" || ok
+# --- Case B: orl_needs_redispatch (bare reservation → durable resumption) ---
+# This is the reviewed final-event-retry-exhaustion / stranded-bare-reservation path.
+printf '%b\n' "$res_only"     | orl_needs_redispatch 688 abc123 && ok || bad "a stranded bare reservation must be re-dispatched"
+printf '%b\n' "$inv_only"     | orl_needs_redispatch 688 abc123 && bad "an invoked (consumed) HEAD must NOT be re-dispatched" || ok
+printf '%b\n' "$trusted_final" | orl_needs_redispatch 688 abc123 && bad "a finalized HEAD must NOT be re-dispatched" || ok
+printf '' | orl_needs_redispatch 688 abc123 && bad "no claim → nothing to re-dispatch" || ok
+printf '%b\n' "$res_only"     | orl_needs_redispatch 688 zzz999 && bad "re-dispatch must bind the exact HEAD" || ok
+printf '%b\n' "attacker	github-actions	$(orl_reservation 688 abc123)" | orl_needs_redispatch 688 abc123 && bad "a spoofed-login reservation must not trigger re-dispatch" || ok
+# Mutual exclusivity: recovery and re-dispatch never both fire for one state.
+for st in "$res_only" "$inv_only" "$trusted_final"; do
+  rec=0; red=0
+  printf '%b\n' "$st" | orl_needs_recovery 688 abc123 && rec=1 || true
+  printf '%b\n' "$st" | orl_needs_redispatch 688 abc123 && red=1 || true
+  [ $(( rec + red )) -le 1 ] && ok || bad "recovery and re-dispatch must be mutually exclusive for one state"
+done
 
 case "$(orl_route PASS)" in *"not merge authority"*) ok ;; *) bad "PASS route" ;; esac
 case "$(orl_route "CHANGES REQUIRED")" in *"#585"*"do not merge"*) ok ;; *) bad "CHANGES route" ;; esac
@@ -434,6 +449,13 @@ haswf "a scheduled sweep recovers stranded reservations" "cron: '17,47"
 haswf "recovery decides disposition with the tested helper" 'orl_needs_recovery'
 haswf "recovery never invokes the model (no curl in it)"    'without invoking the model again'
 haswf "recovery honours a grace window"               'grace=1800'
+haswf "graces the invoked case from the invocation time" '\.updated_at'
+haswf "atomically re-validates before overwriting a verdict" 'live_body='
+haswf "durably re-dispatches a stranded bare reservation" 'orl_needs_redispatch'
+haswf "re-dispatch resumes the review via workflow_dispatch" 'gh workflow run openai-review.yml -f pr='
+haswf "supports a workflow_dispatch resume trigger"   '^  workflow_dispatch:'
+haswf "bounds the invoking run so recovery cannot race it" 'timeout-minutes: 20'
+haswf "bounds the model call duration"                'curl -sS --max-time'
 haswf "reviews only when checks are terminal"         "steps.ci.outputs.terminal == 'true'"
 haswf "paginates the check-runs API"                  'check-runs\?per_page=100'
 haswf "normalizes paginated comments into one array"  "jq -s 'add"

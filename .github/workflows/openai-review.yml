@@ -17,28 +17,44 @@ on:
   workflow_run:
     workflows: [validate, docs-truth, milestone-gate]
     types: [completed]
-  # Durable safety net: a scheduled sweep guarantees every reserved HEAD eventually
-  # reaches a terminal disposition even if the completion path stranded it (retries
-  # exhausted, a run killed after invoking, a transient fetch failure). It finalizes
-  # NOT ASSESSED fail-closed, never invoking the model (#692).
+  # Durable resumption for a reserved-but-unconsumed (bare) HEAD the event-driven
+  # path stranded: the scheduled sweep re-dispatches the review for it here, with the
+  # exact PR and HEAD. The dispatched run resumes through the normal guard (#692).
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: PR number to resume review for
+        required: true
+      head_sha:
+        description: exact HEAD sha to resume review for
+        required: true
+  # A scheduled sweep guarantees every reserved HEAD reaches a terminal disposition
+  # even if the completion path stranded it — it finalizes NOT ASSESSED fail-closed
+  # for a consumed-but-unfinalized HEAD (never re-invoking) and re-dispatches a bare
+  # reservation for review (#692).
   schedule:
     - cron: '17,47 * * * *'
 
-# Serialize by exact HEAD SHA — reliably present in BOTH event payloads — so a
-# pull_request_target run and a workflow_run run for the same commit never overlap,
-# and the paid model call is invoked at most once per exact HEAD. Do not cancel an
+# Serialize by exact HEAD SHA — present in every event payload (a workflow_dispatch
+# resume carries it as an input) — so no two runs for the same commit overlap and
+# the paid model call is invoked at most once per exact HEAD. Do not cancel an
 # in-flight run: cancellation after the paid call could let a replacement re-invoke it.
 concurrency:
-  group: openai-review-${{ github.event.pull_request.head.sha || github.event.workflow_run.head_sha || github.run_id }}
+  group: openai-review-${{ github.event.pull_request.head.sha || github.event.workflow_run.head_sha || github.event.inputs.head_sha || github.run_id }}
   cancel-in-progress: false
 
 permissions: {}
 
 jobs:
   openai-review:
-    # Event-driven review; the scheduled sweep is the separate recover job.
+    # Event-driven review (including a workflow_dispatch resume); the scheduled
+    # sweep is the separate recover job.
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
+    # Hard-bound the invoking run's lifetime. With the model curl's own --max-time,
+    # a run cannot outlive the recovery grace window, so recovery can never race an
+    # active invocation (#692).
+    timeout-minutes: 20
     permissions:
       contents: read
       pull-requests: write
@@ -46,10 +62,12 @@ jobs:
       checks: read
       actions: read
     steps:
-      # Both event types are supported: pull_request_target (a push/open) and
-      # workflow_run (a required-check workflow finished). Resolve the target PR and
-      # exact HEAD from whichever fired; workflow_run.pull_requests can be empty, so
-      # fall back to resolving the open PR from the head SHA. No PR → nothing to do.
+      # Three event types are supported: pull_request_target (a push/open),
+      # workflow_run (a required-check workflow finished), and workflow_dispatch (a
+      # scheduled recovery re-dispatch, which carries the exact pr + head as inputs).
+      # Resolve the target PR and exact HEAD from whichever fired; workflow_run's
+      # pull_requests can be empty, so fall back to the open PR for the head SHA. No
+      # PR → nothing to do.
       - name: Resolve target PR and HEAD
         id: target
         env:
@@ -60,11 +78,15 @@ jobs:
           PR_HEAD: ${{ github.event.pull_request.head.sha }}
           WR_HEAD: ${{ github.event.workflow_run.head_sha }}
           WR_PR: ${{ github.event.workflow_run.pull_requests[0].number }}
+          WD_PR: ${{ github.event.inputs.pr }}
+          WD_HEAD: ${{ github.event.inputs.head_sha }}
         run: |
           set -euo pipefail
           pr=""; head=""
           if [ "$EVENT" = "pull_request_target" ]; then
             pr="$PR_NUM"; head="$PR_HEAD"
+          elif [ "$EVENT" = "workflow_dispatch" ]; then
+            pr="$WD_PR"; head="$WD_HEAD"
           else
             head="$WR_HEAD"; pr="$WR_PR"
             if [ -z "$pr" ] && [ -n "$head" ]; then
@@ -365,7 +387,9 @@ jobs:
           gh api --method PATCH "repos/$REPO/issues/comments/$RESERVATION_ID" \
             -f body="$consumed_body" >/dev/null
 
-          metrics=$(curl -sS -o /tmp/rev/resp.json -w '%{http_code} %{time_total}' \
+          # --max-time bounds the call so the invoking run's lifetime is bounded
+          # (with the job timeout-minutes) well under the recovery grace (#692).
+          metrics=$(curl -sS --max-time 600 -o /tmp/rev/resp.json -w '%{http_code} %{time_total}' \
             https://api.openai.com/v1/responses \
             -H "Authorization: Bearer $OPENAI_API_KEY" \
             -H "Content-Type: application/json" \
@@ -456,6 +480,7 @@ jobs:
   recover:
     if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     concurrency:
       group: openai-review-recover
       cancel-in-progress: false
@@ -463,6 +488,7 @@ jobs:
       contents: read
       pull-requests: write
       issues: read
+      actions: write   # re-dispatch the review workflow for a stranded bare reservation
     steps:
       - name: Checkout trusted base implementation
         uses: actions/checkout@v4
@@ -470,7 +496,7 @@ jobs:
           ref: ${{ github.event.repository.default_branch }}
           fetch-depth: 1
           persist-credentials: false
-      - name: Finalize stranded reservations fail-closed
+      - name: Recover stranded reservations (finalize consumed, re-dispatch bare)
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -490,27 +516,54 @@ jobs:
             jq -s 'add // []' /tmp/c.raw > /tmp/c.json
             jq -r '.[] | [.user.login, (.performed_via_github_app.slug // ""), .body] | @tsv' \
               /tmp/c.json > /tmp/c.tsv
-            orl_needs_recovery "$pr" "$head" < /tmp/c.tsv || continue
-            # Locate the reservation comment (id + updated_at) for this exact head.
-            # Grace is measured from updated_at — the invoked-marker PATCH sets it, so
-            # it is the INVOCATION time, not the (possibly much older, slow-CI)
-            # reservation time. This keeps recovery from racing a model call that only
-            # just started on a HEAD whose CI ran long (#692).
             needle="<!-- $ORL_RESERVATION_TAG pr=$pr head=$head -->"
-            row="$(jq -r --arg l "$ORL_TRUSTED_LOGIN" --arg a "$ORL_TRUSTED_APP" --arg n "$needle" \
-              '[.[] | select(.user.login==$l) | select((.performed_via_github_app.slug // "")==$a) | select(.body|contains($n)) | "\(.id)\t\(.updated_at)"] | (.[0] // "")' \
-              /tmp/c.json)"
-            [ -n "$row" ] || continue
-            cid="${row%%"$tab"*}"; updated="${row#*"$tab"}"
-            updated_epoch="$(date -d "$updated" +%s 2>/dev/null || echo 0)"
-            [ "$updated_epoch" -gt 0 ] || continue
-            [ $(( now - updated_epoch )) -ge "$grace" ] || continue
-            # Fail-closed terminal disposition, no model call.
-            note="The reviewer consumed its model call for this exact HEAD but the run ended before finalizing a verdict, so a scheduled recovery recorded NOT ASSESSED without invoking the model again. This is not a pass; push a new commit or re-request review."
-            body="$(printf '%s\n\n%s' "$(orl_marker 'NOT ASSESSED' "$pr" "$head")" "$note")"
-            # A single PATCH failure must not abort the sweep, but it is logged and
-            # retried on the next scheduled run — never silently swallowed.
-            if ! gh api --method PATCH "repos/$REPO/issues/comments/$cid" -f body="$body" >/dev/null; then
-              echo "recovery PATCH failed for PR $pr ($head); the next sweep retries."
+            # --- Case A: consumed-but-unfinalized → finalize NOT ASSESSED ----------
+            if orl_needs_recovery "$pr" "$head" < /tmp/c.tsv; then
+              # Grace from updated_at — the invoked-marker PATCH sets it, so it is the
+              # INVOCATION time, not the (possibly much older, slow-CI) reservation
+              # time. With the review job's bounded lifetime (timeout-minutes + curl
+              # --max-time) staying well under this grace, the invoking run is long
+              # dead, so recovery cannot race a live model call (#692).
+              row="$(jq -r --arg l "$ORL_TRUSTED_LOGIN" --arg a "$ORL_TRUSTED_APP" --arg n "$needle" \
+                '[.[] | select(.user.login==$l) | select((.performed_via_github_app.slug // "")==$a) | select(.body|contains($n)) | "\(.id)\t\(.updated_at)"] | (.[0] // "")' \
+                /tmp/c.json)"
+              [ -n "$row" ] || continue
+              cid="${row%%"$tab"*}"; updated="${row#*"$tab"}"
+              updated_epoch="$(date -d "$updated" +%s 2>/dev/null || echo 0)"
+              [ "$updated_epoch" -gt 0 ] || continue
+              [ $(( now - updated_epoch )) -ge "$grace" ] || continue
+              # ATOMIC RE-VALIDATE immediately before the patch: re-read THIS comment;
+              # if a review finalized it since the sweep listed comments, do not
+              # overwrite the real verdict. Fail closed on an unreadable re-read.
+              live_body="$(gh api "repos/$REPO/issues/comments/$cid" --jq '.body' 2>/dev/null || printf '__UNREADABLE__')"
+              [ "$live_body" != "__UNREADABLE__" ] || continue
+              case "$live_body" in *"<!-- $ORL_MARKER_TAG pr=$pr head=$head verdict="*) continue ;; esac
+              note="The reviewer consumed its model call for this exact HEAD but the run ended before finalizing a verdict, so a scheduled recovery recorded NOT ASSESSED without invoking the model again. This is not a pass; push a new commit or re-request review."
+              body="$(printf '%s\n\n%s' "$(orl_marker 'NOT ASSESSED' "$pr" "$head")" "$note")"
+              # A single PATCH failure must not abort the sweep; log and retry next run.
+              if ! gh api --method PATCH "repos/$REPO/issues/comments/$cid" -f body="$body" >/dev/null; then
+                echo "recovery PATCH failed for PR $pr ($head); the next sweep retries."
+              fi
+              continue
+            fi
+            # --- Case B: bare reservation → durable RE-DISPATCH of the review -------
+            if orl_needs_redispatch "$pr" "$head" < /tmp/c.tsv; then
+              # Only after a grace from the reservation's creation, so the normal
+              # completion path had ample time. Never blind-finalizes (which would
+              # freeze) or ignores (which would strand): it re-dispatches the review,
+              # which resumes through the guard and reviews or defers on the CURRENT
+              # terminality. at-most-once holds via the guard's consumed-check and the
+              # HEAD-SHA concurrency group (the dispatch carries head_sha as an input).
+              created="$(jq -r --arg l "$ORL_TRUSTED_LOGIN" --arg a "$ORL_TRUSTED_APP" --arg n "$needle" \
+                '[.[] | select(.user.login==$l) | select((.performed_via_github_app.slug // "")==$a) | select(.body|contains($n)) | .created_at] | (.[0] // "")' \
+                /tmp/c.json)"
+              [ -n "$created" ] || continue
+              created_epoch="$(date -d "$created" +%s 2>/dev/null || echo 0)"
+              [ "$created_epoch" -gt 0 ] || continue
+              [ $(( now - created_epoch )) -ge "$grace" ] || continue
+              if ! gh workflow run openai-review.yml -f pr="$pr" -f head_sha="$head" >/dev/null 2>&1; then
+                echo "recovery re-dispatch failed for PR $pr ($head); the next sweep retries."
+              fi
+              continue
             fi
           done < /tmp/prs.txt
