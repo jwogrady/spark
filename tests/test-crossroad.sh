@@ -64,6 +64,14 @@ verdict "DECISION REQUIRED" 3 "a durable DECISION REQUIRED stops" \
 verdict CONTINUE 0 "an unnamed new-authority claim does not stop"       new-authority
 verdict CONTINUE 0 "a named authority without a cited surface does not stop" \
   new-authority "some authority"
+# Whitespace is not a name (#691 review): a blank or all-space authority/surface
+# must not pose as named and manufacture a stop.
+verdict CONTINUE 0 "all-whitespace authority AND surface do not stop" \
+  new-authority " " "	"
+verdict CONTINUE 0 "a whitespace-only authority with a real surface does not stop" \
+  new-authority "   " "AGENTS.md guardrails"
+verdict CONTINUE 0 "a real authority with a whitespace-only surface does not stop" \
+  new-authority "a write-capable deploy key" "  "
 # An unrecognised reason never invents a Crossroad.
 verdict CONTINUE 0 "an unrecognised stop reason continues"              made-up-reason
 verdict CONTINUE 0 "an empty reason continues"                          ""

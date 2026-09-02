@@ -1854,7 +1854,13 @@ xr_stop_check() {
   esac
   case " $XR_BOUNDARY_KINDS " in
     *" $kind "*)
-      if [ -n "$authority" ] && [ -n "$surface" ]; then
+      # Whitespace is not a name. A value must carry at least one non-whitespace
+      # character to count as a named authority / cited surface, or " " could
+      # pose as one and manufacture exactly the false stop this guards against.
+      local a_named=0 s_named=0
+      case "$authority" in *[![:space:]]*) a_named=1 ;; esac
+      case "$surface"   in *[![:space:]]*) s_named=1 ;; esac
+      if [ "$a_named" = 1 ] && [ "$s_named" = 1 ]; then
         echo "DECISION REQUIRED"
         echo "missing authority: $authority — reserved to the human by $surface (kind: $kind)"
         return 3
