@@ -122,9 +122,13 @@ jobs:
           changed_files="$(gh api "repos/$REPO/pulls/$PR" --jq '.changed_files' 2>/dev/null || echo '')"
           if gh api --paginate "repos/$REPO/pulls/$PR/files?per_page=100" \
                --jq '.[] | "\(.status)\t\(.filename|@json)\t+\(.additions)/-\(.deletions)"' \
-               > /tmp/rev/files.txt 2>/dev/null && [ -s /tmp/rev/files.txt ]; then
+               > /tmp/rev/files.txt 2>/dev/null; then
+            # A successful response is authoritative even when empty: a PR with no
+            # changed files legitimately yields zero records, and 0 == changed_files
+            # is complete. Only a FAILED fetch (the else branch) is unavailable.
             manifest_count="$(wc -l < /tmp/rev/files.txt | tr -d ' ')"
             manifest_ok="$(orl_manifest_complete "$manifest_count" "$changed_files")"
+            if [ "$manifest_count" = "0" ]; then echo "(no changed files reported)" > /tmp/rev/files.txt; fi
           else
             manifest_count=0; manifest_ok=0
             echo "(file manifest unavailable)" > /tmp/rev/files.txt

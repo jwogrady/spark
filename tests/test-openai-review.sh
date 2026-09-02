@@ -161,6 +161,7 @@ et 1 TRUNCATED 0    # both gaps → incomplete
 # count short of the PR's changed_files is a silently capped, incomplete manifest.
 mc() { [ "$(orl_manifest_complete "$2" "$3")" = "$1" ] && ok || bad "manifest_complete $2/$3 — want $1"; }
 mc 1 5 5        # every changed file returned → complete
+mc 1 0 0        # a PR with no changed files: 0 of 0 → complete, not unavailable
 mc 0 3000 3500  # endpoint capped at 3000 of 3500 → incomplete, blocks PASS
 mc 0 4 5        # one file short → incomplete
 mc 0 6 5        # an inflated count (never legitimate) → mismatch, fail closed
@@ -191,6 +192,7 @@ haswf "fetches the changed-file manifest"             'pulls/\$PR/files'
 haswf "reads the trusted changed_files count"         'changed_files="\$\(gh api'
 haswf "checks the manifest against the cap"           'orl_manifest_complete "\$manifest_count" "\$changed_files"'
 haswf "counts manifest records newline-safely"        'filename\|@json'
+haswf_not "a successful empty manifest is not unavailable" '&& \[ -s /tmp/rev/files.txt \]'
 haswf "tracks the manifest-fetch outcome"             'manifest_ok=0'
 haswf "derives the evidence flag from both inputs"    'orl_evidence_truncated "\$diff_state" "\$manifest_ok"'
 haswf "discloses diff completeness to the model"      'DIFF COMPLETENESS'
