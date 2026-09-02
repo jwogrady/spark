@@ -102,7 +102,6 @@ jobs:
             diff_ok=0
             echo "(diff unavailable)" > /tmp/rev/diff.raw
           fi
-          orig_bytes="$(wc -c < /tmp/rev/diff.raw | tr -d ' ')"
           budget=200000
 
           # The changed-file manifest is ALWAYS supplied to the reviewer (as
@@ -114,9 +113,6 @@ jobs:
           # trusted-base execution (#693, criterion 6). Filenames are @json-escaped
           # so an embedded newline (git permits them) can neither split one record
           # into several counted lines nor inject a line into the prompt.
-          # Completeness is proven by matching the retrieved record count to the
-          # PR's trusted changed_files EXACTLY; a shortfall or a failed fetch fails
-          # closed to NOT ASSESSED.
           owner="${REPO%%/*}"; name="${REPO#*/}"
           changed_files="$(gh api "repos/$REPO/pulls/$PR" --jq '.changed_files' 2>/dev/null || echo '')"
           if gh api graphql --paginate \
@@ -124,42 +120,20 @@ jobs:
                -f owner="$owner" -f name="$name" -F pr="$PR" \
                --jq '.data.repository.pullRequest.files.nodes[] | "\(.changeType)\t\(.path|@json)\t+\(.additions)/-\(.deletions)"' \
                > /tmp/rev/files.txt 2>/dev/null; then
-            # A successful response is authoritative even when empty: a PR with no
-            # changed files legitimately yields zero records, and 0 == changed_files
-            # is complete. Only a FAILED fetch (the else branch) is unavailable.
-            manifest_count="$(wc -l < /tmp/rev/files.txt | tr -d ' ')"
-            manifest_ok="$(orl_manifest_complete "$manifest_count" "$changed_files")"
-            if [ "$manifest_count" = "0" ]; then echo "(no changed files reported)" > /tmp/rev/files.txt; fi
+            manifest_fetch_ok=1
           else
-            manifest_count=0; manifest_ok=0
+            manifest_fetch_ok=0
             echo "(file manifest unavailable)" > /tmp/rev/files.txt
           fi
-          [ "$manifest_ok" = "1" ] && manifest_state="complete (${manifest_count} of ${changed_files} files)" \
-            || manifest_state="INCOMPLETE (${manifest_count} of ${changed_files:-unknown} files; the file list was capped or could not be fetched)"
 
-          # Diff content for the request: the full diff when fetched and within
-          # budget, else the bounded prefix (a sentinel when unfetchable).
-          if [ "$diff_ok" = "1" ] && ! orl_is_truncated "$orig_bytes" "$budget"; then
-            cp /tmp/rev/diff.raw /tmp/rev/diff.txt
-            diff_state="COMPLETE"
-          else
-            head -c "$budget" /tmp/rev/diff.raw > /tmp/rev/diff.txt
-            [ "$diff_ok" = "0" ] && diff_state="UNAVAILABLE" || diff_state="TRUNCATED"
-          fi
-
-          # PASS is permitted only when the diff content AND the manifest are both
-          # complete; any gap blocks it. completeness.txt carries ONLY this
-          # machine-generated status — no attacker-controlled filenames — so it can
-          # be labelled trusted; the manifest is emitted separately as untrusted.
-          orl_evidence_truncated "$diff_state" "$manifest_ok" > /tmp/rev/truncated
-          {
-            case "$diff_state" in
-              COMPLETE)    printf 'DIFF COMPLETE: the full exact-HEAD diff is present (%s bytes).\n' "$orig_bytes" ;;
-              TRUNCATED)   printf 'DIFF TRUNCATED: showing %s of %s bytes; hunks beyond the bound are OMITTED. An incomplete diff can never be PASS.\n' "$budget" "$orig_bytes" ;;
-              UNAVAILABLE) echo "DIFF UNAVAILABLE: the exact-HEAD diff could not be fetched; NO diff content is present. An unfetchable diff can never be PASS." ;;
-            esac
-            printf 'CHANGED FILE MANIFEST: %s. The file list follows in the untrusted manifest section; a capped or unavailable manifest also blocks PASS.\n' "$manifest_state"
-          } > /tmp/rev/completeness.txt
+          # Derive the bounded diff, the fail-closed completeness flag, and the
+          # trusted machine-generated status from the fetched evidence. Extracted
+          # into a tested helper so real byte-boundary and manifest fixtures
+          # exercise the handling directly, not a numeric proxy (#693). A
+          # successful empty manifest counts as zero records and is complete only
+          # when changed_files is zero; only a FAILED fetch is unavailable.
+          orl_build_evidence /tmp/rev/diff.raw "$diff_ok" "$budget" \
+            /tmp/rev/files.txt "$manifest_fetch_ok" "$changed_files" /tmp/rev
 
           gh api "repos/$REPO/pulls/$PR" --jq '"TITLE: \(.title)\n\nBODY:\n\(.body // "")"' \
             > /tmp/rev/pr.txt 2>/dev/null || echo "(pr unavailable)" > /tmp/rev/pr.txt

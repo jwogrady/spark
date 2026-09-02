@@ -136,12 +136,9 @@ orl_is_truncated abc 200000 && ok || bad "a non-numeric size must fail closed to
 [ "$(orl_enforce_completeness PASS 2)" = "NOT ASSESSED" ] && ok || bad "PASS with a malformed flag (2) must fail closed"
 [ "$(orl_enforce_completeness PASS x)" = "NOT ASSESSED" ] && ok || bad "PASS with a non-numeric flag must fail closed"
 
-# The acceptance scenario: a blocker after the 200000-byte boundary. The diff is
-# over budget (truncated=1), so even a model PASS cannot publish PASS.
-late_blocker_orig=200015
-if orl_is_truncated "$late_blocker_orig" 200000; then
-  [ "$(orl_enforce_completeness PASS 1)" = "NOT ASSESSED" ] && ok || bad "a late blocker must not be able to PASS"
-else bad "a diff with a late blocker past the bound must be truncated"; fi
+# The acceptance scenario — a blocker after the 200000-byte boundary — is proven
+# against real constructed bytes through orl_build_evidence further below, not by
+# passing a number to a helper.
 
 # Evidence completeness (#693): PASS needs a COMPLETE diff AND a fetched manifest.
 et() { [ "$(orl_evidence_truncated "$2" "$3")" = "$1" ] && ok || bad "evidence_truncated $2/$3 — want $1"; }
@@ -191,23 +188,83 @@ if command -v jq >/dev/null 2>&1; then
   [ "$raw" -gt 2 ] && ok || bad "control: raw filename rendering must over-count (got $raw)"
 fi
 
-# Static workflow facts: completeness is detected, disclosed, and enforced.
-haswf "detects truncation with the tested helper"     'orl_is_truncated "\$orig_bytes" "\$budget"'
+# --- orl_build_evidence: real byte/manifest scenarios (#693) -------------------
+# These exercise the ACTUAL diff-bounding, flag, and disclosure the workflow runs
+# — against constructed bytes, not numeric proxies. mkbig N writes N bytes of 'A'.
+be="$(mktemp -d)"; trap 'rm -rf "$be"' EXIT
+mkbig() { head -c "$1" /dev/zero | tr '\0' 'A'; }
+m3="$be/m3.txt"; printf 'M\t"a"\t+1/-0\nM\t"b"\t+1/-0\nM\t"c"\t+1/-0\n' > "$m3"  # 3 records
+
+# 1) A blocking change placed AFTER byte 200000 is not in the bounded diff, the
+#    evidence is flagged truncated, and a model PASS is downgraded to NOT ASSESSED.
+{ mkbig 200000; printf '\nLATE_BLOCKER_zzz\n'; } > "$be/diff.raw"
+orl_build_evidence "$be/diff.raw" 1 200000 "$m3" 1 3 "$be"
+[ "$(cat "$be/truncated")" = 1 ] && ok || bad "a diff with a late blocker past the bound must be truncated"
+[ "$(wc -c < "$be/diff.txt" | tr -d ' ')" = 200000 ] && ok || bad "the bounded diff must be exactly the budget"
+grep -q LATE_BLOCKER "$be/diff.txt" && bad "the late blocker must NOT be in the bounded diff" || ok
+grep -q "DIFF TRUNCATED" "$be/completeness.txt" && ok || bad "truncation must be disclosed to the model"
+[ "$(orl_enforce_completeness PASS "$(cat "$be/truncated")")" = "NOT ASSESSED" ] && ok || bad "a late blocker must force NOT ASSESSED"
+
+# 2) A byte cut inside a line (no newline near the bound) is still detected.
+mkbig 200050 > "$be/diff.raw"
+orl_build_evidence "$be/diff.raw" 1 200000 "$m3" 1 3 "$be"
+[ "$(cat "$be/truncated")" = 1 ] && ok || bad "a mid-line over-budget cut must be truncated"
+[ "$(wc -c < "$be/diff.txt" | tr -d ' ')" = 200000 ] && ok || bad "the mid-line cut must be bounded to the budget"
+
+# 3) A cut inside a multi-byte character (199999 + a 3-byte € = 200002) is detected.
+{ mkbig 199999; printf '\xe2\x82\xac'; } > "$be/diff.raw"
+orl_build_evidence "$be/diff.raw" 1 200000 "$m3" 1 3 "$be"
+[ "$(cat "$be/truncated")" = 1 ] && ok || bad "a split multi-byte char (over budget) must be truncated"
+
+# 4) A small complete diff + complete manifest passes through and lets PASS stand.
+printf 'diff --git a b\n+ok\n' > "$be/diff.raw"
+orl_build_evidence "$be/diff.raw" 1 200000 "$m3" 1 3 "$be"
+[ "$(cat "$be/truncated")" = 0 ] && ok || bad "a small complete diff must not be truncated"
+grep -q "DIFF COMPLETE" "$be/completeness.txt" && ok || bad "a complete diff must be disclosed COMPLETE"
+[ "$(orl_enforce_completeness PASS "$(cat "$be/truncated")")" = "PASS" ] && ok || bad "complete evidence must let a PASS stand"
+
+# 5) An unfetchable diff (diff_ok=0) is UNAVAILABLE and blocks PASS.
+echo "(diff unavailable)" > "$be/diff.raw"
+orl_build_evidence "$be/diff.raw" 0 200000 "$m3" 1 3 "$be"
+[ "$(cat "$be/truncated")" = 1 ] && ok || bad "an unavailable diff must be truncated"
+grep -q "DIFF UNAVAILABLE" "$be/completeness.txt" && ok || bad "an unavailable diff must be disclosed honestly"
+
+# 6) A manifest capped short of changed_files blocks PASS even with a complete diff.
+printf 'diff --git a b\n+ok\n' > "$be/diff.raw"
+awk 'BEGIN{for(i=0;i<3000;i++)printf "M\t\"f%d\"\t+1/-0\n",i}' > "$be/m3000.txt"
+orl_build_evidence "$be/diff.raw" 1 200000 "$be/m3000.txt" 1 3500 "$be"
+[ "$(cat "$be/truncated")" = 1 ] && ok || bad "a manifest capped at 3000 of 3500 must block PASS"
+grep -q "INCOMPLETE" "$be/completeness.txt" && ok || bad "a capped manifest must be disclosed INCOMPLETE"
+
+# 7) A complete manifest beyond the 3000 REST cap (as uncapped GraphQL returns) —
+#    every filename represented, including one after record 3000 — lets PASS stand.
+awk 'BEGIN{for(i=0;i<3500;i++)printf "M\t\"path/f%d.md\"\t+1/-0\n",i}' > "$be/m3500.txt"
+grep -q '"path/f3400.md"' "$be/m3500.txt" && ok || bad "a filename after record 3000 must be represented"
+orl_build_evidence "$be/diff.raw" 1 200000 "$be/m3500.txt" 1 3500 "$be"
+[ "$(cat "$be/truncated")" = 0 ] && ok || bad "a full 3500-file manifest must be complete"
+[ "$(orl_enforce_completeness PASS "$(cat "$be/truncated")")" = "PASS" ] && ok || bad "complete retrieval beyond 3000 must let a PASS stand"
+
+# 8) A successful but EMPTY manifest (a 0-file PR) is complete, not unavailable.
+printf 'diff --git a b\n+ok\n' > "$be/diff.raw"; : > "$be/m0.txt"
+orl_build_evidence "$be/diff.raw" 1 200000 "$be/m0.txt" 1 0 "$be"
+[ "$(cat "$be/truncated")" = 0 ] && ok || bad "a successful empty manifest (0 of 0) must be complete"
+# A FAILED manifest fetch, by contrast, blocks PASS regardless of the file body.
+orl_build_evidence "$be/diff.raw" 1 200000 "$be/m0.txt" 0 0 "$be"
+[ "$(cat "$be/truncated")" = 1 ] && ok || bad "a failed manifest fetch must block PASS"
+
+# Static workflow facts: the workflow fetches, delegates to the tested helper, and
+# enforces the flag; the derived logic itself is proven by the fixtures above.
 haswf "retrieves every path via uncapped GraphQL"     'files\(first:100,after:\$endCursor\)'
 haswf "paginates the GraphQL manifest"                'gh api graphql --paginate'
 haswf "reads the trusted changed_files count"         'changed_files="\$\(gh api'
-haswf "checks the manifest against the cap"           'orl_manifest_complete "\$manifest_count" "\$changed_files"'
 haswf "counts manifest records newline-safely"        '\.path\|@json'
-haswf_not "a successful empty manifest is not unavailable" '&& \[ -s /tmp/rev/files.txt \]'
-haswf "tracks the manifest-fetch outcome"             'manifest_ok=0'
-haswf "derives the evidence flag from both inputs"    'orl_evidence_truncated "\$diff_state" "\$manifest_ok"'
-haswf "discloses diff completeness to the model"      'DIFF COMPLETENESS'
+haswf "builds evidence through the tested helper"     'orl_build_evidence /tmp/rev/diff.raw'
+haswf "tracks the manifest-fetch outcome"             'manifest_fetch_ok=0'
+haswf "labels the trusted machine-generated status"   'DIFF COMPLETENESS'
 haswf "always supplies the manifest as untrusted data" 'UNTRUSTED CHANGED-FILE MANIFEST'
 haswf "enforces completeness on the verdict"          'orl_enforce_completeness "\$model_verdict"'
-haswf_not "no silent head -c bound without detection" 'head -c 200000 /tmp/rev/diff.txt'
-# A refused/unfetchable diff is disclosed honestly, never as COMPLETE.
-haswf "discloses an unavailable diff honestly"         'DIFF UNAVAILABLE'
 haswf "an unreadable completeness flag fails closed"   'cat /tmp/rev/truncated 2>/dev/null \|\| echo 1'
+haswf_not "no silent head -c bound without detection" 'head -c 200000 /tmp/rev/diff.txt'
 
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

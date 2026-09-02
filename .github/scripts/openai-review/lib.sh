@@ -119,3 +119,50 @@ orl_enforce_completeness() { # <verdict> <complete_flag>
     printf '%s' "$1"
   fi
 }
+
+# orl_build_evidence <diff_raw> <diff_ok> <budget> <files_txt> <manifest_fetch_ok>
+#                    <changed_files> <out_dir>
+# Turn the already-fetched raw diff and changed-file manifest into the derived
+# completeness artifacts the reviewer input needs — so the REAL handling (byte
+# truncation, the fail-closed flag, and disclosure) is exercised by fixture tests
+# with constructed byte inputs, not just asserted by grep. Writes, under out_dir:
+#   diff.txt         the diff sent to the model: the full diff when complete, else
+#                    the budget-bounded prefix (the raw sentinel when unfetchable);
+#   truncated        the completeness flag consumed by orl_enforce_completeness —
+#                    "0" only when the diff is COMPLETE and the manifest reached
+#                    changed_files, else "1";
+#   completeness.txt the trusted, machine-generated status (no filenames).
+# The manifest record count is taken from files_txt only when the fetch succeeded
+# (manifest_fetch_ok=1); a failed fetch counts as zero and fails closed. Pure but
+# for these writes — no network, no gh, no git (#693).
+orl_build_evidence() {
+  local raw="$1" diff_ok="$2" budget="$3" files="$4" mfetch="$5" cfiles="$6" out="$7"
+  local orig_bytes diff_state mcount manifest_ok manifest_state
+  orig_bytes="$(wc -c < "$raw" | tr -d ' ')"
+  if [ "$diff_ok" = "1" ] && ! orl_is_truncated "$orig_bytes" "$budget"; then
+    cp "$raw" "$out/diff.txt"; diff_state="COMPLETE"
+  else
+    head -c "$budget" "$raw" > "$out/diff.txt"
+    if [ "$diff_ok" = "0" ]; then diff_state="UNAVAILABLE"; else diff_state="TRUNCATED"; fi
+  fi
+  if [ "$mfetch" = "1" ]; then
+    mcount="$(wc -l < "$files" | tr -d ' ')"
+    manifest_ok="$(orl_manifest_complete "$mcount" "$cfiles")"
+  else
+    mcount=0; manifest_ok=0
+  fi
+  if [ "$manifest_ok" = "1" ]; then
+    manifest_state="complete (${mcount} of ${cfiles} files)"
+  else
+    manifest_state="INCOMPLETE (${mcount} of ${cfiles:-unknown} files; the file list was capped or could not be fetched)"
+  fi
+  orl_evidence_truncated "$diff_state" "$manifest_ok" > "$out/truncated"
+  {
+    case "$diff_state" in
+      COMPLETE)    printf 'DIFF COMPLETE: the full exact-HEAD diff is present (%s bytes).\n' "$orig_bytes" ;;
+      TRUNCATED)   printf 'DIFF TRUNCATED: showing %s of %s bytes; hunks beyond the bound are OMITTED. An incomplete diff can never be PASS.\n' "$budget" "$orig_bytes" ;;
+      UNAVAILABLE) printf 'DIFF UNAVAILABLE: the exact-HEAD diff could not be fetched; NO diff content is present. An unfetchable diff can never be PASS.\n' ;;
+    esac
+    printf 'CHANGED FILE MANIFEST: %s. The file list follows in the untrusted manifest section; a capped or unavailable manifest also blocks PASS.\n' "$manifest_state"
+  } > "$out/completeness.txt"
+}
