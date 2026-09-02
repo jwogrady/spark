@@ -162,13 +162,18 @@ et 1 TRUNCATED 0    # both gaps → incomplete
 mc() { [ "$(orl_manifest_complete "$2" "$3")" = "$1" ] && ok || bad "manifest_complete $2/$3 — want $1"; }
 mc 1 5 5        # every changed file returned → complete
 mc 1 0 0        # a PR with no changed files: 0 of 0 → complete, not unavailable
-mc 0 3000 3500  # endpoint capped at 3000 of 3500 → incomplete, blocks PASS
+mc 1 3500 3500  # uncapped GraphQL retrieval of all 3500 files (>3000) → complete
+mc 0 3000 3500  # a list capped at 3000 of 3500 → incomplete, blocks PASS
 mc 0 4 5        # one file short → incomplete
 mc 0 6 5        # an inflated count (never legitimate) → mismatch, fail closed
 mc 0 "" 5       # unreadable returned count → fail closed
 mc 0 5 ""       # unknown changed_files → fail closed
 mc 0 x 5        # non-numeric count → fail closed
-# End to end: a silently capped manifest on a complete diff downgrades PASS.
+# End to end: uncapped retrieval of every file beyond the 3000 REST cap lets a
+# complete-evidence PASS stand (criterion 3 satisfied without a capped shortfall).
+[ "$(orl_enforce_completeness PASS "$(orl_evidence_truncated COMPLETE "$(orl_manifest_complete 3500 3500)")")" = "PASS" ] \
+  && ok || bad "complete retrieval beyond 3000 files must let a PASS stand"
+# And a list capped short of changed_files still downgrades PASS.
 [ "$(orl_enforce_completeness PASS "$(orl_evidence_truncated COMPLETE "$(orl_manifest_complete 3000 3500)")")" = "NOT ASSESSED" ] \
   && ok || bad "a capped manifest must not let a PASS stand"
 
@@ -177,21 +182,22 @@ mc 0 x 5        # non-numeric count → fail closed
 # and make a capped manifest look complete. @json-escaping keeps one line per
 # record (and stops the same newline injecting a line into the prompt).
 if command -v jq >/dev/null 2>&1; then
-  rec='{"status":"modified","filename":"a\nb/c.md","additions":1,"deletions":0}'
+  rec='{"changeType":"MODIFIED","path":"a\nb/c.md","additions":1,"deletions":0}'
   two="$(printf '[%s,%s]' "$rec" "$rec" \
-    | jq -r '.[] | "\(.status)\t\(.filename|@json)\t+\(.additions)/-\(.deletions)"' | wc -l | tr -d ' ')"
+    | jq -r '.[] | "\(.changeType)\t\(.path|@json)\t+\(.additions)/-\(.deletions)"' | wc -l | tr -d ' ')"
   [ "$two" = "2" ] && ok || bad "two newline-bearing records must count as 2 lines, got $two"
   raw="$(printf '[%s,%s]' "$rec" "$rec" \
-    | jq -r '.[] | "\(.status)\t\(.filename)\t+\(.additions)/-\(.deletions)"' | wc -l | tr -d ' ')"
+    | jq -r '.[] | "\(.changeType)\t\(.path)\t+\(.additions)/-\(.deletions)"' | wc -l | tr -d ' ')"
   [ "$raw" -gt 2 ] && ok || bad "control: raw filename rendering must over-count (got $raw)"
 fi
 
 # Static workflow facts: completeness is detected, disclosed, and enforced.
 haswf "detects truncation with the tested helper"     'orl_is_truncated "\$orig_bytes" "\$budget"'
-haswf "fetches the changed-file manifest"             'pulls/\$PR/files'
+haswf "retrieves every path via uncapped GraphQL"     'files\(first:100,after:\$endCursor\)'
+haswf "paginates the GraphQL manifest"                'gh api graphql --paginate'
 haswf "reads the trusted changed_files count"         'changed_files="\$\(gh api'
 haswf "checks the manifest against the cap"           'orl_manifest_complete "\$manifest_count" "\$changed_files"'
-haswf "counts manifest records newline-safely"        'filename\|@json'
+haswf "counts manifest records newline-safely"        '\.path\|@json'
 haswf_not "a successful empty manifest is not unavailable" '&& \[ -s /tmp/rev/files.txt \]'
 haswf "tracks the manifest-fetch outcome"             'manifest_ok=0'
 haswf "derives the evidence flag from both inputs"    'orl_evidence_truncated "\$diff_state" "\$manifest_ok"'

@@ -106,22 +106,23 @@ jobs:
           budget=200000
 
           # The changed-file manifest is ALWAYS supplied to the reviewer (as
-          # untrusted PR data — filenames are attacker-controlled). The files
-          # endpoint caps at 3000 files, so a successful non-empty response is not
-          # proof of completeness: the returned record count must EXACTLY match the
-          # PR's trusted changed_files. A failed fetch, or any mismatch (a silently
-          # capped list), marks the manifest incomplete and — like an incomplete
-          # diff — blocks PASS by finalizing NOT ASSESSED (#693, criterion 2).
-          #
-          # Filenames are @json-escaped so an embedded newline (git permits them)
-          # can neither split one record into several counted lines nor inject a
-          # line into the prompt. The only uncapped source of a >3000-file list is
-          # the PR head tree; fetching/diffing it, or re-persisting checkout
-          # credentials to do so, would breach trusted-base execution (#693,
-          # criterion 6), so an over-cap PR is finalized NOT ASSESSED instead.
+          # untrusted PR data — filenames are attacker-controlled) and must name
+          # EVERY changed file (#693, criterion 3). The REST files endpoint caps at
+          # 3000, so the manifest is retrieved via GraphQL cursor pagination, which
+          # is uncapped and — a pure API query on the trusted base runner, with no
+          # checkout of and no code execution from the PR head — preserves
+          # trusted-base execution (#693, criterion 6). Filenames are @json-escaped
+          # so an embedded newline (git permits them) can neither split one record
+          # into several counted lines nor inject a line into the prompt.
+          # Completeness is proven by matching the retrieved record count to the
+          # PR's trusted changed_files EXACTLY; a shortfall or a failed fetch fails
+          # closed to NOT ASSESSED.
+          owner="${REPO%%/*}"; name="${REPO#*/}"
           changed_files="$(gh api "repos/$REPO/pulls/$PR" --jq '.changed_files' 2>/dev/null || echo '')"
-          if gh api --paginate "repos/$REPO/pulls/$PR/files?per_page=100" \
-               --jq '.[] | "\(.status)\t\(.filename|@json)\t+\(.additions)/-\(.deletions)"' \
+          if gh api graphql --paginate \
+               -f query='query($owner:String!,$name:String!,$pr:Int!,$endCursor:String){repository(owner:$owner,name:$name){pullRequest(number:$pr){files(first:100,after:$endCursor){pageInfo{hasNextPage endCursor} nodes{path additions deletions changeType}}}}}' \
+               -f owner="$owner" -f name="$name" -F pr="$PR" \
+               --jq '.data.repository.pullRequest.files.nodes[] | "\(.changeType)\t\(.path|@json)\t+\(.additions)/-\(.deletions)"' \
                > /tmp/rev/files.txt 2>/dev/null; then
             # A successful response is authoritative even when empty: a PR with no
             # changed files legitimately yields zero records, and 0 == changed_files
