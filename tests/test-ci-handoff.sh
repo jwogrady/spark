@@ -28,6 +28,10 @@ cat > "$WORK/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 set -uo pipefail
 if [ "${1:-}" = "pr" ] && [ "${2:-}" = "view" ]; then
+  # ci_live asks for headRefOid + statusCheckRollup in one call and expects the
+  # head first, tagged __civ_head__. Emit it only when GH_HEAD is configured, so
+  # fixtures that do not exercise head-binding leave the head unreadable (empty).
+  [ -n "${GH_HEAD:-}" ] && printf '__civ_head__\t%s\n' "$GH_HEAD"
   # "EMPTY" means gh answered successfully with no checks — a different fact
   # from gh failing, which the fixtures below hold apart.
   if [ "$(cat "$GH_ROLLUP" 2>/dev/null)" = "EMPTY" ]; then exit 0; fi
@@ -186,6 +190,32 @@ DOC="$repo_root/docs/ops/ci-handoff.md"
 if [ -f "$DOC" ]; then
   assert_contains "the record states pending is not failure" "not a failure" "$(cat "$DOC")"
 fi
+
+# --- #658: a moved PR head cannot report the old certified head READY ----------
+# The exact-SHA boundary must survive a push/rebase. Certify head h1 while green,
+# then move the PR to a NEW green head h2. resume and status must refuse to call h1
+# READY — the live rollup describes h2, which local certification never covered.
+green_
+export GH_HEAD=h1-certified
+"$SPARK" ci handoff --run stale --pr 42 --head h1-certified >/dev/null 2>&1
+export GH_HEAD=h2-newhead                       # the PR moves; CI is green on the new head
+JS="$("$SPARK" ci resume --run stale --json 2>/dev/null || true)"
+assert_contains "resume on a moved head reports stale, not passing" '"state":"stale"' "$JS"
+assert_contains "resume records the head the rollup actually described" '"observed_head":"h2-newhead"' "$JS"
+rc 5 "a moved-head resume exits stale (5), never READY (0)" -- "$SPARK" ci resume --run stale
+HUM="$("$SPARK" ci resume --run stale 2>&1 || true)"
+assert_contains "the human output names the stale outcome" "STALE" "$HUM"
+if printf '%s' "$HUM" | grep -q "READY"; then bad "a moved head must never print READY for the old commit"; else ok; fi
+rc 5 "status on a moved head exits stale (5)" -- "$SPARK" ci status --run stale
+assert_contains "status records the observed head" '"observed_head":"h2-newhead"' \
+  "$("$SPARK" ci status --run stale --json 2>/dev/null || true)"
+# handoff itself refuses a --head that is not the PR's current head.
+export GH_HEAD=current-head
+rc 1 "handoff refuses a --head that is not the current head" -- "$SPARK" ci handoff --run stale2 --pr 42 --head not-current
+assert_contains "handoff names both heads" "not the PR's current head" \
+  "$("$SPARK" ci handoff --run stale2 --pr 42 --head not-current 2>&1 || true)"
+rc 0 "handoff accepts the PR's current head" -- "$SPARK" ci handoff --run stale3 --pr 42 --head current-head
+unset GH_HEAD                                    # leave the environment clean for later fixtures
 
 # --- MUTATION CONTROL --------------------------------------------------------
 # Stop comparing against the recorded snapshot, so every read looks like a

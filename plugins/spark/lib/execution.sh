@@ -1518,7 +1518,7 @@ EOF
 # And an unchanged read is recorded as exactly that. Polling is not forbidden --
 # it is COUNTED, so the waste is visible in the same telemetry that already
 # knows how many remote calls this run has made.
-CI_FIELDS="pr head required state digest polls unchanged certified_at observed_at"
+CI_FIELDS="pr head required state digest polls unchanged certified_at observed_at observed_head"
 
 ci_dir()  { printf '%s/.spark/ci' "$1"; }
 ci_file() { printf '%s/.spark/ci/%s.tsv' "$1" "$2"; }
@@ -1549,24 +1549,38 @@ ci_write() {
   } > "$f"
 }
 
-# ci_live <pr> — one read of the live check rollup as "<name> <state>" lines,
-# or the literal __unreadable__. Never guessed: a rollup that cannot be read is
-# an unknown, and an unknown that renders as "passing" would authorize a merge.
+# ci_live <pr> — ONE coherent read of the PR's current head AND the check rollup
+# that describes it. Sets CI_LIVE_HEAD to the head SHA the rollup covers (empty if
+# unreadable) and prints the rollup as "<name>\t<state>" lines, or the literal
+# __unreadable__ / __nochecks__. The head and the rollup come from a single
+# observation so the caller can never pair one PR's checks with another head's
+# recorded certification (#658). Never guessed: a rollup that cannot be read is an
+# unknown, and an unknown that renders as "passing" would authorize a merge.
+# Sets the globals CI_LIVE_HEAD (the head SHA the rollup covers, empty if the head
+# is unreadable) and CI_LIVE_LINES (the sorted "<name>\t<state>" rollup, or the
+# literal __unreadable__ / __nochecks__). It sets globals rather than printing so
+# the head reaches the caller — a value returned on stdout and captured in a
+# command substitution would be trapped in a subshell.
 ci_live() {
+  CI_LIVE_HEAD=""; CI_LIVE_LINES=""
+  command -v gh >/dev/null 2>&1 || { CI_LIVE_LINES="__unreadable__"; return 0; }
+  # One request returns both the head and the rollup. The head is emitted first,
+  # tagged with a sentinel field name no real check can use, so it is extracted
+  # unambiguously and the remaining rows are the rollup. A rollup holds two
+  # disjoint shapes: a CheckRun reports .status while running and .conclusion once
+  # finished; a StatusContext reports only .state. conclusion-then-status-then-state
+  # covers both — a finished run's verdict wins, a running one says it is running.
+  local raw
+  raw="$(gh pr view "$1" --json headRefOid,statusCheckRollup \
+        --jq '"__civ_head__\t" + (.headRefOid // ""), (.statusCheckRollup[] | [(.name // .context), (.conclusion // .status // .state)] | @tsv)' 2>/dev/null)" \
+    || { CI_LIVE_LINES="__unreadable__"; return 0; }
+  CI_LIVE_HEAD="$(printf '%s\n' "$raw" | awk -F'\t' '$1=="__civ_head__"{print $2; exit}')"
   local out
-  command -v gh >/dev/null 2>&1 || { printf '__unreadable__'; return 0; }
-  # A rollup holds two disjoint shapes. A CheckRun reports .status while it runs
-  # and .conclusion once finished; a StatusContext reports only .state. Reading
-  # conclusion-then-status-then-state covers both in the right order: a finished
-  # run's verdict wins, a running one reports that it is running, and a plain
-  # status context still answers.
-  out="$(gh pr view "$1" --json statusCheckRollup \
-        --jq '.statusCheckRollup[] | [(.name // .context), (.conclusion // .status // .state)] | @tsv' 2>/dev/null)" \
-    || { printf '__unreadable__'; return 0; }
+  out="$(printf '%s\n' "$raw" | awk -F'\t' '$1!="__civ_head__" && NF{print}')"
   # No checks at all is a different fact from being unable to ask, and a caller
   # that cannot tell them apart will treat one as the other.
-  [ -n "$out" ] || { printf '__nochecks__'; return 0; }
-  printf '%s' "$out" | LC_ALL=C sort
+  [ -n "$out" ] || { CI_LIVE_LINES="__nochecks__"; return 0; }
+  CI_LIVE_LINES="$(printf '%s' "$out" | LC_ALL=C sort)"
 }
 
 # ci_sentinel_state <lines> — the state name when a read produced no check rows
@@ -1627,13 +1641,26 @@ ci_failing_set() {
 # CI_OBS_SENT and CI_OBS_CHANGED.
 ci_observe() {
   local run="$1" file="$2" newdigest
-  CI_OBS_LINES="$(ci_live "$civ_pr")"
+  ci_live "$civ_pr"
+  CI_OBS_LINES="$CI_LIVE_LINES"
+  CI_OBS_HEAD="$CI_LIVE_HEAD"                 # the head the rollup actually described
   CI_OBS_SENT="$(ci_sentinel_state "$CI_OBS_LINES")"
   civ_polls="$(( ${civ_polls:-0} + 1 ))"
   civ_observed_at="$(date -u +%FT%TZ)"
+  civ_observed_head="$CI_OBS_HEAD"           # record which head this observation covered
   if [ -n "$CI_OBS_SENT" ]; then
     CI_OBS_VERDICT="$CI_OBS_SENT"; CI_OBS_CHANGED=1
     civ_state="$CI_OBS_SENT"
+    ci_write "$file"
+    return 0
+  fi
+  # The rollup describes CI_OBS_HEAD. If the PR has moved off the certified commit,
+  # those checks are NOT evidence for civ_head — never classify them as the
+  # certified head's verdict, and never let a green replacement head report the old
+  # head READY (#658). This is its own terminal outcome: re-certify the new head.
+  if [ -n "$CI_OBS_HEAD" ] && [ "$CI_OBS_HEAD" != "$civ_head" ]; then
+    CI_OBS_VERDICT="stale"; CI_OBS_CHANGED=1
+    civ_state="stale"
     ci_write "$file"
     return 0
   fi
@@ -1704,7 +1731,15 @@ cmd_ci() {
         return 1
       fi
       local lines verdict sent
-      lines="$(ci_live "$pr")"
+      ci_live "$pr"; lines="$CI_LIVE_LINES"
+      # The certification must cover the PR's CURRENT head. If a readable live head
+      # differs from the supplied --head, recording it would let CI for newer work
+      # masquerade as this commit's evidence (#658). Refuse, and name both SHAs.
+      if [ -n "$CI_LIVE_HEAD" ] && [ "$CI_LIVE_HEAD" != "$head" ]; then
+        red "spark ci handoff: --head $head is not the PR's current head ($CI_LIVE_HEAD)"
+        yellow "  certify the commit the PR actually points at, or re-run local certification on it."
+        return 1
+      fi
       sent="$(ci_sentinel_state "$lines")"
       if [ -n "$sent" ]; then
         civ_state="$sent"; civ_required=""; civ_digest=""
@@ -1713,7 +1748,7 @@ cmd_ci() {
         civ_required="$(printf '%s\n' "$lines" | awk -F'\t' 'NF { printf "%s%s", (n++ ? "," : ""), $1 }')"
         civ_digest="$(printf '%s' "$lines" | cksum | awk '{ print $1 }')"
       fi
-      civ_pr="$pr"; civ_head="$head"
+      civ_pr="$pr"; civ_head="$head"; civ_observed_head="$CI_LIVE_HEAD"
       civ_polls=0; civ_unchanged=0
       civ_certified_at="$(date -u +%FT%TZ)"
       civ_observed_at="$civ_certified_at"
@@ -1747,9 +1782,21 @@ cmd_ci() {
         fi
         return 1
       fi
+      # A moved head is its own outcome here too — not a transition of the certified
+      # head's checks. Machine callers see state=stale with a distinct exit (#658).
+      if [ "$CI_OBS_VERDICT" = "stale" ]; then
+        if [ -n "$json" ]; then
+          printf '{"run":"%s","state":"stale","observed_head":"%s","transition":null,"polls":%s,"unchanged":%s}\n' \
+            "$run" "${civ_observed_head:-}" "${civ_polls:-0}" "${civ_unchanged:-0}"
+        else
+          red "STALE — the PR head moved off the certified commit $civ_head (now ${civ_observed_head:-a different head})"
+          echo "  re-certify the new head; these checks are not evidence for $civ_head"
+        fi
+        return 5
+      fi
       if [ -n "$json" ]; then
-        printf '{"run":"%s","state":"%s","transition":%s,"polls":%s,"unchanged":%s}\n' \
-          "$run" "$CI_OBS_VERDICT" \
+        printf '{"run":"%s","state":"%s","observed_head":"%s","transition":%s,"polls":%s,"unchanged":%s}\n' \
+          "$run" "$CI_OBS_VERDICT" "${civ_observed_head:-}" \
           "$([ "$CI_OBS_CHANGED" -eq 1 ] && printf true || printf false)" \
           "${civ_polls:-0}" "${civ_unchanged:-0}"
         if [ "$CI_OBS_CHANGED" -eq 1 ]; then return 0; fi
@@ -1775,11 +1822,21 @@ cmd_ci() {
       lines="$CI_OBS_LINES"; verdict="$CI_OBS_VERDICT"
 
       if [ -n "$json" ]; then
-        printf '{"run":"%s","pr":%s,"head":"%s","state":"%s","polls":%s,"unchanged":%s}\n' \
-          "$run" "$civ_pr" "$civ_head" "$verdict" "${civ_polls:-0}" "${civ_unchanged:-0}"
+        printf '{"run":"%s","pr":%s,"head":"%s","observed_head":"%s","state":"%s","polls":%s,"unchanged":%s}\n' \
+          "$run" "$civ_pr" "$civ_head" "${civ_observed_head:-}" "$verdict" "${civ_polls:-0}" "${civ_unchanged:-0}"
       fi
 
       case "$verdict" in
+        stale)
+          # The PR moved off the certified commit. Its checks describe a different
+          # head, so this is neither READY nor a failure of the certified work — it
+          # is a re-certification signal with its own exit code (#658).
+          [ -z "$json" ] && {
+            red "STALE — the PR head moved off the certified commit $civ_head"
+            echo "  the live rollup now describes ${civ_observed_head:-a different head}, which local certification did not cover"
+            echo "  re-run local certification on the new head and hand off again; this is not a pass for $civ_head"
+          }
+          return 5 ;;
         pending)
           # Deliberately not a failure. A run that reported FAIL here would send
           # someone to debug work that is correct and simply unfinished elsewhere.
