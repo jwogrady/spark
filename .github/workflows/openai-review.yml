@@ -443,13 +443,16 @@ jobs:
             echo "total_tokens=$tokens"
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # Scheduled fail-closed recovery (#692): guarantee a terminal disposition for any
-  # reserved HEAD the event-driven path stranded — retries exhausted, a run killed
-  # after invoking, or a transient fetch failure. It NEVER invokes the model; it
-  # only finalizes NOT ASSESSED for a reservation/invoked marker that, after a grace
-  # window well past the completion + retry window, still has no final verdict on the
-  # PR's LIVE head. This is the durable retry the completion trigger alone cannot
-  # promise; the grace window keeps it from racing a normal in-flight review.
+  # Scheduled fail-closed recovery (#692), deliberately NARROW: it finalizes
+  # NOT ASSESSED only for an INVOKED marker (the paid call was consumed) that still
+  # has no final verdict on the PR's LIVE head after a grace window — i.e. a run
+  # died after invoking but before finalizing, beyond what the !cancelled finalize
+  # could catch. It NEVER invokes the model. It does NOT touch a bare reservation:
+  # that CI may still be legitimately running, and blind-finalizing it would recreate
+  # the pre-terminal freeze this issue removes — bare reservations stay with the
+  # completion path. The grace window puts the invoked case well past the invoking
+  # run's lifetime (seconds), and a consumed HEAD is never under active review (the
+  # guard skips it), so recovery cannot race a live review.
   recover:
     if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
@@ -499,7 +502,7 @@ jobs:
             [ "$created_epoch" -gt 0 ] || continue
             [ $(( now - created_epoch )) -ge "$grace" ] || continue
             # Fail-closed terminal disposition, no model call.
-            note="This exact HEAD was reserved but the reviewer never finalized a verdict before the completion path was exhausted, so a scheduled recovery finalized NOT ASSESSED without invoking the model. This is not a pass; push a new commit or re-request review."
+            note="The reviewer consumed its model call for this exact HEAD but the run ended before finalizing a verdict, so a scheduled recovery recorded NOT ASSESSED without invoking the model again. This is not a pass; push a new commit or re-request review."
             body="$(printf '%s\n\n%s' "$(orl_marker 'NOT ASSESSED' "$pr" "$head")" "$note")"
             # A single PATCH failure must not abort the sweep, but it is logged and
             # retried on the next scheduled run — never silently swallowed.
