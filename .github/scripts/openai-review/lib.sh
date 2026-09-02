@@ -11,6 +11,7 @@
 
 ORL_MARKER_TAG="spark-openai-review"
 ORL_RESERVATION_TAG="spark-openai-review-reservation"
+ORL_INVOKED_TAG="spark-openai-review-invoked"
 ORL_TRUSTED_LOGIN="github-actions[bot]"
 ORL_TRUSTED_APP="github-actions"
 
@@ -40,6 +41,16 @@ orl_marker() { # verdict pr head_sha
 # event cannot make a second paid invocation for the same exact PR + HEAD.
 orl_reservation() { # pr head_sha
   printf '<!-- %s pr=%s head=%s -->' "$ORL_RESERVATION_TAG" "$1" "$2"
+}
+
+# Durable "the paid model call has been consumed for this exact PR + HEAD" marker.
+# Written into the reservation comment IMMEDIATELY BEFORE the model call, so that if
+# the run dies after the call but before the final verdict is finalized, a later
+# completion event sees the call was already consumed and does not invoke the model
+# a second time. It carries no verdict, so #585 (which reads verdict markers) never
+# mistakes it for a review outcome (#692).
+orl_invoked() { # pr head_sha
+  printf '<!-- %s pr=%s head=%s -->' "$ORL_INVOKED_TAG" "$1" "$2"
 }
 
 # Has the trusted reviewer producer already claimed this exact PR + HEAD?
@@ -73,6 +84,25 @@ orl_has_final_marker() { # expected_pr expected_head
     [ "$app" = "$ORL_TRUSTED_APP" ] || continue
     case "$body" in
       *"<!-- $ORL_MARKER_TAG pr=$want_pr head=$want_head verdict="*) return 0 ;;
+    esac
+  done
+  return 1
+}
+
+# Has the paid model call already been CONSUMED for this exact PR + HEAD — either
+# invoked (pre-call marker) or fully reviewed (final verdict marker)? The guard
+# skips on this, so once the call is started it is never started again, even if a
+# prior run died between the call and finalization (concurrency stops overlap, not
+# a sequential retry after failure). Only a bare reservation with NEITHER of these
+# is resumable (#692). stdin is TSV: login<TAB>app-slug<TAB>comment-body.
+orl_has_consumed() { # expected_pr expected_head
+  local want_pr="$1" want_head="$2" login app body
+  [ -n "$want_pr" ] && [ -n "$want_head" ] || return 1
+  while IFS=$'\t' read -r login app body; do
+    [ "$login" = "$ORL_TRUSTED_LOGIN" ] || continue
+    [ "$app" = "$ORL_TRUSTED_APP" ] || continue
+    case "$body" in
+      *"<!-- $ORL_INVOKED_TAG pr=$want_pr head=$want_head -->"*|*"<!-- $ORL_MARKER_TAG pr=$want_pr head=$want_head verdict="*) return 0 ;;
     esac
   done
   return 1

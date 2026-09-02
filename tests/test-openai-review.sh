@@ -117,6 +117,18 @@ printf '%b\n' "$spoof_login"   | orl_has_final_marker 688 abc123 && bad "a spoof
 printf '%b\n' "$spoof_app"     | orl_has_final_marker 688 abc123 && bad "a spoofed-app marker must not count" || ok
 printf '%b\n' "$wrong_head"    | orl_has_final_marker 688 abc123 && bad "a wrong-HEAD marker must not count" || ok
 
+# Consumed = invoked OR reviewed (#692). The paid call is recorded BEFORE it is
+# made, so a run that dies between the call and finalization still leaves an invoked
+# marker; the guard skips on orl_has_consumed, so the model is never invoked twice.
+# A bare reservation is NOT consumed → it remains resumable.
+trusted_invoked="github-actions[bot]	github-actions	$(orl_invoked 688 abc123)"
+printf '%b\n' "$trusted_invoked" | orl_has_consumed 688 abc123 && ok || bad "an invoked marker must count as consumed (no re-invocation)"
+printf '%b\n' "$trusted_final"   | orl_has_consumed 688 abc123 && ok || bad "a final verdict marker must count as consumed"
+printf '%b\n' "$trusted_res"     | orl_has_consumed 688 abc123 && bad "a bare reservation must NOT count as consumed (stay resumable)" || ok
+spoof_invoked="attacker	github-actions	$(orl_invoked 688 abc123)"
+printf '%b\n' "$spoof_invoked"   | orl_has_consumed 688 abc123 && bad "a spoofed-login invoked marker must not count" || ok
+printf '%b\n' "github-actions[bot]	github-actions	$(orl_invoked 688 def456)" | orl_has_consumed 688 abc123 && bad "a wrong-HEAD invoked marker must not count" || ok
+
 case "$(orl_route PASS)" in *"not merge authority"*) ok ;; *) bad "PASS route" ;; esac
 case "$(orl_route "CHANGES REQUIRED")" in *"#585"*"do not merge"*) ok ;; *) bad "CHANGES route" ;; esac
 case "$(orl_route "DECISION REQUIRED")" in *"@jwogrady"*) ok ;; *) bad "DECISION route" ;; esac
@@ -333,26 +345,38 @@ done
 [ "$seq_reviewed" = 1 ] && ok || bad "pending→pending→green must become reviewable exactly once, got $seq_reviewed"
 
 # Exactly-once state machine (#692): drive the REAL guard/ci predicates across the
-# events for one HEAD. A model invocation happens only when there is NO final marker
-# AND CI is terminal; a review then writes the final marker, which suppresses every
-# later event. This proves resume + duplicate-completion invoke the model once.
+# events for one HEAD. The guard skips on orl_has_consumed; a "review" writes the
+# INVOKED marker BEFORE the paid call, then the final marker on success. The model
+# is invoked only when NOT consumed AND CI is terminal.
 tab="$(printf '\t')"
 sm_res="github-actions[bot]${tab}github-actions${tab}$(orl_reservation 700 sha700)"
+sm_inv="github-actions[bot]${tab}github-actions${tab}$(orl_invoked 700 sha700)"
 sm_mark="github-actions[bot]${tab}github-actions${tab}$(orl_marker PASS 700 sha700)"
-sm_comments="$sm_res"      # event 1 (pull_request_target, CI pending) left a bare reservation
+# Scenario A — normal: a bare reservation, then two terminal-green completion events.
+sm_comments="$sm_res"
 invocations=0
-# events 2..4: two workflow_run completions (CI now terminal-green) and a duplicate.
-for ev in resume duplicate trailing; do
-  if printf '%s\n' "$sm_comments" | orl_has_final_marker 700 sha700; then continue; fi   # already reviewed → skip
+for ev in resume duplicate; do
+  if printf '%s\n' "$sm_comments" | orl_has_consumed 700 sha700; then continue; fi
   if printf '%s\n' "$green" | orl_checks_terminal $REQ; then
     invocations=$((invocations + 1))
     sm_comments="$sm_comments
-$sm_mark"                                                                                  # finalize writes the marker
+$sm_inv
+$sm_mark"                                          # before-call invoked marker, then final verdict
   fi
 done
 [ "$invocations" = 1 ] && ok || bad "resume+duplicate completion events must invoke the model exactly once, got $invocations"
-# And a bare reservation alone (no terminal CI yet) invokes nothing.
-printf '%s\n' "$sm_res" | orl_has_final_marker 700 sha700 && bad "a bare reservation must not read as reviewed" || ok
+# Scenario B — the run DIES after the paid call, before finalization: only the
+# invoked marker was written (no verdict). A later completion event must NOT
+# re-invoke the model, even though the HEAD was never finalized.
+sm_died="$sm_res
+$sm_inv"
+reinvoked=0
+if printf '%s\n' "$sm_died" | orl_has_consumed 700 sha700; then :; else
+  if printf '%s\n' "$green" | orl_checks_terminal $REQ; then reinvoked=1; fi
+fi
+[ "$reinvoked" = 0 ] && ok || bad "a consumed-but-unfinalized HEAD must never be re-invoked"
+# And a bare reservation alone is neither consumed nor a final marker (resumable).
+printf '%s\n' "$sm_res" | orl_has_consumed 700 sha700 && bad "a bare reservation must not read as consumed" || ok
 
 # Static workflow facts: the workflow fetches, delegates to the tested helper, and
 # enforces the flag; the derived logic itself is proven by the fixtures above.
@@ -375,7 +399,8 @@ haswf "serializes by exact HEAD SHA"                  'openai-review-\$\{\{ gith
 haswf "checks terminality with the tested helper"     'orl_checks_terminal \$required'
 haswf "requires all required checks green to pass"    'orl_checks_passed \$required'
 haswf "a non-green terminal HEAD cannot pass"         'CI_PASSED'
-haswf "resumes a pending reservation, never re-reviews" 'orl_has_final_marker'
+haswf "the guard skips a consumed HEAD, resumes only a bare reservation" 'orl_has_consumed'
+haswf "records the paid call as consumed before making it" 'orl_invoked "\$PR" "\$HEAD_SHA"'
 haswf "reviews only when checks are terminal"         "steps.ci.outputs.terminal == 'true'"
 haswf "paginates the check-runs API"                  'check-runs\?per_page=100'
 haswf "normalizes paginated comments into one array"  "jq -s 'add"

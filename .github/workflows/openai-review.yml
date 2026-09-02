@@ -113,11 +113,13 @@ jobs:
           jq -r '.[] | [.user.login, (.performed_via_github_app.slug // ""), .body] | @tsv' \
             /tmp/rev/comments.json > /tmp/rev/comment-claims.tsv
 
-          # A FINAL verdict marker means this exact HEAD was already reviewed —
-          # never review it twice.
-          if orl_has_final_marker "$PR" "$HEAD_SHA" < /tmp/rev/comment-claims.tsv; then
+          # If the paid call was already CONSUMED for this exact HEAD — invoked
+          # (pre-call marker) or fully reviewed (final marker) — never invoke it
+          # again, even if a prior run died before finalizing. Only a bare
+          # reservation is resumable.
+          if orl_has_consumed "$PR" "$HEAD_SHA" < /tmp/rev/comment-claims.tsv; then
             echo "already=true" >> "$GITHUB_OUTPUT"
-            echo "reason=already-reviewed" >> "$GITHUB_OUTPUT"
+            echo "reason=already-consumed" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -278,8 +280,10 @@ jobs:
           REPO: ${{ github.repository }}
           HEAD_SHA: ${{ steps.target.outputs.head_sha }}
           CI_PASSED: ${{ steps.ci.outputs.passed }}
+          RESERVATION_ID: ${{ steps.guard.outputs.reservation_id }}
         run: |
           set -euo pipefail
+          . .github/scripts/openai-review/lib.sh
 
           # This step runs only when the required checks are terminal (its `if`).
           # Terminal but not all green: a failed or cancelled required check means
@@ -326,6 +330,17 @@ jobs:
 
           jq -n --arg m "gpt-5.6-sol" --rawfile instructions /tmp/rev/instructions.txt --rawfile input /tmp/rev/input.txt \
             '{model: $m, instructions: $instructions, input: $input}' > /tmp/rev/req.json
+
+          # Durably record that the paid call is being CONSUMED for this exact HEAD
+          # BEFORE making it, by transitioning the reservation comment to carry the
+          # invoked marker. If this run then dies before finalization, a later
+          # completion event sees the call was consumed (guard's orl_has_consumed)
+          # and does not invoke the model again (#692). The marker carries no
+          # verdict, so #585 never reads it as an outcome; finalize overwrites it.
+          [ -n "$RESERVATION_ID" ]
+          consumed_body="$(orl_reservation "$PR" "$HEAD_SHA") $(orl_invoked "$PR" "$HEAD_SHA")"
+          gh api --method PATCH "repos/$REPO/issues/comments/$RESERVATION_ID" \
+            -f body="$consumed_body" >/dev/null
 
           metrics=$(curl -sS -o /tmp/rev/resp.json -w '%{http_code} %{time_total}' \
             https://api.openai.com/v1/responses \
