@@ -87,9 +87,53 @@ jobs:
           . .github/scripts/openai-review/lib.sh
           mkdir -p /tmp/rev
 
-          gh api "repos/$REPO/pulls/$PR" -H "Accept: application/vnd.github.v3.diff" \
-            > /tmp/rev/diff.txt 2>/dev/null || echo "(diff unavailable)" > /tmp/rev/diff.txt
-          head -c 200000 /tmp/rev/diff.txt > /tmp/rev/diff.trim && mv /tmp/rev/diff.trim /tmp/rev/diff.txt
+          # Fetch the FULL diff first so truncation can be detected, then bound it
+          # for the request. A prefix is never silently treated as the whole
+          # change: truncation is disclosed as machine-readable completeness
+          # evidence, the complete changed-file manifest is always included, and a
+          # post-step control forbids PASS on a truncated diff (#693).
+          # A refused fetch (e.g. GitHub 406 on a very large diff) is itself an
+          # incomplete review, not a complete zero-byte one: capture the outcome
+          # so the sentinel body can never be disclosed as a COMPLETE diff (#693).
+          if gh api "repos/$REPO/pulls/$PR" -H "Accept: application/vnd.github.v3.diff" \
+               > /tmp/rev/diff.raw 2>/dev/null; then
+            diff_ok=1
+          else
+            diff_ok=0
+            echo "(diff unavailable)" > /tmp/rev/diff.raw
+          fi
+          budget=200000
+
+          # The changed-file manifest is ALWAYS supplied to the reviewer (as
+          # untrusted PR data — filenames are attacker-controlled) and must name
+          # EVERY changed file (#693, criterion 3). The REST files endpoint caps at
+          # 3000, so the manifest is retrieved via GraphQL cursor pagination, which
+          # is uncapped and — a pure API query on the trusted base runner, with no
+          # checkout of and no code execution from the PR head — preserves
+          # trusted-base execution (#693, criterion 6). Filenames are @json-escaped
+          # so an embedded newline (git permits them) can neither split one record
+          # into several counted lines nor inject a line into the prompt.
+          owner="${REPO%%/*}"; name="${REPO#*/}"
+          changed_files="$(gh api "repos/$REPO/pulls/$PR" --jq '.changed_files' 2>/dev/null || echo '')"
+          if gh api graphql --paginate \
+               -f query='query($owner:String!,$name:String!,$pr:Int!,$endCursor:String){repository(owner:$owner,name:$name){pullRequest(number:$pr){files(first:100,after:$endCursor){pageInfo{hasNextPage endCursor} nodes{path additions deletions changeType}}}}}' \
+               -f owner="$owner" -f name="$name" -F pr="$PR" \
+               --jq '.data.repository.pullRequest.files.nodes[] | "\(.changeType)\t\(.path|@json)\t+\(.additions)/-\(.deletions)"' \
+               > /tmp/rev/files.txt 2>/dev/null; then
+            manifest_fetch_ok=1
+          else
+            manifest_fetch_ok=0
+            echo "(file manifest unavailable)" > /tmp/rev/files.txt
+          fi
+
+          # Derive the bounded diff, the fail-closed completeness flag, and the
+          # trusted machine-generated status from the fetched evidence. Extracted
+          # into a tested helper so real byte-boundary and manifest fixtures
+          # exercise the handling directly, not a numeric proxy (#693). A
+          # successful empty manifest counts as zero records and is complete only
+          # when changed_files is zero; only a FAILED fetch is unavailable.
+          orl_build_evidence /tmp/rev/diff.raw "$diff_ok" "$budget" \
+            /tmp/rev/files.txt "$manifest_fetch_ok" "$changed_files" /tmp/rev
 
           gh api "repos/$REPO/pulls/$PR" --jq '"TITLE: \(.title)\n\nBODY:\n\(.body // "")"' \
             > /tmp/rev/pr.txt 2>/dev/null || echo "(pr unavailable)" > /tmp/rev/pr.txt
@@ -157,6 +201,8 @@ jobs:
             echo; echo "=== TRUSTED-BASE SPARK DOCTOR EVIDENCE ==="; cat /tmp/rev/doctor.txt
             echo; echo "=== TRUSTED-BASE SPARK GOVERNANCE EVIDENCE ==="; cat /tmp/rev/gov.txt
             echo; echo "=== UNTRUSTED EXISTING COMMENT DATA ==="; cat /tmp/rev/comments.txt
+            echo; echo "=== DIFF COMPLETENESS STATUS (trusted, machine-generated) ==="; cat /tmp/rev/completeness.txt
+            echo; echo "=== UNTRUSTED CHANGED-FILE MANIFEST (PR-controlled filenames) ==="; cat /tmp/rev/files.txt
             echo; echo "=== UNTRUSTED PR DIFF DATA ==="; cat /tmp/rev/diff.txt
           } > /tmp/rev/input.txt
 
@@ -195,7 +241,18 @@ jobs:
           . .github/scripts/openai-review/lib.sh
           [ -n "$RESERVATION_ID" ]
 
-          verdict="$(head -1 /tmp/rev/verdict.md | orl_normalize_verdict)"
+          model_verdict="$(head -1 /tmp/rev/verdict.md | orl_normalize_verdict)"
+          # A PASS on a truncated diff is not a pass: the whole change was not
+          # seen (#693). Downgrade it, and make the body say why.
+          # Fail closed: an unreadable completeness flag is treated as truncated,
+          # so a missing flag can only ever downgrade a would-be PASS (#693).
+          truncated="$(cat /tmp/rev/truncated 2>/dev/null || echo 1)"
+          verdict="$(orl_enforce_completeness "$model_verdict" "$truncated")"
+          if [ "$verdict" != "$model_verdict" ]; then
+            {
+              printf 'NOT ASSESSED\n\nThe reviewer returned %s, but the review evidence was incomplete: the exact-HEAD diff exceeded the budget and was truncated or could not be fetched, and/or the changed-file manifest was unavailable, so the whole change was not seen. A pass on incomplete evidence is not a pass; a full review needs the complete diff and manifest on this exact HEAD.\n' "$model_verdict"
+            } > /tmp/rev/verdict.md
+          fi
           {
             orl_marker "$verdict" "$PR" "$HEAD_SHA"; echo
             echo "## Reviewer verdict: $verdict"

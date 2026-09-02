@@ -68,3 +68,101 @@ orl_route() { # verdict
     *)                    echo "The change was **not assessed**. This is not a pass." ;;
   esac
 }
+
+# orl_is_truncated <orig_bytes> <budget> — was the diff cut to fit the budget?
+# Returns 0 (truncated) when the original diff is larger than the budget, and
+# also 0 (fail closed) when either value is non-numeric — an unreadable size must
+# never be treated as a complete diff. The check is purely on size, so it fires
+# whatever the cut lands on: a mid-line cut or a split multi-byte character all
+# leave the original larger than the budget (#693).
+orl_is_truncated() { # <orig_bytes> <budget>
+  case "$1" in ''|*[!0-9]*) return 0 ;; esac
+  case "$2" in ''|*[!0-9]*) return 0 ;; esac
+  [ "$1" -gt "$2" ]
+}
+
+# orl_evidence_truncated <diff_state> <manifest_ok> — is the review evidence
+# incomplete? The reviewer has seen the whole change only when the diff content
+# is COMPLETE *and* the changed-file manifest was fetched. A non-complete diff
+# (TRUNCATED or UNAVAILABLE) or an unavailable manifest leaves part of the change
+# unseen, so it blocks PASS. Prints the flag consumed as the <truncated> argument
+# of orl_enforce_completeness: 1 (incomplete → downgrade a PASS) or 0 (#693).
+orl_evidence_truncated() { # <diff_state> <manifest_ok>
+  if [ "$1" = "COMPLETE" ] && [ "$2" = "1" ]; then printf '0'; else printf '1'; fi
+}
+
+# orl_manifest_complete <returned_count> <changed_files> — did the paginated
+# files endpoint return EVERY changed file? GitHub caps that endpoint at 3000
+# files, so a successful, non-empty response is not proof of completeness. The
+# manifest is complete only when the returned record count EXACTLY matches the
+# PR's trusted changed_files count. Any mismatch — a short (silently capped)
+# count, an inflated one, or a non-numeric input — fails closed to incomplete.
+# The count must be taken from API records, never from rendered filenames, since
+# a newline in a filename would otherwise inflate a line count (#693).
+orl_manifest_complete() { # <returned_count> <changed_files>  -> 1 (complete) or 0
+  case "$1" in ''|*[!0-9]*) printf '0'; return ;; esac
+  case "$2" in ''|*[!0-9]*) printf '0'; return ;; esac
+  if [ "$1" -eq "$2" ]; then printf '1'; else printf '0'; fi
+}
+
+# orl_enforce_completeness <verdict> <complete_flag> — a PASS stands only on
+# COMPLETE evidence. The flag is "0" when the reviewer saw the whole change and
+# "1" (or anything else) otherwise. Fail closed: a PASS survives only when the
+# flag is EXACTLY "0"; a "1", an empty value, or any malformed flag downgrades it
+# to NOT ASSESSED. Every non-PASS verdict — a real defect, a decision owed, an
+# already-NOT ASSESSED — is returned unchanged. This is the mechanical guarantee
+# that incomplete evidence can never yield PASS (#693).
+orl_enforce_completeness() { # <verdict> <complete_flag>
+  if [ "$1" = "PASS" ] && [ "${2:-}" != "0" ]; then
+    printf 'NOT ASSESSED'
+  else
+    printf '%s' "$1"
+  fi
+}
+
+# orl_build_evidence <diff_raw> <diff_ok> <budget> <files_txt> <manifest_fetch_ok>
+#                    <changed_files> <out_dir>
+# Turn the already-fetched raw diff and changed-file manifest into the derived
+# completeness artifacts the reviewer input needs — so the REAL handling (byte
+# truncation, the fail-closed flag, and disclosure) is exercised by fixture tests
+# with constructed byte inputs, not just asserted by grep. Writes, under out_dir:
+#   diff.txt         the diff sent to the model: the full diff when complete, else
+#                    the budget-bounded prefix (the raw sentinel when unfetchable);
+#   truncated        the completeness flag consumed by orl_enforce_completeness —
+#                    "0" only when the diff is COMPLETE and the manifest reached
+#                    changed_files, else "1";
+#   completeness.txt the trusted, machine-generated status (no filenames).
+# The manifest record count is taken from files_txt only when the fetch succeeded
+# (manifest_fetch_ok=1); a failed fetch counts as zero and fails closed. Pure but
+# for these writes — no network, no gh, no git (#693).
+orl_build_evidence() {
+  local raw="$1" diff_ok="$2" budget="$3" files="$4" mfetch="$5" cfiles="$6" out="$7"
+  local orig_bytes diff_state mcount manifest_ok manifest_state
+  orig_bytes="$(wc -c < "$raw" | tr -d ' ')"
+  if [ "$diff_ok" = "1" ] && ! orl_is_truncated "$orig_bytes" "$budget"; then
+    cp "$raw" "$out/diff.txt"; diff_state="COMPLETE"
+  else
+    head -c "$budget" "$raw" > "$out/diff.txt"
+    if [ "$diff_ok" = "0" ]; then diff_state="UNAVAILABLE"; else diff_state="TRUNCATED"; fi
+  fi
+  if [ "$mfetch" = "1" ]; then
+    mcount="$(wc -l < "$files" | tr -d ' ')"
+    manifest_ok="$(orl_manifest_complete "$mcount" "$cfiles")"
+  else
+    mcount=0; manifest_ok=0
+  fi
+  if [ "$manifest_ok" = "1" ]; then
+    manifest_state="complete (${mcount} of ${cfiles} files)"
+  else
+    manifest_state="INCOMPLETE (${mcount} of ${cfiles:-unknown} files; the file list was capped or could not be fetched)"
+  fi
+  orl_evidence_truncated "$diff_state" "$manifest_ok" > "$out/truncated"
+  {
+    case "$diff_state" in
+      COMPLETE)    printf 'DIFF COMPLETE: the full exact-HEAD diff is present (%s bytes).\n' "$orig_bytes" ;;
+      TRUNCATED)   printf 'DIFF TRUNCATED: showing %s of %s bytes; hunks beyond the bound are OMITTED. An incomplete diff can never be PASS.\n' "$budget" "$orig_bytes" ;;
+      UNAVAILABLE) printf 'DIFF UNAVAILABLE: the exact-HEAD diff could not be fetched; NO diff content is present. An unfetchable diff can never be PASS.\n' ;;
+    esac
+    printf 'CHANGED FILE MANIFEST: %s. The file list follows in the untrusted manifest section; a capped or unavailable manifest also blocks PASS.\n' "$manifest_state"
+  } > "$out/completeness.txt"
+}
