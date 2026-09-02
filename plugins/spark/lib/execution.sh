@@ -1565,23 +1565,29 @@ ci_live() {
   CI_LIVE_HEAD=""; CI_LIVE_LINES=""
   command -v gh >/dev/null 2>&1 || { CI_LIVE_LINES="__unreadable__"; return 0; }
   # One request returns both the head and the rollup. The head is emitted first,
-  # tagged with a sentinel field name no real check can use, so it is extracted
-  # unambiguously and the remaining rows are the rollup. A rollup holds two
-  # disjoint shapes: a CheckRun reports .status while running and .conclusion once
-  # finished; a StatusContext reports only .state. conclusion-then-status-then-state
-  # covers both — a finished run's verdict wins, a running one says it is running.
+  # tagged with a sentinel field name, and extracted by POSITION (row one) — the
+  # tag alone is not unambiguous, since GitHub check names are user-controlled
+  # and a real check could legitimately be named the same as the sentinel. A
+  # rollup holds two disjoint shapes: a CheckRun reports .status while running
+  # and .conclusion once finished; a StatusContext reports only .state.
+  # conclusion-then-status-then-state covers both — a finished run's verdict
+  # wins, a running one says it is running.
   local raw
   raw="$(gh pr view "$1" --json headRefOid,statusCheckRollup \
         --jq '"__civ_head__\t" + (.headRefOid // ""), (.statusCheckRollup[] | [(.name // .context), (.conclusion // .status // .state)] | @tsv)' 2>/dev/null)" \
     || { CI_LIVE_LINES="__unreadable__"; return 0; }
-  CI_LIVE_HEAD="$(printf '%s\n' "$raw" | awk -F'\t' '$1=="__civ_head__"{print $2; exit}')"
+  CI_LIVE_HEAD="$(printf '%s\n' "$raw" | awk -F'\t' 'NR==1{print $2; exit}')"
   # A coherent observation MUST carry the head the rollup describes. A missing or
   # empty headRefOid — even alongside readable check rows — is not a usable
   # observation: without the head, the rollup cannot be bound to the certified
   # commit, so it is unreadable, never evidence (#658).
   [ -n "$CI_LIVE_HEAD" ] || { CI_LIVE_LINES="__unreadable__"; return 0; }
   local out
-  out="$(printf '%s\n' "$raw" | awk -F'\t' '$1!="__civ_head__" && NF{print}')"
+  # The head sentinel is always row 1 by construction (the jq query emits it
+  # before the rollup array) — dropped by POSITION, never by matching the name
+  # column, because GitHub check names are user-controlled and a real check
+  # legitimately named "__civ_head__" must not be filtered out of the rollup.
+  out="$(printf '%s\n' "$raw" | awk -F'\t' 'NR>1 && NF{print}')"
   # No checks at all is a different fact from being unable to ask, and a caller
   # that cannot tell them apart will treat one as the other.
   [ -n "$out" ] || { CI_LIVE_LINES="__nochecks__"; return 0; }

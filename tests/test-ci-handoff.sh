@@ -236,6 +236,24 @@ assert_contains "and names the unverifiable certification" "could not read the P
   "$("$SPARK" ci handoff --run stale4 --pr 42 --head anything 2>&1 || true)"
 export GH_HEAD=abc123                            # restore the coherent default for later fixtures
 
+# --- #658/#703: a real check literally named __civ_head__ must not vanish ----
+# GitHub check names are user-controlled, so nothing stops a real check from
+# being named exactly like the internal head-sentinel row. The sentinel must be
+# dropped by POSITION (it is always row one), never by matching the name column
+# — a name match would delete a genuine failing check of the same name and let
+# the rollup read as all-green.
+pending
+"$SPARK" ci handoff --run civname --pr 42 --head abc123 >/dev/null 2>&1
+printf '__civ_head__\tFAILURE\ndoctor\tSUCCESS\ngate\tSUCCESS\n' > "$GH_ROLLUP"
+rc 2 "a real check named __civ_head__ still fails the resume" -- "$SPARK" ci resume --run civname
+CIVNAME="$("$SPARK" ci resume --run civname 2>&1 || true)"
+assert_contains "the check stays visible under its real name" "__civ_head__ — FAILURE" "$CIVNAME"
+assert_contains "the verdict is changes required, not a false pass" "CHANGES REQUIRED" "$CIVNAME"
+case "$CIVNAME" in
+  *READY*) bad "a real check named __civ_head__ must never be swallowed into a false READY" ;;
+  *) ok ;;
+esac
+
 # --- MUTATION CONTROL --------------------------------------------------------
 # Stop comparing against the recorded snapshot, so every read looks like a
 # transition. The no-transition fixture must go red — reporting news where
