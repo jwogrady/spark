@@ -102,10 +102,14 @@ jobs:
             exit 0
           fi
 
-          # Fetch every page once. Only claims authored by the trusted Actions
-          # producer count; marker-shaped text from contributors is inert.
+          # Fetch every page once. gh --paginate emits one JSON array PER PAGE, so
+          # normalize the pages into a single array — otherwise a reservation found
+          # after page one yields a multiline id and resumption silently breaks. Only
+          # claims authored by the trusted Actions producer count; marker-shaped text
+          # from contributors is inert.
           gh api --paginate "repos/$REPO/issues/$PR/comments?per_page=100" \
-            > /tmp/rev/comments.json 2>/dev/null || echo '[]' > /tmp/rev/comments.json
+            > /tmp/rev/comments.raw.json 2>/dev/null || echo '[]' > /tmp/rev/comments.raw.json
+          jq -s 'add // []' /tmp/rev/comments.raw.json > /tmp/rev/comments.json
           jq -r '.[] | [.user.login, (.performed_via_github_app.slug // ""), .body] | @tsv' \
             /tmp/rev/comments.json > /tmp/rev/comment-claims.tsv
 
@@ -135,15 +139,17 @@ jobs:
           echo "reservation_id=$reservation_id" >> "$GITHUB_OUTPUT"
 
       # The one paid review must consume a TERMINAL exact-HEAD CI snapshot, never a
-      # pending one that could freeze a pre-terminal verdict (#692). Check the
-      # required checks ONCE: if they are terminal, review now; if not, produce NO
-      # verdict and stop — the reservation stays pending and the workflow_run
-      # completion event resumes this exact HEAD once the checks finish. This
-      # completion-driven continuation, not a bounded wait, is what guarantees a
-      # pending snapshot can never become the permanent signal.
+      # pending one that could freeze a pre-terminal verdict (#692). Read the
+      # required checks: if terminal, review now; if not, produce NO verdict and stop
+      # — the reservation stays pending and a workflow_run completion event resumes
+      # this exact HEAD once the checks finish. The completion trigger, not a wait,
+      # is the continuation; the short retry below only absorbs the seconds of
+      # check-runs API propagation lag after the LAST required workflow completes, so
+      # that terminal event does not miss terminality and strand the reservation.
+      # On retry exhaustion it DEFERS (no verdict finalized), never freezes one.
       - name: Check required checks are terminal
         id: ci
-        if: steps.guard.outputs.already != 'true'
+        if: steps.target.outputs.skip != 'true' && steps.guard.outputs.already != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -153,10 +159,17 @@ jobs:
           . .github/scripts/openai-review/lib.sh
           mkdir -p /tmp/rev
           required="docs-truth doctor gate tests"
-          gh api "repos/$REPO/commits/$HEAD_SHA/check-runs" \
-            --jq '.check_runs[] | "\(.name): \(.status)/\(.conclusion // "pending")"' \
-            > /tmp/rev/checks.txt 2>/dev/null || : > /tmp/rev/checks.txt
-          if orl_checks_terminal $required < /tmp/rev/checks.txt; then
+          terminal=false
+          for attempt in 1 2 3 4 5 6; do
+            # Paginate: a PR with many checks can push a required run past page one,
+            # which would read as missing and strand the reservation.
+            gh api --paginate "repos/$REPO/commits/$HEAD_SHA/check-runs?per_page=100" \
+              --jq '.check_runs[] | "\(.name): \(.status)/\(.conclusion // "pending")"' \
+              > /tmp/rev/checks.txt 2>/dev/null || : > /tmp/rev/checks.txt
+            if orl_checks_terminal $required < /tmp/rev/checks.txt; then terminal=true; break; fi
+            [ "$attempt" -lt 6 ] && sleep 20 || true
+          done
+          if [ "$terminal" = "true" ]; then
             echo "terminal=true" >> "$GITHUB_OUTPUT"
             if orl_checks_passed $required < /tmp/rev/checks.txt; then
               echo "passed=true" >> "$GITHUB_OUTPUT"
@@ -166,7 +179,7 @@ jobs:
           else
             echo "terminal=false" >> "$GITHUB_OUTPUT"
             echo "passed=false" >> "$GITHUB_OUTPUT"
-            echo "Required checks not yet terminal for $HEAD_SHA; the reservation stays pending until the completion event resumes it."
+            echo "Required checks not yet terminal for $HEAD_SHA; the reservation stays pending until a completion event resumes it."
           fi
 
       - name: Gather untrusted review evidence as data
@@ -240,7 +253,7 @@ jobs:
           done
           [ -s /tmp/rev/issue.txt ] || echo "(no closing issue reference found in the PR body)" > /tmp/rev/issue.txt
 
-          gh api "repos/$REPO/commits/$HEAD_SHA/check-runs" \
+          gh api --paginate "repos/$REPO/commits/$HEAD_SHA/check-runs?per_page=100" \
             --jq '.check_runs[] | "\(.name): \(.status)/\(.conclusion // "pending")"' \
             > /tmp/rev/checks.txt 2>/dev/null || echo "(checks unavailable)" > /tmp/rev/checks.txt
 

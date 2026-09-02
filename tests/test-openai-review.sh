@@ -332,6 +332,28 @@ for snap in "$pending" "$pending" "$green"; do
 done
 [ "$seq_reviewed" = 1 ] && ok || bad "pending→pending→green must become reviewable exactly once, got $seq_reviewed"
 
+# Exactly-once state machine (#692): drive the REAL guard/ci predicates across the
+# events for one HEAD. A model invocation happens only when there is NO final marker
+# AND CI is terminal; a review then writes the final marker, which suppresses every
+# later event. This proves resume + duplicate-completion invoke the model once.
+tab="$(printf '\t')"
+sm_res="github-actions[bot]${tab}github-actions${tab}$(orl_reservation 700 sha700)"
+sm_mark="github-actions[bot]${tab}github-actions${tab}$(orl_marker PASS 700 sha700)"
+sm_comments="$sm_res"      # event 1 (pull_request_target, CI pending) left a bare reservation
+invocations=0
+# events 2..4: two workflow_run completions (CI now terminal-green) and a duplicate.
+for ev in resume duplicate trailing; do
+  if printf '%s\n' "$sm_comments" | orl_has_final_marker 700 sha700; then continue; fi   # already reviewed → skip
+  if printf '%s\n' "$green" | orl_checks_terminal $REQ; then
+    invocations=$((invocations + 1))
+    sm_comments="$sm_comments
+$sm_mark"                                                                                  # finalize writes the marker
+  fi
+done
+[ "$invocations" = 1 ] && ok || bad "resume+duplicate completion events must invoke the model exactly once, got $invocations"
+# And a bare reservation alone (no terminal CI yet) invokes nothing.
+printf '%s\n' "$sm_res" | orl_has_final_marker 700 sha700 && bad "a bare reservation must not read as reviewed" || ok
+
 # Static workflow facts: the workflow fetches, delegates to the tested helper, and
 # enforces the flag; the derived logic itself is proven by the fixtures above.
 haswf "retrieves every path via uncapped GraphQL"     'files\(first:100,after:\$endCursor\)'
@@ -355,6 +377,9 @@ haswf "requires all required checks green to pass"    'orl_checks_passed \$requi
 haswf "a non-green terminal HEAD cannot pass"         'CI_PASSED'
 haswf "resumes a pending reservation, never re-reviews" 'orl_has_final_marker'
 haswf "reviews only when checks are terminal"         "steps.ci.outputs.terminal == 'true'"
+haswf "paginates the check-runs API"                  'check-runs\?per_page=100'
+haswf "normalizes paginated comments into one array"  "jq -s 'add"
+haswf "absorbs check-runs propagation lag with a short retry" 'for attempt in 1 2 3 4 5 6'
 haswf_not "no bounded-wait timeout that can freeze a verdict" 'ci-not-terminal-timeout'
 
 echo "  $pass passed, $fail failed"
