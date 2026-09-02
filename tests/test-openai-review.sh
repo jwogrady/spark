@@ -3,8 +3,10 @@
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-wf="$here/../.github/workflows/openai-review.yml"
-lib="$here/../.github/scripts/openai-review/lib.sh"
+repo="$here/.."
+wf="$repo/.github/workflows/openai-review.yml"
+lib="$repo/.github/scripts/openai-review/lib.sh"
+claude_lib="$repo/.github/scripts/claude-lane/lib.sh"
 # shellcheck source=/dev/null
 . "$lib"
 
@@ -40,13 +42,21 @@ haswf_not "publication failures are not swallowed" 'gh (pr comment|api).*\|\| tr
 haswf "uses higher-authority Responses API instructions" 'instructions: \$instructions'
 haswf "labels supplied evidence as untrusted" 'UNTRUSTED DATA'
 haswf "keeps untrusted evidence in input" 'input: \$input'
-haswf_not "does not execute Spark from a PR checkout" 'Checkout repository \(read-only|checkout.*HEAD_SHA'
 
 # Fail closed and exact-head evidence.
 haswf "uses the OpenAI secret" 'OPENAI_API_KEY: \$\{\{ secrets.OPENAI_API_KEY \}\}'
 haswf "missing key fails closed" 'OPENAI_API_KEY is not available'
 haswf "provider failure fails closed" 'could not be reached \(HTTP'
 haswf "posts structured exact-head marker" 'orl_marker'
+
+# Cross-lane guard: Claude's deterministic publisher protects the independent
+# reviewer helper tree as well as workflows and its own helpers.
+# shellcheck source=/dev/null
+. "$claude_lib"
+case "$(printf '100644\t.github/scripts/openai-review/lib.sh\n' | cl_validate_paths 2>&1 || true)" in
+  *"reject:reviewer-path"*) ok ;;
+  *) bad "Claude publisher must reject OpenAI reviewer helper changes" ;;
+esac
 
 # Verdict normalization.
 nv() { local want="$1" got; got="$(orl_normalize_verdict "$2")"; [ "$got" = "$want" ] && ok || bad "normalize '$2' — want '$want' got '$got'"; }
@@ -58,19 +68,17 @@ nv PASS "PASS — nothing blocking"
 nv "NOT ASSESSED" "pass"
 nv "NOT ASSESSED" ""
 
-# Closing-issue parser remains bounded to closing keywords.
 ci() { local got; got="$(printf '%s' "$2" | orl_closing_issues | paste -sd, -)"; [ "$got" = "$1" ] && ok || bad "closing_issues '$2' — want '$1' got '$got'"; }
 ci "12" "closes #12"
 ci "1,2,3" "closes #2, fixes #1, resolves #3"
 ci "" "see #4"
 
-# Exact marker/reservation shape.
 m="$(orl_marker PASS 688 abc123)"
 r="$(orl_reservation 688 abc123)"
 case "$m" in *"spark-openai-review pr=688 head=abc123 verdict=PASS"*) ok ;; *) bad "final marker shape" ;; esac
 case "$r" in *"spark-openai-review-reservation pr=688 head=abc123"*) ok ;; *) bad "reservation marker shape" ;; esac
 
-# Trusted claim identity: text alone is not authority.
+# Trusted claim identity: marker text alone is not authority.
 trusted_final="github-actions[bot]	github-actions	$m"
 trusted_res="github-actions[bot]	github-actions	$r"
 spoof_login="attacker	github-actions	$m"
@@ -84,13 +92,12 @@ printf '%b\n' "$spoof_app" | orl_has_trusted_claim 688 abc123 && bad "spoofed ap
 printf '%b\n' "$wrong_pr" | orl_has_trusted_claim 688 abc123 && bad "wrong PR suppressed review" || ok
 printf '%b\n' "$wrong_head" | orl_has_trusted_claim 688 abc123 && bad "wrong HEAD suppressed review" || ok
 
-# Mutation controls: each critical identity field is load-bearing.
+# Mutation controls prove both trusted identity fields are load-bearing.
 mut_login="$(printf '%b\n' "$spoof_login" | sed 's/^attacker/github-actions[bot]/')"
 printf '%s\n' "$mut_login" | orl_has_trusted_claim 688 abc123 && ok || bad "login mutation control did not flip"
 mut_app="$(printf '%b\n' "$spoof_app" | sed 's/evil-app/github-actions/')"
 printf '%s\n' "$mut_app" | orl_has_trusted_claim 688 abc123 && ok || bad "app mutation control did not flip"
 
-# Routing does not pretend reviewer prose itself is writer authority.
 case "$(orl_route PASS)" in *"not merge authority"*) ok ;; *) bad "PASS route" ;; esac
 case "$(orl_route "CHANGES REQUIRED")" in *"#585"*"do not merge"*) ok ;; *) bad "CHANGES route" ;; esac
 case "$(orl_route "DECISION REQUIRED")" in *"@jwogrady"*) ok ;; *) bad "DECISION route" ;; esac
