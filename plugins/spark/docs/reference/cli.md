@@ -557,13 +557,16 @@ needs an authority a durable surface reserves to the human.
 
 `crossroad` admits a stop **only** for a recognised boundary kind that also
 **names** the missing authority and **cites** the durable surface reserving it.
-Everything else continues. It exits `0` to continue and `3` at a genuine
-`DECISION REQUIRED`.
+There are three outcomes: `CONTINUE` (exit `0`) for a recognised non-boundary
+kind, `DECISION REQUIRED` (exit `3`) for a recognised boundary with both fields
+named, and `INVALID` (exit `2`) for input the classifier could not evaluate.
 
 | Kind | Verdict |
 | --- | --- |
-| `new-authority`, `product-governance-semantics`, `release-policy`, `destructive-external`, `decision-required` | **`DECISION REQUIRED`** — but only when both `authority` and `surface` are named |
-| `activate-authorized`, `evidence-substitution`, `co-authorship`, `operator-courtesy`, `presumptuousness`, `consequentiality`, `general-caution` | **`CONTINUE`** — never an authority boundary |
+| `new-authority`, `product-governance-semantics`, `release-policy`, `destructive-external`, `decision-required`, with **both** `authority` and `surface` named | **`DECISION REQUIRED`** (exit `3`) |
+| the same boundary kinds with a **missing or blank** `authority` or `surface` | **`INVALID`** (exit `2`) — an incomplete claim, not a pass |
+| `activate-authorized`, `evidence-substitution`, `co-authorship`, `operator-courtesy`, `presumptuousness`, `consequentiality`, `general-caution` | **`CONTINUE`** (exit `0`) — never an authority boundary |
+| an unrecognised kind (a typo or an undeclared kind), or too many arguments | **`INVALID`** (exit `2`) — the input could not be classified |
 
 Activating a capability the owning issue already authorized is not a new grant
 merely because it goes live on merge. Substituting one form of evidence for
@@ -572,22 +575,31 @@ cannot self-review — is a verification question, not a governance decision. An
 co-authorship, operator courtesy, perceived presumptuousness, or general caution
 are never authority.
 
-A boundary kind with no named authority or cited surface **continues**: you must
-be able to name the exact reserved authority, and point at the durable surface
-that reserves it, before you stop. The check is **structural** — it confirms a
-named authority and a cited surface, turning an unfalsifiable "it felt
-consequential" stop into a claim a human can check; it does not verify that the
-surface actually reserves the authority (that substance stays the agent's honest
-judgment and the human's to confirm), so the verdict reports the claim rather
-than asserting it. This changes nothing about `UNKNOWN` / `NOT ASSESSED`,
-stale-head protection, review, or CI — those stop work on their own evidence;
-`crossroad` governs only the human-handoff decision.
+A boundary kind with no named authority or cited surface is **`INVALID`**, not
+`CONTINUE` and not `DECISION REQUIRED`: reporting `CONTINUE` there would let a
+machine caller run past a real boundary because a field was omitted or misspelled
+(the fail-open defect #696 closed). `INVALID` halts automated mutation until the
+claim is completed — name the exact reserved authority and cite the durable
+surface, which yields `DECISION REQUIRED` — or the kind is corrected to a
+recognised non-boundary; it never manufactures a human handoff on its own. The
+completeness check is **structural** — it confirms a named authority and a cited
+surface, turning an unfalsifiable "it felt consequential" stop into a claim a
+human can check; it does not verify that the surface actually reserves the
+authority (that substance stays the agent's honest judgment and the human's to
+confirm), so the verdict reports the claim rather than asserting it. This changes
+nothing about `UNKNOWN` / `NOT ASSESSED`, stale-head protection, review, or CI —
+those stop work on their own evidence; `crossroad` governs only the human-handoff
+decision.
 
 ```
 $ spark crossroad activate-authorized
-CONTINUE                                    # exit 0
+CONTINUE                                    # exit 0 — recognised non-boundary
 $ spark crossroad new-authority "a write-capable deploy key" "AGENTS.md guardrails"
-DECISION REQUIRED                           # exit 3
+DECISION REQUIRED                           # exit 3 — boundary, both fields named
+$ spark crossroad destructive-external
+INVALID                                     # exit 2 — boundary, claim incomplete
+$ spark crossroad release_polcy "v0.23 approval" "#480"
+INVALID                                     # exit 2 — unrecognised kind (typo)
 ```
 
 ## `spark hub [--set <owner/repo|url|none>]`

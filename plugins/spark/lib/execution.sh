@@ -1828,9 +1828,21 @@ cmd_ci() {
 # perceived presumptuousness, "this feels consequential" — is never authority.
 #
 # So a stop is admitted ONLY for a recognised boundary kind that also NAMES the
-# missing authority and CITES the durable surface reserving it. Everything else
-# continues. This fails toward CONTINUE on purpose: the defect (#688) was a false
-# stop, so an unnamed or unrecognised reason must never manufacture one. It does
+# missing authority and CITES the durable surface reserving it. A recognised
+# NON-boundary kind continues; that is where the #688 false stop lived, so those
+# never manufacture a handoff.
+#
+# But "not a manufactured stop" is not the same as CONTINUE. A recognised boundary
+# kind whose claim is INCOMPLETE (a missing or blank authority/surface), and an
+# UNRECOGNISED kind (a typo or an undeclared kind), are not classifications at all
+# — the classifier could not evaluate them. Reporting CONTINUE there is fail-open
+# (#696): a machine consumer following the exit code could run past a destructive
+# or release boundary because an argument was omitted or misspelled. Those inputs
+# get a distinct INVALID verdict with a nonzero, non-DECISION status: it halts
+# automated mutation until the claim is completed or the kind corrected, WITHOUT
+# manufacturing a human DECISION REQUIRED handoff. So there are three outcomes —
+# CONTINUE (recognised non-boundary), DECISION REQUIRED (recognised boundary, both
+# fields named), and INVALID (incomplete or unrecognised input). This still does
 # not touch UNKNOWN/NOT ASSESSED, stale-head protection, review, or CI — those
 # stop work on their own evidence; this governs only the human-handoff decision.
 
@@ -1842,9 +1854,18 @@ XR_BOUNDARY_KINDS="new-authority product-governance-semantics release-policy des
 XR_NON_BOUNDARY_KINDS="activate-authorized evidence-substitution co-authorship operator-courtesy presumptuousness consequentiality general-caution"
 
 # xr_stop_check <kind> [authority] [surface]
-# Echoes the verdict on the first line — CONTINUE or DECISION REQUIRED — then the
-# reason. Returns 0 for CONTINUE, 3 for a genuine DECISION REQUIRED Crossroad.
+# Echoes the verdict on the first line — CONTINUE, DECISION REQUIRED, or INVALID —
+# then the reason. Returns 0 for CONTINUE, 3 for a genuine DECISION REQUIRED
+# Crossroad, and 2 for INVALID input the classifier could not evaluate (an
+# incomplete boundary claim, an unrecognised kind, or a malformed argument count).
 xr_stop_check() {
+  # A machine caller passing more than <kind> [authority] [surface] is malformed
+  # input, not a classification — halt rather than silently ignore the surplus.
+  if [ "$#" -gt 3 ]; then
+    echo "INVALID"
+    echo "reason: crossroad takes at most <kind> [authority] [surface]; got $# arguments — this is malformed input, not a classification. Halt automated mutation until the call is corrected."
+    return 2
+  fi
   local kind="${1:-}" authority="${2:-}" surface="${3:-}"
   case " $XR_NON_BOUNDARY_KINDS " in
     *" $kind "*)
@@ -1877,25 +1898,39 @@ xr_stop_check() {
       elif [ "$a_named" = 0 ];                       then lack="a named authority"
       else                                                lack="a cited surface"
       fi
-      echo "CONTINUE"
-      echo "reason: a '$kind' stop needs $lack, which was not given — name the specific missing human authority and cite the durable surface reserving it, or continue rather than manufacture a Crossroad"
-      return 0 ;;
+      # A recognised human-owned boundary with an INCOMPLETE claim is not a
+      # CONTINUE: reporting one here would let a machine caller run past a real
+      # boundary because a field was omitted or blank (#696). It is also not a
+      # manufactured DECISION REQUIRED. Halt as INVALID until the claim is
+      # completed (which yields DECISION REQUIRED) or the kind is corrected.
+      echo "INVALID"
+      echo "reason: '$kind' is a human-owned boundary but the claim is incomplete — missing $lack. This is NOT a pass and NOT CONTINUE: halt automated mutation until the specific reserved authority is named and its durable surface cited (which yields DECISION REQUIRED), or the kind is corrected to a recognised non-boundary. It is NOT a manufactured human handoff."
+      return 2 ;;
   esac
-  echo "CONTINUE"
-  echo "reason: unrecognised stop kind '$kind' — name the exact reserved authority and its durable surface, or continue"
-  return 0
+  # An unrecognised kind (a typo or an undeclared kind) is not a classification:
+  # the classifier cannot evaluate it, so it must not report CONTINUE (#696).
+  echo "INVALID"
+  echo "reason: unrecognised stop kind '$kind' — the classifier cannot evaluate it. This is NOT CONTINUE and NOT a pass: halt automated mutation until a recognised kind is given. Boundary kinds: $XR_BOUNDARY_KINDS. Non-boundary kinds: $XR_NON_BOUNDARY_KINDS."
+  return 2
 }
 
 # cmd_crossroad <kind> [authority] [surface] — expose xr_stop_check on the CLI so
-# an agent can check itself before a human handoff. Exits 0 to continue, 3 at a
-# genuine Crossroad.
+# an agent can check itself before a human handoff. Exits 0 to CONTINUE, 3 at a
+# genuine DECISION REQUIRED Crossroad, 2 for INVALID input the classifier could
+# not evaluate (an incomplete boundary claim, an unrecognised kind, or a malformed
+# argument count).
 cmd_crossroad() {
   if [ "$#" -eq 0 ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
     echo "usage: spark crossroad <kind> [authority] [surface]"
-    echo "  boundary kinds (stop only when authority AND surface are named):"
+    echo "  boundary kinds (DECISION REQUIRED only when authority AND surface are"
+    echo "  named; INVALID if either is missing):"
     echo "    $XR_BOUNDARY_KINDS"
-    echo "  non-boundary kinds (always continue):"
+    echo "  non-boundary kinds (always CONTINUE):"
     echo "    $XR_NON_BOUNDARY_KINDS"
+    echo "  outcomes: CONTINUE (exit 0), DECISION REQUIRED (exit 3), INVALID (exit 2)."
+    echo "  INVALID = the input could not be classified (incomplete claim, unknown"
+    echo "  kind, or too many arguments); it halts automated mutation without"
+    echo "  manufacturing a human handoff."
     return 0
   fi
   local rc=0

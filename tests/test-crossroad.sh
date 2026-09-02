@@ -58,38 +58,59 @@ verdict "DECISION REQUIRED" 3 "a materially new product/governance semantic stop
 verdict "DECISION REQUIRED" 3 "a durable DECISION REQUIRED stops" \
   decision-required "milestone/priority placement" "#677 standing orchestration"
 
-# --- the load-bearing control: you must NAME the authority before stopping -----
-# A genuine boundary KIND with no named authority/surface must NOT manufacture a
-# stop — it continues. This is exactly the discipline #688 lacked.
-verdict CONTINUE 0 "an unnamed new-authority claim does not stop"       new-authority
-verdict CONTINUE 0 "a named authority without a cited surface does not stop" \
+# --- the load-bearing control: an INCOMPLETE or UNKNOWN input is INVALID -------
+# (#696) A genuine boundary KIND with no named authority/surface must NOT report
+# CONTINUE — that fail-open path let a machine caller run past a real boundary on
+# an omitted argument. It also must not manufacture DECISION REQUIRED. It is
+# INVALID (exit 2): halt until the claim is completed or the kind corrected.
+verdict INVALID 2 "an unnamed new-authority claim is invalid, not CONTINUE"   new-authority
+verdict INVALID 2 "a named authority without a cited surface is invalid" \
   new-authority "some authority"
+verdict INVALID 2 "a cited surface without a named authority is invalid" \
+  release-policy "" "#480 release gate"
 # Whitespace is not a name (#691 review): a blank or all-space authority/surface
-# must not pose as named and manufacture a stop.
-verdict CONTINUE 0 "all-whitespace authority AND surface do not stop" \
+# is an incomplete claim → INVALID, never a stop and never a pass.
+verdict INVALID 2 "all-whitespace authority AND surface are invalid" \
   new-authority " " "	"
-verdict CONTINUE 0 "a whitespace-only authority with a real surface does not stop" \
+verdict INVALID 2 "a whitespace-only authority with a real surface is invalid" \
   new-authority "   " "AGENTS.md guardrails"
-verdict CONTINUE 0 "a real authority with a whitespace-only surface does not stop" \
+verdict INVALID 2 "a real authority with a whitespace-only surface is invalid" \
   new-authority "a write-capable deploy key" "  "
-# An unrecognised reason never invents a Crossroad.
-verdict CONTINUE 0 "an unrecognised stop reason continues"              made-up-reason
-verdict CONTINUE 0 "an empty reason continues"                          ""
+# An unrecognised kind (a typo or an undeclared kind) cannot be classified → INVALID.
+verdict INVALID 2 "an unrecognised stop kind is invalid"                made-up-reason
+verdict INVALID 2 "a misspelled boundary kind is invalid, not CONTINUE" release_polcy
+verdict INVALID 2 "an empty kind is invalid"                            ""
+# A malformed argument count is invalid input, not a silent-ignore.
+verdict INVALID 2 "extra positional arguments are invalid"              activate-authorized a b c
+verdict INVALID 2 "extra args after a complete boundary are invalid" \
+  new-authority "a deploy key" "AGENTS.md" "surplus"
+
+# --- INVALID is distinct from CONTINUE and DECISION REQUIRED (#696) ------------
+# The verdict, the exit code, and the reason must let a machine consumer tell a
+# failed classification apart from a successful non-boundary CONTINUE.
+case "$(xr_stop_check destructive-external 2>&1)" in
+  *"NOT a pass and NOT CONTINUE"*"NOT a manufactured human handoff"*) ok ;;
+  *) bad "an incomplete boundary must say it is neither a pass, a CONTINUE, nor a handoff" ;;
+esac
+case "$(xr_stop_check made-up-reason 2>&1)" in
+  *"cannot evaluate it"*"NOT CONTINUE"*) ok ;;
+  *) bad "an unknown kind must say the classifier cannot evaluate it and it is not CONTINUE" ;;
+esac
 
 # --- the reason text names the discipline, so a reader can act on it ----------
 case "$(xr_stop_check activate-authorized)" in
   *"not an authority boundary"*) ok ;; *) bad "continue reason must explain why it is not a boundary" ;;
 esac
-# The unnamed-boundary reason names WHICH value is missing (#691 review), not a
+# The incomplete-boundary reason names WHICH value is missing (#691 review), not a
 # blanket "neither was given".
 case "$(xr_stop_check new-authority 2>&1)" in
-  *"needs a named authority and a cited surface"*) ok ;; *) bad "both-missing reason must say both are missing" ;;
+  *"missing a named authority and a cited surface"*) ok ;; *) bad "both-missing reason must say both are missing" ;;
 esac
 case "$(xr_stop_check new-authority "" "AGENTS.md" 2>&1)" in
-  *"needs a named authority,"*) ok ;; *) bad "authority-missing reason must name the authority" ;;
+  *"missing a named authority."*) ok ;; *) bad "authority-missing reason must name the authority" ;;
 esac
 case "$(xr_stop_check new-authority "a deploy key" "" 2>&1)" in
-  *"needs a cited surface,"*) ok ;; *) bad "surface-missing reason must name the surface" ;;
+  *"missing a cited surface."*) ok ;; *) bad "surface-missing reason must name the surface" ;;
 esac
 case "$(xr_stop_check new-authority "deploy key" "AGENTS.md" 2>&1)" in
   *"reserved to the human by AGENTS.md"*) ok ;; *) bad "a real stop must cite the reserving surface" ;;

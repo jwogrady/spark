@@ -144,6 +144,17 @@ continues the already-authorized close-out — a routine merge under standing
 authority, with exact-head protection — and a completed PR does not end the
 session: it flows into owning-issue reconciliation and the next executable work.
 
+But "continue" is only for a reason the classifier positively recognises as a
+non-boundary. A boundary claim it **cannot evaluate** — a recognised boundary
+kind with a missing or blank authority or surface, or an unrecognised kind (a
+typo, an undeclared kind) — is neither a stop nor a pass. Reporting `CONTINUE`
+there is fail-open: a machine consumer following the exit code could run past a
+destructive or release boundary because a field was omitted or misspelled. So the
+classifier has three outcomes, not two — `CONTINUE`, `DECISION REQUIRED`, and a
+distinct **`INVALID`** for input it could not classify. `INVALID` halts automated
+mutation until the claim is completed (which yields `DECISION REQUIRED`) or the
+kind corrected, without manufacturing a human handoff of its own.
+
 This governs only the human-handoff decision. It changes nothing about `UNKNOWN`
 / `NOT ASSESSED` never being a pass, stale-head protection, independent review,
 or CI — those stop work on their own evidence. `spark crossroad` encodes the
