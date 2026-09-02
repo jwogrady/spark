@@ -94,13 +94,15 @@ orl_evidence_truncated() { # <diff_state> <manifest_ok>
 # orl_manifest_complete <returned_count> <changed_files> — did the paginated
 # files endpoint return EVERY changed file? GitHub caps that endpoint at 3000
 # files, so a successful, non-empty response is not proof of completeness. The
-# manifest is complete only when the returned count is a number that reaches the
-# PR's trusted changed_files count; a short count, or any non-numeric input,
-# fails closed to incomplete (#693).
+# manifest is complete only when the returned record count EXACTLY matches the
+# PR's trusted changed_files count. Any mismatch — a short (silently capped)
+# count, an inflated one, or a non-numeric input — fails closed to incomplete.
+# The count must be taken from API records, never from rendered filenames, since
+# a newline in a filename would otherwise inflate a line count (#693).
 orl_manifest_complete() { # <returned_count> <changed_files>  -> 1 (complete) or 0
   case "$1" in ''|*[!0-9]*) printf '0'; return ;; esac
   case "$2" in ''|*[!0-9]*) printf '0'; return ;; esac
-  if [ "$1" -ge "$2" ]; then printf '1'; else printf '0'; fi
+  if [ "$1" -eq "$2" ]; then printf '1'; else printf '0'; fi
 }
 
 # orl_enforce_completeness <verdict> <complete_flag> — a PASS stands only on

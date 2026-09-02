@@ -163,6 +163,7 @@ mc() { [ "$(orl_manifest_complete "$2" "$3")" = "$1" ] && ok || bad "manifest_co
 mc 1 5 5        # every changed file returned → complete
 mc 0 3000 3500  # endpoint capped at 3000 of 3500 → incomplete, blocks PASS
 mc 0 4 5        # one file short → incomplete
+mc 0 6 5        # an inflated count (never legitimate) → mismatch, fail closed
 mc 0 "" 5       # unreadable returned count → fail closed
 mc 0 5 ""       # unknown changed_files → fail closed
 mc 0 x 5        # non-numeric count → fail closed
@@ -170,11 +171,26 @@ mc 0 x 5        # non-numeric count → fail closed
 [ "$(orl_enforce_completeness PASS "$(orl_evidence_truncated COMPLETE "$(orl_manifest_complete 3000 3500)")")" = "NOT ASSESSED" ] \
   && ok || bad "a capped manifest must not let a PASS stand"
 
+# The manifest count must come from API records, not rendered filenames: git
+# permits a newline in a filename, which would otherwise inflate a wc -l count
+# and make a capped manifest look complete. @json-escaping keeps one line per
+# record (and stops the same newline injecting a line into the prompt).
+if command -v jq >/dev/null 2>&1; then
+  rec='{"status":"modified","filename":"a\nb/c.md","additions":1,"deletions":0}'
+  two="$(printf '[%s,%s]' "$rec" "$rec" \
+    | jq -r '.[] | "\(.status)\t\(.filename|@json)\t+\(.additions)/-\(.deletions)"' | wc -l | tr -d ' ')"
+  [ "$two" = "2" ] && ok || bad "two newline-bearing records must count as 2 lines, got $two"
+  raw="$(printf '[%s,%s]' "$rec" "$rec" \
+    | jq -r '.[] | "\(.status)\t\(.filename)\t+\(.additions)/-\(.deletions)"' | wc -l | tr -d ' ')"
+  [ "$raw" -gt 2 ] && ok || bad "control: raw filename rendering must over-count (got $raw)"
+fi
+
 # Static workflow facts: completeness is detected, disclosed, and enforced.
 haswf "detects truncation with the tested helper"     'orl_is_truncated "\$orig_bytes" "\$budget"'
 haswf "fetches the changed-file manifest"             'pulls/\$PR/files'
 haswf "reads the trusted changed_files count"         'changed_files="\$\(gh api'
 haswf "checks the manifest against the cap"           'orl_manifest_complete "\$manifest_count" "\$changed_files"'
+haswf "counts manifest records newline-safely"        'filename\|@json'
 haswf "tracks the manifest-fetch outcome"             'manifest_ok=0'
 haswf "derives the evidence flag from both inputs"    'orl_evidence_truncated "\$diff_state" "\$manifest_ok"'
 haswf "discloses diff completeness to the model"      'DIFF COMPLETENESS'
