@@ -206,16 +206,24 @@ PY
   # producer proves nothing, and the publisher never checked it.
   case "$WFBODY" in *change.patch.sha256*) bad "the unused patch digest must be removed — it establishes no independent property" ;; *) ok ;; esac
 
-  # -- one production reviewer: no OTHER workflow reviews every PR automatically
-  autoreviewers=0
+  # -- one production reviewer (#584): exactly one workflow reviews every PR
+  # automatically, and it is the OpenAI reviewer lane. The claude coding lane
+  # (excluded — it wakes on issue_comment, not pull_request) is never a second
+  # reviewer, and no rogue third workflow may auto-review either.
+  autoreviewers=""
   for f in "$repo_root"/.github/workflows/*.yml; do
     [ -f "$f" ] || continue
     case "$(basename "$f")" in claude.yml) continue ;; esac
     if grep -qE '^\s+pull_request:' "$f" && grep -qiE 'review' "$f"; then
-      autoreviewers=$((autoreviewers + 1))
+      autoreviewers="${autoreviewers}$(basename "$f") "
     fi
   done
-  [ "$autoreviewers" -eq 0 ] && ok || bad "another workflow already reviews every PR automatically ($autoreviewers); #584 would be a second"
+  autoreviewers="$(printf '%s' "$autoreviewers" | xargs || true)"
+  case "$autoreviewers" in
+    "openai-review.yml") ok ;;
+    "") bad "no production automatic reviewer present — #584's openai-review.yml must be the one reviewer" ;;
+    *) bad "exactly one automatic PR reviewer is allowed (the #584 lane); found: $autoreviewers" ;;
+  esac
 else
   echo "  (python3 unavailable — static YAML assertions skipped)"
 fi

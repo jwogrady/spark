@@ -158,11 +158,14 @@ jobs:
           jq -n --arg m "gpt-5.6-sol" --rawfile i /tmp/rev/prompt.txt \
             '{model: $m, input: $i}' > /tmp/rev/req.json
 
-          code=$(curl -sS -o /tmp/rev/resp.json -w '%{http_code}' \
+          # Capture the HTTP code and wall time; the latency is #574 telemetry.
+          metrics=$(curl -sS -o /tmp/rev/resp.json -w '%{http_code} %{time_total}' \
             https://api.openai.com/v1/responses \
             -H "Authorization: Bearer $OPENAI_API_KEY" \
             -H "Content-Type: application/json" \
-            --data @/tmp/rev/req.json) || code=000
+            --data @/tmp/rev/req.json) || metrics="000 0"
+          code="${metrics%% *}"
+          printf '%s' "${metrics##* }" > /tmp/rev/latency.txt
 
           # Fail closed on any non-200: a reviewer that could not be reached did
           # not review, and that is not a pass.
@@ -212,9 +215,14 @@ jobs:
 
           # Advisory only: the required checks are doctor and tests. This lane
           # reports and stops; it must not become a second merge gate. Telemetry
-          # to the run summary (#574, where available).
+          # to the run summary (#574, where available): verdict, HEAD, model, the
+          # request wall time, and token usage when the provider reports it.
+          latency="$(cat /tmp/rev/latency.txt 2>/dev/null || echo n/a)"
+          tokens="$(jq -r '.usage.total_tokens // "n/a"' /tmp/rev/resp.json 2>/dev/null || echo n/a)"
           {
             echo "verdict=$verdict"
             echo "head=$HEAD_SHA"
             echo "model=gpt-5.6-sol"
+            echo "latency_s=$latency"
+            echo "total_tokens=$tokens"
           } >> "$GITHUB_STEP_SUMMARY"
