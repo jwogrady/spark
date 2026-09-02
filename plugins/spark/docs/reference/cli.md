@@ -574,9 +574,14 @@ are never authority.
 
 A boundary kind with no named authority or cited surface **continues**: you must
 be able to name the exact reserved authority, and point at the durable surface
-that reserves it, before you stop. This changes nothing about `UNKNOWN` / `NOT
-ASSESSED`, stale-head protection, review, or CI — those stop work on their own
-evidence; `crossroad` governs only the human-handoff decision.
+that reserves it, before you stop. The check is **structural** — it confirms a
+named authority and a cited surface, turning an unfalsifiable "it felt
+consequential" stop into a claim a human can check; it does not verify that the
+surface actually reserves the authority (that substance stays the agent's honest
+judgment and the human's to confirm), so the verdict reports the claim rather
+than asserting it. This changes nothing about `UNKNOWN` / `NOT ASSESSED`,
+stale-head protection, review, or CI — those stop work on their own evidence;
+`crossroad` governs only the human-handoff decision.
 
 ```
 $ spark crossroad activate-authorized

@@ -95,5 +95,18 @@ case "$(xr_stop_check new-authority "deploy key" "AGENTS.md" 2>&1)" in
   *"reserved to the human by AGENTS.md"*) ok ;; *) bad "a real stop must cite the reserving surface" ;;
 esac
 
+# --- design boundary (#691 review): STRUCTURAL, not semantic -----------------
+# The classifier requires a named authority AND a cited surface — turning an
+# unfalsifiable "it felt consequential" stop into a claim a human can check. It
+# cannot verify that the surface reserves the authority (no such mechanical
+# oracle exists), so a structurally complete but arbitrary claim still stops, and
+# the verdict presents it as a CLAIM to confirm — never an asserted verified fact.
+verdict "DECISION REQUIRED" 3 "a structurally complete claim stops; substance is human-checked" \
+  new-authority "an arbitrary named authority" "an arbitrary cited surface"
+case "$(xr_stop_check new-authority "x" "y" 2>&1)" in
+  *"cited as reserved"*"confirm the citation holds"*) ok ;;
+  *) bad "the stop verdict must present the surface as a claim to confirm, not verified fact" ;;
+esac
+
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

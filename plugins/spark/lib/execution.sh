@@ -1861,8 +1861,15 @@ xr_stop_check() {
       case "$authority" in *[![:space:]]*) a_named=1 ;; esac
       case "$surface"   in *[![:space:]]*) s_named=1 ;; esac
       if [ "$a_named" = 1 ] && [ "$s_named" = 1 ]; then
+        # STRUCTURAL, not semantic. This confirms the stop carries a named
+        # authority and a cited surface — turning an unfalsifiable "it felt
+        # consequential" stop into a claim a human can check. It does NOT (and a
+        # pure classifier cannot) verify that the cited surface actually reserves
+        # the authority; that substance is the agent's honest judgment and the
+        # human's to confirm. So the verdict reports the claim, it does not
+        # assert it as verified fact.
         echo "DECISION REQUIRED"
-        echo "missing authority: $authority — reserved to the human by $surface (kind: $kind)"
+        echo "claimed authority: $authority — cited as reserved to the human by $surface (kind: $kind); confirm the citation holds before stopping"
         return 3
       fi
       local lack
