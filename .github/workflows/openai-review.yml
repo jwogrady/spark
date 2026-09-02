@@ -288,9 +288,10 @@ jobs:
           done
           [ -s /tmp/rev/issue.txt ] || echo "(no closing issue reference found in the PR body)" > /tmp/rev/issue.txt
 
-          gh api --paginate "repos/$REPO/commits/$HEAD_SHA/check-runs?per_page=100" \
-            --jq '.check_runs[] | "\(.name): \(.status)/\(.conclusion // "pending")"' \
-            > /tmp/rev/checks.txt 2>/dev/null || echo "(checks unavailable)" > /tmp/rev/checks.txt
+          # NOTE: the check-run snapshot is NOT fetched here. The Ask step re-fetches
+          # it immediately before invocation (the TOCTOU re-validation) and the model
+          # payload is assembled AFTER that fetch, so the request always carries the
+          # single, coherent, revalidated terminal snapshot — never a stale one (#692).
 
           gh api --paginate "repos/$REPO/issues/$PR/comments?per_page=100" \
             --jq '.[] | "\(.user.login): \(.body)"' > /tmp/rev/comments-all.txt 2>/dev/null || : > /tmp/rev/comments-all.txt
@@ -364,6 +365,8 @@ jobs:
           {
             echo "=== UNTRUSTED ISSUE CONTRACT DATA ==="; cat /tmp/rev/issue.txt
             echo; echo "=== UNTRUSTED PULL REQUEST DATA ==="; cat /tmp/rev/pr.txt
+            # checks.txt here is the revalidated pre-invocation snapshot fetched above
+            # in THIS step, so the payload and the terminality decision are coherent.
             echo; echo "=== CHECK DATA FOR EXACT HEAD ==="; cat /tmp/rev/checks.txt
             echo; echo "=== TRUSTED-BASE SPARK DOCTOR EVIDENCE ==="; cat /tmp/rev/doctor.txt
             echo; echo "=== TRUSTED-BASE SPARK GOVERNANCE EVIDENCE ==="; cat /tmp/rev/gov.txt

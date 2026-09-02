@@ -484,6 +484,27 @@ haswf "records the paid call as consumed before making it" 'orl_invoked "\$PR" "
 haswf "re-validates terminal checks immediately before the call" '! orl_checks_terminal \$required'
 haswf "a re-run to pending before the call defers"    'defer=true'
 haswf "does not finalize a deferred review"           'steps.ask.outputs.defer !='
+# The model payload must carry the RE-VALIDATED pre-invocation check snapshot, not a
+# stale one (#692): in the Ask step the checks re-fetch precedes the input.txt
+# assembly, and there is NO redundant check-run fetch in the Gather step, so no
+# stale "first snapshot" exists to leak into the request.
+ask_ln="$(grep -n 'name: Ask the reviewer' "$wf" | head -1 | cut -d: -f1)"
+gather_ln="$(grep -n 'name: Gather untrusted' "$wf" | head -1 | cut -d: -f1)"
+refetch_ln="$(awk -v s="$ask_ln" 'NR>s && /> \/tmp\/rev\/checks.txt/ {print NR; exit}' "$wf")"
+input_ln="$(awk -v s="$ask_ln" 'NR>s && /> \/tmp\/rev\/input.txt/ {print NR; exit}' "$wf")"
+{ [ -n "$refetch_ln" ] && [ -n "$input_ln" ] && [ "$refetch_ln" -lt "$input_ln" ]; } \
+  && ok || bad "Ask must re-fetch checks BEFORE assembling input.txt (payload must be the revalidated snapshot)"
+gather_fetch="$(awk -v s="$gather_ln" -v e="$ask_ln" 'NR>s && NR<e && /> \/tmp\/rev\/checks.txt/ {print NR; exit}' "$wf")"
+[ -z "$gather_fetch" ] && ok || bad "the gather step must not redundantly fetch checks (single revalidated source in Ask)"
+# Behavioral: assembling input AFTER the re-fetch carries the revalidated snapshot,
+# never the earlier one — models the initial≠pre-invocation snapshot case.
+sd="$(mktemp -d)"
+printf 'gate: in_progress/pending\n' > "$sd/checks.txt"          # a stale earlier snapshot
+printf 'docs-truth: completed/success\ndoctor: completed/success\ngate: completed/success\ntests: completed/success\n' > "$sd/checks.txt"  # the re-fetch overwrites it
+{ echo "=== CHECK DATA FOR EXACT HEAD ==="; cat "$sd/checks.txt"; } > "$sd/input.txt"   # input assembled AFTER
+grep -q 'gate: completed/success' "$sd/input.txt" && ok || bad "the payload must contain the revalidated snapshot"
+grep -q 'gate: in_progress/pending' "$sd/input.txt" && bad "the payload must NOT contain the stale snapshot" || ok
+rm -rf "$sd"
 haswf "finalizes even if the ask step errored (fail closed)" '!cancelled\(\)'
 haswf "a scheduled sweep recovers stranded reservations" "cron: '17,47"
 haswf "recovery decides disposition with the tested helper" 'orl_needs_recovery'
