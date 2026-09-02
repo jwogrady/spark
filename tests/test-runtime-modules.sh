@@ -198,7 +198,7 @@ else bad "the nested-recording guard must exist"; fi
 # paying for every module is the coupling this was meant to remove, wearing new
 # filenames. With modules absent, a core verb must then fail; if it still runs,
 # this suite is not actually proving on-demand loading.
-mutant_runtime "s#telemetry|budget|evidence|route|ci) printf 'execution' ;;#*) printf 'execution' ;;#"
+mutant_runtime "s#telemetry|budget|evidence|route|ci|crossroad) printf 'execution' ;;#*) printf 'execution' ;;#"
 MUT="$MUTANT_PATH"
 if [ "$MUTANT_CHANGED" = "1" ]; then ok
 else bad "MUTATION control changed nothing — it proves nothing"; fi
