@@ -81,6 +81,16 @@ orl_is_truncated() { # <orig_bytes> <budget>
   [ "$1" -gt "$2" ]
 }
 
+# orl_evidence_truncated <diff_state> <manifest_ok> — is the review evidence
+# incomplete? The reviewer has seen the whole change only when the diff content
+# is COMPLETE *and* the changed-file manifest was fetched. A non-complete diff
+# (TRUNCATED or UNAVAILABLE) or an unavailable manifest leaves part of the change
+# unseen, so it blocks PASS. Prints the flag consumed as the <truncated> argument
+# of orl_enforce_completeness: 1 (incomplete → downgrade a PASS) or 0 (#693).
+orl_evidence_truncated() { # <diff_state> <manifest_ok>
+  if [ "$1" = "COMPLETE" ] && [ "$2" = "1" ]; then printf '0'; else printf '1'; fi
+}
+
 # orl_enforce_completeness <verdict> <truncated> — a PASS on a TRUNCATED diff is
 # not a pass. The reviewer never saw the whole change, so a prefix-only PASS is
 # downgraded to NOT ASSESSED. Any other verdict — a real defect found, a decision

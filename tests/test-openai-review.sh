@@ -138,14 +138,30 @@ if orl_is_truncated "$late_blocker_orig" 200000; then
   [ "$(orl_enforce_completeness PASS 1)" = "NOT ASSESSED" ] && ok || bad "a late blocker must not be able to PASS"
 else bad "a diff with a late blocker past the bound must be truncated"; fi
 
-# Static workflow facts: truncation is detected, disclosed, and enforced.
+# Evidence completeness (#693): PASS needs a COMPLETE diff AND a fetched manifest.
+et() { [ "$(orl_evidence_truncated "$2" "$3")" = "$1" ] && ok || bad "evidence_truncated $2/$3 — want $1"; }
+et 0 COMPLETE 1     # whole diff seen and manifest present → complete, PASS allowed
+et 1 COMPLETE 0     # manifest fetch failed → incomplete, blocks PASS
+et 1 TRUNCATED 1    # diff cut → incomplete even with a manifest
+et 1 UNAVAILABLE 1  # diff unfetchable → incomplete
+et 1 TRUNCATED 0    # both gaps → incomplete
+# End to end: a manifest-fetch failure on an otherwise complete diff downgrades PASS.
+[ "$(orl_enforce_completeness PASS "$(orl_evidence_truncated COMPLETE 0)")" = "NOT ASSESSED" ] \
+  && ok || bad "a model PASS with an unavailable manifest must become NOT ASSESSED"
+# And a genuinely complete diff + manifest lets a PASS stand.
+[ "$(orl_enforce_completeness PASS "$(orl_evidence_truncated COMPLETE 1)")" = "PASS" ] \
+  && ok || bad "a model PASS on complete evidence must stand"
+
+# Static workflow facts: completeness is detected, disclosed, and enforced.
 haswf "detects truncation with the tested helper"     'orl_is_truncated "\$orig_bytes" "\$budget"'
-haswf "fetches the complete changed-file manifest"    'pulls/\$PR/files'
+haswf "fetches the changed-file manifest"             'pulls/\$PR/files'
+haswf "tracks the manifest-fetch outcome"             'manifest_ok=0'
+haswf "derives the evidence flag from both inputs"    'orl_evidence_truncated "\$diff_state" "\$manifest_ok"'
 haswf "discloses diff completeness to the model"      'DIFF COMPLETENESS'
+haswf "always supplies the manifest as untrusted data" 'UNTRUSTED CHANGED-FILE MANIFEST'
 haswf "enforces completeness on the verdict"          'orl_enforce_completeness "\$model_verdict"'
 haswf_not "no silent head -c bound without detection" 'head -c 200000 /tmp/rev/diff.txt'
-# A refused/unfetchable diff is treated as truncated, never disclosed as COMPLETE.
-haswf "an unfetched diff forces the truncated branch"  '\[ "\$diff_ok" = "0" \] \|\| orl_is_truncated'
+# A refused/unfetchable diff is disclosed honestly, never as COMPLETE.
 haswf "discloses an unavailable diff honestly"         'DIFF UNAVAILABLE'
 haswf "an unreadable completeness flag fails closed"   'cat /tmp/rev/truncated 2>/dev/null \|\| echo 1'
 

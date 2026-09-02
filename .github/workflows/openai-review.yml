@@ -104,28 +104,43 @@ jobs:
           fi
           orig_bytes="$(wc -c < /tmp/rev/diff.raw | tr -d ' ')"
           budget=200000
-          # Every changed filename is represented even when hunks are omitted.
-          gh api --paginate "repos/$REPO/pulls/$PR/files?per_page=100" \
-            --jq '.[] | "\(.status)\t\(.filename)\t+\(.additions)/-\(.deletions)"' \
-            > /tmp/rev/files.txt 2>/dev/null || echo "(file manifest unavailable)" > /tmp/rev/files.txt
-          if [ "$diff_ok" = "0" ] || orl_is_truncated "$orig_bytes" "$budget"; then
-            printf '1' > /tmp/rev/truncated
-            head -c "$budget" /tmp/rev/diff.raw > /tmp/rev/diff.txt
-            {
-              if [ "$diff_ok" = "0" ]; then
-                echo "DIFF UNAVAILABLE: the exact-HEAD diff could not be fetched; NO diff content is present."
-                echo "An unfetchable diff can never be PASS. Every changed file is in the manifest below; no hunks were shown."
-              else
-                printf 'DIFF TRUNCATED: showing %s of %s bytes; hunks beyond the bound are OMITTED.\n' "$budget" "$orig_bytes"
-                echo "An incomplete diff can never be PASS. Every changed file is in the manifest; hunks for content past the boundary were not shown."
-              fi
-              echo "--- CHANGED FILE MANIFEST (complete) ---"; cat /tmp/rev/files.txt
-            } > /tmp/rev/completeness.txt
+
+          # The changed-file manifest is ALWAYS supplied to the reviewer (as
+          # untrusted PR data — filenames are attacker-controlled). Track the
+          # fetch so an unavailable manifest is never disclosed as complete and,
+          # like an incomplete diff, blocks PASS (#693).
+          if gh api --paginate "repos/$REPO/pulls/$PR/files?per_page=100" \
+               --jq '.[] | "\(.status)\t\(.filename)\t+\(.additions)/-\(.deletions)"' \
+               > /tmp/rev/files.txt 2>/dev/null && [ -s /tmp/rev/files.txt ]; then
+            manifest_ok=1; manifest_state="complete"
           else
-            printf '0' > /tmp/rev/truncated
-            cp /tmp/rev/diff.raw /tmp/rev/diff.txt
-            printf 'DIFF COMPLETE: the full exact-HEAD diff is present (%s bytes).\n' "$orig_bytes" > /tmp/rev/completeness.txt
+            manifest_ok=0; manifest_state="UNAVAILABLE"
+            echo "(file manifest unavailable)" > /tmp/rev/files.txt
           fi
+
+          # Diff content for the request: the full diff when fetched and within
+          # budget, else the bounded prefix (a sentinel when unfetchable).
+          if [ "$diff_ok" = "1" ] && ! orl_is_truncated "$orig_bytes" "$budget"; then
+            cp /tmp/rev/diff.raw /tmp/rev/diff.txt
+            diff_state="COMPLETE"
+          else
+            head -c "$budget" /tmp/rev/diff.raw > /tmp/rev/diff.txt
+            [ "$diff_ok" = "0" ] && diff_state="UNAVAILABLE" || diff_state="TRUNCATED"
+          fi
+
+          # PASS is permitted only when the diff content AND the manifest are both
+          # complete; any gap blocks it. completeness.txt carries ONLY this
+          # machine-generated status — no attacker-controlled filenames — so it can
+          # be labelled trusted; the manifest is emitted separately as untrusted.
+          orl_evidence_truncated "$diff_state" "$manifest_ok" > /tmp/rev/truncated
+          {
+            case "$diff_state" in
+              COMPLETE)    printf 'DIFF COMPLETE: the full exact-HEAD diff is present (%s bytes).\n' "$orig_bytes" ;;
+              TRUNCATED)   printf 'DIFF TRUNCATED: showing %s of %s bytes; hunks beyond the bound are OMITTED. An incomplete diff can never be PASS.\n' "$budget" "$orig_bytes" ;;
+              UNAVAILABLE) echo "DIFF UNAVAILABLE: the exact-HEAD diff could not be fetched; NO diff content is present. An unfetchable diff can never be PASS." ;;
+            esac
+            printf 'CHANGED FILE MANIFEST: %s (file list follows in the untrusted manifest section). An unavailable manifest also blocks PASS.\n' "$manifest_state"
+          } > /tmp/rev/completeness.txt
 
           gh api "repos/$REPO/pulls/$PR" --jq '"TITLE: \(.title)\n\nBODY:\n\(.body // "")"' \
             > /tmp/rev/pr.txt 2>/dev/null || echo "(pr unavailable)" > /tmp/rev/pr.txt
@@ -193,7 +208,8 @@ jobs:
             echo; echo "=== TRUSTED-BASE SPARK DOCTOR EVIDENCE ==="; cat /tmp/rev/doctor.txt
             echo; echo "=== TRUSTED-BASE SPARK GOVERNANCE EVIDENCE ==="; cat /tmp/rev/gov.txt
             echo; echo "=== UNTRUSTED EXISTING COMMENT DATA ==="; cat /tmp/rev/comments.txt
-            echo; echo "=== DIFF COMPLETENESS (trusted) ==="; cat /tmp/rev/completeness.txt
+            echo; echo "=== DIFF COMPLETENESS STATUS (trusted, machine-generated) ==="; cat /tmp/rev/completeness.txt
+            echo; echo "=== UNTRUSTED CHANGED-FILE MANIFEST (PR-controlled filenames) ==="; cat /tmp/rev/files.txt
             echo; echo "=== UNTRUSTED PR DIFF DATA ==="; cat /tmp/rev/diff.txt
           } > /tmp/rev/input.txt
 
@@ -241,7 +257,7 @@ jobs:
           verdict="$(orl_enforce_completeness "$model_verdict" "$truncated")"
           if [ "$verdict" != "$model_verdict" ]; then
             {
-              printf 'NOT ASSESSED\n\nThe reviewer returned %s, but the exact-HEAD diff was incomplete (it exceeded the review budget and was truncated, or could not be fetched), so the whole change was not seen. A prefix-only pass is not a pass. The changed-file manifest is complete; a full review needs the complete diff.\n' "$model_verdict"
+              printf 'NOT ASSESSED\n\nThe reviewer returned %s, but the review evidence was incomplete: the exact-HEAD diff exceeded the budget and was truncated or could not be fetched, and/or the changed-file manifest was unavailable, so the whole change was not seen. A pass on incomplete evidence is not a pass; a full review needs the complete diff and manifest on this exact HEAD.\n' "$model_verdict"
             } > /tmp/rev/verdict.md
           fi
           {
