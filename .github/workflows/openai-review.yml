@@ -491,16 +491,20 @@ jobs:
             jq -r '.[] | [.user.login, (.performed_via_github_app.slug // ""), .body] | @tsv' \
               /tmp/c.json > /tmp/c.tsv
             orl_needs_recovery "$pr" "$head" < /tmp/c.tsv || continue
-            # Locate the reservation comment (id + created_at) for this exact head.
+            # Locate the reservation comment (id + updated_at) for this exact head.
+            # Grace is measured from updated_at — the invoked-marker PATCH sets it, so
+            # it is the INVOCATION time, not the (possibly much older, slow-CI)
+            # reservation time. This keeps recovery from racing a model call that only
+            # just started on a HEAD whose CI ran long (#692).
             needle="<!-- $ORL_RESERVATION_TAG pr=$pr head=$head -->"
             row="$(jq -r --arg l "$ORL_TRUSTED_LOGIN" --arg a "$ORL_TRUSTED_APP" --arg n "$needle" \
-              '[.[] | select(.user.login==$l) | select((.performed_via_github_app.slug // "")==$a) | select(.body|contains($n)) | "\(.id)\t\(.created_at)"] | (.[0] // "")' \
+              '[.[] | select(.user.login==$l) | select((.performed_via_github_app.slug // "")==$a) | select(.body|contains($n)) | "\(.id)\t\(.updated_at)"] | (.[0] // "")' \
               /tmp/c.json)"
             [ -n "$row" ] || continue
-            cid="${row%%"$tab"*}"; created="${row#*"$tab"}"
-            created_epoch="$(date -d "$created" +%s 2>/dev/null || echo 0)"
-            [ "$created_epoch" -gt 0 ] || continue
-            [ $(( now - created_epoch )) -ge "$grace" ] || continue
+            cid="${row%%"$tab"*}"; updated="${row#*"$tab"}"
+            updated_epoch="$(date -d "$updated" +%s 2>/dev/null || echo 0)"
+            [ "$updated_epoch" -gt 0 ] || continue
+            [ $(( now - updated_epoch )) -ge "$grace" ] || continue
             # Fail-closed terminal disposition, no model call.
             note="The reviewer consumed its model call for this exact HEAD but the run ended before finalizing a verdict, so a scheduled recovery recorded NOT ASSESSED without invoking the model again. This is not a pass; push a new commit or re-request review."
             body="$(printf '%s\n\n%s' "$(orl_marker 'NOT ASSESSED' "$pr" "$head")" "$note")"
