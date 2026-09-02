@@ -1,0 +1,220 @@
+# The independent OpenAI reviewer lane (#584) — the single production automatic
+# reviewer for the autonomous loop.
+#
+# Non-coding by construction: `contents: read`, checkout carries no writable
+# credential, and nothing in this job can edit, push or merge. It reads the
+# change and posts exactly one structured verdict per PR HEAD.
+#
+# The verdict vocabulary is Spark's, not a star rating:
+#
+#   PASS               nothing blocking; READY FOR HUMAN MERGE (not merge authority)
+#   CHANGES REQUIRED   a concrete defect the author can fix (hands to the @claude lane)
+#   DECISION REQUIRED  a project judgment only the human may make — the reviewer
+#                      must NOT choose one, and is not satisfied by an agent choosing
+#   NOT ASSESSED       the reviewer could not read enough to judge; never a pass
+#
+# UNARMED until a human adds the OPENAI_API_KEY secret: without it every run
+# fails closed to NOT ASSESSED. See docs/ops/openai-reviewer-lane.md.
+name: OpenAI Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+# One review at a time per PR, and a new push cancels the in-flight review of an
+# older HEAD — so a stale review for a superseded HEAD never completes or posts,
+# and cannot drive a later repair.
+concurrency:
+  group: openai-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  openai-review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read         # NEVER write: this lane does not code
+      pull-requests: write   # post the verdict comment
+      issues: read
+      checks: read
+      actions: read
+    steps:
+      - name: Checkout repository (read-only, no persisted credential)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # One verdict per HEAD. If this exact HEAD was already reviewed, do nothing
+      # more — the expensive evidence + model steps are skipped. A synchronize
+      # push carries a new HEAD SHA, so it is never mistaken for a reviewed one.
+      - name: Skip if this HEAD was already reviewed
+        id: guard
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -uo pipefail
+          . .github/scripts/openai-review/lib.sh
+          bodies="$(gh api "repos/$REPO/issues/$PR/comments" --jq '.[].body' 2>/dev/null || true)"
+          if printf '%s' "$bodies" | orl_reviewed_head "$HEAD_SHA"; then
+            echo "already=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "already=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Gather review evidence
+        if: steps.guard.outputs.already != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -uo pipefail
+          . .github/scripts/openai-review/lib.sh
+          mkdir -p /tmp/rev
+
+          # The diff, bounded so a large PR cannot blow the request budget.
+          gh api "repos/$REPO/pulls/$PR" -H "Accept: application/vnd.github.v3.diff" \
+            > /tmp/rev/diff.txt 2>/dev/null || echo "(diff unavailable)" > /tmp/rev/diff.txt
+          head -c 200000 /tmp/rev/diff.txt > /tmp/rev/diff.trim && mv /tmp/rev/diff.trim /tmp/rev/diff.txt
+
+          gh api "repos/$REPO/pulls/$PR" --jq '"TITLE: \(.title)\n\nBODY:\n\(.body // "")"' \
+            > /tmp/rev/pr.txt 2>/dev/null || echo "(pr unavailable)" > /tmp/rev/pr.txt
+
+          # The issue contract, when the PR names one it closes — the canonical
+          # producer picks the closing references out of the PR body.
+          : > /tmp/rev/issue.txt
+          for n in $(orl_closing_issues < /tmp/rev/pr.txt); do
+            gh api "repos/$REPO/issues/$n" \
+              --jq '"ISSUE #\(.number): \(.title)\nLABELS: \([.labels[].name]|join(","))\nMILESTONE: \(.milestone.title // "none")\n\n\(.body // "")"' \
+              >> /tmp/rev/issue.txt 2>/dev/null || true
+          done
+          [ -s /tmp/rev/issue.txt ] || echo "(no closing issue reference found in the PR body)" > /tmp/rev/issue.txt
+
+          # Check results for THIS head, and existing conversation so the
+          # reviewer does not repeat a point already made.
+          gh api "repos/$REPO/commits/$HEAD_SHA/check-runs" \
+            --jq '.check_runs[] | "\(.name): \(.status)/\(.conclusion // "pending")"' \
+            > /tmp/rev/checks.txt 2>/dev/null || echo "(checks unavailable)" > /tmp/rev/checks.txt
+          gh api "repos/$REPO/issues/$PR/comments" --jq '.[] | "\(.user.login): \(.body)"' \
+            > /tmp/rev/comments.txt 2>/dev/null || : > /tmp/rev/comments.txt
+          head -c 40000 /tmp/rev/comments.txt > /tmp/rev/c.trim && mv /tmp/rev/c.trim /tmp/rev/comments.txt
+
+          # Spark's own deterministic output, best effort. A failure here is
+          # evidence the reviewer should see, not a reason to abort the job.
+          ./plugins/spark/bin/spark doctor > /tmp/rev/doctor.txt 2>&1 || true
+          ./plugins/spark/bin/spark governance validate --tsv > /tmp/rev/gov.txt 2>&1 || true
+          tail -c 20000 /tmp/rev/gov.txt > /tmp/rev/g.trim && mv /tmp/rev/g.trim /tmp/rev/gov.txt
+
+      - name: Ask the reviewer
+        id: ask
+        if: steps.guard.outputs.already != 'true'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          set -uo pipefail
+          # Fail closed: no key, no review. An unread surface is never a pass.
+          if [ -z "${OPENAI_API_KEY:-}" ]; then
+            printf 'NOT ASSESSED\n\nOPENAI_API_KEY is not available to this run, so no review was performed. An unread surface is not a pass.\n' > /tmp/rev/verdict.md
+            exit 0
+          fi
+
+          {
+            echo "You are an independent reviewer on a pull request. Answer with a"
+            echo "verdict on the FIRST line, exactly one of:"
+            echo "PASS | CHANGES REQUIRED | DECISION REQUIRED | NOT ASSESSED"
+            echo
+            echo "Then a short rationale, then specific findings with file:line where"
+            echo "you can give them."
+            echo
+            echo "Rules that bind you:"
+            echo "- DECISION REQUIRED means a project judgment only the human may make"
+            echo "  (priority, milestone, backlog disposition, release direction, product"
+            echo "  direction). You may state the admissible options and your reasoning."
+            echo "  You may NOT choose one, and a choice made by any agent does not"
+            echo "  satisfy it."
+            echo "- NOT ASSESSED means you could not read enough to judge. It is never a"
+            echo "  pass, and an unread surface is never a negative finding."
+            echo "- CHANGES REQUIRED means a concrete defect the author can fix. Say what"
+            echo "  is wrong and why it is wrong, not merely what you would prefer."
+            echo "- PASS means nothing blocking. It reads as READY FOR HUMAN MERGE."
+            echo "- Do not ask for a milestone, priority or disposition to be assigned."
+            echo "- Do not approve or merge; you cannot, and you should not imply it."
+            echo
+            echo "=== ISSUE CONTRACT ==="; cat /tmp/rev/issue.txt
+            echo; echo "=== PULL REQUEST ==="; cat /tmp/rev/pr.txt
+            echo; echo "=== CHECKS ==="; cat /tmp/rev/checks.txt
+            echo; echo "=== SPARK DOCTOR ==="; cat /tmp/rev/doctor.txt
+            echo; echo "=== SPARK GOVERNANCE (tsv) ==="; cat /tmp/rev/gov.txt
+            echo; echo "=== EXISTING COMMENTS ==="; cat /tmp/rev/comments.txt
+            echo; echo "=== DIFF ==="; cat /tmp/rev/diff.txt
+          } > /tmp/rev/prompt.txt
+
+          jq -n --arg m "gpt-5.6-sol" --rawfile i /tmp/rev/prompt.txt \
+            '{model: $m, input: $i}' > /tmp/rev/req.json
+
+          code=$(curl -sS -o /tmp/rev/resp.json -w '%{http_code}' \
+            https://api.openai.com/v1/responses \
+            -H "Authorization: Bearer $OPENAI_API_KEY" \
+            -H "Content-Type: application/json" \
+            --data @/tmp/rev/req.json) || code=000
+
+          # Fail closed on any non-200: a reviewer that could not be reached did
+          # not review, and that is not a pass.
+          if [ "$code" != "200" ]; then
+            {
+              printf 'NOT ASSESSED\n\nThe reviewer could not be reached (HTTP %s), so this change was not reviewed. That is not a pass.\n\n' "$code"
+              echo '```'; head -c 1200 /tmp/rev/resp.json 2>/dev/null; echo; echo '```'
+            } > /tmp/rev/verdict.md
+            exit 0
+          fi
+
+          jq -r '.output_text // ([.output[]?.content[]?.text] | map(select(. != null)) | join("\n")) // ""' \
+            /tmp/rev/resp.json > /tmp/rev/verdict.md 2>/dev/null || : > /tmp/rev/verdict.md
+          if [ ! -s /tmp/rev/verdict.md ]; then
+            printf 'NOT ASSESSED\n\nThe reviewer returned no readable text, so this change was not reviewed.\n' > /tmp/rev/verdict.md
+          fi
+
+      - name: Post the review
+        if: steps.guard.outputs.already != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -uo pipefail
+          . .github/scripts/openai-review/lib.sh
+
+          verdict="$(head -1 /tmp/rev/verdict.md | orl_normalize_verdict)"
+
+          {
+            # Machine-readable evidence for #585, bound to the exact PR + HEAD.
+            orl_marker "$verdict" "$PR" "$HEAD_SHA"; echo
+            echo "## Reviewer verdict: $verdict"
+            echo
+            orl_route "$verdict"
+            echo
+            echo "---"
+            echo
+            cat /tmp/rev/verdict.md
+            echo
+            echo "---"
+            echo "_Independent reviewer for HEAD \`$HEAD_SHA\`. It cannot edit code, push, merge, or assign a milestone, priority or disposition._"
+          } > /tmp/rev/body.md
+
+          gh pr comment "$PR" --repo "$REPO" --body-file /tmp/rev/body.md || true
+
+          # Advisory only: the required checks are doctor and tests. This lane
+          # reports and stops; it must not become a second merge gate. Telemetry
+          # to the run summary (#574, where available).
+          {
+            echo "verdict=$verdict"
+            echo "head=$HEAD_SHA"
+            echo "model=gpt-5.6-sol"
+          } >> "$GITHUB_STEP_SUMMARY"
