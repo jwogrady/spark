@@ -91,13 +91,27 @@ orl_evidence_truncated() { # <diff_state> <manifest_ok>
   if [ "$1" = "COMPLETE" ] && [ "$2" = "1" ]; then printf '0'; else printf '1'; fi
 }
 
-# orl_enforce_completeness <verdict> <truncated> — a PASS on a TRUNCATED diff is
-# not a pass. The reviewer never saw the whole change, so a prefix-only PASS is
-# downgraded to NOT ASSESSED. Any other verdict — a real defect found, a decision
-# owed, or an already-NOT ASSESSED — is returned unchanged. This is the mechanical
-# guarantee that a blocker beyond the diff bound can never yield PASS (#693).
-orl_enforce_completeness() { # <verdict> <truncated>
-  if [ "${2:-0}" = "1" ] && [ "$1" = "PASS" ]; then
+# orl_manifest_complete <returned_count> <changed_files> — did the paginated
+# files endpoint return EVERY changed file? GitHub caps that endpoint at 3000
+# files, so a successful, non-empty response is not proof of completeness. The
+# manifest is complete only when the returned count is a number that reaches the
+# PR's trusted changed_files count; a short count, or any non-numeric input,
+# fails closed to incomplete (#693).
+orl_manifest_complete() { # <returned_count> <changed_files>  -> 1 (complete) or 0
+  case "$1" in ''|*[!0-9]*) printf '0'; return ;; esac
+  case "$2" in ''|*[!0-9]*) printf '0'; return ;; esac
+  if [ "$1" -ge "$2" ]; then printf '1'; else printf '0'; fi
+}
+
+# orl_enforce_completeness <verdict> <complete_flag> — a PASS stands only on
+# COMPLETE evidence. The flag is "0" when the reviewer saw the whole change and
+# "1" (or anything else) otherwise. Fail closed: a PASS survives only when the
+# flag is EXACTLY "0"; a "1", an empty value, or any malformed flag downgrades it
+# to NOT ASSESSED. Every non-PASS verdict — a real defect, a decision owed, an
+# already-NOT ASSESSED — is returned unchanged. This is the mechanical guarantee
+# that incomplete evidence can never yield PASS (#693).
+orl_enforce_completeness() { # <verdict> <complete_flag>
+  if [ "$1" = "PASS" ] && [ "${2:-}" != "0" ]; then
     printf 'NOT ASSESSED'
   else
     printf '%s' "$1"

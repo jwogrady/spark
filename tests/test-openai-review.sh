@@ -130,6 +130,11 @@ orl_is_truncated abc 200000 && ok || bad "a non-numeric size must fail closed to
 [ "$(orl_enforce_completeness "CHANGES REQUIRED" 1)" = "CHANGES REQUIRED" ] && ok || bad "CHANGES REQUIRED must survive truncation"
 [ "$(orl_enforce_completeness "DECISION REQUIRED" 1)" = "DECISION REQUIRED" ] && ok || bad "DECISION REQUIRED must survive truncation"
 [ "$(orl_enforce_completeness "NOT ASSESSED" 1)" = "NOT ASSESSED" ] && ok || bad "NOT ASSESSED stays NOT ASSESSED"
+# Fail closed: only an EXACT "0" completeness flag lets a PASS stand. An empty or
+# malformed flag must downgrade a PASS, never permit it.
+[ "$(orl_enforce_completeness PASS "")" = "NOT ASSESSED" ] && ok || bad "PASS with an empty flag must fail closed"
+[ "$(orl_enforce_completeness PASS 2)" = "NOT ASSESSED" ] && ok || bad "PASS with a malformed flag (2) must fail closed"
+[ "$(orl_enforce_completeness PASS x)" = "NOT ASSESSED" ] && ok || bad "PASS with a non-numeric flag must fail closed"
 
 # The acceptance scenario: a blocker after the 200000-byte boundary. The diff is
 # over budget (truncated=1), so even a model PASS cannot publish PASS.
@@ -152,9 +157,24 @@ et 1 TRUNCATED 0    # both gaps → incomplete
 [ "$(orl_enforce_completeness PASS "$(orl_evidence_truncated COMPLETE 1)")" = "PASS" ] \
   && ok || bad "a model PASS on complete evidence must stand"
 
+# Manifest completeness (#693): the files endpoint caps at 3000, so a returned
+# count short of the PR's changed_files is a silently capped, incomplete manifest.
+mc() { [ "$(orl_manifest_complete "$2" "$3")" = "$1" ] && ok || bad "manifest_complete $2/$3 — want $1"; }
+mc 1 5 5        # every changed file returned → complete
+mc 0 3000 3500  # endpoint capped at 3000 of 3500 → incomplete, blocks PASS
+mc 0 4 5        # one file short → incomplete
+mc 0 "" 5       # unreadable returned count → fail closed
+mc 0 5 ""       # unknown changed_files → fail closed
+mc 0 x 5        # non-numeric count → fail closed
+# End to end: a silently capped manifest on a complete diff downgrades PASS.
+[ "$(orl_enforce_completeness PASS "$(orl_evidence_truncated COMPLETE "$(orl_manifest_complete 3000 3500)")")" = "NOT ASSESSED" ] \
+  && ok || bad "a capped manifest must not let a PASS stand"
+
 # Static workflow facts: completeness is detected, disclosed, and enforced.
 haswf "detects truncation with the tested helper"     'orl_is_truncated "\$orig_bytes" "\$budget"'
 haswf "fetches the changed-file manifest"             'pulls/\$PR/files'
+haswf "reads the trusted changed_files count"         'changed_files="\$\(gh api'
+haswf "checks the manifest against the cap"           'orl_manifest_complete "\$manifest_count" "\$changed_files"'
 haswf "tracks the manifest-fetch outcome"             'manifest_ok=0'
 haswf "derives the evidence flag from both inputs"    'orl_evidence_truncated "\$diff_state" "\$manifest_ok"'
 haswf "discloses diff completeness to the model"      'DIFF COMPLETENESS'

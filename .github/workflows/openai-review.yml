@@ -106,17 +106,24 @@ jobs:
           budget=200000
 
           # The changed-file manifest is ALWAYS supplied to the reviewer (as
-          # untrusted PR data — filenames are attacker-controlled). Track the
-          # fetch so an unavailable manifest is never disclosed as complete and,
-          # like an incomplete diff, blocks PASS (#693).
+          # untrusted PR data — filenames are attacker-controlled). The files
+          # endpoint caps at 3000 files, so a successful non-empty response is not
+          # proof of completeness: compare the returned count against the PR's
+          # trusted changed_files. A failed fetch, or a short (silently capped)
+          # count, marks the manifest incomplete and — like an incomplete diff —
+          # blocks PASS (#693).
+          changed_files="$(gh api "repos/$REPO/pulls/$PR" --jq '.changed_files' 2>/dev/null || echo '')"
           if gh api --paginate "repos/$REPO/pulls/$PR/files?per_page=100" \
                --jq '.[] | "\(.status)\t\(.filename)\t+\(.additions)/-\(.deletions)"' \
                > /tmp/rev/files.txt 2>/dev/null && [ -s /tmp/rev/files.txt ]; then
-            manifest_ok=1; manifest_state="complete"
+            manifest_count="$(wc -l < /tmp/rev/files.txt | tr -d ' ')"
+            manifest_ok="$(orl_manifest_complete "$manifest_count" "$changed_files")"
           else
-            manifest_ok=0; manifest_state="UNAVAILABLE"
+            manifest_count=0; manifest_ok=0
             echo "(file manifest unavailable)" > /tmp/rev/files.txt
           fi
+          [ "$manifest_ok" = "1" ] && manifest_state="complete (${manifest_count} of ${changed_files} files)" \
+            || manifest_state="INCOMPLETE (${manifest_count} of ${changed_files:-unknown} files; the file list was capped or could not be fetched)"
 
           # Diff content for the request: the full diff when fetched and within
           # budget, else the bounded prefix (a sentinel when unfetchable).
@@ -139,7 +146,7 @@ jobs:
               TRUNCATED)   printf 'DIFF TRUNCATED: showing %s of %s bytes; hunks beyond the bound are OMITTED. An incomplete diff can never be PASS.\n' "$budget" "$orig_bytes" ;;
               UNAVAILABLE) echo "DIFF UNAVAILABLE: the exact-HEAD diff could not be fetched; NO diff content is present. An unfetchable diff can never be PASS." ;;
             esac
-            printf 'CHANGED FILE MANIFEST: %s (file list follows in the untrusted manifest section). An unavailable manifest also blocks PASS.\n' "$manifest_state"
+            printf 'CHANGED FILE MANIFEST: %s. The file list follows in the untrusted manifest section; a capped or unavailable manifest also blocks PASS.\n' "$manifest_state"
           } > /tmp/rev/completeness.txt
 
           gh api "repos/$REPO/pulls/$PR" --jq '"TITLE: \(.title)\n\nBODY:\n\(.body // "")"' \
