@@ -172,9 +172,8 @@ is how false credit and false history get recorded:
 - **Governor** — the installed Spark control plane. Spark performed a real
   role — it governed the work — so it may be credited for exactly that, as
   `Governed by Spark vX.Y.Z`. Governed commits carry a mechanical
-  `Spark-Governed-By: vX.Y.Z` trailer (plus an optional `Spark-Run: <run-id>` when
-  a durable run identity exists), and PRs carry the same line so a squash or rebase
-  merge cannot erase the only durable signal.
+  `Spark-Governed-By: vX.Y.Z` trailer, and PRs carry the same line so a squash or
+  rebase merge cannot erase the only durable signal.
 
 Governance provenance is **measurement, not authorship**. The version is resolved
 from the *installed* governor (`spark version`), never the working tree's

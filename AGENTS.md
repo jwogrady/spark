@@ -246,8 +246,7 @@ Three roles, and they must never be collapsed into one another:
   commit-msg hook rejects it.
 - **Governor** — the installed Spark control plane. Spark may be credited for the
   governance/control-plane role it actually performed, as `Governed by Spark
-  vX.Y.Z`. Governed commits carry a mechanical `Spark-Governed-By: vX.Y.Z` trailer
-  (and an optional `Spark-Run: <run-id>` only when a durable run identity exists),
+  vX.Y.Z`. Governed commits carry a mechanical `Spark-Governed-By: vX.Y.Z` trailer,
   and PRs carry the same `Governed by Spark vX.Y.Z` line so a squash/rebase merge
   cannot erase the only durable signal.
 

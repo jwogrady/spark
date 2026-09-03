@@ -124,20 +124,23 @@ work* — provenance, never authorship, and never an AI/worker credit:
 
 ```text
 Spark-Governed-By: vX.Y.Z
-Spark-Run: <run-id>        # only when SPARK_RUN_ID is set; never invented
 ```
 
-The version is the **installed governor's** own `spark version` (resolved via the
-`spark.governorBin` git config that `install-git-hooks` records, then
-`SPARK_ROOT`, then `spark` on `PATH`), **not** the target repo's own — possibly
-unreleased — manifest. So a checkout being developed under an earlier installed
-governor is stamped with that governor. The trailer is added once and de-duped on
-amend/re-run; a supplied `Spark-Governed-By` that disagrees with the resolved
-governor **fails closed** rather than recording false provenance. A repository
-that resolves no governor (not Spark-governed) is left untouched — attribution is
-recorded, never fabricated. This is orthogonal to the AI-attribution ban above and
-never changes the Git author or committer. See the author/worker/governor
-distinction in [enforcement-model.md](../explanation/enforcement-model.md).
+The version is the **installed governor's** own `spark version`. A repository whose
+hooks were installed by Spark has the **canonical** governor pinned in the
+`spark.governorBin` git config (recorded by `install-git-hooks`); that pin is
+authoritative — **not** the target repo's own, possibly unreleased, manifest — so a
+checkout being developed under an earlier installed governor is stamped with that
+governor. Once a repo is governed, a resolution failure (a missing/broken pinned
+governor, or an override pointing at a different binary) **fails the commit** rather
+than substituting another binary or omitting provenance. The trailer is added once
+in exactly the canonical form and de-duped on amend/re-run; a supplied
+`Spark-Governed-By` that is noncanonical, duplicated, or disagrees with the resolved
+governor **fails closed**. A repository that resolves no governor (not Spark-governed)
+is left untouched — attribution is recorded, never fabricated. This is orthogonal to
+the AI-attribution ban above and never changes the Git author or committer. See the
+author/worker/governor distinction in
+[enforcement-model.md](../explanation/enforcement-model.md).
 
 ### `pre-commit`
 
