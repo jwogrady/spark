@@ -73,11 +73,39 @@ rc=0
 bash "$SB/run.sh" >/dev/null 2>&1 || rc=$?
 [ "$rc" = "1" ] && ok || bad "a failing suite must still exit non-zero (got $rc)"
 
-# --- streaming is preserved ---------------------------------------------------
-# Capturing each suite's output to count assertions must not swallow it, or the
-# CI log stops being readable.
+# --- streaming is LIVE, not merely eventual -----------------------------------
+# Counting each suite's assertions must not withhold its output until the suite
+# EXITS: a long suite has to show progress while it runs, or CI looks stalled and
+# the documented streamed-output contract is a fiction. Eventual presence does not
+# discriminate buffering from streaming — reading the runner's redirected output
+# WHILE a deliberately slow suite is still sleeping is the only thing that does
+# (#664).
 assert_contains "suite output still reaches the log" "  10 passed, 0 failed" "$OUT"
 assert_contains "and each suite is announced"        "== test-alpha.sh" "$OUT"
+
+cat > "$SB/test-slow.sh" <<'SLOW'
+#!/usr/bin/env bash
+echo early-marker
+sleep 3
+echo late-marker
+echo "  1 passed, 0 failed"
+SLOW
+chmod +x "$SB/test-slow.sh"
+LIVE="$WORK/live.out"
+bash "$SB/run.sh" --only slow > "$LIVE" 2>&1 &
+live_pid=$!
+sleep 1
+# One second in, the early marker must already be on disk while the suite is still
+# sleeping toward its late marker; buffering would show NEITHER until it exits.
+grep -q "early-marker" "$LIVE" && ok || bad "an early marker must stream before a slow suite exits (#664)"
+case "$(cat "$LIVE")" in
+  *late-marker*) bad "the slow suite finished too soon to prove streaming — raise its sleep" ;;
+  *) ok ;;
+esac
+wait "$live_pid"; live_rc=$?
+[ "$live_rc" = "0" ] && ok || bad "the slow suite must still pass once complete (got $live_rc)"
+assert_contains "the streamed suite is still aggregated, not re-run" "  1 passed, 0 failed" "$(cat "$LIVE")"
+rm -f "$SB/test-slow.sh" "$LIVE"
 
 # --- the targeted path is the cheap one --------------------------------------
 # #558 prefers targeted checks during repair and reserves full certification for
@@ -182,6 +210,27 @@ sent_after="$(sha1sum "$SENT" | cut -d' ' -f1)"
 [ "$(cat "$SENT")" = "pre-existing" ] && ok \
   || bad "no execution row may be appended through the traversal path (#648)"
 rm -f "$SENT"
+
+# --- #664: an unmatched --only is a failure, not an empty pass ----------------
+# A typo or a renamed suite that matches nothing must never yield green targeted
+# evidence: the run exits non-zero, says nothing ran, and neither its JSON nor its
+# human summary calls zero selected suites "passed" — nor records a targeted
+# execution for a run that verified nothing.
+zrc=0
+ZOUT="$(bash "$SB/run.sh" --only definitely-no-such-suite --json 2>&1)" || zrc=$?
+[ "$zrc" != "0" ] && ok || bad "an --only filter matching no suite must exit non-zero (#664)"
+assert_contains "and says nothing ran" "matched no suite" "$ZOUT"
+case "$ZOUT" in
+  *"suite(s) passed"*)     bad "human output must not call zero selected suites passed (#664)" ;;
+  *'"assertions_passed"'*) bad "JSON must not describe zero selected suites (#664)" ;;
+  *) ok ;;
+esac
+: > "$TELLOG"
+SPARK_RUN_ID=zero-match bash "$SB/run.sh" --only definitely-no-such-suite >/dev/null 2>&1 || true
+zcalls="$(awk "/telemetry record/ { n++ } END { print n+0 }" "$TELLOG")"
+[ "$zcalls" = "0" ] && ok || bad "an unmatched filter must record no telemetry (got $zcalls) (#664)"
+[ -f "$SB/../.spark/telemetry/zero-match.executions" ] \
+  && bad "an unmatched filter must not append an execution log (#664)" || ok
 
 # Reading the same result again must record nothing further — a projection is
 # not an execution.
