@@ -47,4 +47,85 @@ case "$subject" in
   *.) fail "subject must not end with a period." ;;
 esac
 
+# 5. Governance provenance (#710). A repository governed by INSTALLED Spark records
+# which RELEASED governor version produced the work — provenance, never authorship,
+# and never an AI/worker credit. The version comes from the installed governor's
+# own `spark version` (the single version authority; see `cmd_version`), NEVER the
+# target repo's own — possibly unreleased — manifest, so a checkout being developed
+# under an earlier installed governor is stamped with that governor, not its own
+# in-progress version. An unconfigured / non-Spark repository resolves no governor
+# and is left untouched: attribution is recorded, never fabricated.
+# Resolve the governor. Governance is established ONLY by the canonical pin that
+# install-git-hooks records in `spark.governorBin`. Spark merely being installed,
+# on `PATH`, or exported through the environment is NOT evidence that it governed
+# this work — there is deliberately no PATH/SPARK_ROOT/env fallback. A pinned repo
+# whose governor cannot be resolved to an exact released version STOPS the commit
+# rather than substitute a binary or omit provenance; an UNPINNED repo is simply
+# not Spark-governed and is left untouched (recorded, never fabricated).
+gov_version=""
+# REPOSITORY-LOCAL pin only: a global/system spark.governorBin must not make an
+# otherwise-unconfigured repository stamp provenance merely because it inherited a
+# user-wide setting. Governance is established per repository, by its own install.
+gov_pin="$(git config --local --get spark.governorBin 2>/dev/null || true)"
+if [ -n "$gov_pin" ]; then
+  [ -x "$gov_pin" ] || fail "the pinned Spark governor is not executable: ${gov_pin}. Re-run 'spark install-git-hooks' from the installed governor."
+  # Capture and check the governor command's STATUS before parsing: a governor that
+  # prints a valid-looking version but exits nonzero must NOT be stamped. Do not
+  # rely on a pipe's exit status — check explicitly, then parse the captured output.
+  gov_out=""; gov_rc=0
+  gov_out="$("$gov_pin" version 2>/dev/null)" || gov_rc=$?
+  [ "$gov_rc" -eq 0 ] || fail "the pinned Spark governor (${gov_pin}) failed (exit ${gov_rc}); cannot record governance provenance."
+  gov_raw="$(printf '%s\n' "$gov_out" | awk '{ print $NF }')"
+  # The COMPLETE reported version must be an exact released X.Y.Z. A pre-release
+  # (0.23.0-dev) or any trailing text is not a released governor and must never be
+  # silently truncated into a provenance claim.
+  if ! printf '%s' "$gov_raw" | grep -qxE '[0-9]+\.[0-9]+\.[0-9]+'; then
+    fail "the pinned Spark governor (${gov_pin}) reported '${gov_raw}', not a released vX.Y.Z; cannot record governance provenance."
+  fi
+  gov_version="$gov_raw"
+fi
+
+if [ -n "$gov_version" ]; then
+  want="v$gov_version"
+  # Validation runs against GIT'S OWN parsed trailer block, not a whole-message
+  # grep: a canonical-looking line in the body is NOT a trailer, and treating it as
+  # one would let interpret-trailers append a second real trailer and break
+  # exactly-once. A supplied trailer is valid only if it is already the exact
+  # canonical form for the resolved governor; a duplicate, a noncanonical
+  # key/spacing/value, a disagreeing value, or a body line masquerading as a
+  # trailer all fail closed. The hook itself only ever writes the canonical form.
+  parsed="$(git interpret-trailers --parse "$msg_file" 2>/dev/null || true)"
+  raw_seen="$(grep -icE '^[[:space:]]*Spark-Governed-By[[:space:]]*:' "$msg_file" || true)"
+  parsed_seen="$(printf '%s\n' "$parsed" | grep -icE '^Spark-Governed-By[[:space:]]*:' || true)"
+  if [ "${raw_seen:-0}" -ne "${parsed_seen:-0}" ]; then
+    fail "a Spark-Governed-By line must be a real git trailer in the terminal trailer block, not body text; remove it and let Spark stamp it."
+  fi
+  if [ "${parsed_seen:-0}" -gt 1 ]; then
+    fail "Spark-Governed-By appears ${parsed_seen} times; it is recorded exactly once."
+  fi
+  if [ "${parsed_seen:-0}" -eq 1 ]; then
+    # Validate the RAW stored line (not git's normalized view): git would silently
+    # canonicalize spacing/casing in --parse, hiding a noncanonical stored form that
+    # --if-exists doNothing then leaves on disk. The committed trailer must already
+    # be exactly canonical.
+    gov_line="$(grep -iE '^[[:space:]]*Spark-Governed-By[[:space:]]*:' "$msg_file" | head -n1)"
+    if ! printf '%s' "$gov_line" | grep -qE '^Spark-Governed-By: v[0-9]+\.[0-9]+\.[0-9]+$'; then
+      fail "Spark-Governed-By must be the canonical 'Spark-Governed-By: vX.Y.Z' form (got '${gov_line}'); remove it and let Spark stamp it."
+    fi
+    if [ "${gov_line#Spark-Governed-By: }" != "$want" ]; then
+      fail "Spark-Governed-By: ${gov_line#Spark-Governed-By: } conflicts with the installed governor (${want}). Spark stamps governance provenance mechanically — remove the manual trailer."
+    fi
+  fi
+  # Idempotent add: a no-op when the canonical trailer already exists (amend/re-run).
+  git interpret-trailers --in-place --if-exists doNothing \
+    --trailer "Spark-Governed-By=${want}" "$msg_file"
+  # Postcondition: exactly one canonical trailer with the resolved value, in the
+  # parsed trailer block. If stamping did not converge, fail rather than commit a
+  # malformed or duplicated provenance record.
+  post="$(git interpret-trailers --parse "$msg_file" 2>/dev/null | grep -cE "^Spark-Governed-By: ${want}$" || true)"
+  if [ "${post:-0}" -ne 1 ]; then
+    fail "governance stamping did not converge to exactly one canonical 'Spark-Governed-By: ${want}'."
+  fi
+fi
+
 exit 0

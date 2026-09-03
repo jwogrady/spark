@@ -43,7 +43,7 @@ identically.
    - How it was verified (tests run, app exercised) — use the evidence classes
      from [`validate`](../validate/SKILL.md) where the distinction matters.
    - Anything reviewers should look at closely.
-6. **Report the PR URL** back to the user.
+6. **Stamp durable governor provenance, then report the PR URL.** Run `bash <path-to-this-skill>/scripts/governed-pr.sh apply <pr>` — it mechanically projects the canonical **`Governed by Spark vX.Y.Z`** onto the PR body from the SAME repository-local pinned governor the commit `Spark-Governed-By` trailers use (idempotent; refuses a conflicting or duplicate claim), so the signal survives a squash/rebase merge and stays queryable through the API. (The richer GitHub provenance check and multi-actor execution provenance is #711, not this primitive.) Then report the PR URL.
 7. **Ask the promotion question once.** Issue completion is a natural
    provenance boundary (ADR-0028): would this work still be true and useful if
    the implementation disappeared and were rebuilt? A "no" needs no ceremony —
@@ -79,7 +79,8 @@ changelog-records-product-not-process rule are in
 
 - **No AI attribution anywhere** — no `Co-Authored-By` for AI tools, no mention
   of Claude/Anthropic/Copilot/ChatGPT in the commit message, PR title, or body.
-  Credit belongs to the author only.
+  Credit belongs to the author only; `Governed by Spark vX.Y.Z` is governance
+  provenance (the control plane's role), not an AI/worker credit, and belongs in the PR body.
 - Conventional type prefix required; subject ≤ 72 characters, no trailing period.
 
 ## Guardrails

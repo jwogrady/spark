@@ -118,6 +118,36 @@ Rejects a commit when its message:
 - has a subject longer than 72 characters
 - has a subject ending in a period
 
+**Governance provenance.** On a repository governed by installed Spark, the hook
+also stamps one canonical trailer recording *which released governor produced the
+work* — provenance, never authorship, and never an AI/worker credit:
+
+```text
+Spark-Governed-By: vX.Y.Z
+```
+
+The version is the **installed governor's** own `spark version`. A repository whose
+hooks were installed by Spark has the **canonical** governor pinned in the
+`spark.governorBin` git config (recorded by `install-git-hooks`); that pin is
+authoritative — **not** the target repo's own, possibly unreleased, manifest — so a
+checkout being developed under an earlier installed governor is stamped with that
+governor. The **repository-local** pin is the only source — a global/system config
+is never consulted, and there is no environment or PATH override. Once a repo is
+governed, a resolution failure (a missing or non-executable pinned governor, or one
+that reports no exact released version) **fails the commit** rather than substituting
+another binary or omitting provenance. The trailer is added once
+in exactly the canonical form and de-duped on amend/re-run; a supplied
+`Spark-Governed-By` that is noncanonical, duplicated, or disagrees with the resolved
+governor **fails closed**. A repository that resolves no governor (not Spark-governed)
+is left untouched — attribution is recorded, never fabricated. This is orthogonal to
+the AI-attribution ban above and never changes the Git author or committer.
+
+This hook records **only the governor identity** (`Spark-Governed-By`). Execution
+provenance — which worker/model, provider, and surface performed each role, and its
+GitHub projection — is a **separate facility** (issue #711), out of scope here. See
+the author/worker/governor distinction in
+[enforcement-model.md](../explanation/enforcement-model.md).
+
 ### `pre-commit`
 
 Rejects a commit made directly on `master` or `main`.
