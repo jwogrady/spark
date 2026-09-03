@@ -708,7 +708,8 @@ cmd_budget() {
   if [ -n "$bg_load_ambiguous" ] && [ "$action" != "declare" ]; then
     red "budget record for run '$run' predates the text-injection fix (#642) and cannot be verified safe"
     yellow "  it has more than one line but no format stamp, so an injected line cannot be told apart from a legitimate one."
-    yellow "  repair: run 'spark budget declare --run $run --convergence \"...\"' to overwrite it with a clean record, or remove $file"
+    yellow "  repair: inspect and back up $file first — 'declare' replaces the record outright, it does not read the old one."
+    yellow "  redeclare EVERY intended bound: 'spark budget declare --run $run --convergence \"...\"' plus every --max-... / --model / --effort the run depends on, or remove $file and declare fresh."
     return 1
   fi
 

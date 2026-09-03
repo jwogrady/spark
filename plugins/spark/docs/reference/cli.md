@@ -1895,6 +1895,40 @@ Bounds available to `declare`: `--max-iterations`, `--max-full-suite`,
 (recorded, never treated as bounds): `--model`, `--effort`,
 `--preflight-tokens`, `--per-request-output-cap`.
 
+### Record format and legacy repair
+
+Every text field (`--convergence`, `--model`, `--effort`, `reopen`'s
+`--reason`) must be a single line — a newline, CR or tab is rejected outright,
+because it could otherwise serialize as an extra row in the on-disk TSV record
+and forge a second budget key (#642). A validated write always stamps line one
+of the file with the key `__format` and value `1` (tab-separated, like every
+record field); that stamp is the only honest proof the file was produced
+end-to-end by this fail-closed path.
+
+A record with more than one line and no `__format` stamp predates the fix.
+There is no parser-only way to tell whether its later lines are legitimate
+bounds or an injected key, so every action **except** `declare` refuses it
+outright rather than trust unverifiable state. `declare` is the one path back
+in, because it replaces the file outright from freshly validated input — but
+that replacement is a rewrite, not a merge: it does not read the legacy
+file's existing bounds first, so any `--max-…`, `--model`, or `--effort` value
+the old record held is dropped, not migrated, unless it is restated.
+
+To repair a legacy record:
+
+1. Inspect `.spark/budgets/<run>.tsv` and back it up before touching it — the
+   repair overwrites it outright.
+2. Note every envelope field it declared, not just convergence — every
+   `--max-…` bound and routing input the run actually depends on.
+3. Redeclare all of it in one `declare` call: `spark budget declare --run
+   <id> --convergence "<text>"` plus **every** `--max-…`, `--model`, and
+   `--effort` flag the run needs. Redeclaring convergence alone does not
+   preserve the rest of the envelope — any bound left off is gone, not
+   carried over.
+
+Or remove the file (`rm .spark/budgets/<run>.tsv`) and declare a fresh
+envelope from scratch.
+
 ### The five answers
 
 `check` returns one of five as text **and** as an exit code, so a loop reading
