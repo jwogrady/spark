@@ -59,20 +59,23 @@ GOVBIN="$WORK/gov/bin/spark"
 
 # The working repository advertises a LATER, unreleased version — the exact Spark
 # self-development shape: an installed v0.23 governor developing a v0.24 checkout.
+# Governance is established ONLY by the recorded canonical pin (spark.governorBin),
+# never an env var or PATH — installation alone is not evidence of governance.
 make_repo "$WORK/proj"
+git -C "$WORK/proj" config spark.governorBin "$GOVBIN"
 mkdir -p "$WORK/proj/.claude-plugin"
 printf '{\n  "name": "spark",\n  "version": "0.24.0"\n}\n' > "$WORK/proj/.claude-plugin/plugin.json"
 
 gmsg="$WORK/gmsg.txt"
 gov_count() { grep -icE '^Spark-Governed-By:' "$gmsg" || true; }
-# gov_hook runs the hook AS the governor, from inside the working repo.
-gov_hook() { ( cd "$WORK/proj" && SPARK_GOVERNOR_BIN="$GOVBIN" bash "$hook" "$gmsg" >/dev/null 2>&1 ); }
+# gov_hook runs the hook from inside the governed working repo (pin resolves it).
+gov_hook() { ( cd "$WORK/proj" && bash "$hook" "$gmsg" >/dev/null 2>&1 ); }
 
-# 1. the installed v0.23 governor stamps the v0.24 working tree with v0.23.0 — the
-#    resolved value is the installed governor's, never the working manifest's.
+# 1. the pinned installed v0.23 governor stamps the v0.24 working tree with v0.23.0
+#    — the resolved value is the pinned governor's, never the working manifest's.
 printf 'feat: implement a thing\n\nwhy it matters\n' > "$gmsg"; gov_hook
 [ "$(gov_count)" = 1 ] && ok || bad "#710: a governed commit gets exactly one Spark-Governed-By (got $(gov_count))"
-assert_contains "#710: the stamp is the installed governor v0.23.0" "Spark-Governed-By: v0.23.0" "$(cat "$gmsg")"
+assert_contains "#710: the stamp is the pinned governor v0.23.0" "Spark-Governed-By: v0.23.0" "$(cat "$gmsg")"
 case "$(cat "$gmsg")" in
   *v0.24.0*) bad "#710: the working tree's unreleased v0.24.0 must never be stamped" ;;
   *) ok ;;
@@ -84,7 +87,7 @@ gov_hook
 
 # 3. a conflicting supplied governor fails closed with a diagnostic naming the resolved one.
 printf 'feat: x\n\nbody\n\nSpark-Governed-By: v9.9.9\n' > "$gmsg"
-crc=0; ( cd "$WORK/proj" && SPARK_GOVERNOR_BIN="$GOVBIN" bash "$hook" "$gmsg" 2>"$WORK/gerr.txt" >/dev/null ) || crc=$?
+crc=0; ( cd "$WORK/proj" && bash "$hook" "$gmsg" 2>"$WORK/gerr.txt" >/dev/null ) || crc=$?
 [ "$crc" -ne 0 ] && ok || bad "#710: a conflicting Spark-Governed-By must fail closed"
 assert_contains "#710: the conflict diagnostic names the resolved governor" "v0.23.0" "$(cat "$WORK/gerr.txt")"
 
@@ -105,10 +108,12 @@ for bad_form in 'spark-governed-by: v0.23.0' 'Spark-Governed-By:v0.23.0' 'Spark-
   [ "$frc" -ne 0 ] && ok || bad "#710: a noncanonical trailer '$bad_form' must be rejected"
 done
 
-# 7. an unconfigured / non-Spark repository receives NO fabricated attribution.
+# 7. an UNPINNED repository is not governed — no fabricated attribution, even with
+#    Spark reachable on PATH/SPARK_ROOT (installation alone is not governance).
+make_repo "$WORK/bare"
 printf 'feat: plain\n\nbody\n' > "$gmsg"
-( cd "$WORK/proj" && env -u SPARK_GOVERNOR_BIN -u SPARK_ROOT PATH=/usr/bin:/bin bash "$hook" "$gmsg" >/dev/null 2>&1 )
-case "$(cat "$gmsg")" in *Spark-Governed-By:*) bad "#710: an ungoverned repo must not be stamped" ;; *) ok ;; esac
+( cd "$WORK/bare" && SPARK_ROOT="$WORK/gov" PATH="$WORK/gov/bin:$PATH" bash "$hook" "$gmsg" >/dev/null 2>&1 )
+case "$(cat "$gmsg")" in *Spark-Governed-By:*) bad "#710: an unpinned repo must not be stamped" ;; *) ok ;; esac
 
 # 8. governance provenance SURVIVES while an AI Co-Authored-By is still rejected.
 printf 'feat: q\n\nbody\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n' > "$gmsg"
@@ -117,10 +122,21 @@ arc=0; gov_hook || arc=$?
 printf 'feat: q\n\nbody\n' > "$gmsg"; gov_hook
 assert_contains "#710: a clean governed commit is still stamped" "Spark-Governed-By: v0.23.0" "$(cat "$gmsg")"
 
+# 9. a pinned governor reporting a NON-release version (pre-release/garbage) must
+#    fail closed, never be truncated into a false released-version claim.
+make_governor "$WORK/govdev" "0.23.0-dev"
+git -C "$WORK/proj" config spark.governorBin "$WORK/govdev/bin/spark"
+printf 'feat: pre\n\nbody\n' > "$gmsg"
+prc=0; gov_hook || prc=$?
+[ "$prc" -ne 0 ] && ok || bad "#710: a non-release governor version (0.23.0-dev) must fail closed, not be truncated"
+git -C "$WORK/proj" config spark.governorBin "$GOVBIN"
+
 # CONTROL: the stamp tracks the governor's REPORTED version, not a constant — a
-# different governor yields a different stamp, so the value is genuinely resolved.
+# different pinned governor yields a different stamp, so the value is genuinely resolved.
 make_governor "$WORK/gov2" "1.5.0"
-printf 'feat: w\n\nbody\n' > "$gmsg"; ( cd "$WORK/proj" && SPARK_GOVERNOR_BIN="$WORK/gov2/bin/spark" bash "$hook" "$gmsg" >/dev/null 2>&1 )
-assert_contains "#710 control: the stamp follows the governor's reported version" "Spark-Governed-By: v1.5.0" "$(cat "$gmsg")"
+git -C "$WORK/proj" config spark.governorBin "$WORK/gov2/bin/spark"
+printf 'feat: w\n\nbody\n' > "$gmsg"; gov_hook
+assert_contains "#710 control: the stamp follows the pinned governor's reported version" "Spark-Governed-By: v1.5.0" "$(cat "$gmsg")"
+git -C "$WORK/proj" config spark.governorBin "$GOVBIN"
 
 finish

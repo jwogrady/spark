@@ -55,36 +55,25 @@ esac
 # under an earlier installed governor is stamped with that governor, not its own
 # in-progress version. An unconfigured / non-Spark repository resolves no governor
 # and is left untouched: attribution is recorded, never fabricated.
-# Resolve the governor. A repository whose hooks were installed by Spark has the
-# CANONICAL governor pinned in `spark.governorBin` (see install-git-hooks); that
-# pin is authoritative. Once a repo is governed, resolution failure STOPS the
-# commit rather than silently substituting another binary or omitting provenance —
-# false or missing governance is worse than a blocked commit. Only an UNPINNED
-# (not-yet-governed) repo resolves leniently, and an unresolved governor there
-# simply stamps nothing: attribution is recorded, never fabricated.
-gov_bin=""; gov_version=""
+# Resolve the governor. Governance is established ONLY by the canonical pin that
+# install-git-hooks records in `spark.governorBin`. Spark merely being installed,
+# on `PATH`, or exported through the environment is NOT evidence that it governed
+# this work — there is deliberately no PATH/SPARK_ROOT/env fallback. A pinned repo
+# whose governor cannot be resolved to an exact released version STOPS the commit
+# rather than substitute a binary or omit provenance; an UNPINNED repo is simply
+# not Spark-governed and is left untouched (recorded, never fabricated).
+gov_version=""
 gov_pin="$(git config --get spark.governorBin 2>/dev/null || true)"
 if [ -n "$gov_pin" ]; then
-  # A caller-supplied override must not silently stamp a version from a different
-  # binary than the pinned installed governor.
-  if [ -n "${SPARK_GOVERNOR_BIN:-}" ] && [ "${SPARK_GOVERNOR_BIN}" != "$gov_pin" ]; then
-    fail "SPARK_GOVERNOR_BIN (${SPARK_GOVERNOR_BIN}) disagrees with this repository's pinned governor (${gov_pin}); the pinned installed governor is canonical."
-  fi
   [ -x "$gov_pin" ] || fail "the pinned Spark governor is not executable: ${gov_pin}. Re-run 'spark install-git-hooks' from the installed governor."
-  gov_version="$("$gov_pin" version 2>/dev/null | awk '{ print $NF }' | grep -Eo '^[0-9]+\.[0-9]+\.[0-9]+' || true)"
-  [ -n "$gov_version" ] || fail "the pinned Spark governor (${gov_pin}) reported no usable version; cannot record governance provenance."
-  gov_bin="$gov_pin"
-else
-  if [ -n "${SPARK_GOVERNOR_BIN:-}" ] && [ -x "${SPARK_GOVERNOR_BIN:-}" ]; then
-    gov_bin="$SPARK_GOVERNOR_BIN"
-  elif [ -n "${SPARK_ROOT:-}" ] && [ -x "${SPARK_ROOT}/bin/spark" ]; then
-    gov_bin="${SPARK_ROOT}/bin/spark"
-  elif command -v spark >/dev/null 2>&1; then
-    gov_bin="$(command -v spark)"
+  gov_raw="$("$gov_pin" version 2>/dev/null | awk '{ print $NF }')"
+  # The COMPLETE reported version must be an exact released X.Y.Z. A pre-release
+  # (0.23.0-dev) or any trailing text is not a released governor and must never be
+  # silently truncated into a provenance claim.
+  if ! printf '%s' "$gov_raw" | grep -qxE '[0-9]+\.[0-9]+\.[0-9]+'; then
+    fail "the pinned Spark governor (${gov_pin}) reported '${gov_raw}', not a released vX.Y.Z; cannot record governance provenance."
   fi
-  if [ -n "$gov_bin" ]; then
-    gov_version="$("$gov_bin" version 2>/dev/null | awk '{ print $NF }' | grep -Eo '^[0-9]+\.[0-9]+\.[0-9]+' || true)"
-  fi
+  gov_version="$gov_raw"
 fi
 
 if [ -n "$gov_version" ]; then

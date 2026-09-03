@@ -59,23 +59,19 @@ msg2="$(git log -1 --format='%B')"
 n2="$(printf '%s\n' "$msg2" | grep -c '^Spark-Governed-By:' || true)"
 [ "$n2" = 1 ] && ok || bad "#710: each governed commit carries exactly one trailer (got $n2)"
 
-# Once the governor is PINNED, the canonical pin wins: an override pointing at a
-# DIFFERENT binary must fail closed, never silently stamp a foreign version.
-cp -r "$WORK/plugin" "$WORK/other"
-sed -i 's/"version": "[^"]*"/"version": "9.9.9"/' "$WORK/other/.claude-plugin/plugin.json"
-printf 'again\n' >> f.txt; git add f.txt
-orc=0
-SPARK_GOVERNOR_BIN="$WORK/other/bin/spark" git commit -q -m "feat: overridden" 2>"$WORK/oerr.txt" || orc=$?
-[ "$orc" -ne 0 ] && ok || bad "#710: an override disagreeing with the pinned governor must fail closed"
-case "$(cat "$WORK/oerr.txt")" in *disagrees*) ok ;; *) bad "#710: the override-conflict diagnostic must name the disagreement" ;; esac
-
 # A governed repo whose pinned governor is broken must STOP the commit, not fall
 # through to another binary or silently omit provenance.
+printf 'again\n' >> f.txt; git add f.txt
 git config spark.governorBin "$WORK/nonexistent/bin/spark"
 brc=0
 git commit -q -m "feat: broken governor" 2>"$WORK/berr.txt" || brc=$?
 [ "$brc" -ne 0 ] && ok || bad "#710: a governed repo with a broken pinned governor must fail closed"
-# restore the good pin so the tree is left consistent
-git config spark.governorBin "$GOV"
+
+# With the pin REMOVED, the repo is no longer governed: a commit succeeds and is
+# NOT stamped — installation/hook presence alone is not evidence of governance.
+git config --unset spark.governorBin
+git commit -q -m "feat: ungoverned now"
+unmsg="$(git log -1 --format='%B')"
+case "$unmsg" in *Spark-Governed-By:*) bad "#710: an unpinned (ungoverned) repo must not be stamped" ;; *) ok ;; esac
 
 finish

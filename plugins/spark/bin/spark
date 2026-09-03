@@ -6615,6 +6615,16 @@ cmd_install_git_hooks() {
     INSTALL_GIT_HOOKS_ATTENTION=1 INSTALL_GIT_HOOKS_FAILED=1
     return 1
   fi
+  # Establish the canonical governor pin BEFORE activating any hook (#710): the
+  # commit-msg hook stamps Spark-Governed-By ONLY when this pin is present, so
+  # recording it first means a hook is never active in the window where it could
+  # run against an unestablished governor. If the pin cannot be recorded, install
+  # nothing rather than leave active hooks with no canonical governor.
+  if ! git config spark.governorBin "$SPARK_ROOT/bin/spark"; then
+    red "could not record the governor pin (spark.governorBin) — refusing to install hooks with no established governor"
+    INSTALL_GIT_HOOKS_ATTENTION=1 INSTALL_GIT_HOOKS_FAILED=1
+    return 1
+  fi
   for h in commit-msg pre-commit; do
     local src="$SPARK_ROOT/scripts/hooks/$h"
     if [ ! -f "$src" ]; then
@@ -6648,18 +6658,6 @@ cmd_install_git_hooks() {
     green "✓ installed $h"
     INSTALL_GIT_HOOKS_CREATED=$((INSTALL_GIT_HOOKS_CREATED+1))
   done
-  # Pin the governor that installed these hooks (#710): the commit-msg hook asks
-  # THIS binary for `spark version` to stamp Spark-Governed-By, so the recorded
-  # provenance is the installed governor, not whatever `spark` happens to be on a
-  # future PATH nor the target repo's own unreleased manifest. Re-running after an
-  # in-place upgrade repoints it. This pin is the governed repo's canonical
-  # governor, so failing to record it would install governance hooks with no
-  # established governor — fail clearly rather than leave that gap.
-  if ! git config spark.governorBin "$SPARK_ROOT/bin/spark"; then
-    red "! could not record the governor pin (spark.governorBin) — governance provenance would be unestablished"
-    INSTALL_GIT_HOOKS_ATTENTION=$((INSTALL_GIT_HOOKS_ATTENTION+1))
-    failed=1; INSTALL_GIT_HOOKS_FAILED=1
-  fi
   return "$failed"
 }
 
