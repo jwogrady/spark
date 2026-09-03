@@ -1848,7 +1848,8 @@ operator-visible count.
 `tool_schema_tokens`; `cost_usd`, `wall_seconds`; `tool_calls`,
 `api_requests`, `full_suite_runs`, `targeted_checks`, `iterations`,
 `batch_usage`; `compaction_events`, `context_before`, `context_after`;
-`failing_before`, `failing_after`; `verdict`, `overhead_ms`.
+`failing_before`, `failing_after`; `verdict`, `overhead_ms`;
+`runtime_peak_source_bytes`, `runtime_modules_loaded`.
 
 `verdict` is closed: `PASS`, `CHANGES REQUIRED`, `DECISION REQUIRED`,
 `NOT ASSESSED`, `FAIL`. Counters must be whole numbers and `cost_usd` decimal —
@@ -2160,11 +2161,27 @@ loads every module, so a consumer of the runtime never has to know which file
 owns which function. A module that is declared but missing or unparseable is an
 error, not a quiet partial load.
 
-With `SPARK_RUN_ID` set, each invocation records `runtime_source_bytes` and
-`runtime_modules_loaded` into the run's telemetry — the source it actually read,
-in bytes, and which modules. **Bytes are reported as bytes**: no token figure is
-derived from them, because that is a different measurement and a constant
-divisor would turn a filesystem number into a cost claim.
+With `SPARK_RUN_ID` set, each invocation appends its runtime footprint — the
+bytes it read and the modules it loaded — as one line to an append-only
+`.spark/telemetry/<run>.footprint` log. A run invokes `spark` many times, so the
+footprint is **per invocation but summarised per run**, and the summary is
+*derived* from that log at read time rather than left as a last-write-wins value
+a later lightweight command could erase:
+
+- `runtime_peak_source_bytes` — the **peak** single-invocation source bytes in
+  the run (the heaviest command's footprint), so a trailing `version` or `--help`
+  cannot shrink it. **Bytes are reported as bytes**: no token figure is derived
+  from them, because that is a different measurement and a constant divisor would
+  turn a filesystem number into a cost claim.
+- `runtime_modules_loaded` — the **distinct union** of modules any invocation in
+  the run loaded, comma-joined and sorted (`none` only when the run loaded
+  nothing). Once a run has loaded `planning`, a later core verb cannot erase that
+  evidence.
+
+The `.tsv` record still carries these two keys as a last-write projection, but
+every read (`telemetry show`, `--json`, `relay`, `compare`) derives them from the
+append-only log, exactly as the execution counters are derived from
+`<run>.executions` — so a lost projection race can never regress the run summary.
 
 Two rules govern where new code goes, and both exist to stop a split from
 becoming decoration:
