@@ -95,6 +95,38 @@ else
 fi
 assert_contains "accepted convergence survives JSON projection" 'green when \"quoted\" path \\\\' "$J"
 
+# --- the serialization boundary itself is fail-closed, not just today's flags
+# Every text-bearing CLI flag above calls bg_reject_framing before it ever
+# touches $pairs, but that only proves the ENUMERATED flags are safe. A future
+# author adds a new bgv_<key> and a new BUDGET_KEYS entry without necessarily
+# remembering to guard its call site the same way. bg_write must refuse to
+# serialize framing on its own, for a key no CLI flag here has ever heard of —
+# proving the guarantee lives at the boundary, not in each caller's memory.
+BOUNDARY_SCRIPT="$WORK/boundary-probe.sh"
+cat > "$BOUNDARY_SCRIPT" <<'EOF'
+set -eu
+. "$1" >/dev/null 2>&1
+bg_load "/nonexistent-budget-probe.tsv"
+BUDGET_KEYS="$BUDGET_KEYS future_field"
+bgv_future_field="$(printf 'safe\nmax_full_suite\t0')"
+f="$2"
+if bg_write "$f"; then echo "WROTE"; else echo "REJECTED"; fi
+if [ -f "$f" ]; then cat "$f"; fi
+EOF
+BOUNDARY_FILE="$WORK/boundary.tsv"
+boundary_rc=0
+BOUNDARY_OUT="$(bash "$BOUNDARY_SCRIPT" "$SPARK" "$BOUNDARY_FILE" 2>&1)" || boundary_rc=$?
+[ "$boundary_rc" -eq 0 ] || bad "boundary probe script itself failed (rc $boundary_rc): $BOUNDARY_OUT"
+case "$BOUNDARY_OUT" in
+  *REJECTED*) ok ;;
+  *) bad "bg_write must reject framing in a key no CLI flag validates, not just the enumerated flags — got: $BOUNDARY_OUT" ;;
+esac
+case "$BOUNDARY_OUT" in
+  *max_full_suite*) bad "an unrecognized future field's framing must not manufacture max_full_suite" ;;
+  *) ok ;;
+esac
+[ ! -e "$BOUNDARY_FILE" ] && ok || bad "bg_write must not create a record when any field fails the framing check"
+
 # --- ambiguous pre-fix records cannot silently acquire authority ------------
 # Before #642 a multiline convergence value could serialize to exactly the same
 # bytes as a legitimate bound. There is no honest parser-only way to know which

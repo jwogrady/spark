@@ -556,9 +556,19 @@ bg_load() {
   return 0
 }
 
+# bg_write <file> — the one path that serializes bgv_* into the TSV record.
+# Every accepted value is re-checked for framing HERE, not trusted from
+# whatever set it: a caller that adds a new bgv_<key> and forgets to call
+# bg_reject_framing at parse time still cannot smuggle a newline/tab/CR into
+# the file, because nothing reaches disk without passing this boundary first.
 bg_write() {
   local f="$1" k v
   mkdir -p "$(dirname "$f")" || return 1
+  for k in $BUDGET_KEYS; do
+    eval "v=\$bgv_$k"
+    [ -n "$v" ] || continue
+    bg_reject_framing "$k" "$v" || return 1
+  done
   {
     printf '%s\t%s\n' "$BUDGET_FORMAT_KEY" "$BUDGET_FORMAT_VAL"
     for k in $BUDGET_KEYS; do
@@ -610,10 +620,12 @@ cmd_budget() {
       --max-*)
         local mk="${1#--max-}"; mk="max_$(printf '%s' "$mk" | tr '-' '_')"
         shift
-        # Checked here, on the raw argv value, not after it lands in $pairs:
-        # $pairs joins entries with a literal newline, so a value carrying its
-        # own embedded newline would already have forged a second, independent
-        # "key=value" line by the time any later per-pair loop looked at it.
+        # Checked here, on the raw argv value, so a bad --max-* flag is named
+        # in the error instead of a generic write failure. $pairs joins entries
+        # with a literal newline, so an unchecked value could otherwise forge a
+        # second "key=value" line before any per-pair loop looked at it — but
+        # this early check is a UX nicety, not the guarantee: bg_write
+        # re-validates every bgv_* value before it reaches disk regardless.
         bg_reject_framing "$mk" "${1:-}" || return 1
         pairs="${pairs}${mk}=${1:-}
 " ;;
