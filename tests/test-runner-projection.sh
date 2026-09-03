@@ -159,21 +159,27 @@ mkdir -p "$TELDIR"
 SENT="$TELDIR/../escaped.executions"   # where '../escaped' would land
 printf 'pre-existing\n' > "$SENT"
 sent_before="$(sha1sum "$SENT" | cut -d' ' -f1)"
-for bad_id in '../escaped' '../../escaped' '/abs/escaped' 'a/b' '..'; do
-  : > "$TELLOG"
-  ERR="$(SPARK_RUN_ID="$bad_id" bash "$SB/run.sh" --only alpha 2>&1 >/dev/null || true)"
-  assert_contains "an invalid run id '$bad_id' is reported, not recorded" "NOT recorded" "$ERR"
-  calls="$(awk "/telemetry record/ { n++ } END { print n+0 }" "$TELLOG")"
-  [ "$calls" = "0" ] && ok || bad "an invalid run id '$bad_id' must record no telemetry (got $calls)"
+# Every invalid class — traversal, absolute, separator, dot-dot, control char —
+# must be refused in BOTH the full and the targeted invocation (the control-char
+# id is quoted so the loop cannot split it apart).
+CTRL="$(printf 'a\tb')"
+for bad_id in '../escaped' '../../escaped' '/abs/escaped' 'a/b' '..' "$CTRL"; do
+  for mode in targeted full; do
+    : > "$TELLOG"
+    if [ "$mode" = targeted ]; then
+      ERR="$(SPARK_RUN_ID="$bad_id" bash "$SB/run.sh" --only alpha 2>&1 >/dev/null || true)"
+    else
+      ERR="$(SPARK_RUN_ID="$bad_id" bash "$SB/run.sh" 2>&1 >/dev/null || true)"
+    fi
+    assert_contains "invalid run id '$bad_id' ($mode) is reported, not recorded" "NOT recorded" "$ERR"
+    assert_contains "and names the canonical rule for '$bad_id' ($mode)" "valid run id" "$ERR"
+    calls="$(awk "/telemetry record/ { n++ } END { print n+0 }" "$TELLOG")"
+    [ "$calls" = "0" ] && ok || bad "invalid run id '$bad_id' ($mode) must record no telemetry (got $calls)"
+  done
 done
-# a full run refuses the same way a targeted one does
-: > "$TELLOG"
-ERR="$(SPARK_RUN_ID='../escaped' bash "$SB/run.sh" 2>&1 >/dev/null || true)"
-assert_contains "a full run rejects the invalid id too" "NOT recorded" "$ERR"
-assert_contains "and names the canonical rule"          "valid run id"  "$ERR"
 sent_after="$(sha1sum "$SENT" | cut -d' ' -f1)"
 [ "$sent_before" = "$sent_after" ] && ok || bad "a traversal run id must not modify a tracked file (#648)"
-[ -f "$TELDIR/../escaped.executions" ] && [ "$(cat "$SENT")" = "pre-existing" ] && ok \
+[ "$(cat "$SENT")" = "pre-existing" ] && ok \
   || bad "no execution row may be appended through the traversal path (#648)"
 rm -f "$SENT"
 
