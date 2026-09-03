@@ -909,13 +909,19 @@ ev_write() {
   } > "$f"
 }
 
-# ev_drift <field> <recorded> <asked> — one line naming what moved, or empty.
-# An invalidator the caller did not state cannot invalidate: absence is not a
-# mismatch, or every consumer would be forced to restate the whole fingerprint
-# to read anything at all.
+# ev_drift <field> <recorded> <asked> — one line naming what moved, or empty when
+# the field is not an invalidator for this read. An invalidator the caller did NOT
+# state cannot invalidate: absence on the READER side is not a mismatch, or every
+# consumer would have to restate the whole fingerprint to read anything. But when
+# the reader DOES state a field the capture never recorded, that is NOT a match: the
+# capture was never bound to what the reader requires, so it drifts and is stale
+# (#647) — a capture made without --head is not fresh to a reader asking for a HEAD.
 ev_drift() {
   [ -n "$3" ] || return 0
-  [ -n "$2" ] || return 0
+  if [ -z "$2" ]; then
+    printf 'the %s was requested (%s) but the capture never recorded it' "$1" "$3"
+    return 0
+  fi
   [ "$2" = "$3" ] && return 0
   printf 'the %s changed (%s -> %s)' "$1" "$2" "$3"
 }

@@ -1965,7 +1965,13 @@ STALE — the model changed (claude-opus-5 -> claude-sonnet-5)
 ```
 
 An invalidator the caller does not state cannot invalidate — otherwise every
-consumer would have to restate the whole fingerprint to read anything.
+consumer would have to restate the whole fingerprint to read anything. But
+"the caller did not state it" and "the caller stated it, and the capture never
+recorded it" are different facts: the second is **stale**, not a match. A capture
+made without `--head` is not fresh to a reader that asks for a HEAD — the capture
+was never bound to what the reader requires, so `get` refuses it and names the
+missing field, and a `put` that newly states an invalidator recaptures rather
+than reporting the old capture as fresh.
 
 Exit codes: `0` fresh, `1` no such capture, `2` stale (the payload is **not**
 returned — a reused capture must never make an old verdict valid), `4`
