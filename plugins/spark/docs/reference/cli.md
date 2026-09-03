@@ -1825,6 +1825,14 @@ distinguish a single run projected several ways from several actual runs, which
 is the difference a convergence budget needs in order to see repeated expensive
 verification for what it is.
 
+The append-only log the runner writes at `.spark/telemetry/<run>.executions` is
+the **authoritative** record of how many executions actually happened — a short
+append is atomic even when two runners for the same run id overlap.
+`full_suite_runs`/`targeted_checks` on the telemetry record are a last-write-wins
+**projection** of that log, republished whenever a runner's own read of it turns
+out to have been stale by the time its write lands, so the projection can never
+finish below what the log already proves happened.
+
 ### The field schema
 
 `run_id`, `attempt`, `trigger`, `pr`, `head_sha`, `actions_run`; `provider`,

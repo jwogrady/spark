@@ -123,11 +123,35 @@ if [ -n "${SPARK_RUN_ID:-}" ]; then
        ! printf '%s\t%s\n' "$kind" "$(date -u +%FT%TZ 2>/dev/null)" >> "$log" 2>/dev/null; then
       echo "run.sh: this execution was NOT recorded — could not append to $log" >&2
     else
-      n_full="$(awk -F'\t' '$1 == "full" { n++ } END { print n+0 }' "$log")"
-      n_targ="$(awk -F'\t' '$1 == "targeted" { n++ } END { print n+0 }' "$log")"
+      # $log is the AUTHORITATIVE surface for execution counts: an append-only
+      # log where a short append is atomic even when two runners overlap.
+      # full_suite_runs/targeted_checks on the telemetry record are a
+      # last-write-wins PROJECTION of it, published below — read them for
+      # convenience, never in place of $log when the two could disagree.
+      count_kind() { awk -F'\t' -v k="$1" '$1 == k { n++ } END { print n+0 }' "$log"; }
+      n_full="$(count_kind full)"
+      n_targ="$(count_kind targeted)"
       if ! "$spark_bin" telemetry record --run "$SPARK_RUN_ID" \
              "full_suite_runs=$n_full" "targeted_checks=$n_targ" >/dev/null 2>&1; then
         echo "run.sh: execution logged at $log but telemetry record FAILED" >&2
+      fi
+      # The call above can be published by the underlying store AFTER a
+      # concurrent runner's fresher call, because it was dispatched against
+      # whatever $log held at THIS runner's read — and last-write-wins storage
+      # lets the STALER of two overlapping publishes finish last and erase the
+      # newer one (#665). $log only grows, so re-deriving it now already
+      # reflects every append any concurrent runner made by the time this
+      # runner's own call returned; republish whatever moved so the projection
+      # can never finish below the append-only evidence above.
+      n_full2="$(count_kind full)"
+      n_targ2="$(count_kind targeted)"
+      reconcile_pairs=()
+      [ "$n_full2" = "$n_full" ] || reconcile_pairs+=("full_suite_runs=$n_full" "full_suite_runs=$n_full2")
+      [ "$n_targ2" = "$n_targ" ] || reconcile_pairs+=("targeted_checks=$n_targ" "targeted_checks=$n_targ2")
+      if [ "${#reconcile_pairs[@]}" -gt 0 ]; then
+        if ! "$spark_bin" telemetry record --run "$SPARK_RUN_ID" "${reconcile_pairs[@]}" >/dev/null 2>&1; then
+          echo "run.sh: durable count advanced after publishing but the corrected telemetry record FAILED" >&2
+        fi
       fi
     fi
   fi
