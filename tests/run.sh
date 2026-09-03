@@ -26,9 +26,11 @@ while [ "$#" -gt 0 ]; do
     --only=*) only="${1#--only=}" ;;
     -h|--help)
       echo "usage: run.sh [--json] [--only <substring>]"
-      echo "  Runs suites once and reports suites, assertions and per-suite seconds."
+      echo "  Runs suites once, streaming each suite's output live, and reports"
+      echo "  suites, assertions and per-suite seconds together."
       echo "  --only runs the matching subset: the cheap targeted path for repair,"
-      echo "  as distinct from full certification."
+      echo "  as distinct from full certification. A filter matching no suite fails"
+      echo "  non-zero — a targeted run that verifies nothing is not a pass."
       exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
@@ -55,10 +57,18 @@ for suite in "$here"/test-*.sh; do
   suites=$((suites + 1))
   echo "== $name"
   s0="$(now_s)"
-  # The suite's output is streamed AND captured: the log stays readable while
-  # the assertion counts come from the same execution that produced it.
-  out="$(bash "$suite" 2>&1)" && rc=0 || rc=$?
-  printf '%s\n' "$out"
+  # The suite's output is STREAMED live and captured in one execution: a long
+  # suite shows progress WHILE it runs — not only after it exits — and the
+  # assertion counts are read from the very bytes just streamed, never a second
+  # run. tee mirrors the suite to the terminal and to a capture file; the suite's
+  # own status is PIPESTATUS[0], since tee's success would otherwise mask a fail.
+  cap="$(mktemp)"
+  set +e
+  bash "$suite" 2>&1 | tee "$cap"
+  rc="${PIPESTATUS[0]}"
+  set -e
+  out="$(cat "$cap")"
+  rm -f "$cap"
   s1="$(now_s)"
   [ "$rc" -eq 0 ] || fails=$((fails + 1))
 
@@ -70,6 +80,16 @@ for suite in "$here"/test-*.sh; do
   timings="${timings}${name}	$((s1 - s0))
 "
 done
+
+# A non-empty --only that matched no suite ran nothing — that is a failure, not a
+# pass. A typo or a renamed suite must never yield green targeted evidence, so it
+# exits non-zero BEFORE any telemetry, JSON, or summary can describe zero selected
+# suites as passed (#664).
+if [ -n "$only" ] && [ "$suites" -eq 0 ]; then
+  echo "run.sh: --only '$only' matched no suite — nothing ran" >&2
+  echo "  (a targeted check that runs zero suites is not evidence; fix the filter)" >&2
+  exit 1
+fi
 
 tree_after="$(snapshot)"
 if [ "$tree_before" != "$tree_after" ]; then
