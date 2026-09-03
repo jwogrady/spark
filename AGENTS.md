@@ -256,6 +256,12 @@ unreleased manifest), it never credits an AI worker, and it never changes the Gi
 author or committer. A supplied trailer that disagrees with the resolved installed
 governor fails closed rather than recording false provenance.
 
+This primitive records **only the governor identity**. Execution provenance —
+which worker/model, provider, and surface actually performed each role — is a
+separate facility (**#711**) with its own durable, multi-actor representation, and
+is deliberately **out of scope** for the governor stamp: `Spark-Governed-By`
+answers *which released Spark governed the work*, never *who executed it*.
+
 ## Naming
 
 The organization name is written **`Status26`** — one word, capital S, no

@@ -184,6 +184,13 @@ fails closed; an ungoverned repository is never stamped. Crediting the control
 plane for governing is not the same as crediting a worker for authoring, and the
 model refuses to let the second masquerade as the first.
 
+This primitive records **only the governor identity**. Execution provenance — the
+worker/model, provider, and surface that performed each governed role, and its
+human-visible GitHub projection — is a **separate facility** (issue #711) with its
+own durable, multi-actor representation. `Spark-Governed-By` answers *which
+released Spark governed the work*, never *who executed it*, and this feature is
+deliberately not widened into that scope.
+
 ## See also
 
 - [Philosophy](philosophy.md) — the values layer this rationale supports.

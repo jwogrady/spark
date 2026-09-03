@@ -138,8 +138,12 @@ in exactly the canonical form and de-duped on amend/re-run; a supplied
 `Spark-Governed-By` that is noncanonical, duplicated, or disagrees with the resolved
 governor **fails closed**. A repository that resolves no governor (not Spark-governed)
 is left untouched — attribution is recorded, never fabricated. This is orthogonal to
-the AI-attribution ban above and never changes the Git author or committer. See the
-author/worker/governor distinction in
+the AI-attribution ban above and never changes the Git author or committer.
+
+This hook records **only the governor identity** (`Spark-Governed-By`). Execution
+provenance — which worker/model, provider, and surface performed each role, and its
+GitHub projection — is a **separate facility** (issue #711), out of scope here. See
+the author/worker/governor distinction in
 [enforcement-model.md](../explanation/enforcement-model.md).
 
 ### `pre-commit`
