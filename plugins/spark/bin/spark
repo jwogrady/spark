@@ -127,10 +127,31 @@ spark_runtime_source_bytes() {
 spark_record_runtime_footprint() {
   [ -n "${SPARK_RUN_ID:-}" ] || return 0
   [ -z "${SPARK_RECORDING:-}" ] || return 0
-  local mods
+  # The run id becomes a filename, so validate its alphabet before use — the same
+  # closed set tm_valid_run enforces (#648). An invalid id is skipped, never
+  # sanitised into a different run or a traversal path.
+  case "$SPARK_RUN_ID" in
+    ''|.|..) return 0 ;;
+    *[!A-Za-z0-9._-]*) return 0 ;;
+  esac
+  local top mods bytes dir log
+  top="$(git_root)"; [ -n "$top" ] || return 0
   mods="$(printf '%s' "$SPARK_LOADED_MODULES" | awk '{ $1=$1; gsub(/ /, ","); print }')"
+  bytes="$(spark_runtime_source_bytes)"
+  # A run invokes Spark many times, so the per-invocation footprint is summarised
+  # per run from an append-only log — one line `<bytes>\t<modules-or-none>\t<iso>`
+  # per invocation, the authority the read path derives from. A short append is
+  # atomic under overlap, no lock (mirrors the runner's execution log, #665/#670),
+  # so a later lightweight command can never erase an earlier module load.
+  dir="$top/.spark/telemetry"; log="$dir/$SPARK_RUN_ID.footprint"
+  mkdir -p "$dir" 2>/dev/null || return 0
+  printf '%s\t%s\t%s\n' "$bytes" "${mods:-none}" "$(date -u +%FT%TZ 2>/dev/null)" >> "$log" 2>/dev/null || return 0
+  # The .tsv keys are a last-write-wins projection (like full_suite_runs): the read
+  # path re-derives the peak byte count and the distinct module union from the log,
+  # so a later invocation overwriting this projection is harmless — the derivation
+  # is what makes the run summary truthful.
   SPARK_RECORDING=1 "$SPARK_ROOT/bin/spark" telemetry record --run "$SPARK_RUN_ID" \
-    runtime_source_bytes="$(spark_runtime_source_bytes)" \
+    runtime_peak_source_bytes="$bytes" \
     runtime_modules_loaded="${mods:-none}" >/dev/null 2>&1 || true
   return 0
 }
