@@ -78,6 +78,10 @@ printf '%s' "$out" > "$WORK/agree.md"
 bash "$GP" agree "v0.23.0" "$WORK/agree.md" && ok || bad "#710: matching commit/PR governors must agree"
 arc=0; bash "$GP" agree "v0.24.0" "$WORK/agree.md" >/dev/null 2>&1 || arc=$?
 [ "$arc" -ne 0 ] && ok || bad "#710: disagreeing commit/PR governors must fail"
+# agree validates the COMPLETE claim set: two identical claims must fail exactly-once.
+printf 'body\n\nGoverned by Spark v0.23.0\n\nGoverned by Spark v0.23.0\n' > "$WORK/dupagree.md"
+darc=0; bash "$GP" agree "v0.23.0" "$WORK/dupagree.md" >/dev/null 2>&1 || darc=$?
+[ "$darc" -ne 0 ] && ok || bad "#710: agree must reject a duplicated governor claim (exactly-once)"
 
 # --- apply through the GitHub API surface, durable across commit topology --------
 # A stub gh persists the PR body OUT OF BAND from git commits, exactly as GitHub

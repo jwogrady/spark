@@ -131,9 +131,11 @@ hooks were installed by Spark has the **canonical** governor pinned in the
 `spark.governorBin` git config (recorded by `install-git-hooks`); that pin is
 authoritative — **not** the target repo's own, possibly unreleased, manifest — so a
 checkout being developed under an earlier installed governor is stamped with that
-governor. Once a repo is governed, a resolution failure (a missing/broken pinned
-governor, or an override pointing at a different binary) **fails the commit** rather
-than substituting another binary or omitting provenance. The trailer is added once
+governor. The **repository-local** pin is the only source — a global/system config
+is never consulted, and there is no environment or PATH override. Once a repo is
+governed, a resolution failure (a missing or non-executable pinned governor, or one
+that reports no exact released version) **fails the commit** rather than substituting
+another binary or omitting provenance. The trailer is added once
 in exactly the canonical form and de-duped on amend/re-run; a supplied
 `Spark-Governed-By` that is noncanonical, duplicated, or disagrees with the resolved
 governor **fails closed**. A repository that resolves no governor (not Spark-governed)

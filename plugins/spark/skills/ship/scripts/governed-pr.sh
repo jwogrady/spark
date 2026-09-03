@@ -81,8 +81,14 @@ case "${1:-}" in
     gp_ensure "$2" "$want" ;;
   agree)
     [ -n "${2:-}" ] && [ -n "${3:-}" ] && [ -f "$3" ] || gp_die "agree needs <version> <body-file>"
+    # Validate the COMPLETE claim set before comparing: a duplicate or noncanonical
+    # claim must fail closed, not slip through by reading only the first line.
+    n="$(grep -icE "$FACT_ANY" "$3" 2>/dev/null || true)"
+    [ "${n:-0}" -ge 1 ] || gp_die "the PR carries no governor fact to compare" 2
+    [ "${n:-0}" -eq 1 ] || gp_die "the PR carries ${n} governor claims; it is recorded exactly once" 2
     seen="$(grep -iE "$FACT_ANY" "$3" | head -n1 | sed -E 's/^[[:space:]]*//')"
-    [ -n "$seen" ] || gp_die "the PR carries no governor fact to compare" 2
+    printf '%s' "$seen" | grep -qE "$FACT_CANON" \
+      || gp_die "the PR governor line is noncanonical (got '$seen')" 2
     [ "$seen" = "Governed by Spark $2" ] \
       || gp_die "commit governor '$2' and PR governor '$seen' disagree" 2 ;;
   apply)
