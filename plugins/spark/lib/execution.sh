@@ -489,8 +489,71 @@ BUDGET_INT_KEYS="max_iterations max_full_suite max_targeted max_tool_calls max_a
 # material having changed before the run is escalated rather than continued.
 BUDGET_DEFAULT_NO_PROGRESS="${BUDGET_DEFAULT_NO_PROGRESS:-1}"
 
+# The record-format stamp (#642). It is always line one of a written file, and
+# it can only ever be there honestly: every accepted text field is rejected
+# below if it contains the newline a forged line would need, so a file that
+# has this exact stamp was necessarily produced by validated writes end to
+# end. A multi-line file WITHOUT it predates that guarantee, and there is no
+# honest parser-only way to tell its later lines apart from ones a pre-fix
+# text value smuggled in — see bg_ambiguous.
+BUDGET_FORMAT_KEY="__format"
+BUDGET_FORMAT_VAL="1"
+
 bg_is_key()     { case " $BUDGET_KEYS "     in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
 bg_is_int_key() { case " $BUDGET_INT_KEYS " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
+
+# bg_reject_framing <field> <value> — the boundary #642 gives every budget
+# text field: a newline, CR or tab could serialize as an extra TSV line,
+# turning prose into an unauthorized budget key. Mirrors the telemetry record
+# path's fail-closed check (tm record, above) rather than inventing a second
+# rule for the same threat.
+bg_reject_framing() {
+  case "$2" in
+    *$'\n'*|*$'\r'*|*$'\t'*)
+      red "budget $1 must be one line ($1 contains a newline/tab/CR) — a multi-line value could inject another budget key"
+      return 1 ;;
+  esac
+  return 0
+}
+
+# bg_stage <key> <value> — the one path cmd_budget's parser uses to queue a
+# pending `declare` assignment. Earlier this joined "key=value" pairs with a
+# literal newline into a single string and re-split it on read; a value that
+# reached that join un-checked (a future text option that forgot its own
+# bg_reject_framing call) could plant its own newline and have `read` split it
+# into an extra "key=value" line, forging a second assignment before
+# bg_reject_framing ever saw the combined value. Giving every pair its
+# own shell variable — never joined, never re-split — removes that class by
+# construction: bg_apply_staged always validates each value exactly as staged.
+bg_stage() {
+  bg_pairs_n=$((bg_pairs_n + 1))
+  eval "bg_pair_key_$bg_pairs_n=\$1"
+  eval "bg_pair_val_$bg_pairs_n=\$2"
+}
+
+# bg_apply_staged — consume every pair bg_stage queued into bgv_<key>,
+# rejecting an unknown key or framing violation exactly as `declare` always
+# has. Split out from cmd_budget so the full stage→validate→assign path is
+# reachable on its own, including for a key no CLI flag defines yet.
+bg_apply_staged() {
+  local i=1 key val
+  while [ "$i" -le "$bg_pairs_n" ]; do
+    eval "key=\$bg_pair_key_$i"
+    eval "val=\$bg_pair_val_$i"
+    if ! bg_is_key "$key"; then
+      red "unknown budget bound: ${key#max_} (valid: $(printf '%s' "$BUDGET_DECLARED" | tr ' ' '\n' | sed -n 's/^max_//p' | tr '\n' ' '))"
+      return 1
+    fi
+    if bg_is_int_key "$key"; then
+      case "$val" in ''|*[!0-9]*) red "$key must be a whole number (got '$val')"; return 1 ;; esac
+    else
+      bg_reject_framing "$key" "$val" || return 1
+    fi
+    eval "bgv_$key=\$val"
+    i=$((i + 1))
+  done
+  return 0
+}
 
 bg_dir()  { printf '%s/.spark/budgets' "$1"; }
 bg_file() { printf '%s/.spark/budgets/%s.tsv' "$1" "$2"; }
@@ -500,21 +563,53 @@ bg_get() {
   awk -F'\t' -v k="$2" '$1 == k { v = $2 } END { if (v != "") print v }' "$1"
 }
 
-# bg_load <file> — fill bgv_<key> for every key, empty when unset.
+# bg_ambiguous <file> — true only when a file both (a) has more than one line,
+# so a forged extra line is even possible, and (b) lacks the format stamp that
+# proves it came from validated writes. A single-line file can never be
+# ambiguous: there is nowhere for an injected key to hide.
+bg_ambiguous() {
+  local f="$1" lines first
+  [ -f "$f" ] || return 1
+  lines="$(awk 'END { print NR }' "$f")"
+  [ "${lines:-0}" -gt 1 ] || return 1
+  IFS= read -r first < "$f"
+  [ "$first" = "$(printf '%s\t%s' "$BUDGET_FORMAT_KEY" "$BUDGET_FORMAT_VAL")" ] && return 1
+  return 0
+}
+
+# bg_load <file> — fill bgv_<key> for every key, empty when unset. Sets
+# bg_load_ambiguous when the file cannot be proven free of pre-fix injection
+# (see bg_ambiguous); callers must fail closed on that rather than trust it.
 bg_load() {
   local f="$1" k v
+  bg_load_ambiguous=""
   for k in $BUDGET_KEYS; do eval "bgv_$k=''"; done
   [ -f "$f" ] || return 0
+  if bg_ambiguous "$f"; then
+    bg_load_ambiguous=1
+    return 0
+  fi
   while IFS=$'\t' read -r k v; do
     bg_is_key "$k" && eval "bgv_$k=\$v"
   done < "$f"
   return 0
 }
 
+# bg_write <file> — the one path that serializes bgv_* into the TSV record.
+# Every accepted value is re-checked for framing HERE, not trusted from
+# whatever set it: a caller that adds a new bgv_<key> and forgets to call
+# bg_reject_framing at parse time still cannot smuggle a newline/tab/CR into
+# the file, because nothing reaches disk without passing this boundary first.
 bg_write() {
   local f="$1" k v
   mkdir -p "$(dirname "$f")" || return 1
+  for k in $BUDGET_KEYS; do
+    eval "v=\$bgv_$k"
+    [ -n "$v" ] || continue
+    bg_reject_framing "$k" "$v" || return 1
+  done
   {
+    printf '%s\t%s\n' "$BUDGET_FORMAT_KEY" "$BUDGET_FORMAT_VAL"
     for k in $BUDGET_KEYS; do
       eval "v=\$bgv_$k"
       if [ -n "$v" ]; then printf '%s\t%s\n' "$k" "$v"; fi
@@ -546,7 +641,7 @@ cmd_budget() {
     *) action="status" ;;
   esac
 
-  local run="" kind="" json="" reason="" failing="" convergence="" pairs=""
+  local run="" kind="" json="" reason="" failing="" convergence="" bg_pairs_n=0
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --run)   shift; run="${1:-}" ;;
@@ -563,16 +658,26 @@ cmd_budget() {
       -h|--help) echo "$usage_line"; return 0 ;;
       --max-*)
         local mk="${1#--max-}"; mk="max_$(printf '%s' "$mk" | tr '-' '_')"
-        shift; pairs="${pairs}${mk}=${1:-}
-" ;;
-      --per-request-output-cap) shift; pairs="${pairs}per_request_output_cap=${1:-}
-" ;;
-      --preflight-tokens) shift; pairs="${pairs}preflight_tokens=${1:-}
-" ;;
-      --model) shift; pairs="${pairs}model=${1:-}
-" ;;
-      --effort) shift; pairs="${pairs}effort=${1:-}
-" ;;
+        shift
+        # Checked here, on the raw argv value, so a bad --max-* flag is named
+        # in the error instead of a generic write failure. This is a UX
+        # nicety, not the guarantee: bg_stage never joins values into a
+        # splittable string, so bg_apply_staged re-validates the exact same
+        # unsplit value regardless of whether this precheck ran.
+        bg_reject_framing "$mk" "${1:-}" || return 1
+        bg_stage "$mk" "${1:-}" ;;
+      --per-request-output-cap)
+        shift; bg_reject_framing per_request_output_cap "${1:-}" || return 1
+        bg_stage per_request_output_cap "${1:-}" ;;
+      --preflight-tokens)
+        shift; bg_reject_framing preflight_tokens "${1:-}" || return 1
+        bg_stage preflight_tokens "${1:-}" ;;
+      --model)
+        shift; bg_reject_framing model "${1:-}" || return 1
+        bg_stage model "${1:-}" ;;
+      --effort)
+        shift; bg_reject_framing effort "${1:-}" || return 1
+        bg_stage effort "${1:-}" ;;
       *) red "unknown option: $1"; echo "$usage_line"; return 1 ;;
     esac
     shift
@@ -594,6 +699,20 @@ cmd_budget() {
   tfile="$(tm_file "$top" "$run")"
   bg_load "$file"
 
+  # A pre-fix multi-line record with no format stamp cannot be told apart from
+  # one whose extra lines were injected through an unsanitized text value
+  # (#642). `declare` is the repair path — it replaces the file outright from
+  # freshly validated input, which is the one migration that is mechanically
+  # unambiguous. Every other action would otherwise trust unverifiable state,
+  # so it fails closed with repair guidance instead.
+  if [ -n "$bg_load_ambiguous" ] && [ "$action" != "declare" ]; then
+    red "budget record for run '$run' predates the text-injection fix (#642) and cannot be verified safe"
+    yellow "  it has more than one line but no format stamp, so an injected line cannot be told apart from a legitimate one."
+    yellow "  repair: inspect and back up $file first — 'declare' replaces the record outright, it does not read the old one."
+    yellow "  redeclare EVERY intended bound: 'spark budget declare --run $run --convergence \"...\"' plus every --max-... / --model / --effort the run depends on, or remove $file and declare fresh."
+    return 1
+  fi
+
   case "$action" in
     declare)
       if [ -z "$convergence" ] && [ -z "$bgv_convergence" ]; then
@@ -601,22 +720,11 @@ cmd_budget() {
         yellow "  budgets bound a run; they do not tell it what finishing means."
         return 1
       fi
-      if [ -n "$convergence" ]; then bgv_convergence="$convergence"; fi
-      local pair key val
-      while IFS= read -r pair; do
-        [ -n "$pair" ] || continue
-        key="${pair%%=*}"; val="${pair#*=}"
-        if ! bg_is_key "$key"; then
-          red "unknown budget bound: ${key#max_} (valid: $(printf '%s' "$BUDGET_DECLARED" | tr ' ' '\n' | sed -n 's/^max_//p' | tr '\n' ' '))"
-          return 1
-        fi
-        if bg_is_int_key "$key"; then
-          case "$val" in ''|*[!0-9]*) red "$key must be a whole number (got '$val')"; return 1 ;; esac
-        fi
-        eval "bgv_$key=\$val"
-      done <<EOF
-$pairs
-EOF
+      if [ -n "$convergence" ]; then
+        bg_reject_framing convergence "$convergence" || return 1
+        bgv_convergence="$convergence"
+      fi
+      bg_apply_staged || return 1
       [ -n "$bgv_max_no_progress" ] || bgv_max_no_progress="$BUDGET_DEFAULT_NO_PROGRESS"
       bg_write "$file" || { red "could not write $file"; return 1; }
       green "budget: $file"
@@ -650,6 +758,7 @@ EOF
         red "reopening a converged or stopped run needs --reason: the new release-critical evidence"
         return 1
       fi
+      bg_reject_framing reason "$reason" || return 1
       [ -n "$bgv_convergence" ] || { red "no budget declared for run '$run'"; return 1; }
       bgv_reopen_count="$(( ${bgv_reopen_count:-0} + 1 ))"
       bgv_reopen_reason="$reason"
