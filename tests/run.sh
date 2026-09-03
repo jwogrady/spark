@@ -126,32 +126,42 @@ if [ -n "${SPARK_RUN_ID:-}" ]; then
       # $log is the AUTHORITATIVE surface for execution counts: an append-only
       # log where a short append is atomic even when two runners overlap.
       # full_suite_runs/targeted_checks on the telemetry record are a
-      # last-write-wins PROJECTION of it, published below — read them for
-      # convenience, never in place of $log when the two could disagree.
+      # PROJECTION of it, published below — read them for convenience, never
+      # in place of $log when the two could disagree.
+      #
+      # A read-then-publish pair is not by itself safe under overlap: two
+      # runners can each read $log, then have their publishes land in EITHER
+      # order in last-write-wins storage, so the staler read can finish last
+      # and regress the projection below durable truth (#665). One retry after
+      # the fact narrows that window but does not close it — a third runner
+      # can still append and publish between the retry's own read and its
+      # write landing.
+      #
+      # The only way to make the projection mechanically unable to finish
+      # stale is to make "read $log, publish it" one indivisible step across
+      # every runner publishing for this run id, so publishes are totally
+      # ordered and each one reads at least what every earlier publish read
+      # ($log only grows). `mkdir` is an atomic mutual-exclusion primitive on
+      # every POSIX filesystem, so that boundary needs no new dependency.
       count_kind() { awk -F'\t' -v k="$1" '$1 == k { n++ } END { print n+0 }' "$log"; }
-      n_full="$(count_kind full)"
-      n_targ="$(count_kind targeted)"
-      if ! "$spark_bin" telemetry record --run "$SPARK_RUN_ID" \
-             "full_suite_runs=$n_full" "targeted_checks=$n_targ" >/dev/null 2>&1; then
-        echo "run.sh: execution logged at $log but telemetry record FAILED" >&2
-      fi
-      # The call above can be published by the underlying store AFTER a
-      # concurrent runner's fresher call, because it was dispatched against
-      # whatever $log held at THIS runner's read — and last-write-wins storage
-      # lets the STALER of two overlapping publishes finish last and erase the
-      # newer one (#665). $log only grows, so re-deriving it now already
-      # reflects every append any concurrent runner made by the time this
-      # runner's own call returned; republish whatever moved so the projection
-      # can never finish below the append-only evidence above.
-      n_full2="$(count_kind full)"
-      n_targ2="$(count_kind targeted)"
-      reconcile_pairs=()
-      [ "$n_full2" = "$n_full" ] || reconcile_pairs+=("full_suite_runs=$n_full" "full_suite_runs=$n_full2")
-      [ "$n_targ2" = "$n_targ" ] || reconcile_pairs+=("targeted_checks=$n_targ" "targeted_checks=$n_targ2")
-      if [ "${#reconcile_pairs[@]}" -gt 0 ]; then
-        if ! "$spark_bin" telemetry record --run "$SPARK_RUN_ID" "${reconcile_pairs[@]}" >/dev/null 2>&1; then
-          echo "run.sh: durable count advanced after publishing but the corrected telemetry record FAILED" >&2
+      lock_dir="$log_dir/$SPARK_RUN_ID.publish-lock"
+      publish_locked=""
+      lock_wait=0
+      while [ "$lock_wait" -lt 500 ]; do
+        mkdir "$lock_dir" 2>/dev/null && { publish_locked=1; break; }
+        sleep 0.01
+        lock_wait=$((lock_wait + 1))
+      done
+      if [ -z "$publish_locked" ]; then
+        echo "run.sh: execution logged at $log but the publish lock never freed — telemetry projection NOT published" >&2
+      else
+        n_full="$(count_kind full)"
+        n_targ="$(count_kind targeted)"
+        if ! "$spark_bin" telemetry record --run "$SPARK_RUN_ID" \
+               "full_suite_runs=$n_full" "targeted_checks=$n_targ" >/dev/null 2>&1; then
+          echo "run.sh: execution logged at $log but telemetry record FAILED" >&2
         fi
+        rmdir "$lock_dir" 2>/dev/null || true
       fi
     fi
   fi

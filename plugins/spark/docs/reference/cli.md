@@ -1828,10 +1828,15 @@ verification for what it is.
 The append-only log the runner writes at `.spark/telemetry/<run>.executions` is
 the **authoritative** record of how many executions actually happened — a short
 append is atomic even when two runners for the same run id overlap.
-`full_suite_runs`/`targeted_checks` on the telemetry record are a last-write-wins
-**projection** of that log, republished whenever a runner's own read of it turns
-out to have been stale by the time its write lands, so the projection can never
-finish below what the log already proves happened.
+`full_suite_runs`/`targeted_checks` on the telemetry record are a **projection**
+of that log. Reading the log and publishing it is one indivisible step per run
+id, guarded by an `mkdir`-based mutual-exclusion boundary — publishes for a run
+id are therefore totally ordered, and each one reads at least what every
+earlier publish read, since the log only grows. That ordering is what makes the
+projection mechanically unable to finish below what the log already proves
+happened: a single retry after an unguarded read-then-publish could still be
+overtaken by a third overlapping runner, but a publish that only ever happens
+while holding the lock cannot be.
 
 ### The field schema
 
