@@ -2047,6 +2047,11 @@ replaying the episode.
 `--head` is mandatory on `handoff`. Without it a later resume cannot tell
 whether CI answered about the certified work or about something pushed since,
 and a green rollup for a newer commit is not evidence about an older one.
+`handoff` also **verifies that `--head` is the PR's current head** before
+recording it — certifying a commit the PR no longer points at would let CI for
+newer work masquerade as this commit's evidence, and it refuses and names both
+SHAs. Every live observation reads the current head and its rollup in **one
+coherent GitHub request**, and records which head the rollup actually described.
 
 ### Verdicts
 
@@ -2055,6 +2060,7 @@ and a green rollup for a newer commit is not evidence about an older one.
 | `READY` | 0 | Every required check passed on the certified head — do not re-run local certification |
 | `CHANGES REQUIRED` | 2 | CI failed; the failing set is printed from GitHub, not rediscovered by replay |
 | `PENDING` | 4 | CI has not answered yet |
+| `STALE` | 5 | The PR head moved off the certified commit; the live rollup describes a different head, so it is not evidence for the certified one — re-certify the new head |
 | `NOT ASSESSED` | 1 | The rollup could not be read |
 
 **Pending is not a failure.** Reporting one would send someone to debug work
@@ -2062,7 +2068,11 @@ that is correct and merely unfinished elsewhere. **An unreadable rollup is an
 unknown, never a pass** — resolving it to "nothing is failing" is how an
 unchecked commit gets merged. A PR with **no checks registered** is reported
 separately from one that could not be read: both refuse to become a pass, but
-they send an operator to different places.
+they send an operator to different places. **A moved head is `STALE`, never
+`READY`** — an ordinary push or rebase to the PR branch replaces the head, and a
+green replacement head's checks must not authorize the older certified commit;
+`status` and `resume` both refuse it, exit `5`, and (in `--json`) report the
+`observed_head` the rollup actually covered.
 
 ### Polling is counted, not forbidden
 

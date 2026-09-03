@@ -28,6 +28,10 @@ cat > "$WORK/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 set -uo pipefail
 if [ "${1:-}" = "pr" ] && [ "${2:-}" = "view" ]; then
+  # ci_live asks for headRefOid + statusCheckRollup in one call and expects the
+  # head first, tagged __civ_head__. Emit it only when GH_HEAD is configured, so
+  # fixtures that do not exercise head-binding leave the head unreadable (empty).
+  [ -n "${GH_HEAD:-}" ] && printf '__civ_head__\t%s\n' "$GH_HEAD"
   # "EMPTY" means gh answered successfully with no checks — a different fact
   # from gh failing, which the fixtures below hold apart.
   if [ "$(cat "$GH_ROLLUP" 2>/dev/null)" = "EMPTY" ]; then exit 0; fi
@@ -39,6 +43,10 @@ exit 0
 STUB
 chmod +x "$WORK/bin/gh"
 export PATH="$WORK/bin:$PATH"
+# Real GitHub always answers with a headRefOid; the stub emits one when GH_HEAD is
+# set. Default it to the head the fixtures below certify (abc123) so a coherent
+# observation exists; the #658 fixtures vary it to move or hide the head.
+export GH_HEAD=abc123
 
 rc() {
   local want="$1" desc="$2" got=0; shift 3
@@ -186,6 +194,65 @@ DOC="$repo_root/docs/ops/ci-handoff.md"
 if [ -f "$DOC" ]; then
   assert_contains "the record states pending is not failure" "not a failure" "$(cat "$DOC")"
 fi
+
+# --- #658: a moved PR head cannot report the old certified head READY ----------
+# The exact-SHA boundary must survive a push/rebase. Certify head h1 while green,
+# then move the PR to a NEW green head h2. resume and status must refuse to call h1
+# READY — the live rollup describes h2, which local certification never covered.
+green_
+export GH_HEAD=h1-certified
+"$SPARK" ci handoff --run stale --pr 42 --head h1-certified >/dev/null 2>&1
+export GH_HEAD=h2-newhead                       # the PR moves; CI is green on the new head
+JS="$("$SPARK" ci resume --run stale --json 2>/dev/null || true)"
+assert_contains "resume on a moved head reports stale, not passing" '"state":"stale"' "$JS"
+assert_contains "resume records the head the rollup actually described" '"observed_head":"h2-newhead"' "$JS"
+rc 5 "a moved-head resume exits stale (5), never READY (0)" -- "$SPARK" ci resume --run stale
+HUM="$("$SPARK" ci resume --run stale 2>&1 || true)"
+assert_contains "the human output names the stale outcome" "STALE" "$HUM"
+if printf '%s' "$HUM" | grep -q "READY"; then bad "a moved head must never print READY for the old commit"; else ok; fi
+rc 5 "status on a moved head exits stale (5)" -- "$SPARK" ci status --run stale
+assert_contains "status records the observed head" '"observed_head":"h2-newhead"' \
+  "$("$SPARK" ci status --run stale --json 2>/dev/null || true)"
+# handoff itself refuses a --head that is not the PR's current head.
+export GH_HEAD=current-head
+rc 1 "handoff refuses a --head that is not the current head" -- "$SPARK" ci handoff --run stale2 --pr 42 --head not-current
+assert_contains "handoff names both heads" "not the PR's current head" \
+  "$("$SPARK" ci handoff --run stale2 --pr 42 --head not-current 2>&1 || true)"
+rc 0 "handoff accepts the PR's current head" -- "$SPARK" ci handoff --run stale3 --pr 42 --head current-head
+# A moved head whose new head has NO checks yet is STALE, not "no checks": the
+# stale decision precedes sentinel classification.
+printf 'EMPTY\n' > "$GH_ROLLUP"; export GH_HEAD=h2-newhead
+rc 5 "a moved head with no checks is stale, not nochecks" -- "$SPARK" ci resume --run stale
+assert_contains "reported stale, not a nochecks sentinel" '"state":"stale"' \
+  "$("$SPARK" ci resume --run stale --json 2>/dev/null || true)"
+# A response carrying checks but NO head is not a coherent observation: unreadable,
+# never a pass, and handoff refuses to record against it.
+green_; unset GH_HEAD
+rc 1 "checks with no readable head are unreadable, never a pass" -- "$SPARK" ci resume --run stale
+assert_contains "an unreadable head is not a pass" "never a pass" \
+  "$("$SPARK" ci resume --run stale 2>&1 || true)"
+rc 1 "handoff refuses when the current head is unreadable" -- "$SPARK" ci handoff --run stale4 --pr 42 --head anything
+assert_contains "and names the unverifiable certification" "could not read the PR's current head" \
+  "$("$SPARK" ci handoff --run stale4 --pr 42 --head anything 2>&1 || true)"
+export GH_HEAD=abc123                            # restore the coherent default for later fixtures
+
+# --- #658/#703: a real check literally named __civ_head__ must not vanish ----
+# GitHub check names are user-controlled, so nothing stops a real check from
+# being named exactly like the internal head-sentinel row. The sentinel must be
+# dropped by POSITION (it is always row one), never by matching the name column
+# — a name match would delete a genuine failing check of the same name and let
+# the rollup read as all-green.
+pending
+"$SPARK" ci handoff --run civname --pr 42 --head abc123 >/dev/null 2>&1
+printf '__civ_head__\tFAILURE\ndoctor\tSUCCESS\ngate\tSUCCESS\n' > "$GH_ROLLUP"
+rc 2 "a real check named __civ_head__ still fails the resume" -- "$SPARK" ci resume --run civname
+CIVNAME="$("$SPARK" ci resume --run civname 2>&1 || true)"
+assert_contains "the check stays visible under its real name" "__civ_head__ — FAILURE" "$CIVNAME"
+assert_contains "the verdict is changes required, not a false pass" "CHANGES REQUIRED" "$CIVNAME"
+case "$CIVNAME" in
+  *READY*) bad "a real check named __civ_head__ must never be swallowed into a false READY" ;;
+  *) ok ;;
+esac
 
 # --- MUTATION CONTROL --------------------------------------------------------
 # Stop comparing against the recorded snapshot, so every read looks like a
