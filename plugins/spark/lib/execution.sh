@@ -38,12 +38,12 @@
 # What was not recorded reports as NOT ASSESSED. A missing provider metric is an
 # unknown, and an unknown rendered as a number is a lie the operator would then
 # optimize against.
-TELEMETRY_KEYS="run_id attempt trigger pr head_sha actions_run provider model routing_reason effort preflight_tokens input_tokens output_tokens cache_write_tokens cache_read_tokens cache_reason tool_schema_tokens cost_usd wall_seconds tool_calls api_requests full_suite_runs targeted_checks iterations batch_usage compaction_events context_before context_after failing_before failing_after verdict overhead_ms certified_at ci_state runtime_source_bytes runtime_modules_loaded"
+TELEMETRY_KEYS="run_id attempt trigger pr head_sha actions_run provider model routing_reason effort preflight_tokens input_tokens output_tokens cache_write_tokens cache_read_tokens cache_reason tool_schema_tokens cost_usd wall_seconds tool_calls api_requests full_suite_runs targeted_checks iterations batch_usage compaction_events context_before context_after failing_before failing_after verdict overhead_ms certified_at ci_state runtime_peak_source_bytes runtime_modules_loaded"
 
 # Counts and measurements are integers. A field that must be a number and is not
 # is a recording error: taking it anyway would put a value in a comparison column
 # that cannot be compared.
-TELEMETRY_INT_KEYS="attempt pr preflight_tokens input_tokens output_tokens cache_write_tokens cache_read_tokens tool_schema_tokens wall_seconds tool_calls api_requests full_suite_runs targeted_checks iterations compaction_events context_before context_after failing_before failing_after overhead_ms runtime_source_bytes"
+TELEMETRY_INT_KEYS="attempt pr preflight_tokens input_tokens output_tokens cache_write_tokens cache_read_tokens tool_schema_tokens wall_seconds tool_calls api_requests full_suite_runs targeted_checks iterations compaction_events context_before context_after failing_before failing_after overhead_ms runtime_peak_source_bytes"
 
 # The verdict vocabulary is closed and matches the lifecycle's own answers, so a
 # run's outcome is comparable across runs. NOT ASSESSED is a legitimate verdict —
@@ -96,6 +96,44 @@ tm_exec_count() {
   local elog; elog="$(tm_dir "$1")/$2.executions"
   [ -f "$elog" ] || return 1
   awk -F'\t' -v k="$3" '$1 == k { n++ } END { print n+0 }' "$elog"
+}
+
+# The runtime footprint is per-INVOCATION but summarised per RUN, and a run can
+# invoke Spark many times. The authority is the append-only
+# .spark/telemetry/<run>.footprint log — one line `<bytes>\t<modules-or-none>\t<iso8601>`
+# per invocation — so a later lightweight command can never erase evidence an
+# earlier one loaded a module. Both readers below derive the run summary from that
+# log and, like tm_exec_count, fail (no output) when it is absent so a value set
+# without the runtime recorder keeps its stored projection (#670).
+
+# tm_footprint_bytes <top> <run> — the run's PEAK single-invocation source bytes.
+# Peak, not sum: it is the heaviest command's exact wc -c footprint, monotonic
+# across the run (a trailing lightweight verb cannot shrink it) and it never
+# double-counts the dispatcher the way a sum across invocations would.
+tm_footprint_bytes() {
+  local flog; flog="$(tm_dir "$1")/$2.footprint"
+  [ -f "$flog" ] || return 1
+  awk -F'\t' '$1 ~ /^[0-9]+$/ && $1+0 > m { m = $1+0 } END { print m+0 }' "$flog"
+}
+
+# tm_footprint_modules <top> <run> — the DISTINCT UNION of modules the run loaded,
+# comma-joined and sorted. Union, not last-write, is what makes the evidence
+# non-erasable: once an invocation loaded `planning` the run records it whatever a
+# later core verb loaded. The `none` placeholder is never unioned in; it is
+# re-emitted only when the run genuinely loaded nothing.
+tm_footprint_modules() {
+  local flog; flog="$(tm_dir "$1")/$2.footprint"
+  [ -f "$flog" ] || return 1
+  awk -F'\t' '
+    { n = split($2, a, ",")
+      for (i = 1; i <= n; i++) if (a[i] != "" && a[i] != "none") seen[a[i]] = 1 }
+    END {
+      c = 0; for (k in seen) keys[++c] = k
+      for (i = 2; i <= c; i++) { x = keys[i]; j = i - 1
+        while (j >= 1 && keys[j] > x) { keys[j+1] = keys[j]; j-- }; keys[j+1] = x }
+      out = ""; for (i = 1; i <= c; i++) out = out (i > 1 ? "," : "") keys[i]
+      print (out == "" ? "none" : out) }
+  ' "$flog"
 }
 
 # tm_get <file> <key> — the recorded value, or empty. Last write wins, so
@@ -358,6 +396,14 @@ EOF
             da="$(tm_exec_count "$top" "$a" "$ekind")" && va="$da"
             db="$(tm_exec_count "$top" "$b" "$ekind")" && vb="$db"
             ;;
+          runtime_peak_source_bytes)
+            da="$(tm_footprint_bytes "$top" "$a")" && va="$da"
+            db="$(tm_footprint_bytes "$top" "$b")" && vb="$db"
+            ;;
+          runtime_modules_loaded)
+            da="$(tm_footprint_modules "$top" "$a")" && va="$da"
+            db="$(tm_footprint_modules "$top" "$b")" && vb="$db"
+            ;;
         esac
         [ -z "$va" ] && [ -z "$vb" ] && continue
         ch="—"
@@ -377,9 +423,14 @@ EOF
       # stale publish that lost a race can never surface here — for the human
       # table, the JSON, the relay projection, and the convergence signal below,
       # which all read the tmv_ counters set here (#665).
-      local dfull dtarg
+      local dfull dtarg dbytes dmods
       dfull="$(tm_exec_count "$top" "$run" full)"     && tmv_full_suite_runs="$dfull"
       dtarg="$(tm_exec_count "$top" "$run" targeted)" && tmv_targeted_checks="$dtarg"
+      # The runtime footprint is likewise DERIVED from the append-only log, never
+      # the last-write .tsv projection — so a later lightweight invocation in the
+      # same run cannot erase a module load or shrink the peak byte count (#670).
+      dbytes="$(tm_footprint_bytes "$top" "$run")"   && tmv_runtime_peak_source_bytes="$dbytes"
+      dmods="$(tm_footprint_modules "$top" "$run")"  && tmv_runtime_modules_loaded="$dmods"
       local live ratio cdelta fdelta noprog binding
       live="$head"; [ -n "$live" ] || live="$(tm_live_head "$tmv_pr")"
       binding="$(tm_binding_status "$tmv_head_sha" "$live")"
