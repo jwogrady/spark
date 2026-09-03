@@ -1900,7 +1900,7 @@ Bounds available to `declare`: `--max-iterations`, `--max-full-suite`,
 Every text field (`--convergence`, `--model`, `--effort`, `reopen`'s
 `--reason`) must be a single line — a newline, CR or tab is rejected outright,
 because it could otherwise serialize as an extra row in the on-disk TSV record
-and forge a second budget key (#642). A validated write always stamps line one
+and forge a second budget key. A validated write always stamps line one
 of the file with the key `__format` and value `1` (tab-separated, like every
 record field); that stamp is the only honest proof the file was produced
 end-to-end by this fail-closed path.
