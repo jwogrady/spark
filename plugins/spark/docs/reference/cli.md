@@ -1825,6 +1825,21 @@ distinguish a single run projected several ways from several actual runs, which
 is the difference a convergence budget needs in order to see repeated expensive
 verification for what it is.
 
+The append-only log the runner writes at `.spark/telemetry/<run>.executions` is
+the **authoritative** record of how many executions actually happened — a short
+append is atomic even when two runners for the same run id overlap, so the log
+never loses a concurrent execution. `full_suite_runs`/`targeted_checks` persisted
+on the telemetry record are a convenience **projection** the runner publishes;
+publishing is last-write-wins, so under overlap a staler runner's call can finish
+last and leave that stored value low. Every authoritative read therefore
+**derives** the two counters from the append-only log at read time — `telemetry
+show`, its `--json`, `relay`, and `compare` all report the log's count, never the
+stored projection. Reading straight from the durable evidence is what makes the
+reported count mechanically unable to finish below what the log already proves
+happened, however the concurrent publishes interleave: there is no lock to
+abandon, no stale lock owner to recover, and no last stale publisher can set the
+operator-visible count.
+
 ### The field schema
 
 `run_id`, `attempt`, `trigger`, `pr`, `head_sha`, `actions_run`; `provider`,

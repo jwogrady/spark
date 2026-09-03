@@ -143,10 +143,20 @@ if [ -n "${SPARK_RUN_ID:-}" ]; then
        ! printf '%s\t%s\n' "$kind" "$(date -u +%FT%TZ 2>/dev/null)" >> "$log" 2>/dev/null; then
       echo "run.sh: this execution was NOT recorded — could not append to $log" >&2
     else
-      n_full="$(awk -F'\t' '$1 == "full" { n++ } END { print n+0 }' "$log")"
-      n_targ="$(awk -F'\t' '$1 == "targeted" { n++ } END { print n+0 }' "$log")"
+      # $log is the AUTHORITATIVE, append-only execution evidence: a short append
+      # is atomic even when runners overlap, so it never loses a concurrent
+      # execution. The full_suite_runs/targeted_checks we publish here are a
+      # convenience PROJECTION of it. Publishing is last-write-wins, so under
+      # concurrency a staler runner's call can finish last and leave the stored
+      # projection below $log — which is exactly why every AUTHORITATIVE read
+      # (`telemetry show`, its `--json`, and `relay`) DERIVES these two counters
+      # from $log at read time (#665). The reported count can therefore never
+      # finish below durable truth however the publishes interleave, so this
+      # runner simply publishes its own view: no lock to abandon, no stale lock
+      # owner to recover, and no last stale publisher can set the reported count.
+      count_kind() { awk -F'\t' -v k="$1" '$1 == k { n++ } END { print n+0 }' "$log"; }
       if ! "$spark_bin" telemetry record --run "$SPARK_RUN_ID" \
-             "full_suite_runs=$n_full" "targeted_checks=$n_targ" >/dev/null 2>&1; then
+             "full_suite_runs=$(count_kind full)" "targeted_checks=$(count_kind targeted)" >/dev/null 2>&1; then
         echo "run.sh: execution logged at $log but telemetry record FAILED" >&2
       fi
     fi

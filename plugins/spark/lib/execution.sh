@@ -83,6 +83,21 @@ tm_valid_run() {
 tm_dir()  { printf '%s/.spark/telemetry' "$1"; }
 tm_file() { printf '%s/.spark/telemetry/%s.tsv' "$1" "$2"; }
 
+# tm_exec_count <top> <run> <kind> — the AUTHORITATIVE execution count for a run,
+# derived from its append-only .spark/telemetry/<run>.executions log. That log is
+# the source of truth for full_suite_runs/targeted_checks: a short append is
+# atomic under arbitrary overlap, so the log never loses a concurrent execution,
+# while the counters stored on the .tsv record are a last-write-wins projection a
+# stale publish can leave low. Every read that reports these two counters derives
+# them here so a lost publish race can never surface a regressed count (#665).
+# Prints the count and succeeds when the log exists; fails (no output) when it
+# does not, so a counter set directly, without the runner, keeps its stored value.
+tm_exec_count() {
+  local elog; elog="$(tm_dir "$1")/$2.executions"
+  [ -f "$elog" ] || return 1
+  awk -F'\t' -v k="$3" '$1 == k { n++ } END { print n+0 }' "$elog"
+}
+
 # tm_get <file> <key> — the recorded value, or empty. Last write wins, so
 # re-recording a field supersedes it rather than leaving two truths on disk.
 tm_get() {
@@ -330,10 +345,20 @@ EOF
       [ -f "$fb" ] || { red "no telemetry record for run '$b'"; return 1; }
       echo "Spark run comparison — $a vs $b"
       printf '  %-22s %-22s %-22s %s\n' field "$a" "$b" change
-      local k va vb ch
+      local k va vb ch ekind da db
       for k in $TELEMETRY_KEYS; do
         [ "$k" = "run_id" ] && continue
         va="$(tm_get "$fa" "$k")"; vb="$(tm_get "$fb" "$k")"
+        # The execution counters are authoritative in each run's append-only log,
+        # not its .tsv projection — derive them so a comparison never reports a
+        # count a stale publish left low (#665).
+        case "$k" in
+          full_suite_runs|targeted_checks)
+            ekind=full; [ "$k" = "targeted_checks" ] && ekind=targeted
+            da="$(tm_exec_count "$top" "$a" "$ekind")" && va="$da"
+            db="$(tm_exec_count "$top" "$b" "$ekind")" && vb="$db"
+            ;;
+        esac
         [ -z "$va" ] && [ -z "$vb" ] && continue
         ch="—"
         tm_is_int_key "$k" && ch="$(tm_delta "$va" "$vb")"
@@ -341,12 +366,20 @@ EOF
       done
       echo
       echo "Cost, latency, tokens, cache, tool/API/full-suite counts and outcome are all above —"
-      echo "comparing two runs never requires reading a raw log."
+      echo "the execution counts derive from each run's append-only log, never a raw scan here."
       ;;
 
     show|relay)
       [ -f "$file" ] || { yellow "no telemetry record for run '$run' (.spark/telemetry/$run.tsv)"; return 0; }
       tm_load "$file"
+      # The execution counters are DERIVED from the append-only log at read time,
+      # never trusted from the last-write-wins projection on the record, so a
+      # stale publish that lost a race can never surface here — for the human
+      # table, the JSON, the relay projection, and the convergence signal below,
+      # which all read the tmv_ counters set here (#665).
+      local dfull dtarg
+      dfull="$(tm_exec_count "$top" "$run" full)"     && tmv_full_suite_runs="$dfull"
+      dtarg="$(tm_exec_count "$top" "$run" targeted)" && tmv_targeted_checks="$dtarg"
       local live ratio cdelta fdelta noprog binding
       live="$head"; [ -n "$live" ] || live="$(tm_live_head "$tmv_pr")"
       binding="$(tm_binding_status "$tmv_head_sha" "$live")"
