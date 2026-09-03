@@ -1565,9 +1565,11 @@ ci_live() {
   CI_LIVE_HEAD=""; CI_LIVE_LINES=""
   command -v gh >/dev/null 2>&1 || { CI_LIVE_LINES="__unreadable__"; return 0; }
   # One request returns both the head and the rollup. The head is emitted first,
-  # tagged with a sentinel field name, and extracted by POSITION (row one) — the
-  # tag alone is not unambiguous, since GitHub check names are user-controlled
-  # and a real check could legitimately be named the same as the sentinel. A
+  # tagged with a sentinel field name AND pinned to row one by construction (the
+  # jq query emits it before the rollup array). Both must hold for the row to be
+  # read as the head: position alone would misread a headless response's first
+  # check row as the head, and name alone would let a real check legitimately
+  # named the same as the sentinel be mistaken for it (or stripped below). A
   # rollup holds two disjoint shapes: a CheckRun reports .status while running
   # and .conclusion once finished; a StatusContext reports only .state.
   # conclusion-then-status-then-state covers both — a finished run's verdict
@@ -1576,7 +1578,7 @@ ci_live() {
   raw="$(gh pr view "$1" --json headRefOid,statusCheckRollup \
         --jq '"__civ_head__\t" + (.headRefOid // ""), (.statusCheckRollup[] | [(.name // .context), (.conclusion // .status // .state)] | @tsv)' 2>/dev/null)" \
     || { CI_LIVE_LINES="__unreadable__"; return 0; }
-  CI_LIVE_HEAD="$(printf '%s\n' "$raw" | awk -F'\t' 'NR==1{print $2; exit}')"
+  CI_LIVE_HEAD="$(printf '%s\n' "$raw" | awk -F'\t' 'NR==1 && $1=="__civ_head__"{print $2; exit}')"
   # A coherent observation MUST carry the head the rollup describes. A missing or
   # empty headRefOid — even alongside readable check rows — is not a usable
   # observation: without the head, the rollup cannot be bound to the certified
