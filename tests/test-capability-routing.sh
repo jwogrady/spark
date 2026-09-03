@@ -164,6 +164,27 @@ OVR="$("$SPARK" route select --task review)"
 assert_contains "a project override replaces the policy" "review -> cheap" "$OVR"
 assert_contains "including the model it names"           "some-other-model" "$OVR"
 
+# --- #648: a run id becomes a filename, so a traversal id must never escape -----
+# select/escalate/attempt all take --run; an id carrying a separator, traversal, or
+# control character must be refused BEFORE any write, and a tracked sentinel must
+# stay byte-identical.
+SENT="$WORK/proj/sentinel-tracked.tsv"
+printf 'keep\tme\n' > "$SENT"
+sent_before="$(sha1sum "$SENT" | cut -d' ' -f1)"
+for bad_id in '../x' '../../sentinel-tracked' '/abs/x' 'a/b' '..'; do
+  rc 1 "route select refuses run id '$bad_id'"   -- "$SPARK" route select   --task review --run "$bad_id"
+  rc 1 "route escalate refuses run id '$bad_id'" -- "$SPARK" route escalate --run "$bad_id" --reason x
+  rc 1 "route attempt refuses run id '$bad_id'"  -- "$SPARK" route attempt  --run "$bad_id" --outcome pass
+done
+# separators and control characters are rejected too (quoted so the loop cannot split them)
+rc 1 "route refuses a space-bearing run id" -- "$SPARK" route select --task review --run 'a b'
+rc 1 "route refuses a control-char run id"  -- "$SPARK" route select --task review --run "$(printf 'a\tb')"
+sent_after="$(sha1sum "$SENT" | cut -d' ' -f1)"
+[ "$sent_before" = "$sent_after" ] && ok || bad "a traversal run id must not modify a tracked file (#648)"
+assert_contains "the refusal names the canonical rule" "invalid run id" \
+  "$("$SPARK" route select --task review --run '../../x' 2>&1 || true)"
+rm -f "$SENT"
+
 # --- MUTATION CONTROL --------------------------------------------------------
 # Stop carrying the failed attempt into the two-stage total. The economics
 # fixture must go red: without it, starting cheap always looks cheaper.

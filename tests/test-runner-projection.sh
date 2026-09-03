@@ -99,7 +99,11 @@ assert_contains "an execution counts itself once" '"executions":1' "$JSON"
 # The telemetry hand-off: each runner invocation records exactly one execution,
 # which is what lets run telemetry tell one run with several projections apart
 # from several actual runs.
-mkdir -p "$SB/../plugins/spark/bin"
+mkdir -p "$SB/../plugins/spark/bin" "$SB/../plugins/spark/lib"
+# run.sh validates SPARK_RUN_ID with the ONE canonical rule by sourcing the real
+# runtime module (#648) — so the sandbox carries it, exercising the production
+# path rather than a re-stated copy.
+cp "$repo_root/plugins/spark/lib/execution.sh" "$SB/../plugins/spark/lib/execution.sh"
 TELLOG="$WORK/telemetry.calls"
 : > "$TELLOG"
 cat > "$SB/../plugins/spark/bin/spark" <<TELSTUB
@@ -144,6 +148,34 @@ mv "$SB/../plugins/spark/bin/spark" "$SB/../plugins/spark/bin/spark.hidden"
 ERR="$(SPARK_RUN_ID=bench-run bash "$SB/run.sh" --only alpha 2>&1 >/dev/null || true)"
 assert_contains "a missing recorder is reported, not swallowed" "NOT recorded" "$ERR"
 mv "$SB/../plugins/spark/bin/spark.hidden" "$SB/../plugins/spark/bin/spark"
+
+# --- #648: SPARK_RUN_ID becomes a filename, so a traversal id must not escape ---
+# The recorder writes ".spark/telemetry/<id>.executions". A traversal or separator
+# id would append OUTSIDE that directory and corrupt a tracked file, so an invalid
+# id records nothing, says so, and writes no file — for full and targeted runs
+# alike. A sentinel one level up from the telemetry dir must stay byte-identical.
+TELDIR="$SB/../.spark/telemetry"
+mkdir -p "$TELDIR"
+SENT="$TELDIR/../escaped.executions"   # where '../escaped' would land
+printf 'pre-existing\n' > "$SENT"
+sent_before="$(sha1sum "$SENT" | cut -d' ' -f1)"
+for bad_id in '../escaped' '../../escaped' '/abs/escaped' 'a/b' '..'; do
+  : > "$TELLOG"
+  ERR="$(SPARK_RUN_ID="$bad_id" bash "$SB/run.sh" --only alpha 2>&1 >/dev/null || true)"
+  assert_contains "an invalid run id '$bad_id' is reported, not recorded" "NOT recorded" "$ERR"
+  calls="$(awk "/telemetry record/ { n++ } END { print n+0 }" "$TELLOG")"
+  [ "$calls" = "0" ] && ok || bad "an invalid run id '$bad_id' must record no telemetry (got $calls)"
+done
+# a full run refuses the same way a targeted one does
+: > "$TELLOG"
+ERR="$(SPARK_RUN_ID='../escaped' bash "$SB/run.sh" 2>&1 >/dev/null || true)"
+assert_contains "a full run rejects the invalid id too" "NOT recorded" "$ERR"
+assert_contains "and names the canonical rule"          "valid run id"  "$ERR"
+sent_after="$(sha1sum "$SENT" | cut -d' ' -f1)"
+[ "$sent_before" = "$sent_after" ] && ok || bad "a traversal run id must not modify a tracked file (#648)"
+[ -f "$TELDIR/../escaped.executions" ] && [ "$(cat "$SENT")" = "pre-existing" ] && ok \
+  || bad "no execution row may be appended through the traversal path (#648)"
+rm -f "$SENT"
 
 # Reading the same result again must record nothing further — a projection is
 # not an execution.

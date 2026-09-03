@@ -1230,6 +1230,16 @@ cmd_route() {
     shift
   done
 
+  # A run id becomes a repository-local filename (.spark/routing/<run>.tsv and the
+  # run's telemetry), so it must pass the one canonical rule BEFORE any action reads
+  # or writes with it — a traversal or separator would escape the runtime-state
+  # directory and overwrite tracked files (#648). Empty is allowed (select without a
+  # run simply does not record); a stated id must validate, for every action.
+  if [ -n "$run" ] && ! tm_valid_run "$run"; then
+    red "spark route: invalid run id '$run' (letters, digits, dot, dash, underscore only — it becomes a filename)"
+    return 1
+  fi
+
   local top policy
   top="$(git_root)"
   policy="$(route_policy_file "$top")"
