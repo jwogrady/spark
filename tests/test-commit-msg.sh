@@ -146,6 +146,17 @@ printf 'feat: m\n\nSpark-Governed-By: v0.23.0\n\nmore body after the line\n' > "
 mrc=0; gov_hook || mrc=$?
 [ "$mrc" -ne 0 ] && ok || bad "#710: a Spark-Governed-By in the body (not the trailer block) must be rejected"
 
+# 12. a pinned governor that prints a valid-looking version but EXITS NONZERO must
+#     not be trusted — the commit fails closed on the command status, not output.
+mkdir -p "$WORK/badgov/bin"
+printf '#!/usr/bin/env bash\necho "spark 0.23.0"\nexit 1\n' > "$WORK/badgov/bin/spark"
+chmod +x "$WORK/badgov/bin/spark"
+git -C "$WORK/proj" config spark.governorBin "$WORK/badgov/bin/spark"
+printf 'feat: bad\n\nbody\n' > "$gmsg"
+zrc=0; gov_hook || zrc=$?
+[ "$zrc" -ne 0 ] && ok || bad "#710: a governor exiting nonzero must fail the commit despite valid-looking output"
+git -C "$WORK/proj" config spark.governorBin "$GOVBIN"
+
 # CONTROL: the stamp tracks the governor's REPORTED version, not a constant — a
 # different pinned governor yields a different stamp, so the value is genuinely resolved.
 make_governor "$WORK/gov2" "1.5.0"

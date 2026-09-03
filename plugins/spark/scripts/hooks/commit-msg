@@ -69,7 +69,13 @@ gov_version=""
 gov_pin="$(git config --local --get spark.governorBin 2>/dev/null || true)"
 if [ -n "$gov_pin" ]; then
   [ -x "$gov_pin" ] || fail "the pinned Spark governor is not executable: ${gov_pin}. Re-run 'spark install-git-hooks' from the installed governor."
-  gov_raw="$("$gov_pin" version 2>/dev/null | awk '{ print $NF }')"
+  # Capture and check the governor command's STATUS before parsing: a governor that
+  # prints a valid-looking version but exits nonzero must NOT be stamped. Do not
+  # rely on a pipe's exit status — check explicitly, then parse the captured output.
+  gov_out=""; gov_rc=0
+  gov_out="$("$gov_pin" version 2>/dev/null)" || gov_rc=$?
+  [ "$gov_rc" -eq 0 ] || fail "the pinned Spark governor (${gov_pin}) failed (exit ${gov_rc}); cannot record governance provenance."
+  gov_raw="$(printf '%s\n' "$gov_out" | awk '{ print $NF }')"
   # The COMPLETE reported version must be an exact released X.Y.Z. A pre-release
   # (0.23.0-dev) or any trailing text is not a released governor and must never be
   # silently truncated into a provenance claim.

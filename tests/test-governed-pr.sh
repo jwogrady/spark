@@ -97,9 +97,25 @@ retrieved="$(PATH="$WORK/stub:$PATH" gh pr view 999 --json body -q .body)"
 printf '%s\n' "$retrieved" | grep -qxE 'Governed by Spark v0.23.0' && ok \
   || bad "#710: the PR governor fact must remain retrievable via gh independent of commit topology"
 
-# An ungoverned repository projects nothing (no fabrication).
+# An ungoverned repository projects nothing (no fabrication) — for every command.
 git config --local --unset spark.governorBin
 urc=0; bash "$GP" apply 999 >/dev/null 2>&1 || urc=$?
 [ "$urc" -ne 0 ] && ok || bad "#710: apply on an ungoverned repo must not fabricate a projection"
+lrc=0; bash "$GP" line >/dev/null 2>&1 || lrc=$?
+[ "$lrc" -ne 0 ] && ok || bad "#710: line must fail on an ungoverned repo, not emit an empty version"
+printf 'body\n' > "$WORK/ub.md"
+erc=0; ercout="$(bash "$GP" ensure "$WORK/ub.md" 2>/dev/null)" || erc=$?
+[ "$erc" -ne 0 ] && ok || bad "#710: ensure must fail on an ungoverned repo"
+case "$ercout" in *"Governed by Spark "*) bad "#710: ensure must not append a malformed empty-version claim" ;; *) ok ;; esac
+
+# A governor that prints a valid-LOOKING version but EXITS NONZERO must not be
+# trusted — resolution fails closed on the command status, not its output.
+mkdir -p "$WORK/badgov/bin"
+printf '#!/usr/bin/env bash\necho "spark 0.23.0"\nexit 1\n' > "$WORK/badgov/bin/spark"
+chmod +x "$WORK/badgov/bin/spark"
+git config --local spark.governorBin "$WORK/badgov/bin/spark"
+brc=0; bash "$GP" version >/dev/null 2>&1 || brc=$?
+[ "$brc" -ne 0 ] && ok || bad "#710: a governor exiting nonzero must fail closed despite valid-looking output"
+git config --local --unset spark.governorBin
 
 finish

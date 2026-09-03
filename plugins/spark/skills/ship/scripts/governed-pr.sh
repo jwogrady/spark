@@ -28,11 +28,16 @@ gp_die() { echo "governed-pr: $1" >&2; exit "${2:-1}"; }
 # pin's own `spark version`, an exact released X.Y.Z. A global/system pin is never
 # consulted, and an ungoverned repo returns exit 3 (fact absent, never fabricated).
 gp_version() {
-  local pin raw
+  local pin out rc=0 raw
   pin="$(git config --local --get spark.governorBin 2>/dev/null || true)"
   [ -n "$pin" ] || return 3
   [ -x "$pin" ] || gp_die "the pinned governor is not executable: $pin"
-  raw="$("$pin" version 2>/dev/null | awk '{ print $NF }')"
+  # Capture and check the governor command's STATUS explicitly — a governor that
+  # prints a valid-looking version but exits nonzero must NOT be trusted. Do not
+  # rely on errexit/pipefail here: this runs inside command substitutions and `||`.
+  out="$("$pin" version 2>/dev/null)" || rc=$?
+  [ "$rc" -eq 0 ] || gp_die "the pinned governor ($pin) failed (exit $rc); cannot resolve governance"
+  raw="$(printf '%s\n' "$out" | awk '{ print $NF }')"
   printf '%s' "$raw" | grep -qxE '[0-9]+\.[0-9]+\.[0-9]+' \
     || gp_die "the pinned governor reported '$raw', not a released vX.Y.Z"
   printf 'v%s' "$raw"
@@ -62,10 +67,13 @@ gp_ensure() {
 
 case "${1:-}" in
   version) gp_version || exit $? ;;
-  line)    printf 'Governed by Spark %s\n' "$(gp_version)" ;;
+  line)
+    want=""; want="$(gp_version)" || exit $?
+    printf 'Governed by Spark %s\n' "$want" ;;
   ensure)
     [ -n "${2:-}" ] && [ -f "$2" ] || gp_die "ensure needs a body file"
-    gp_ensure "$2" "$(gp_version)" ;;
+    want=""; want="$(gp_version)" || exit $?
+    gp_ensure "$2" "$want" ;;
   agree)
     [ -n "${2:-}" ] && [ -n "${3:-}" ] && [ -f "$3" ] || gp_die "agree needs <version> <body-file>"
     seen="$(grep -iE "$FACT_ANY" "$3" | head -n1 | sed -E 's/^[[:space:]]*//')"
@@ -74,7 +82,7 @@ case "${1:-}" in
       || gp_die "commit governor '$2' and PR governor '$seen' disagree" 2 ;;
   apply)
     [ -n "${2:-}" ] || gp_die "apply needs a PR number"
-    pr="$2"; want="$(gp_version)"
+    pr="$2"; want=""; want="$(gp_version)" || exit $?
     tmp="$(mktemp)"; trap 'rm -f "$tmp"' EXIT
     body="$(gh pr view "$pr" --json body -q .body 2>/dev/null)" || gp_die "could not read PR #$pr body via gh"
     printf '%s' "$body" > "$tmp"
