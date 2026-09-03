@@ -96,6 +96,34 @@ assert_contains "and says why reuse would be wrong" "never make an old verdict v
 # consumer would have to restate the whole fingerprint to read anything.
 rc 0 "an unstated invalidator does not invalidate" -- "$SPARK" evidence get --key inv --head abc123
 
+# --- #647: a field the capture NEVER RECORDED is not fresh to a reader asking ---
+# "the reader did not state it" and "the reader stated it but the capture never
+# recorded it" are different facts: the second is drift, not a match. A capture made
+# without --head must never be served fresh to a reader that asks for any HEAD.
+printf 'unbound\n' | "$SPARK" evidence put --key unbound >/dev/null   # records no invalidators
+rc 2 "a capture with no head is stale to a reader asking for one" -- "$SPARK" evidence get --key unbound --head deadbeef
+MISS="$("$SPARK" evidence get --key unbound --head deadbeef 2>&1 || true)"
+assert_contains "and names the field the capture never recorded" \
+  "the head was requested (deadbeef) but the capture never recorded it" "$MISS"
+case "$MISS" in *unbound*) bad "a capture missing the requested field must not hand back its payload" ;; *) ok ;; esac
+# All five invalidators: each requested against a capture that never recorded it.
+while read -r field value; do
+  rc 2 "a capture with no $field is stale to a reader asking for one" \
+    -- "$SPARK" evidence get --key unbound "--$field" "$value"
+done <<'INV'
+contract v9
+model claude-x
+effort high
+tools sha-zzz
+INV
+# A reader that states nothing still reads the unbound capture — unstated stays optional.
+rc 0 "a reader that states nothing still reads the unbound capture" -- "$SPARK" evidence get --key unbound
+# A duplicate put that NEWLY states an invalidator must recapture, not claim fresh.
+NEWINV="$(printf 'now bound\n' | "$SPARK" evidence put --key unbound --head abc123 2>&1)"
+case "$NEWINV" in *"already captured"*) bad "a put adding a new invalidator must not claim the old capture fresh" ;; *) ok ;; esac
+assert_contains "it recaptures with the newly stated fingerprint" "captured 'unbound'" "$NEWINV"
+rc 0 "and the newly bound capture is fresh to that head" -- "$SPARK" evidence get --key unbound --head abc123
+
 # --- bounds: partial evidence must announce itself ---------------------------
 PUT="$(printf 'row\n' | "$SPARK" evidence put --key pages --head abc123 --bound 100 --count 100 2>&1)"
 assert_contains "hitting the bound is NOT ASSESSED at capture time" "NOT ASSESSED" "$PUT"
