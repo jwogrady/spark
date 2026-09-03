@@ -39,7 +39,7 @@ identically.
 5. **Open the PR** into the default branch. **Title it to match how PRs land
    here** — plainly for merge commits, conventionally for squash merges; the
    wrong one doubles or drops the entry ([release-please.md](references/release-please.md)). Body should cover:
-   - **What** changed and **why** (link the issue: `Closes #12`).
+   - **What** changed and **why** (link the issue: `Closes #12`), plus a durable **`Governed by Spark vX.Y.Z`** line (the version from `spark version`) so a squash/rebase merge cannot erase the governance signal.
    - How it was verified (tests run, app exercised) — use the evidence classes
      from [`validate`](../validate/SKILL.md) where the distinction matters.
    - Anything reviewers should look at closely.
@@ -79,7 +79,8 @@ changelog-records-product-not-process rule are in
 
 - **No AI attribution anywhere** — no `Co-Authored-By` for AI tools, no mention
   of Claude/Anthropic/Copilot/ChatGPT in the commit message, PR title, or body.
-  Credit belongs to the author only.
+  Credit belongs to the author only; `Governed by Spark vX.Y.Z` is governance
+  provenance (the control plane's role), not an AI/worker credit, and belongs in the PR body.
 - Conventional type prefix required; subject ≤ 72 characters, no trailing period.
 
 ## Guardrails

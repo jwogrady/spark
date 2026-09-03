@@ -47,4 +47,55 @@ case "$subject" in
   *.) fail "subject must not end with a period." ;;
 esac
 
+# 5. Governance provenance (#710). A repository governed by INSTALLED Spark records
+# which RELEASED governor version produced the work — provenance, never authorship,
+# and never an AI/worker credit. The version comes from the installed governor's
+# own `spark version` (the single version authority; see `cmd_version`), NEVER the
+# target repo's own — possibly unreleased — manifest, so a checkout being developed
+# under an earlier installed governor is stamped with that governor, not its own
+# in-progress version. An unconfigured / non-Spark repository resolves no governor
+# and is left untouched: attribution is recorded, never fabricated.
+gov_bin=""
+if [ -n "${SPARK_GOVERNOR_BIN:-}" ] && [ -x "${SPARK_GOVERNOR_BIN:-}" ]; then
+  gov_bin="$SPARK_GOVERNOR_BIN"
+else
+  gov_cfg="$(git config --get spark.governorBin 2>/dev/null || true)"
+  if [ -n "$gov_cfg" ] && [ -x "$gov_cfg" ]; then
+    gov_bin="$gov_cfg"
+  elif [ -n "${SPARK_ROOT:-}" ] && [ -x "${SPARK_ROOT}/bin/spark" ]; then
+    gov_bin="${SPARK_ROOT}/bin/spark"
+  elif command -v spark >/dev/null 2>&1; then
+    gov_bin="$(command -v spark)"
+  fi
+fi
+
+if [ -n "$gov_bin" ]; then
+  gov_version="$("$gov_bin" version 2>/dev/null | awk '{ print $NF }' | grep -Eo '^[0-9]+\.[0-9]+\.[0-9]+' || true)"
+  if [ -n "$gov_version" ]; then
+    want="v$gov_version"
+    # A supplied Spark-Governed-By is only ever valid if it already matches the
+    # mechanically resolved governor. A conflicting value is false provenance and a
+    # duplicate is never canonical — both fail closed rather than being rewritten.
+    gov_count="$(grep -icE '^Spark-Governed-By:' "$msg_file" || true)"
+    if [ "${gov_count:-0}" -gt 1 ]; then
+      fail "Spark-Governed-By appears ${gov_count} times; it is recorded exactly once."
+    fi
+    if [ "${gov_count:-0}" -eq 1 ]; then
+      supplied="$(grep -iE '^Spark-Governed-By:' "$msg_file" | head -n1 | sed -E 's/^[^:]*:[[:space:]]*//')"
+      if [ "$supplied" != "$want" ]; then
+        fail "Spark-Governed-By: ${supplied} conflicts with the installed governor (${want}). Spark stamps governance provenance mechanically — remove the manual trailer."
+      fi
+    fi
+    # Idempotent add: a no-op when the correct trailer already exists (amend/re-run).
+    git interpret-trailers --in-place --if-exists doNothing \
+      --trailer "Spark-Governed-By=${want}" "$msg_file"
+    # Optional durable run identity — projected only when one actually exists in the
+    # environment; never invented when absent.
+    if [ -n "${SPARK_RUN_ID:-}" ]; then
+      git interpret-trailers --in-place --if-exists doNothing \
+        --trailer "Spark-Run=${SPARK_RUN_ID}" "$msg_file"
+    fi
+  fi
+fi
+
 exit 0

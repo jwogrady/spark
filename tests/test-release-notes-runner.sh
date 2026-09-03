@@ -311,6 +311,27 @@ sha_ind="$(gitc rev-parse HEAD)"
 [ "$(cd "$fixture" && notes_body_breaking "$sha_ind")" = "breaking" ] \
   && ok || bad "F5: indented BREAKING-CHANGE footer must be detected"
 
+# #710: governance trailers are metadata, never release-note content. They ride
+# in the commit BODY (the subject parser only ever sees SUBJECT lines), they are
+# not a rendered conventional type, and they are not a BREAKING footer — so the
+# changelog generator and the completeness guard both ignore them. Proven here
+# deterministically rather than trusted.
+gov_type="$(notes_parse_subject 'Spark-Governed-By: v0.23.0' | cut -f1)"
+case "$gov_type" in
+  feat|fix|docs|chore|refactor|test) bad "#710: a Spark-Governed-By trailer must not be a rendered release-note type (got '$gov_type')" ;;
+  *) ok ;;
+esac
+run_type="$(notes_parse_subject 'Spark-Run: run-42' | cut -f1)"
+case "$run_type" in
+  feat|fix|docs|chore|refactor|test) bad "#710: a Spark-Run trailer must not be a rendered release-note type (got '$run_type')" ;;
+  *) ok ;;
+esac
+gitc commit -q --allow-empty -m 'feat: governed change' -m 'why it matters' \
+  -m 'Spark-Governed-By: v0.23.0' -m 'Spark-Run: run-42'
+sha_gov="$(gitc rev-parse HEAD)"
+[ -z "$(cd "$fixture" && notes_body_breaking "$sha_gov")" ] \
+  && ok || bad "#710: a governance-trailer body must not be read as a BREAKING footer"
+
 # F7: a hostile tab inside a verbatim commit subject must not inject TSV
 # columns (labels/breaking field shift).
 date +%s%N > "$fixture/core.txt"
