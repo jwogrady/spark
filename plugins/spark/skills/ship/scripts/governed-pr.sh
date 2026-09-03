@@ -20,7 +20,12 @@
 set -euo pipefail
 
 FACT_CANON='^Governed by Spark v[0-9]+\.[0-9]+\.[0-9]+$'
-FACT_ANY='^[[:space:]]*Governed by Spark([[:space:]]|$)'
+# A governor CLAIM is "Governed by Spark <version>" anywhere it is asserted,
+# including behind Markdown list/quote/heading prefixes (- * + > #) or an ordered
+# list number, so a claim like `- Governed by Spark v9.9.9` cannot hide from the
+# conflict/duplicate check and be left contradicting the canonical line. Only the
+# bare canonical form (FACT_CANON) is ever accepted; every other match is rejected.
+FACT_ANY='^[[:space:]]*([*+>#-][[:space:]]*|[0-9]+\.[[:space:]]*)*Governed by Spark[[:space:]]+v?[0-9]'
 
 gp_die() { echo "governed-pr: $1" >&2; exit "${2:-1}"; }
 

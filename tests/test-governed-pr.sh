@@ -58,6 +58,20 @@ printf 'body\n\ngoverned by spark v0.23.0\n' > "$WORK/nc.md"
 nrc=0; bash "$GP" ensure "$WORK/nc.md" >/dev/null 2>&1 || nrc=$?
 [ "$nrc" -ne 0 ] && ok || bad "#710: a noncanonical governor line must be rejected"
 
+# --- Markdown-prefixed claims cannot hide from the conflict/duplicate check ------
+# A list/quote/heading-prefixed claim is still a governor claim: it must be detected
+# and rejected, never left contradicting an appended canonical line.
+for md in '- Governed by Spark v9.9.9' '> Governed by Spark v9.9.9' '* Governed by Spark v9.9.9' '1. Governed by Spark v9.9.9'; do
+  printf 'body\n\n%s\n' "$md" > "$WORK/md.md"
+  mrc=0; out_md="$(bash "$GP" ensure "$WORK/md.md" 2>/dev/null)" || mrc=$?
+  [ "$mrc" -ne 0 ] && ok || bad "#710: a Markdown-prefixed governor claim '$md' must fail closed"
+  case "$out_md" in *v9.9.9*) bad "#710: a contradictory prefixed claim must not survive alongside the canonical line" ;; *) ok ;; esac
+done
+# even a version-MATCHING but Markdown-prefixed line is noncanonical and rejected.
+printf 'body\n\n- Governed by Spark v0.23.0\n' > "$WORK/md2.md"
+m2=0; bash "$GP" ensure "$WORK/md2.md" >/dev/null 2>&1 || m2=$?
+[ "$m2" -ne 0 ] && ok || bad "#710: a Markdown-prefixed even-matching claim must be rejected as noncanonical"
+
 # --- commit / PR governor agreement ---------------------------------------------
 # The commit trailer and the PR fact both derive from the pin, so they agree.
 printf '%s' "$out" > "$WORK/agree.md"
