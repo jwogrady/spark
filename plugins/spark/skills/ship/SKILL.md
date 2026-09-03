@@ -39,11 +39,11 @@ identically.
 5. **Open the PR** into the default branch. **Title it to match how PRs land
    here** — plainly for merge commits, conventionally for squash merges; the
    wrong one doubles or drops the entry ([release-please.md](references/release-please.md)). Body should cover:
-   - **What** changed and **why** (link the issue: `Closes #12`), plus a durable **`Governed by Spark vX.Y.Z`** line whose version is the branch commits' own `Spark-Governed-By` trailer (the pinned installed governor — `"$(git config --local spark.governorBin)" version`, the SAME repository-local resolver the commit-msg hook uses), so the PR and commit provenance cannot disagree and a squash/rebase merge cannot erase the signal. (A richer, mechanically-projected GitHub provenance check is #711's facility, not this primitive.)
+   - **What** changed and **why** (link the issue: `Closes #12`).
    - How it was verified (tests run, app exercised) — use the evidence classes
      from [`validate`](../validate/SKILL.md) where the distinction matters.
    - Anything reviewers should look at closely.
-6. **Report the PR URL** back to the user.
+6. **Stamp durable governor provenance, then report the PR URL.** Run `bash <path-to-this-skill>/scripts/governed-pr.sh apply <pr>` — it mechanically projects the canonical **`Governed by Spark vX.Y.Z`** onto the PR body from the SAME repository-local pinned governor the commit `Spark-Governed-By` trailers use (idempotent; refuses a conflicting or duplicate claim), so the signal survives a squash/rebase merge and stays queryable through the API. (The richer GitHub provenance check and multi-actor execution provenance is #711, not this primitive.) Then report the PR URL.
 7. **Ask the promotion question once.** Issue completion is a natural
    provenance boundary (ADR-0028): would this work still be true and useful if
    the implementation disappeared and were rebuilt? A "no" needs no ceremony —
