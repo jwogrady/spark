@@ -39,7 +39,7 @@ identically.
 5. **Open the PR** into the default branch. **Title it to match how PRs land
    here** — plainly for merge commits, conventionally for squash merges; the
    wrong one doubles or drops the entry ([release-please.md](references/release-please.md)). Body should cover:
-   - **What** changed and **why** (link the issue: `Closes #12`), plus a durable **`Governed by Spark vX.Y.Z`** line (the version from `spark version`) so a squash/rebase merge cannot erase the governance signal.
+   - **What** changed and **why** (link the issue: `Closes #12`), plus a durable **`Governed by Spark vX.Y.Z`** line whose version is the branch commits' own `Spark-Governed-By` trailer (the pinned installed governor — `"$(git config spark.governorBin)" version`, the SAME resolver the commit-msg hook uses), so the PR and commit provenance cannot disagree and a squash/rebase merge cannot erase the signal.
    - How it was verified (tests run, app exercised) — use the evidence classes
      from [`validate`](../validate/SKILL.md) where the distinction matters.
    - Anything reviewers should look at closely.

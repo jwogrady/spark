@@ -59,14 +59,23 @@ msg2="$(git log -1 --format='%B')"
 n2="$(printf '%s\n' "$msg2" | grep -c '^Spark-Governed-By:' || true)"
 [ "$n2" = 1 ] && ok || bad "#710: each governed commit carries exactly one trailer (got $n2)"
 
-# Optional run identity rides a real commit only when SPARK_RUN_ID exists.
-printf 'again\n' >> f.txt
-git add f.txt
-SPARK_RUN_ID=run-e2e git commit -q -m "chore: with a run id"
-msg3="$(git log -1 --format='%B')"
-case "$msg3" in
-  *"Spark-Run: run-e2e"*) ok ;;
-  *) bad "#710: SPARK_RUN_ID must project a Spark-Run trailer on a real commit (got: $msg3)" ;;
-esac
+# Once the governor is PINNED, the canonical pin wins: an override pointing at a
+# DIFFERENT binary must fail closed, never silently stamp a foreign version.
+cp -r "$WORK/plugin" "$WORK/other"
+sed -i 's/"version": "[^"]*"/"version": "9.9.9"/' "$WORK/other/.claude-plugin/plugin.json"
+printf 'again\n' >> f.txt; git add f.txt
+orc=0
+SPARK_GOVERNOR_BIN="$WORK/other/bin/spark" git commit -q -m "feat: overridden" 2>"$WORK/oerr.txt" || orc=$?
+[ "$orc" -ne 0 ] && ok || bad "#710: an override disagreeing with the pinned governor must fail closed"
+case "$(cat "$WORK/oerr.txt")" in *disagrees*) ok ;; *) bad "#710: the override-conflict diagnostic must name the disagreement" ;; esac
+
+# A governed repo whose pinned governor is broken must STOP the commit, not fall
+# through to another binary or silently omit provenance.
+git config spark.governorBin "$WORK/nonexistent/bin/spark"
+brc=0
+git commit -q -m "feat: broken governor" 2>"$WORK/berr.txt" || brc=$?
+[ "$brc" -ne 0 ] && ok || bad "#710: a governed repo with a broken pinned governor must fail closed"
+# restore the good pin so the tree is left consistent
+git config spark.governorBin "$GOV"
 
 finish

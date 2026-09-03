@@ -55,47 +55,61 @@ esac
 # under an earlier installed governor is stamped with that governor, not its own
 # in-progress version. An unconfigured / non-Spark repository resolves no governor
 # and is left untouched: attribution is recorded, never fabricated.
-gov_bin=""
-if [ -n "${SPARK_GOVERNOR_BIN:-}" ] && [ -x "${SPARK_GOVERNOR_BIN:-}" ]; then
-  gov_bin="$SPARK_GOVERNOR_BIN"
+# Resolve the governor. A repository whose hooks were installed by Spark has the
+# CANONICAL governor pinned in `spark.governorBin` (see install-git-hooks); that
+# pin is authoritative. Once a repo is governed, resolution failure STOPS the
+# commit rather than silently substituting another binary or omitting provenance —
+# false or missing governance is worse than a blocked commit. Only an UNPINNED
+# (not-yet-governed) repo resolves leniently, and an unresolved governor there
+# simply stamps nothing: attribution is recorded, never fabricated.
+gov_bin=""; gov_version=""
+gov_pin="$(git config --get spark.governorBin 2>/dev/null || true)"
+if [ -n "$gov_pin" ]; then
+  # A caller-supplied override must not silently stamp a version from a different
+  # binary than the pinned installed governor.
+  if [ -n "${SPARK_GOVERNOR_BIN:-}" ] && [ "${SPARK_GOVERNOR_BIN}" != "$gov_pin" ]; then
+    fail "SPARK_GOVERNOR_BIN (${SPARK_GOVERNOR_BIN}) disagrees with this repository's pinned governor (${gov_pin}); the pinned installed governor is canonical."
+  fi
+  [ -x "$gov_pin" ] || fail "the pinned Spark governor is not executable: ${gov_pin}. Re-run 'spark install-git-hooks' from the installed governor."
+  gov_version="$("$gov_pin" version 2>/dev/null | awk '{ print $NF }' | grep -Eo '^[0-9]+\.[0-9]+\.[0-9]+' || true)"
+  [ -n "$gov_version" ] || fail "the pinned Spark governor (${gov_pin}) reported no usable version; cannot record governance provenance."
+  gov_bin="$gov_pin"
 else
-  gov_cfg="$(git config --get spark.governorBin 2>/dev/null || true)"
-  if [ -n "$gov_cfg" ] && [ -x "$gov_cfg" ]; then
-    gov_bin="$gov_cfg"
+  if [ -n "${SPARK_GOVERNOR_BIN:-}" ] && [ -x "${SPARK_GOVERNOR_BIN:-}" ]; then
+    gov_bin="$SPARK_GOVERNOR_BIN"
   elif [ -n "${SPARK_ROOT:-}" ] && [ -x "${SPARK_ROOT}/bin/spark" ]; then
     gov_bin="${SPARK_ROOT}/bin/spark"
   elif command -v spark >/dev/null 2>&1; then
     gov_bin="$(command -v spark)"
   fi
+  if [ -n "$gov_bin" ]; then
+    gov_version="$("$gov_bin" version 2>/dev/null | awk '{ print $NF }' | grep -Eo '^[0-9]+\.[0-9]+\.[0-9]+' || true)"
+  fi
 fi
 
-if [ -n "$gov_bin" ]; then
-  gov_version="$("$gov_bin" version 2>/dev/null | awk '{ print $NF }' | grep -Eo '^[0-9]+\.[0-9]+\.[0-9]+' || true)"
-  if [ -n "$gov_version" ]; then
-    want="v$gov_version"
-    # A supplied Spark-Governed-By is only ever valid if it already matches the
-    # mechanically resolved governor. A conflicting value is false provenance and a
-    # duplicate is never canonical — both fail closed rather than being rewritten.
-    gov_count="$(grep -icE '^Spark-Governed-By:' "$msg_file" || true)"
-    if [ "${gov_count:-0}" -gt 1 ]; then
-      fail "Spark-Governed-By appears ${gov_count} times; it is recorded exactly once."
+if [ -n "$gov_version" ]; then
+  want="v$gov_version"
+  # A supplied Spark-Governed-By is valid only if it is ALREADY the exact canonical
+  # form for the resolved governor. A duplicate is never canonical, a value that
+  # disagrees is false provenance, and a noncanonical key/spacing/value is not the
+  # canonical trailer — all fail closed rather than being silently accepted or
+  # rewritten. The hook itself only ever writes the canonical form.
+  gov_seen="$(grep -icE '^[[:space:]]*Spark-Governed-By[[:space:]]*:' "$msg_file" || true)"
+  if [ "${gov_seen:-0}" -gt 1 ]; then
+    fail "Spark-Governed-By appears ${gov_seen} times; it is recorded exactly once."
+  fi
+  if [ "${gov_seen:-0}" -eq 1 ]; then
+    gov_line="$(grep -iE '^[[:space:]]*Spark-Governed-By[[:space:]]*:' "$msg_file" | head -n1)"
+    if ! printf '%s' "$gov_line" | grep -qE '^Spark-Governed-By: v[0-9]+\.[0-9]+\.[0-9]+$'; then
+      fail "Spark-Governed-By must be the canonical 'Spark-Governed-By: vX.Y.Z' form (got '${gov_line}'); remove it and let Spark stamp it."
     fi
-    if [ "${gov_count:-0}" -eq 1 ]; then
-      supplied="$(grep -iE '^Spark-Governed-By:' "$msg_file" | head -n1 | sed -E 's/^[^:]*:[[:space:]]*//')"
-      if [ "$supplied" != "$want" ]; then
-        fail "Spark-Governed-By: ${supplied} conflicts with the installed governor (${want}). Spark stamps governance provenance mechanically — remove the manual trailer."
-      fi
-    fi
-    # Idempotent add: a no-op when the correct trailer already exists (amend/re-run).
-    git interpret-trailers --in-place --if-exists doNothing \
-      --trailer "Spark-Governed-By=${want}" "$msg_file"
-    # Optional durable run identity — projected only when one actually exists in the
-    # environment; never invented when absent.
-    if [ -n "${SPARK_RUN_ID:-}" ]; then
-      git interpret-trailers --in-place --if-exists doNothing \
-        --trailer "Spark-Run=${SPARK_RUN_ID}" "$msg_file"
+    if [ "${gov_line#Spark-Governed-By: }" != "$want" ]; then
+      fail "Spark-Governed-By: ${gov_line#Spark-Governed-By: } conflicts with the installed governor (${want}). Spark stamps governance provenance mechanically — remove the manual trailer."
     fi
   fi
+  # Idempotent add: a no-op when the canonical trailer already exists (amend/re-run).
+  git interpret-trailers --in-place --if-exists doNothing \
+    --trailer "Spark-Governed-By=${want}" "$msg_file"
 fi
 
 exit 0

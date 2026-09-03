@@ -6652,9 +6652,14 @@ cmd_install_git_hooks() {
   # THIS binary for `spark version` to stamp Spark-Governed-By, so the recorded
   # provenance is the installed governor, not whatever `spark` happens to be on a
   # future PATH nor the target repo's own unreleased manifest. Re-running after an
-  # in-place upgrade repoints it. Best-effort: a repo without this config falls back
-  # to SPARK_ROOT/PATH resolution, and an unresolved governor stamps nothing.
-  git config spark.governorBin "$SPARK_ROOT/bin/spark" 2>/dev/null || true
+  # in-place upgrade repoints it. This pin is the governed repo's canonical
+  # governor, so failing to record it would install governance hooks with no
+  # established governor — fail clearly rather than leave that gap.
+  if ! git config spark.governorBin "$SPARK_ROOT/bin/spark"; then
+    red "! could not record the governor pin (spark.governorBin) — governance provenance would be unestablished"
+    INSTALL_GIT_HOOKS_ATTENTION=$((INSTALL_GIT_HOOKS_ATTENTION+1))
+    failed=1; INSTALL_GIT_HOOKS_FAILED=1
+  fi
   return "$failed"
 }
 

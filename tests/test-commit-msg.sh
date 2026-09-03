@@ -97,11 +97,13 @@ drc=0; gov_hook || drc=$?
 printf 'feat: x\n\nbody\n\nSpark-Governed-By: v0.23.0\n' > "$gmsg"; gov_hook
 [ "$(gov_count)" = 1 ] && ok || bad "#710: a matching supplied trailer must stay single (got $(gov_count))"
 
-# 6. optional run identity appears ONLY when a durable one exists — never invented.
-printf 'fix: y\n\nbody\n' > "$gmsg"; ( cd "$WORK/proj" && SPARK_GOVERNOR_BIN="$GOVBIN" SPARK_RUN_ID=run-42 bash "$hook" "$gmsg" >/dev/null 2>&1 )
-assert_contains "#710: Spark-Run is projected when SPARK_RUN_ID exists" "Spark-Run: run-42" "$(cat "$gmsg")"
-printf 'fix: z\n\nbody\n' > "$gmsg"; gov_hook
-case "$(cat "$gmsg")" in *Spark-Run:*) bad "#710: no Spark-Run may be invented without SPARK_RUN_ID" ;; *) ok ;; esac
+# 6. a noncanonical Spark-Governed-By (wrong key casing or spacing) is rejected,
+#    not silently accepted — a governed commit contains exactly the canonical form.
+for bad_form in 'spark-governed-by: v0.23.0' 'Spark-Governed-By:v0.23.0' 'Spark-Governed-By:  v0.23.0'; do
+  printf 'feat: x\n\nbody\n\n%s\n' "$bad_form" > "$gmsg"
+  frc=0; gov_hook || frc=$?
+  [ "$frc" -ne 0 ] && ok || bad "#710: a noncanonical trailer '$bad_form' must be rejected"
+done
 
 # 7. an unconfigured / non-Spark repository receives NO fabricated attribution.
 printf 'feat: plain\n\nbody\n' > "$gmsg"

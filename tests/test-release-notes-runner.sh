@@ -321,13 +321,8 @@ case "$gov_type" in
   feat|fix|docs|chore|refactor|test) bad "#710: a Spark-Governed-By trailer must not be a rendered release-note type (got '$gov_type')" ;;
   *) ok ;;
 esac
-run_type="$(notes_parse_subject 'Spark-Run: run-42' | cut -f1)"
-case "$run_type" in
-  feat|fix|docs|chore|refactor|test) bad "#710: a Spark-Run trailer must not be a rendered release-note type (got '$run_type')" ;;
-  *) ok ;;
-esac
 gitc commit -q --allow-empty -m 'feat: governed change' -m 'why it matters' \
-  -m 'Spark-Governed-By: v0.23.0' -m 'Spark-Run: run-42'
+  -m 'Spark-Governed-By: v0.23.0'
 sha_gov="$(gitc rev-parse HEAD)"
 [ -z "$(cd "$fixture" && notes_body_breaking "$sha_gov")" ] \
   && ok || bad "#710: a governance-trailer body must not be read as a BREAKING footer"
