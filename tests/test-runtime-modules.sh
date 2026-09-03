@@ -152,7 +152,7 @@ loaded_of() { # loaded_of <run>
 }
 bytes_of() { # bytes_of <run>
   "$SPARK" telemetry show --run "$1" --json 2>/dev/null \
-    | sed -n 's/.*"runtime_source_bytes":\([0-9]*\).*/\1/p'
+    | sed -n 's/.*"runtime_peak_source_bytes":\([0-9]*\).*/\1/p'
 }
 
 SPARK_RUN_ID=rt-core   "$SPARK" version        >/dev/null 2>&1
@@ -191,6 +191,53 @@ else ok; fi
 # recursion is load-bearing rather than decorative.
 if grep -q 'SPARK_RECORDING' "$WORK/plugin/bin/spark"; then ok
 else bad "the nested-recording guard must exist"; fi
+
+# --- #670: the run summary is per-RUN, not the last command in the run --------
+# A run invokes Spark many times. The #667 fields were last-write-wins, so a
+# later lightweight verb erased that an earlier verb loaded a module and shrank
+# the peak footprint. The footprint is now an append-only per-invocation log and
+# the summary is DERIVED from it: the distinct module union and the peak bytes,
+# neither of which a trailing command can undo.
+plan_peak_b="$(( disp_b + plan_b ))"
+
+# plan then a trailing core verb, under ONE run id — the exact reproduction.
+SPARK_RUN_ID=rt-multi "$SPARK" plan --help >/dev/null 2>&1
+SPARK_RUN_ID=rt-multi "$SPARK" version     >/dev/null 2>&1
+assert_contains "#670: a trailing core verb cannot erase an earlier module load" "planning" "$(loaded_of rt-multi)"
+[ "$(bytes_of rt-multi)" = "$plan_peak_b" ] && ok \
+  || bad "#670: a trailing lightweight verb must not shrink the peak bytes (got $(bytes_of rt-multi), want $plan_peak_b)"
+
+# The reverse order proves the summary is order-independent, not merely first- or
+# last-write.
+SPARK_RUN_ID=rt-rev "$SPARK" version     >/dev/null 2>&1
+SPARK_RUN_ID=rt-rev "$SPARK" plan --help >/dev/null 2>&1
+assert_contains "#670: the derived module set is order-independent" "planning" "$(loaded_of rt-rev)"
+[ "$(bytes_of rt-rev)" = "$plan_peak_b" ] && ok \
+  || bad "#670: the derived peak is order-independent (got $(bytes_of rt-rev), want $plan_peak_b)"
+
+# Two differently-loaded module verbs in one run: the summary is their DISTINCT
+# UNION, sorted — not just the last one.
+SPARK_RUN_ID=rt-union "$SPARK" plan --help    >/dev/null 2>&1
+SPARK_RUN_ID=rt-union "$SPARK" telemetry list  >/dev/null 2>&1
+[ "$(loaded_of rt-union)" = "execution,planning" ] && ok \
+  || bad "#670: a run's modules must be the distinct union of every invocation (got '$(loaded_of rt-union)')"
+
+# The authority is an append-only log that retains EVERY invocation: three
+# commands, three lines, none overwritten.
+mlog="$WORK/proj/.spark/telemetry/rt-union.footprint"
+[ -f "$mlog" ] && ok || bad "#670: the append-only footprint log must exist at .spark/telemetry/<run>.footprint"
+[ "$(wc -l < "$mlog" | tr -d ' ')" = 2 ] && ok \
+  || bad "#670: the append-only log must retain one line per invocation, never overwrite"
+
+# MUTATION CONTROL (#670): disable the read-time derivation and the erased
+# last-write projection must resurface — proving the derivation, not the stored
+# .tsv, is what keeps the run summary truthful.
+mutant_runtime 's#\[ -f "$flog" \] || return 1#return 1#'
+[ "$MUTANT_CHANGED" = "1" ] && ok || bad "#670 MUTATION changed nothing — it proves nothing"
+mut_loaded="$("$MUTANT_PATH" telemetry show --run rt-multi --json 2>/dev/null \
+  | sed -n 's/.*"runtime_modules_loaded":"\([^"]*\)".*/\1/p')"
+[ "$mut_loaded" = "none" ] && ok \
+  || bad "#670 MUTATION — with derivation disabled the erased last-write value must resurface (got '$mut_loaded')"
 
 # --- MUTATION CONTROL --------------------------------------------------------
 # Make every verb claim it needs the execution module. The split would still
