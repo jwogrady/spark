@@ -235,9 +235,27 @@ When in doubt, ask.
 
 ## Attribution
 
-Credit belongs to the author only. In any author/credit/metadata field, use the
-literal string `jwogrady`. Never credit an AI system (Claude, Anthropic, Copilot,
-ChatGPT, etc.) in any commit message, PR, file header, comment, doc, or manifest.
+Three roles, and they must never be collapsed into one another:
+
+- **Author/owner** — the human/project authority. Credit belongs here, and only
+  here. In any author/credit/metadata field, use the literal string `jwogrady`.
+- **Worker/provider** — Claude, OpenAI, Copilot, ChatGPT, etc. These are delegated
+  execution surfaces; performing implementation work never makes one a project
+  author. Never credit an AI system in any commit message, PR, file header,
+  comment, doc, or manifest, and never a `Co-Authored-By` trailer for one — the
+  commit-msg hook rejects it.
+- **Governor** — the installed Spark control plane. Spark may be credited for the
+  governance/control-plane role it actually performed, as `Governed by Spark
+  vX.Y.Z`. Governed commits carry a mechanical `Spark-Governed-By: vX.Y.Z` trailer
+  (and an optional `Spark-Run: <run-id>` only when a durable run identity exists),
+  and PRs carry the same `Governed by Spark vX.Y.Z` line so a squash/rebase merge
+  cannot erase the only durable signal.
+
+Governance provenance is **not authorship**: the `Spark-Governed-By` value is
+sourced from the *installed* governor's `spark version` (never the working tree's
+unreleased manifest), it never credits an AI worker, and it never changes the Git
+author or committer. A supplied trailer that disagrees with the resolved installed
+governor fails closed rather than recording false provenance.
 
 ## Naming
 
