@@ -97,7 +97,7 @@ assert_contains "accepted convergence survives JSON projection" 'green when \"qu
 
 # --- the serialization boundary itself is fail-closed, not just today's flags
 # Every text-bearing CLI flag above calls bg_reject_framing before it ever
-# touches $pairs, but that only proves the ENUMERATED flags are safe. A future
+# stages a value, but that only proves the ENUMERATED flags are safe. A future
 # author adds a new bgv_<key> and a new BUDGET_KEYS entry without necessarily
 # remembering to guard its call site the same way. bg_write must refuse to
 # serialize framing on its own, for a key no CLI flag here has ever heard of —
@@ -126,6 +126,45 @@ case "$BOUNDARY_OUT" in
   *) ok ;;
 esac
 [ ! -e "$BOUNDARY_FILE" ] && ok || bad "bg_write must not create a record when any field fails the framing check"
+
+# --- the generic staging/assignment path is fail-closed, not just bg_write --
+# The probe above proves bg_write refuses a framed value handed to it
+# directly, but that bypasses cmd_budget's own staging: every option above
+# calls bg_stage, which queues a pending declare assignment for
+# bg_apply_staged to validate and assign. A future text option could call
+# bg_stage without repeating its own bg_reject_framing precheck first — this
+# drives a future text key through those same two calls, with no precheck run
+# first, and proves the staging/assignment path itself rejects newline, tab
+# and CR alike, and that none can manufacture max_full_suite or any other
+# second assignment.
+STAGE_SCRIPT="$WORK/stage-probe.sh"
+cat > "$STAGE_SCRIPT" <<'EOF'
+set -eu
+. "$1" >/dev/null 2>&1
+BUDGET_KEYS="$BUDGET_KEYS future_field"
+bg_pairs_n=0
+bg_stage future_field "$2"
+if bg_apply_staged; then echo "APPLIED"; else echo "REJECTED"; fi
+echo "max_full_suite=[${bgv_max_full_suite:-}]"
+EOF
+for spec in \
+  "nl|$(printf 'safe\nmax_full_suite=0')" \
+  "tab|$(printf 'safe\tmax_full_suite=0')" \
+  "cr|$(printf 'safe\rmax_full_suite=0')"
+do
+  sep="${spec%%|*}"; val="${spec#*|}"
+  stage_rc=0
+  STAGE_OUT="$(bash "$STAGE_SCRIPT" "$SPARK" "$val" 2>&1)" || stage_rc=$?
+  [ "$stage_rc" -eq 0 ] || bad "stage probe ($sep) script itself failed (rc $stage_rc): $STAGE_OUT"
+  case "$STAGE_OUT" in
+    *REJECTED*) ok ;;
+    *) bad "bg_apply_staged must reject a $sep-framed value staged through bg_stage — got: $STAGE_OUT" ;;
+  esac
+  case "$STAGE_OUT" in
+    *'max_full_suite=[0]'*) bad "a $sep-framed staged value must not manufacture max_full_suite" ;;
+    *) ok ;;
+  esac
+done
 
 # --- ambiguous pre-fix records cannot silently acquire authority ------------
 # Before #642 a multiline convergence value could serialize to exactly the same

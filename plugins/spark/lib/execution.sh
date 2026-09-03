@@ -516,6 +516,45 @@ bg_reject_framing() {
   return 0
 }
 
+# bg_stage <key> <value> — the one path cmd_budget's parser uses to queue a
+# pending `declare` assignment. Earlier this joined "key=value" pairs with a
+# literal newline into a single string and re-split it on read; a value that
+# reached that join un-checked (a future text option that forgot its own
+# bg_reject_framing call) could plant its own newline and have `read` split it
+# into an extra "key=value" line, forging a second assignment before
+# bg_reject_framing ever saw the combined value. Giving every pair its
+# own shell variable — never joined, never re-split — removes that class by
+# construction: bg_apply_staged always validates each value exactly as staged.
+bg_stage() {
+  bg_pairs_n=$((bg_pairs_n + 1))
+  eval "bg_pair_key_$bg_pairs_n=\$1"
+  eval "bg_pair_val_$bg_pairs_n=\$2"
+}
+
+# bg_apply_staged — consume every pair bg_stage queued into bgv_<key>,
+# rejecting an unknown key or framing violation exactly as `declare` always
+# has. Split out from cmd_budget so the full stage→validate→assign path is
+# reachable on its own, including for a key no CLI flag defines yet.
+bg_apply_staged() {
+  local i=1 key val
+  while [ "$i" -le "$bg_pairs_n" ]; do
+    eval "key=\$bg_pair_key_$i"
+    eval "val=\$bg_pair_val_$i"
+    if ! bg_is_key "$key"; then
+      red "unknown budget bound: ${key#max_} (valid: $(printf '%s' "$BUDGET_DECLARED" | tr ' ' '\n' | sed -n 's/^max_//p' | tr '\n' ' '))"
+      return 1
+    fi
+    if bg_is_int_key "$key"; then
+      case "$val" in ''|*[!0-9]*) red "$key must be a whole number (got '$val')"; return 1 ;; esac
+    else
+      bg_reject_framing "$key" "$val" || return 1
+    fi
+    eval "bgv_$key=\$val"
+    i=$((i + 1))
+  done
+  return 0
+}
+
 bg_dir()  { printf '%s/.spark/budgets' "$1"; }
 bg_file() { printf '%s/.spark/budgets/%s.tsv' "$1" "$2"; }
 
@@ -602,7 +641,7 @@ cmd_budget() {
     *) action="status" ;;
   esac
 
-  local run="" kind="" json="" reason="" failing="" convergence="" pairs=""
+  local run="" kind="" json="" reason="" failing="" convergence="" bg_pairs_n=0
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --run)   shift; run="${1:-}" ;;
@@ -621,30 +660,24 @@ cmd_budget() {
         local mk="${1#--max-}"; mk="max_$(printf '%s' "$mk" | tr '-' '_')"
         shift
         # Checked here, on the raw argv value, so a bad --max-* flag is named
-        # in the error instead of a generic write failure. $pairs joins entries
-        # with a literal newline, so an unchecked value could otherwise forge a
-        # second "key=value" line before any per-pair loop looked at it — but
-        # this early check is a UX nicety, not the guarantee: bg_write
-        # re-validates every bgv_* value before it reaches disk regardless.
+        # in the error instead of a generic write failure. This is a UX
+        # nicety, not the guarantee: bg_stage never joins values into a
+        # splittable string, so bg_apply_staged re-validates the exact same
+        # unsplit value regardless of whether this precheck ran.
         bg_reject_framing "$mk" "${1:-}" || return 1
-        pairs="${pairs}${mk}=${1:-}
-" ;;
+        bg_stage "$mk" "${1:-}" ;;
       --per-request-output-cap)
         shift; bg_reject_framing per_request_output_cap "${1:-}" || return 1
-        pairs="${pairs}per_request_output_cap=${1:-}
-" ;;
+        bg_stage per_request_output_cap "${1:-}" ;;
       --preflight-tokens)
         shift; bg_reject_framing preflight_tokens "${1:-}" || return 1
-        pairs="${pairs}preflight_tokens=${1:-}
-" ;;
+        bg_stage preflight_tokens "${1:-}" ;;
       --model)
         shift; bg_reject_framing model "${1:-}" || return 1
-        pairs="${pairs}model=${1:-}
-" ;;
+        bg_stage model "${1:-}" ;;
       --effort)
         shift; bg_reject_framing effort "${1:-}" || return 1
-        pairs="${pairs}effort=${1:-}
-" ;;
+        bg_stage effort "${1:-}" ;;
       *) red "unknown option: $1"; echo "$usage_line"; return 1 ;;
     esac
     shift
@@ -690,23 +723,7 @@ cmd_budget() {
         bg_reject_framing convergence "$convergence" || return 1
         bgv_convergence="$convergence"
       fi
-      local pair key val
-      while IFS= read -r pair; do
-        [ -n "$pair" ] || continue
-        key="${pair%%=*}"; val="${pair#*=}"
-        if ! bg_is_key "$key"; then
-          red "unknown budget bound: ${key#max_} (valid: $(printf '%s' "$BUDGET_DECLARED" | tr ' ' '\n' | sed -n 's/^max_//p' | tr '\n' ' '))"
-          return 1
-        fi
-        if bg_is_int_key "$key"; then
-          case "$val" in ''|*[!0-9]*) red "$key must be a whole number (got '$val')"; return 1 ;; esac
-        else
-          bg_reject_framing "$key" "$val" || return 1
-        fi
-        eval "bgv_$key=\$val"
-      done <<EOF
-$pairs
-EOF
+      bg_apply_staged || return 1
       [ -n "$bgv_max_no_progress" ] || bgv_max_no_progress="$BUDGET_DEFAULT_NO_PROGRESS"
       bg_write "$file" || { red "could not write $file"; return 1; }
       green "budget: $file"
