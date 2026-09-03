@@ -48,6 +48,11 @@ chmod +x "$SB/test-alpha.sh"
 export REAL_SPARK="$SPARK"
 export BAR_A_AT="$WORK/bar_a_at" BAR_RELEASE="$WORK/bar_release"
 export BAR_A_DONE="$WORK/bar_a_done" BAR_B_DONE="$WORK/bar_b_done"
+# A publisher's DONE marker is written only when its real record SUCCEEDS; a
+# failed record writes a distinct FAIL marker instead. run.sh reports a telemetry
+# failure without failing the runner, so a PID check alone would not catch it —
+# the controller must see B's 2 actually land before it releases A (#665).
+export BAR_A_FAIL="$WORK/bar_a_fail" BAR_B_FAIL="$WORK/bar_b_fail"
 cat > "$PROJ/plugins/spark/bin/spark" <<'WRAP'
 #!/usr/bin/env bash
 set -uo pipefail
@@ -64,13 +69,15 @@ if [ "${1:-}" = telemetry ] && [ "${2:-}" = record ] && [ "${RACE_BARRIER:-}" = 
       w=$((w + 1)); [ "$w" -gt 12000 ] && { echo "barrier: stale publisher never released" >&2; exit 91; }
       sleep 0.01
     done
-    rc=0; "$REAL_SPARK" "$@" || rc=$?
-    : > "$BAR_A_DONE"
-    exit "$rc"
+    # DONE only on a successful record; a failed one raises FAIL, never DONE, so
+    # the controller can never mistake a failed stale publish for a completed one.
+    if "$REAL_SPARK" "$@"; then : > "$BAR_A_DONE"; exit 0
+    else rc=$?; : > "$BAR_A_FAIL"; exit "$rc"; fi
   elif [ "$nf" = 2 ]; then
-    rc=0; "$REAL_SPARK" "$@" || rc=$?
-    : > "$BAR_B_DONE"
-    exit "$rc"
+    # The newer publish must SUCCEED for its completion to count: emit DONE only on
+    # success (FAIL otherwise), so releasing A can be gated on B's 2 truly landing.
+    if "$REAL_SPARK" "$@"; then : > "$BAR_B_DONE"; exit 0
+    else rc=$?; : > "$BAR_B_FAIL"; exit "$rc"; fi
   fi
 fi
 exec "$REAL_SPARK" "$@"
@@ -84,20 +91,37 @@ chmod +x "$PROJ/plugins/spark/bin/spark"
 #   A is released and publishes its stale full_suite_runs=1 LAST.
 # The stored last-write-wins projection is therefore 1, yet the authoritative
 # read must still report 2 from the append-only log.
-rm -f "$BAR_A_AT" "$BAR_RELEASE" "$BAR_A_DONE" "$BAR_B_DONE"
+rm -f "$BAR_A_AT" "$BAR_RELEASE" "$BAR_A_DONE" "$BAR_B_DONE" "$BAR_A_FAIL" "$BAR_B_FAIL"
 export RACE_BARRIER=1
+PTSV="$PROJ/.spark/telemetry/pair.tsv"
+# Robust under `set -e`: a missing record reads as 0, never an awk failure that
+# would abort the fixture — so a broken B publish FAILS the assertions explicitly
+# rather than exiting the script and leaving the parked runner to time out.
+tsv_full() {
+  [ -f "$PTSV" ] || { echo 0; return 0; }
+  awk -F'\t' '$1 == "full_suite_runs" { v = $2 } END { print v + 0 }' "$PTSV"
+}
 
 ( cd "$SB" && SPARK_RUN_ID=pair bash run.sh >/dev/null 2>&1 ) & A_PID=$!
-w=0; while [ ! -f "$BAR_A_AT" ]; do w=$((w + 1)); [ "$w" -gt 12000 ] && break; sleep 0.01; done
+w=0; while [ ! -f "$BAR_A_AT" ] && [ ! -f "$BAR_A_FAIL" ]; do w=$((w + 1)); [ "$w" -gt 12000 ] && break; sleep 0.01; done
 [ -f "$BAR_A_AT" ] && ok || bad "pair: runner A must reach the publish barrier having read the log as 1"
 
 ( cd "$SB" && SPARK_RUN_ID=pair bash run.sh >/dev/null 2>&1 ) & B_PID=$!
-w=0; while [ ! -f "$BAR_B_DONE" ]; do w=$((w + 1)); [ "$w" -gt 12000 ] && break; sleep 0.01; done
-[ -f "$BAR_B_DONE" ] && ok || bad "pair: runner B must publish full_suite_runs=2 and COMPLETE before A is released"
+# Wait for B to resolve either way — a successful publish (DONE) or a failed one
+# (FAIL) — so a broken recorder is caught explicitly, never by silent timeout.
+w=0; while [ ! -f "$BAR_B_DONE" ] && [ ! -f "$BAR_B_FAIL" ]; do w=$((w + 1)); [ "$w" -gt 12000 ] && break; sleep 0.01; done
+[ -f "$BAR_B_DONE" ] && ok \
+  || bad "pair: runner B must SUCCESSFULLY publish full_suite_runs=2 before A is released (fail=$([ -f "$BAR_B_FAIL" ] && echo yes || echo timeout))"
+# B's 2 must ACTUALLY be on disk before A is released — the stored projection is
+# read here and must be 2, so the stale-writer sequence provably starts from 2.
+b_stored="$(tsv_full)"
+[ "$b_stored" = 2 ] && ok \
+  || bad "pair: B's full_suite_runs=2 must be the stored projection before A is released (got $b_stored)"
 
 : > "$BAR_RELEASE"
-w=0; while [ ! -f "$BAR_A_DONE" ]; do w=$((w + 1)); [ "$w" -gt 12000 ] && break; sleep 0.01; done
-[ -f "$BAR_A_DONE" ] && ok || bad "pair: runner A must publish its stale 1 after release"
+w=0; while [ ! -f "$BAR_A_DONE" ] && [ ! -f "$BAR_A_FAIL" ]; do w=$((w + 1)); [ "$w" -gt 12000 ] && break; sleep 0.01; done
+[ -f "$BAR_A_DONE" ] && ok \
+  || bad "pair: runner A must SUCCESSFULLY publish its stale 1 after release (fail=$([ -f "$BAR_A_FAIL" ] && echo yes || echo timeout))"
 
 pair_fail=0
 wait "$A_PID" || pair_fail=$((pair_fail + 1))
@@ -109,8 +133,9 @@ PLOG="$PROJ/.spark/telemetry/pair.executions"
 pfull="$(awk -F'\t' '$1 == "full" { n++ } END { print n+0 }' "$PLOG")"
 [ "$pfull" = 2 ] && ok || bad "pair: the append-only log must hold both full executions (got $pfull)"
 
-PTSV="$PROJ/.spark/telemetry/pair.tsv"
-stored="$(awk -F'\t' '$1 == "full_suite_runs" { v = $2 } END { print v + 0 }' "$PTSV")"
+# The stored projection went 2 (B, proven above) then 1 (A, last): the exact
+# 2 -> stale-1 last-write-wins sequence #665 is about.
+stored="$(tsv_full)"
 [ "$stored" = 1 ] && ok \
   || bad "pair: the stale publish must finish LAST, leaving the stored projection at 1 (got $stored)"
 
