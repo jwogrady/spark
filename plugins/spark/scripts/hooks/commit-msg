@@ -63,7 +63,10 @@ esac
 # rather than substitute a binary or omit provenance; an UNPINNED repo is simply
 # not Spark-governed and is left untouched (recorded, never fabricated).
 gov_version=""
-gov_pin="$(git config --get spark.governorBin 2>/dev/null || true)"
+# REPOSITORY-LOCAL pin only: a global/system spark.governorBin must not make an
+# otherwise-unconfigured repository stamp provenance merely because it inherited a
+# user-wide setting. Governance is established per repository, by its own install.
+gov_pin="$(git config --local --get spark.governorBin 2>/dev/null || true)"
 if [ -n "$gov_pin" ]; then
   [ -x "$gov_pin" ] || fail "the pinned Spark governor is not executable: ${gov_pin}. Re-run 'spark install-git-hooks' from the installed governor."
   gov_raw="$("$gov_pin" version 2>/dev/null | awk '{ print $NF }')"
@@ -78,16 +81,27 @@ fi
 
 if [ -n "$gov_version" ]; then
   want="v$gov_version"
-  # A supplied Spark-Governed-By is valid only if it is ALREADY the exact canonical
-  # form for the resolved governor. A duplicate is never canonical, a value that
-  # disagrees is false provenance, and a noncanonical key/spacing/value is not the
-  # canonical trailer — all fail closed rather than being silently accepted or
-  # rewritten. The hook itself only ever writes the canonical form.
-  gov_seen="$(grep -icE '^[[:space:]]*Spark-Governed-By[[:space:]]*:' "$msg_file" || true)"
-  if [ "${gov_seen:-0}" -gt 1 ]; then
-    fail "Spark-Governed-By appears ${gov_seen} times; it is recorded exactly once."
+  # Validation runs against GIT'S OWN parsed trailer block, not a whole-message
+  # grep: a canonical-looking line in the body is NOT a trailer, and treating it as
+  # one would let interpret-trailers append a second real trailer and break
+  # exactly-once. A supplied trailer is valid only if it is already the exact
+  # canonical form for the resolved governor; a duplicate, a noncanonical
+  # key/spacing/value, a disagreeing value, or a body line masquerading as a
+  # trailer all fail closed. The hook itself only ever writes the canonical form.
+  parsed="$(git interpret-trailers --parse "$msg_file" 2>/dev/null || true)"
+  raw_seen="$(grep -icE '^[[:space:]]*Spark-Governed-By[[:space:]]*:' "$msg_file" || true)"
+  parsed_seen="$(printf '%s\n' "$parsed" | grep -icE '^Spark-Governed-By[[:space:]]*:' || true)"
+  if [ "${raw_seen:-0}" -ne "${parsed_seen:-0}" ]; then
+    fail "a Spark-Governed-By line must be a real git trailer in the terminal trailer block, not body text; remove it and let Spark stamp it."
   fi
-  if [ "${gov_seen:-0}" -eq 1 ]; then
+  if [ "${parsed_seen:-0}" -gt 1 ]; then
+    fail "Spark-Governed-By appears ${parsed_seen} times; it is recorded exactly once."
+  fi
+  if [ "${parsed_seen:-0}" -eq 1 ]; then
+    # Validate the RAW stored line (not git's normalized view): git would silently
+    # canonicalize spacing/casing in --parse, hiding a noncanonical stored form that
+    # --if-exists doNothing then leaves on disk. The committed trailer must already
+    # be exactly canonical.
     gov_line="$(grep -iE '^[[:space:]]*Spark-Governed-By[[:space:]]*:' "$msg_file" | head -n1)"
     if ! printf '%s' "$gov_line" | grep -qE '^Spark-Governed-By: v[0-9]+\.[0-9]+\.[0-9]+$'; then
       fail "Spark-Governed-By must be the canonical 'Spark-Governed-By: vX.Y.Z' form (got '${gov_line}'); remove it and let Spark stamp it."
@@ -99,6 +113,13 @@ if [ -n "$gov_version" ]; then
   # Idempotent add: a no-op when the canonical trailer already exists (amend/re-run).
   git interpret-trailers --in-place --if-exists doNothing \
     --trailer "Spark-Governed-By=${want}" "$msg_file"
+  # Postcondition: exactly one canonical trailer with the resolved value, in the
+  # parsed trailer block. If stamping did not converge, fail rather than commit a
+  # malformed or duplicated provenance record.
+  post="$(git interpret-trailers --parse "$msg_file" 2>/dev/null | grep -cE "^Spark-Governed-By: ${want}$" || true)"
+  if [ "${post:-0}" -ne 1 ]; then
+    fail "governance stamping did not converge to exactly one canonical 'Spark-Governed-By: ${want}'."
+  fi
 fi
 
 exit 0

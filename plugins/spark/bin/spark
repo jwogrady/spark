@@ -6615,12 +6615,18 @@ cmd_install_git_hooks() {
     INSTALL_GIT_HOOKS_ATTENTION=1 INSTALL_GIT_HOOKS_FAILED=1
     return 1
   fi
-  # Establish the canonical governor pin BEFORE activating any hook (#710): the
-  # commit-msg hook stamps Spark-Governed-By ONLY when this pin is present, so
-  # recording it first means a hook is never active in the window where it could
-  # run against an unestablished governor. If the pin cannot be recorded, install
-  # nothing rather than leave active hooks with no canonical governor.
-  if ! git config spark.governorBin "$SPARK_ROOT/bin/spark"; then
+  # Establish the canonical governor pin BEFORE activating any hook (#710), and
+  # write it REPOSITORY-LOCAL so it can never be inherited from a user-wide config.
+  # The commit-msg hook stamps Spark-Governed-By ONLY when this local pin is
+  # present, so recording it first means a hook is never active against an
+  # unestablished governor. The install is transactional on the pin: if it cannot
+  # be recorded, install nothing; if a later hook copy fails, the pin is rolled
+  # back to its prior value so a failed install never leaves the repo marked
+  # governed.
+  local prev_pin had_prev_pin
+  prev_pin="$(git config --local --get spark.governorBin 2>/dev/null || true)"
+  if [ -n "$prev_pin" ]; then had_prev_pin=1; else had_prev_pin=0; fi
+  if ! git config --local spark.governorBin "$SPARK_ROOT/bin/spark"; then
     red "could not record the governor pin (spark.governorBin) — refusing to install hooks with no established governor"
     INSTALL_GIT_HOOKS_ATTENTION=1 INSTALL_GIT_HOOKS_FAILED=1
     return 1
@@ -6658,6 +6664,16 @@ cmd_install_git_hooks() {
     green "✓ installed $h"
     INSTALL_GIT_HOOKS_CREATED=$((INSTALL_GIT_HOOKS_CREATED+1))
   done
+  # Roll the pin back on any failure: a partial install must not leave the repo
+  # marked governed. Restore the previous local pin, or remove ours if none existed.
+  if [ "$failed" != 0 ]; then
+    if [ "$had_prev_pin" = 1 ]; then
+      git config --local spark.governorBin "$prev_pin" 2>/dev/null || true
+    else
+      git config --local --unset spark.governorBin 2>/dev/null || true
+    fi
+    red "! hook installation failed — rolled the governor pin back so this repo is not marked governed"
+  fi
   return "$failed"
 }
 

@@ -131,6 +131,21 @@ prc=0; gov_hook || prc=$?
 [ "$prc" -ne 0 ] && ok || bad "#710: a non-release governor version (0.23.0-dev) must fail closed, not be truncated"
 git -C "$WORK/proj" config spark.governorBin "$GOVBIN"
 
+# 10. a GLOBAL (user-wide) pin must NOT govern an otherwise-unconfigured repo —
+#     the pin is repository-local; inheritance/installation alone is not governance.
+make_repo "$WORK/globalpin"
+git config --global spark.governorBin "$GOVBIN"
+printf 'feat: g\n\nbody\n' > "$gmsg"
+( cd "$WORK/globalpin" && bash "$hook" "$gmsg" >/dev/null 2>&1 )
+case "$(cat "$gmsg")" in *Spark-Governed-By:*) bad "#710: a global pin must not govern an unconfigured repo" ;; *) ok ;; esac
+git config --global --unset spark.governorBin
+
+# 11. a canonical-looking line in the BODY (not the terminal trailer block) is body
+#     text, not a real trailer — reject it rather than accept it and append a second.
+printf 'feat: m\n\nSpark-Governed-By: v0.23.0\n\nmore body after the line\n' > "$gmsg"
+mrc=0; gov_hook || mrc=$?
+[ "$mrc" -ne 0 ] && ok || bad "#710: a Spark-Governed-By in the body (not the trailer block) must be rejected"
+
 # CONTROL: the stamp tracks the governor's REPORTED version, not a constant — a
 # different pinned governor yields a different stamp, so the value is genuinely resolved.
 make_governor "$WORK/gov2" "1.5.0"

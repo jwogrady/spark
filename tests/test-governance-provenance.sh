@@ -74,4 +74,15 @@ git commit -q -m "feat: ungoverned now"
 unmsg="$(git log -1 --format='%B')"
 case "$unmsg" in *Spark-Governed-By:*) bad "#710: an unpinned (ungoverned) repo must not be stamped" ;; *) ok ;; esac
 
+# A FAILED install rolls the pin back: a partial install must never leave a repo
+# marked governed. Make the hooks dir unwritable so the hook copy fails.
+make_repo "$WORK/rollback"
+( cd "$WORK/rollback"
+  hd="$(git rev-parse --git-path hooks)"
+  mkdir -p "$hd"; chmod 000 "$hd"
+  "$GOV" install-git-hooks >/dev/null 2>&1 || true
+  chmod 755 "$hd" )
+[ -z "$(git -C "$WORK/rollback" config --local --get spark.governorBin || true)" ] && ok \
+  || bad "#710: a failed install must roll the governor pin back (repo left marked governed)"
+
 finish
