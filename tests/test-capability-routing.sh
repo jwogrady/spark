@@ -164,6 +164,29 @@ OVR="$("$SPARK" route select --task review)"
 assert_contains "a project override replaces the policy" "review -> cheap" "$OVR"
 assert_contains "including the model it names"           "some-other-model" "$OVR"
 
+# --- #648: a run id becomes a filename, so a traversal id must never escape -----
+# select/escalate/attempt all take --run; an id carrying a separator, traversal, or
+# control character must be refused BEFORE any write, and a tracked sentinel must
+# stay byte-identical.
+SENT="$WORK/proj/sentinel-tracked.tsv"
+printf 'keep\tme\n' > "$SENT"
+sent_before="$(sha1sum "$SENT" | cut -d' ' -f1)"
+# Each malformed id must be refused BECAUSE canonical validation rejected it, not
+# because an intermediate directory happened to be absent — so every case asserts
+# the invalid-run diagnostic, not exit status alone. The control-char and
+# space-bearing ids are quoted so the loop cannot split them apart.
+CTRL="$(printf 'a\tb')"
+for bad_id in '../x' '../../sentinel-tracked' '/abs/x' 'a/b' '..' 'a b' "$CTRL"; do
+  rc 1 "route select refuses run id '$bad_id'"   -- "$SPARK" route select   --task review --run "$bad_id"
+  rc 1 "route escalate refuses run id '$bad_id'" -- "$SPARK" route escalate --run "$bad_id" --reason x
+  rc 1 "route attempt refuses run id '$bad_id'"  -- "$SPARK" route attempt  --run "$bad_id" --outcome pass
+  assert_contains "and names the canonical rule for '$bad_id'" "invalid run id" \
+    "$("$SPARK" route select --task review --run "$bad_id" 2>&1 || true)"
+done
+sent_after="$(sha1sum "$SENT" | cut -d' ' -f1)"
+[ "$sent_before" = "$sent_after" ] && ok || bad "a traversal run id must not modify a tracked file (#648)"
+rm -f "$SENT"
+
 # --- MUTATION CONTROL --------------------------------------------------------
 # Stop carrying the failed attempt into the two-stage total. The economics
 # fixture must go red: without it, starting cheap always looks cheaper.

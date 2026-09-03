@@ -98,7 +98,22 @@ if [ -n "${SPARK_RUN_ID:-}" ]; then
   # git for it only adds a way to fail.
   top="$(cd "$here/.." && pwd)"
   spark_bin="$top/plugins/spark/bin/spark"
-  if [ ! -x "$spark_bin" ]; then
+  # The run id becomes a repository-local filename below, so validate it with the
+  # ONE canonical rule (tm_valid_run) BEFORE the append — a traversal or separator
+  # would append outside .spark/telemetry and corrupt a tracked file (#648). Source
+  # the runtime module rather than restating the rule, so the two cannot drift.
+  # A missing module fails closed on RECORDING (the suites already ran); it never
+  # crashes the run, so the summary below is always reached.
+  lib="$top/plugins/spark/lib/execution.sh"
+  # shellcheck source=/dev/null
+  [ -f "$lib" ] && . "$lib"
+  if ! command -v tm_valid_run >/dev/null 2>&1; then
+    echo "run.sh: SPARK_RUN_ID is set but this execution was NOT recorded" >&2
+    echo "  (the runtime module that validates the id is missing: $lib)" >&2
+  elif ! tm_valid_run "$SPARK_RUN_ID"; then
+    echo "run.sh: SPARK_RUN_ID '$SPARK_RUN_ID' is not a valid run id — this execution was NOT recorded" >&2
+    echo "  (letters, digits, dot, dash and underscore only — it becomes a filename)" >&2
+  elif [ ! -x "$spark_bin" ]; then
     echo "run.sh: SPARK_RUN_ID is set but this execution was NOT recorded" >&2
     echo "  (plugins/spark/bin/spark is missing or not executable)" >&2
   else
