@@ -23,12 +23,14 @@
 # the durability check and the derivation check share the very same evidence
 # instead of the second being hand-authored after the fact.
 #
-# A "controlled delayed recorder" stands in for `plugins/spark/bin/spark`
-# during the race: it reads the counts a runner is about to publish and
-# sleeps LONGER the SMALLER they are, so whichever runner saw the stalest
-# snapshot of the log is also, deterministically, the LAST to actually
-# publish — reproducing #665's exact last-write-wins hazard on every run of
-# this suite instead of leaving it to scheduler luck.
+# A "controlled recorder" stands in for `plugins/spark/bin/spark` during the
+# race: for this run's two full runners specifically, it holds the one that
+# read full_suite_runs=1 (the stale snapshot) at a barrier until the one that
+# read full_suite_runs=2 (the newer snapshot) has PROVABLY finished
+# publishing — a completion marker file, not a sleep tuned to a guessed
+# relative timing — so the stale writer is deterministically the LAST to
+# actually publish, reproducing #665's exact last-write-wins hazard on every
+# run of this suite instead of leaving it to scheduler luck.
 set -euo pipefail
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 
@@ -54,23 +56,49 @@ cp "$repo_root/plugins/spark/lib/execution.sh" "$PROJ/plugins/spark/lib/executio
 printf '#!/usr/bin/env bash\necho "  1 passed, 0 failed"\n' > "$SB/test-alpha.sh"
 chmod +x "$SB/test-alpha.sh"
 
-# The delayed recorder. REAL_SPARK is the sandbox's own real, full dispatcher
-# (from sandbox_init) — every publish is genuinely handled by the production
-# `telemetry record` path; only the delay ahead of it is a test control.
+# The controlled recorder. REAL_SPARK is the sandbox's own real, full
+# dispatcher (from sandbox_init) — every publish is genuinely handled by the
+# production `telemetry record` path; only the ORDER of the two full-run
+# publishes below is a test control, and that control is a deterministic
+# barrier (a completion marker file it polls for), never a sleep tuned to a
+# guessed relative timing.
 export REAL_SPARK="$SPARK"
+RACE_BARRIER="$PROJ/.spark/race-barrier"
+export RACE_BARRIER
+mkdir -p "$RACE_BARRIER"
 cat > "$PROJ/plugins/spark/bin/spark" <<'WRAP'
 #!/usr/bin/env bash
 set -euo pipefail
-if [ "${1:-}" = telemetry ] && [ "${2:-}" = record ]; then
-  nf=0 nt=0
+if [ "${1:-}" = telemetry ] && [ "${2:-}" = record ] && [ "${SPARK_RUN_ID:-}" = race ]; then
+  nf=""
   for a in "$@"; do
     case "$a" in
       full_suite_runs=*) nf="${a#full_suite_runs=}" ;;
-      targeted_checks=*) nt="${a#targeted_checks=}" ;;
     esac
   done
-  d="$(awk -v nf="$nf" -v nt="$nt" 'BEGIN { d = (4 - (nf + nt)) * 0.5; if (d < 0) d = 0; printf "%.2f", d }')"
-  sleep "$d"
+  # Deterministic barrier for the #665 hazard: on this run there are exactly
+  # two full runners. The one that reads full_suite_runs=1 saw only its own
+  # append and is the STALE writer — it is held here until the other (which
+  # read full_suite_runs=2, having seen both) has PROVABLY finished
+  # publishing, so the stale "1" is the publish that lands last on disk.
+  case "$nf" in
+    1)
+      i=0
+      while [ ! -f "$RACE_BARRIER/newer-published" ]; do
+        i=$((i + 1))
+        if [ "$i" -gt 200 ]; then
+          echo "spark(wrap): timed out waiting for the newer full-run publish to complete" >&2
+          exit 1
+        fi
+        sleep 0.1
+      done
+      ;;
+    2)
+      if "$REAL_SPARK" "$@"; then rc=0; else rc=$?; fi
+      : > "$RACE_BARRIER/newer-published"
+      exit "$rc"
+      ;;
+  esac
 fi
 exec "$REAL_SPARK" "$@"
 WRAP
@@ -79,14 +107,28 @@ chmod +x "$PROJ/plugins/spark/bin/spark"
 # --- 1. real overlap: two full and two targeted runners for one run id race,
 # each running the REAL run.sh against the REAL recorder. The append-only log
 # must keep all four; a failing runner must never be swallowed into a false
-# pass (#665 finding 2); and the delayed recorder must have forced a genuinely
-# stale publish, not a hand-seeded one, so the derivation check below proves
-# something about the actual race rather than a scripted end-state.
+# pass (#665 finding 2); and the deterministic barrier above must force a
+# genuinely stale publish — not a hand-seeded one and not a sleep guess — so
+# the derivation check below proves something about the actual race.
+#
+# The first full runner is staged alone so its own read of the log (real
+# run.sh, unmodified) is forced to observe only itself (full_suite_runs=1);
+# only once that append is on record do the other three runners start.
 pids="" fail_runners=0
-for _ in 1 2; do
-  ( cd "$SB" && SPARK_RUN_ID=race bash run.sh >/dev/null 2>&1 ) &
-  pids="$pids $!"
+LOG="$PROJ/.spark/telemetry/race.executions"
+( cd "$SB" && SPARK_RUN_ID=race bash run.sh >/dev/null 2>&1 ) &
+pids="$!"
+i=0
+while [ ! -f "$LOG" ] || [ "$(awk -F'\t' '$1 == "full" { n++ } END { print n+0 }' "$LOG" 2>/dev/null)" != "1" ]; do
+  i=$((i + 1))
+  if [ "$i" -gt 200 ]; then
+    bad "the first full runner never appended — cannot stage the deterministic #665 sequence"
+    break
+  fi
+  sleep 0.1
 done
+( cd "$SB" && SPARK_RUN_ID=race bash run.sh >/dev/null 2>&1 ) &
+pids="$pids $!"
 for _ in 1 2; do
   ( cd "$SB" && SPARK_RUN_ID=race bash run.sh --only alpha >/dev/null 2>&1 ) &
   pids="$pids $!"
@@ -103,16 +145,15 @@ nt="$(awk -F'\t' '$1 == "targeted" { n++ } END { print n+0 }' "$LOG")"
 [ "$nf" = "2" ] && ok || bad "append-only log must preserve both concurrent full runs (got $nf)"
 [ "$nt" = "2" ] && ok || bad "append-only log must preserve both concurrent targeted runs (got $nt)"
 
-# --- 2. the delayed recorder's own publish must be the discriminating,
-# genuinely stale end-state — below the log truth on at least one counter —
-# or the checks that follow would prove nothing about #665.
+# --- 2. the barrier's own publish must be the discriminating, genuinely
+# stale end-state it was built to force: the newer full-run publish (2)
+# completed first, and the stale one (1) — held until then — landed last.
 TSV="$PROJ/.spark/telemetry/race.tsv"
-[ -f "$TSV" ] && ok || bad "the delayed recorder must have published a stored projection to race the derivation against"
+[ -f "$TSV" ] && ok || bad "the barrier must have published a stored projection to race the derivation against"
+[ -f "$RACE_BARRIER/newer-published" ] && ok || bad "the newer full-run publish (full_suite_runs=2) must complete before the barrier can release the stale one"
 RAW="$(awk -F'\t' '$1 == "full_suite_runs" { v = $2 } END { print v + 0 }' "$TSV")"
 RAWT="$(awk -F'\t' '$1 == "targeted_checks" { v = $2 } END { print v + 0 }' "$TSV")"
-if [ "$RAW" -lt "$nf" ] || [ "$RAWT" -lt "$nt" ]; then ok
-else bad "the controlled delay did not force a stale publish to finish last (stored $RAW/$RAWT, log $nf/$nt) — the fixture proves nothing"
-fi
+[ "$RAW" = "1" ] && ok || bad "the barrier must force the stale full-run publish (full_suite_runs=1) to land last on race — got $RAW; the fixture proves nothing about #665 without it"
 
 # --- 3. every read surface DERIVES the counters from the log (the #665 fix),
 # never the raw stale publish captured above.
@@ -158,6 +199,8 @@ case "$FULLROW" in
   *"2"*"3"*) ok ;;
   *) bad "compare must report derived full_suite_runs (2 vs 3) — got: $FULLROW" ;;
 esac
+JSHOW2="$(cd "$PROJ" && "$SPARK" telemetry show --run race2 --json 2>&1)"
+assert_contains "json reports the derived full count for the full-only concurrent run (race2)" '"full_suite_runs":3' "$JSHOW2"
 
 # --- MUTATION CONTROL --------------------------------------------------------
 # Stop deriving from the log: let tm_exec_count report "no log" so every reader
@@ -169,21 +212,18 @@ MUT="$MUTANT_PATH"
 if [ "$MUTANT_CHANGED" = "1" ]; then ok
 else bad "MUTATION control changed nothing — it proves nothing"; fi
 MJSON="$(cd "$PROJ" && "$MUT" telemetry show --run race --json 2>&1)"
-# Discriminate on whichever dimension the delayed recorder actually left
-# stale (section 2 already proved at least one of them is) — the other may
-# coincidentally match its true count and so cannot tell derived from raw.
-if [ "$RAW" != "$nf" ]; then
-  case "$MJSON" in
-    *"\"full_suite_runs\":$RAW"*) ok ;;
-    *) bad "MUTATION control — json did not fall back to the stale full_suite_runs ($RAW): $MJSON" ;;
-  esac
-elif [ "$RAWT" != "$nt" ]; then
+# full_suite_runs is deterministically stale by construction (section 2
+# above forced it); targeted_checks may or may not be, depending on real
+# scheduling of the two targeted runners, so its check only runs when it is.
+case "$MJSON" in
+  *"\"full_suite_runs\":$RAW"*) ok ;;
+  *) bad "MUTATION control — json did not fall back to the stale full_suite_runs ($RAW): $MJSON" ;;
+esac
+if [ "$RAWT" != "$nt" ]; then
   case "$MJSON" in
     *"\"targeted_checks\":$RAWT"*) ok ;;
     *) bad "MUTATION control — json did not fall back to the stale targeted_checks ($RAWT): $MJSON" ;;
   esac
-else
-  bad "MUTATION control — no stale dimension found to discriminate on (unexpected)"
 fi
 MREL="$(cd "$PROJ" && "$MUT" telemetry relay --run race 2>&1)"
 case "$MREL" in
