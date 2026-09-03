@@ -20,6 +20,17 @@ This document is a roadmap/architecture contract, not evidence that unreleased b
 
 Provider-neutral Claude/OpenAI parity is not part of v0.25 under this architecture; it remains a Later candidate preserved historically on #700.
 
+## Authority
+
+These roadmap semantics — the v0.24 GitHub-native control-plane theme, the v0.25 **Versioned Blueprints** theme, the canonization of **Blueprint** as the project-template noun, and the deferral of provider-neutral Claude/OpenAI parity to *Later* — are authoritatively approved product direction, not a proposal this document introduces. The approving authority is durable and independent of this PR:
+
+- the standing orchestration/authority contract on #677 (the project owner's cross-session steering surface);
+- the v0.25 release-readiness gate #701 ("versioned Blueprints for the GitHub control plane") and the v0.25 Blueprint contract #714;
+- the v0.24 release-readiness gate #481 ("GitHub-native automation control plane");
+- GitHub milestone **v0.25 — Versioned Blueprints** (#22), reconciled to this canonical noun.
+
+This document *records* that approved direction for engineering reference; it does not itself decide it. The parity deferral's *Later* placement is preserved historically on #700.
+
 ---
 
 ## 1. Product layering
