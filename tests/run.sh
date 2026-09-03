@@ -143,45 +143,21 @@ if [ -n "${SPARK_RUN_ID:-}" ]; then
        ! printf '%s\t%s\n' "$kind" "$(date -u +%FT%TZ 2>/dev/null)" >> "$log" 2>/dev/null; then
       echo "run.sh: this execution was NOT recorded — could not append to $log" >&2
     else
-      # $log is the AUTHORITATIVE surface for execution counts: an append-only
-      # log where a short append is atomic even when two runners overlap.
-      # full_suite_runs/targeted_checks on the telemetry record are a
-      # PROJECTION of it, published below — read them for convenience, never
-      # in place of $log when the two could disagree.
-      #
-      # A read-then-publish pair is not by itself safe under overlap: two
-      # runners can each read $log, then have their publishes land in EITHER
-      # order in last-write-wins storage, so the staler read can finish last
-      # and regress the projection below durable truth (#665). One retry after
-      # the fact narrows that window but does not close it — a third runner
-      # can still append and publish between the retry's own read and its
-      # write landing.
-      #
-      # The only way to make the projection mechanically unable to finish
-      # stale is to make "read $log, publish it" one indivisible step across
-      # every runner publishing for this run id, so publishes are totally
-      # ordered and each one reads at least what every earlier publish read
-      # ($log only grows). `mkdir` is an atomic mutual-exclusion primitive on
-      # every POSIX filesystem, so that boundary needs no new dependency.
+      # $log is the AUTHORITATIVE, append-only execution evidence: a short append
+      # is atomic even when runners overlap, so it never loses a concurrent
+      # execution. The full_suite_runs/targeted_checks we publish here are a
+      # convenience PROJECTION of it. Publishing is last-write-wins, so under
+      # concurrency a staler runner's call can finish last and leave the stored
+      # projection below $log — which is exactly why every AUTHORITATIVE read
+      # (`telemetry show`, its `--json`, and `relay`) DERIVES these two counters
+      # from $log at read time (#665). The reported count can therefore never
+      # finish below durable truth however the publishes interleave, so this
+      # runner simply publishes its own view: no lock to abandon, no stale lock
+      # owner to recover, and no last stale publisher can set the reported count.
       count_kind() { awk -F'\t' -v k="$1" '$1 == k { n++ } END { print n+0 }' "$log"; }
-      lock_dir="$log_dir/$SPARK_RUN_ID.publish-lock"
-      publish_locked=""
-      lock_wait=0
-      while [ "$lock_wait" -lt 500 ]; do
-        mkdir "$lock_dir" 2>/dev/null && { publish_locked=1; break; }
-        sleep 0.01
-        lock_wait=$((lock_wait + 1))
-      done
-      if [ -z "$publish_locked" ]; then
-        echo "run.sh: execution logged at $log but the publish lock never freed — telemetry projection NOT published" >&2
-      else
-        n_full="$(count_kind full)"
-        n_targ="$(count_kind targeted)"
-        if ! "$spark_bin" telemetry record --run "$SPARK_RUN_ID" \
-               "full_suite_runs=$n_full" "targeted_checks=$n_targ" >/dev/null 2>&1; then
-          echo "run.sh: execution logged at $log but telemetry record FAILED" >&2
-        fi
-        rmdir "$lock_dir" 2>/dev/null || true
+      if ! "$spark_bin" telemetry record --run "$SPARK_RUN_ID" \
+             "full_suite_runs=$(count_kind full)" "targeted_checks=$(count_kind targeted)" >/dev/null 2>&1; then
+        echo "run.sh: execution logged at $log but telemetry record FAILED" >&2
       fi
     fi
   fi

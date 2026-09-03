@@ -1827,16 +1827,18 @@ verification for what it is.
 
 The append-only log the runner writes at `.spark/telemetry/<run>.executions` is
 the **authoritative** record of how many executions actually happened — a short
-append is atomic even when two runners for the same run id overlap.
-`full_suite_runs`/`targeted_checks` on the telemetry record are a **projection**
-of that log. Reading the log and publishing it is one indivisible step per run
-id, guarded by an `mkdir`-based mutual-exclusion boundary — publishes for a run
-id are therefore totally ordered, and each one reads at least what every
-earlier publish read, since the log only grows. That ordering is what makes the
-projection mechanically unable to finish below what the log already proves
-happened: a single retry after an unguarded read-then-publish could still be
-overtaken by a third overlapping runner, but a publish that only ever happens
-while holding the lock cannot be.
+append is atomic even when two runners for the same run id overlap, so the log
+never loses a concurrent execution. `full_suite_runs`/`targeted_checks` persisted
+on the telemetry record are a convenience **projection** the runner publishes;
+publishing is last-write-wins, so under overlap a staler runner's call can finish
+last and leave that stored value low. Every authoritative read therefore
+**derives** the two counters from the append-only log at read time — `telemetry
+show`, its `--json`, `relay`, and `compare` all report the log's count, never the
+stored projection. Reading straight from the durable evidence is what makes the
+reported count mechanically unable to finish below what the log already proves
+happened, however the concurrent publishes interleave: there is no lock to
+abandon, no stale lock owner to recover, and no last stale publisher can set the
+operator-visible count.
 
 ### The field schema
 
