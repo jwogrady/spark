@@ -637,6 +637,25 @@ v1 but blocks nothing.
 
 ---
 
+## v0.25 — Versioned Blueprints
+
+**Status:** Planned
+
+Versioned Blueprints — Spark's canonical, version-controlled project templates —
+fed into the GitHub-native control plane. This is the milestone's canonical noun
+and product direction (per #677/#701/#714); it supersedes the earlier
+provider-parity "feature-complete" framing. GitHub milestone #22 is the version
+authority; issue #701 is the release gate.
+
+Nothing here is implemented yet.
+
+- Feed versioned project Blueprints into the GitHub-native Spark control plane
+  (#714).
+- The earlier "provider-neutral Spark roles across Claude and OpenAI" horizon
+  (#700) is closed as a later concern, subsumed by the Blueprints direction.
+
+---
+
 ## Later — Project inception
 
 Project inception — `/plugin install spark` plus the `bootstrap` skill —
