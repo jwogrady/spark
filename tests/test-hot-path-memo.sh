@@ -103,4 +103,35 @@ if [ "$(cat "$ctx/a.root")" != "$(cat "$ctx/b.root")" ] && [ -n "$(cat "$ctx/a.r
 if [ -z "$(cat "$ctx/out.root")" ]; then ok; else bad "git_root outside a repo should be empty"; fi
 if [ -n "$(cat "$ctx/back.root")" ] && [ "$(cat "$ctx/back.root")" = "$(cat "$ctx/a.root")" ]; then ok; else bad "git_root reused the stale empty result after cd into a repo"; fi
 
+# --- Concurrency: many subshells missing the same key at once must each end up
+# reading or writing a COMPLETE entry — a reader must never observe a truncated
+# cache file. A shared, non-unique temp path ($$ is inherited by every subshell)
+# would let one writer rename its temp into place while another is still writing
+# the same temp, exposing partial content; a writer-unique temp ($BASHPID) does
+# not. This fixture races a cold cache and asserts every reader saw the whole
+# value.
+conc="$WORK/conc"; make_repo "$conc"; mkdir -p "$conc/.spark"
+printf '{ "stack": "conc-stack", "release": "conc-rel" }\n' > "$conc/.spark/preferences.json"
+# Ground truth, resolved unmemoized (a fresh source sets no __SPARK_MEMO).
+exp_prefs="$( cd "$conc" && unset __SPARK_MEMO; . "$SPARK"; resolve_prefs )"
+cout="$WORK/cout"; mkdir -p "$cout"
+memo_conc="$(mktemp -d)"
+(
+  export __SPARK_MEMO="$memo_conc"; . "$SPARK"; cd "$conc"
+  i=0
+  while [ "$i" -lt 24 ]; do
+    ( resolve_prefs > "$cout/p.$i"; git_root > "$cout/r.$i" ) &   # all miss the cold cache, then race
+    i=$((i + 1))
+  done
+  wait
+)
+rm -rf "$memo_conc"
+bad_p=0; bad_r=0
+for i in $(seq 0 23); do
+  [ "$(cat "$cout/p.$i" 2>/dev/null)" = "$exp_prefs" ] || bad_p=$((bad_p + 1))
+  [ "$(cat "$cout/r.$i" 2>/dev/null)" = "$conc" ]     || bad_r=$((bad_r + 1))
+done
+if [ "$bad_p" -eq 0 ]; then ok; else bad "$bad_p/24 concurrent resolve_prefs readers saw truncated/incorrect prefs"; fi
+if [ "$bad_r" -eq 0 ]; then ok; else bad "$bad_r/24 concurrent git_root readers saw a truncated/incorrect root"; fi
+
 finish
