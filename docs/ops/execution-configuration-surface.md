@@ -146,43 +146,54 @@ currently scheduled**. Provider-neutral execution is the closed *Later* horizon
 scope, which is Versioned Blueprints (#701/#714). This record asserts no release
 placement for it and has no authority to assign one.
 
-## Equal-workload probe: released v0.22.0 vs the v0.23 candidate
+## Cross-version comparison: why no numbers are presented here
 
-The first bounded attempt could not compare the two releases because it ran them
-against the Spark repository itself — whose plugin tree differs by version — and
-against an archived v0.22 tree where several verbs short-circuited or failed.
+A probe compared released **v0.22.0** with the v0.23 candidate by running both
+against one neutral fixture repository. That does remove two defects of the first
+bounded attempt: it no longer measures against Spark's own differing plugin tree,
+and the verbs no longer short-circuit as they did in an archived tree. Every verb
+tried returned the same exit status on both sides.
 
-Running both binaries against **one neutral fixture repository** removes both
-problems for the verbs that operate on the *target* repo. All four verbs below
-return the same exit status in both versions, so the outcome is held constant.
+That is **not sufficient** to publish performance evidence, so the numbers it
+produced are deliberately not reproduced here:
 
-**Equal workload** (operates on the fixture): `brief --short`, `triage`,
-`governance`. **Not equal workload**: `doctor` and `footprint` inspect Spark's
-*own* plugin tree, which is larger in v0.23 — a difference in the job, not in
-efficiency.
+- **Identical target and exit status do not establish equivalent outcomes.** No
+  outcome contract was defined for these verbs, and no comparable-result evidence
+  was gathered — nothing shows the two versions performed the same required work.
+  Two runs can both exit `0` having done materially different amounts.
+- **The measurements were not durably reproducible.** No committed harness,
+  recorded fixture identity, pinned commit per side, or captured effective
+  configuration existed, so the figures were not pointable or re-derivable.
+- **`triage` is a live path.** Shimming `gh` shows it invokes the CLI seven
+  times, while `brief --short` and `governance` invoke it zero times. A path that
+  reaches the network has no reproducible wall time.
 
-| verb | v0.22 median wall (min–max, n=15) | v0.23 median wall | processes v0.22 → v0.23 |
-|---|---|---|---|
-| `brief --short` | 59 ms (58–62) | **56 ms (55–57)** | 30 → **24** |
-| `triage` | 659 ms (636–673) | 651 ms (617–680) | 97 → **86** |
-| `governance` | 93 ms (92–99) | **98 ms (96–101)** | 49 → 48 |
+Applying **one** significance rule consistently to what was collected, the
+offline verbs' wall-time ranges overlap, so their latency differences are
+`NOT ASSESSED` in both directions. An earlier revision of this record called one
+of them a regression while treating the same overlap elsewhere as unassessed;
+that inconsistency was wrong and is withdrawn.
 
-What this does and does not support:
+**The one rigorous equal-workload comparison available is not cross-version at
+all.** It is the per-process memo measured on the *same* binary — memo on versus
+`SPARK_NO_MEMO=1` — where the workload is identical by construction and the
+output is asserted byte-identical by `tests/test-hot-path-memo.sh`. That
+comparison (total process creation 47 → 39, complete tool set 36 → 28, parser
+calls 21 → 13, median wall 84 → 68 ms) lives with its negative control in PR
+#724.
 
-- `brief --short` improves on **two** dimensions — wall latency (the ranges do
-  not overlap) and process creation (−20%, deterministic).
-- `triage` improves on process creation (−11%, deterministic); its wall ranges
-  **overlap**, so the latency difference is `NOT ASSESSED`, not an improvement.
-- `governance` **regressed** on wall latency (~+5%, ranges barely overlapping)
-  while process creation is flat. Recorded as a regression, not omitted.
-- `doctor` costs more in v0.23 (1722 → 1774 ms, 843 → 859 processes) but is
-  **not** an equal-workload comparison, so it is neither an efficiency regression
-  claim nor an excuse.
+A defensible v0.22 → v0.23 comparison still needs exactly what #722 asks for:
+outcome contracts per workload, a committed harness, pinned versions and fixture
+identity, captured effective configuration, and paired runs. Until that exists,
+cross-version efficiency is **`NOT ASSESSED`**.
 
-This is a probe, not the #480 proof. One verb improving two dimensions, one
-improving one, and one regressing does not establish "material improvement in at
-least two dimensions across representative comparable workloads". Token, cost,
-and model dimensions remain `NOT ASSESSED`.
+### A located optimization target (no performance claim attached)
+
+Independently of the above, profiling `triage` shows it repeats identical work
+inside a single run: `git ls-files` four times, and its repository-identity
+resolution three times. That is the same recompute pattern the per-process memo
+already removed elsewhere. It is recorded as a target to investigate, not as a
+measured saving.
 
 ## What this record does not establish
 
