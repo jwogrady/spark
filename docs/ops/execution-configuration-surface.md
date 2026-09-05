@@ -207,16 +207,20 @@ What the harness guarantees, which is why its output can be trusted as evidence:
   exit status and aborts on failure, and every fixture setup step is validated —
   including that the fixture really is a single-commit repository with a project
   preference file.
-- **Honest counting.** The tool count includes the operations the memo itself
+- **Honest counting.** The **tools** figure counts invocations of a fixed list of
+  selected tools — not processes — and includes the operations the memo itself
   introduces (`mktemp`/`mv`/`rm` — a cache *hit* reads with the `mapfile`
-  builtin and forks nothing). Under `--strace` the harness reports two distinct
-  syscall counts, because they measure different things: **execs** (`execve`,
-  program images executed) and **procs** (`clone`/`fork`, process creation
+  builtin and forks nothing). It is a **lower bound on selected tool
+  invocations**, not a subprocess total. Under `--strace` the harness reports two
+  distinct syscall counts, because they measure different things: **execs**
+  (`execve` calls that *succeeded* — program images actually executed; a failed
+  attempt such as `= -1 ENOENT`, which PATH searching produces routinely,
+  replaced no image and is not counted) and **procs** (`clone`/`clone3`/`fork`/
+  `vfork` that succeeded and did not carry `CLONE_THREAD` — process creation
   *including subshells the shell forks without exec*). `execve` alone is not a
-  process-creation total and is never reported as one; a self-check proves the
-  procs metric catches a shell-only subshell. The tool count remains a
-  **lower bound** on
-  subprocesses, not a full accounting.
+  process-creation total and is never reported as one. Self-checks prove each
+  metric against synthetic logs holding successful, failed, split and
+  zero-result records, and prove the procs metric catches a shell-only subshell.
 
 The suite (`tests/test-hot-path-memo.sh`) asserts the *properties* — transparency,
 a strict reduction, and the negative control; the harness produces the *figures*.
