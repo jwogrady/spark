@@ -561,18 +561,25 @@ before work can start.
 
 ## v0.23 — Execution efficiency, observability, state and provenance
 
-**Status:** Planned
+**Status:** In progress — release gate #480 open; not yet released.
 
-v0.22 proved Spark can govern **what work is allowed**. v0.23 must also govern
-**how autonomous software work executes** — bounded convergence instead of
-thrashing, targeted verification instead of repeated full suites, model routing
-proportional to difficulty, and every automated run observable by cost, latency,
-tokens, tool calls and verdict. Repository code and docs still own current state
-and durable meaning; Git and GitHub own change-over-time provenance. GitHub
-milestone #20 is the version authority; issue #480 is the release gate and
-carries the scope as sub-issues.
+The release outcome is **Never automate inefficiency**. v0.22 proved Spark can
+govern **what work is allowed**; v0.23 also governs **how autonomous software
+work executes** — bounded convergence instead of thrashing, targeted
+verification instead of repeated full suites, model routing proportional to
+difficulty, and every automated run observable by cost, latency, tokens, tool
+calls and verdict. Repository code and docs still own current state and durable
+meaning; Git and GitHub own change-over-time provenance. GitHub milestone #20 is
+the version authority; issue #480 is the release gate and carries the scope as
+sub-issues.
 
-Nothing here is implemented.
+Most of the scope has landed, and the field and self-host evidence is
+consolidated in the
+[v0.23 usage & field-evidence report](docs/releases/v0.23-usage-evidence.md)
+(#709). The release is **not yet cut**: #480's measurement criterion — material
+improvement in at least two cost/latency/token/tool dimensions without reducing
+correctness — is **not yet satisfied**, so no efficiency-improvement claim is
+made here.
 
 The approved delivery course is **truth/ownership → measurement → efficiency
 primitives → safe execution lanes → autonomous loops → release automation →
