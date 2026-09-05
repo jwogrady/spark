@@ -21,9 +21,93 @@ red()   { printf '\033[31m%s\033[0m\n' "$1"; }
 green() { printf '\033[32m%s\033[0m\n' "$1"; }
 yellow(){ printf '\033[33m%s\033[0m\n' "$1"; }
 
+# __spark_memo_key — a BOUNDED cache key for the current directory.
+#
+# Neither obvious approach works. Flattening $PWD into one filename exceeds the
+# component limit on a deep path; mirroring it as directories exceeds the total
+# path limit once the scratch prefix is prepended. Both fail the write and make
+# the memoized run behave differently from the unmemoized one.
+#
+# So the key is a fixed-length digest (FNV-1a, computed with shell arithmetic —
+# no subprocess) plus the path length. A digest can collide, so the cached file
+# records the directory it was written for and a reader must match it; a
+# collision therefore costs a recompute, never a wrong answer.
+# Sets __SPARK_MEMO_KEY rather than printing it: a command substitution would
+# fork a subshell on EVERY memoized call, process creation the memo would then be
+# adding invisibly to its own measurements.
+__spark_memo_key() {
+  local s="$PWD" h=2166136261 i c
+  for (( i = 0; i < ${#s}; i++ )); do
+    printf -v c '%d' "'${s:i:1}"
+    h=$(( (h ^ c) * 16777619 & 0xFFFFFFFF ))
+  done
+  printf -v __SPARK_MEMO_KEY '%08x.%d' "$h" "${#s}"
+}
+
+# __spark_memo_read <file> — print a cached value, or return 1. Reads with the
+# `mapfile` builtin rather than `cat`, so a hit costs no subprocess at all, and
+# verifies the recorded directory before trusting the entry.
+__spark_memo_read() {
+  local -a raw=(); local blob owner
+  # Wrapped, not `2>/dev/null` on the command: a failed INPUT redirect is
+  # reported against stderr as it stands when the redirect is attempted, so the
+  # trailing form would arrive too late — the same trap as on the write side.
+  #
+  # Read the file as ONE blob (`-d ''` splits on NUL, of which there is none)
+  # rather than as lines. A line-wise read cannot round-trip a value whose own
+  # bytes end in newlines — and a repository path may legally do exactly that.
+  { mapfile -d '' -t raw < "$1"; } 2>/dev/null || return 1
+  blob="${raw[0]-}"
+  case "$blob" in *$'\n'*) ;; *) return 1 ;; esac   # no owner line: not a valid entry
+  owner="${PWD//\%/%25}"; owner="${owner//$'\n'/%0a}"
+  [ "${blob%%$'\n'*}" = "$owner" ] || return 1    # digest collision, or a stale file
+  printf '%s' "${blob#*$'\n'}"                    # exact bytes, trailing newlines included
+  return 0
+}
+
 # git_root — the repo top-level, or empty when not inside a git repo (#276).
 # The one place the git plumbing is spelled, so callers stop re-deriving it.
-git_root() { git rev-parse --show-toplevel 2>/dev/null || true; }
+# Memoized per process when $__SPARK_MEMO is set (#722): the repo root does not
+# change within one command, and callers derive it repeatedly. Unset the var to
+# recompute from scratch (the negative control); sourced/test contexts never set
+# it, so their behaviour is unchanged.
+git_root() {
+  local memo="${__SPARK_MEMO:-}" f=""
+  if [ -n "$memo" ]; then
+    # Key by the current directory: the root depends on where we are, so a run
+    # that moves between directories/repositories must not reuse a stale entry.
+    __spark_memo_key; f="$memo/gitroot.$__SPARK_MEMO_KEY"
+    __spark_memo_read "$f" && return 0
+  fi
+  local rendered=""
+  # `$( )` strips ALL trailing newlines, which would eat part of a repository
+  # path that legally ends in one — the unmemoized original printed git's bytes
+  # straight through. The `printf x` sentinel preserves them exactly.
+  rendered="$(git rev-parse --show-toplevel 2>/dev/null; printf x)"
+  rendered="${rendered%x}"
+  # Write atomically (writer-unique temp then mv) so a concurrent subshell never
+  # reads a half-written entry. $BASHPID is per-subshell (unlike $$, which every
+  # subshell inherits), so two concurrent misses for one key never share a temp.
+  # Miss-path only. A hit reads with the mapfile builtin, so it costs no
+  # subprocess at all; the miss path pays one mv to publish the entry.
+  # The whole write is wrapped so a failed redirect cannot reach the real stderr:
+  # bash reports an error like "File name too long" against stderr as it stands
+  # when the redirect is attempted, so a trailing 2>/dev/null arrives too late.
+  # The first line records the directory this entry belongs to, so a digest
+  # collision is detected on read instead of returning another path's answer.
+  if [ -n "$f" ]; then
+    {
+      local tmp="$f.$BASHPID.$RANDOM.tmp" owner
+      # A newline is a legal character in a directory name, so the ownership
+      # record is encoded to a single line; a raw $PWD would make such a
+      # directory miss its own cache forever and pay the miss path every call.
+      owner="${PWD//\%/%25}"; owner="${owner//$'\n'/%0a}"
+      { printf '%s\n' "$owner"; printf '%s' "$rendered"; } > "$tmp" \
+        && mv -f "$tmp" "$f" || rm -f "$tmp"
+    } 2>/dev/null || true
+  fi
+  printf '%s' "$rendered"
+}
 
 # check_json <file> — true when the file parses as JSON. jq, then python3; with
 # neither validator present it returns 0 (skip), so a zero-dependency
@@ -269,21 +353,63 @@ read_flat_json() {
 # standard, source ∈ default|operator|project. Keys keep first-seen order so
 # the shipped defaults define the listing; later tiers override the value.
 resolve_prefs() {
-  local top
-  top="$(git_root)"
-  {
-    read_flat_json "$SPARK_ROOT/preferences/defaults.json" \
-      | awk -F'\t' 'NF >= 2 { print $0 "\tdefault" }'
-    read_flat_json "$(prefs_operator_path)" \
-      | awk -F'\t' 'NF >= 2 { print $0 "\toperator" }'
-    if [ -n "$top" ]; then
-      read_flat_json "$top/.spark/preferences.json" \
-        | awk -F'\t' 'NF >= 2 { print $0 "\tproject" }'
-    fi
-  } | awk -F'\t' '
-      !($1 in v) { order[++n] = $1 }
-      { v[$1] = $2; s[$1] = $3 }
-      END { for (i = 1; i <= n; i++) print order[i] "\t" v[order[i]] "\t" s[order[i]] }'
+  # Memoized per process when $__SPARK_MEMO is set (#722): the merge reads three
+  # JSON files and forks jq+awk several times, and a single command resolves it
+  # repeatedly (the brief header, the standards summary, each pref_get). The
+  # resolved standard does not change within one command. Unset the var to
+  # recompute (the negative control); sourced/test contexts never set it.
+  local memo="${__SPARK_MEMO:-}" f=""
+  if [ -n "$memo" ]; then
+    # Key by the current directory: the project tier is read from the repo root,
+    # which depends on where we are, so a run that changes directory/repository
+    # must resolve fresh. Bounded, collision-verified key, as git_root uses.
+    __spark_memo_key; f="$memo/prefs.$__SPARK_MEMO_KEY"
+    __spark_memo_read "$f" && return 0
+  fi
+  local top rendered=""
+  # git_root emits the root followed by git's newline. `$( )` would strip ALL
+  # trailing newlines, so a repository whose name ends in one would yield a
+  # wrong .spark path and silently lose the project tier. Keep the bytes and
+  # remove exactly the one delimiter.
+  top="$(git_root; printf x)"; top="${top%x}"; top="${top%$'\n'}"
+  # Same sentinel as git_root: preserve the pipeline's exact trailing bytes
+  # instead of letting command substitution strip them.
+  rendered="$(
+    {
+      read_flat_json "$SPARK_ROOT/preferences/defaults.json" \
+        | awk -F'\t' 'NF >= 2 { print $0 "\tdefault" }'
+      read_flat_json "$(prefs_operator_path)" \
+        | awk -F'\t' 'NF >= 2 { print $0 "\toperator" }'
+      if [ -n "$top" ]; then
+        read_flat_json "$top/.spark/preferences.json" \
+          | awk -F'\t' 'NF >= 2 { print $0 "\tproject" }'
+      fi
+    } | awk -F'\t' '
+        !($1 in v) { order[++n] = $1 }
+        { v[$1] = $2; s[$1] = $3 }
+        END { for (i = 1; i <= n; i++) print order[i] "\t" v[order[i]] "\t" s[order[i]] }'
+    printf x
+  )"
+  rendered="${rendered%x}"
+  # Atomic write on a miss only, with a writer-unique temp ($BASHPID differs per
+  # subshell; $$ does not), so concurrent misses for one key never share a temp
+  # and a reader never observes a half-written entry. A hit reads with the
+  # mapfile builtin and forks nothing at all.
+  # Wrapped so a failed redirect cannot reach the real stderr — a trailing
+  # 2>/dev/null would be applied after bash has already reported the error. The
+  # first line records the directory, so a digest collision is caught on read.
+  if [ -n "$f" ]; then
+    {
+      local tmp="$f.$BASHPID.$RANDOM.tmp" owner
+      # A newline is a legal character in a directory name, so the ownership
+      # record is encoded to a single line; a raw $PWD would make such a
+      # directory miss its own cache forever and pay the miss path every call.
+      owner="${PWD//\%/%25}"; owner="${owner//$'\n'/%0a}"
+      { printf '%s\n' "$owner"; printf '%s' "$rendered"; } > "$tmp" \
+        && mv -f "$tmp" "$f" || rm -f "$tmp"
+    } 2>/dev/null || true
+  fi
+  printf '%s' "$rendered"
 }
 
 # pref_get <key> — print the single resolved value; exit 1 when the key is
@@ -8675,6 +8801,60 @@ EOF_ROWS3
 if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
   verb="${1:-help}"
   case "$verb" in -h|--help) verb=help ;; esac
+  # Per-process memoization of pure, repeatedly-derived facts (#722): a scratch
+  # dir the whole process and its subshells share, so git_root and resolve_prefs
+  # compute once per command instead of on every call. Best-effort — if mktemp
+  # is unavailable the run is simply unmemoized. Set SPARK_NO_MEMO=1 to disable
+  # it (the negative control: the saved forks reappear). Cleaned up on exit.
+  #
+  # Caching is CONFINED to verbs that report rather than mutate. The cached facts
+  # are derived from the repository association and the preference files, and a
+  # verb that can create either of those — `setup` seeding preferences, a scaffold
+  # running `git init` — would otherwise read a stale answer for the rest of the
+  # run. Those verbs keep the original derive-on-every-call behaviour. Extending
+  # this list requires showing the verb cannot change a repo association or a
+  # preference file mid-run.
+  # The list is MEASURED, not assumed. A verb that resolves these facts once or
+  # not at all pays for the scratch directory and gains nothing: `help` and
+  # `version` measured +2 tool processes, `state`/`telemetry`/`ci` +3,
+  # `orient`/`docs-impact` +4. Only these six measured a net reduction —
+  # doctor -32, brief -19, triage -19, footprint -11, governance -5, labels -5.
+  # Re-measure with tests/bench-memo.sh --verb before adding to this list.
+  # Start from "off" explicitly: an inherited __SPARK_MEMO_STATE would otherwise
+  # let a run that fell back to unmemoized still report itself as memoized.
+  __SPARK_MEMO_STATE=off
+  case " brief triage governance doctor footprint labels " in
+    *" $verb "*) __SPARK_MEMO_ELIGIBLE=1 ;;
+    *)           __SPARK_MEMO_ELIGIBLE="" ;;
+  esac
+  # There is deliberately NO environment switch that widens this list. One would
+  # be inheritable, and an accidental setting would restore the stale-cache
+  # defect on exactly the verbs excluded for being able to run `git init` or
+  # write preferences. Measuring a candidate is a benchmark concern: the harness
+  # patches this list in its own throwaway copy of the plugin, which cannot
+  # affect a real command.
+  if [ -n "${SPARK_NO_MEMO:-}" ] || [ -z "$__SPARK_MEMO_ELIGIBLE" ]; then
+    __SPARK_MEMO=""
+  elif __SPARK_MEMO="$(mktemp -d 2>/dev/null)"; then
+    export __SPARK_MEMO
+    # Clean up the directory this run actually created. The trap must not read
+    # the exported, mutable $__SPARK_MEMO at exit — a handler that reassigned it
+    # would redirect rm at the replacement path — so capture the mktemp result
+    # in a readonly variable and delete that, with -- so a leading-dash path is
+    # never read as an option.
+    readonly __SPARK_MEMO_DIR="$__SPARK_MEMO"
+    trap 'rm -rf -- "$__SPARK_MEMO_DIR"' EXIT
+    __SPARK_MEMO_STATE=on
+  else
+    __SPARK_MEMO=""
+  fi
+  # Report the EFFECTIVE state when asked. A caller measuring the cache must be
+  # able to prove the run it labels "on" was actually memoized: eligibility can
+  # be absent, and even an eligible run falls back to unmemoized when mktemp
+  # fails. Without this a harness can publish an off-vs-off comparison.
+  if [ -n "${SPARK_MEMO_STATE_FILE:-}" ]; then
+    printf '%s\n' "${__SPARK_MEMO_STATE:-off}" > "$SPARK_MEMO_STATE_FILE" 2>/dev/null || true
+  fi
   handler=""
   while IFS='|' read -r v h _; do
     [ "$v" = "$verb" ] && { handler="$h"; break; }
