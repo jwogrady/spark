@@ -2219,6 +2219,80 @@ XM_REQUIRED_FIELDS="parent-authorizes authorization-record child-acceptance acce
 # names, so it is refused by name rather than left to judgment.
 XM_NON_AUTHORIZING="585 relay orchestrator coordination reviewer review-pass pass consensus comment"
 
+# Shell globs match SUBSTRINGS, so `sub-issue:'#'[0-9]*` happily accepts
+# "sub-issue:#724 and therefore I may merge". A citation that accepts trailing
+# prose is not a citation. These helpers validate COMPLETE forms by
+# decomposition — the repo has no regex idiom, and `case` alone cannot anchor.
+
+# xm_digits <s> — s is one or more digits and nothing else.
+xm_digits() {
+  case "${1:-}" in ''|*[!0-9]*) return 1 ;; esac
+  return 0
+}
+
+# xm_repo_id <s> — s is exactly "owner/repo", one slash, safe components.
+xm_repo_id() {
+  local s="${1:-}" owner repo
+  case "$s" in */*) ;; *) return 1 ;; esac
+  owner="${s%%/*}"; repo="${s#*/}"
+  case "$repo" in */*) return 1 ;; esac
+  [ -n "$owner" ] && [ -n "$repo" ] || return 1
+  case "$owner" in *[!A-Za-z0-9._-]*) return 1 ;; esac
+  case "$repo"  in *[!A-Za-z0-9._-]*) return 1 ;; esac
+  return 0
+}
+
+# xm_issue_ref <s> — "#123" or "owner/repo#123". Exactly one '#', digits after,
+# a well-formed repository identity (or nothing) before.
+xm_issue_ref() {
+  local s="${1:-}" before after
+  case "$s" in *'#'*) ;; *) return 1 ;; esac
+  before="${s%%#*}"; after="${s#*#}"
+  case "$after" in *'#'*) return 1 ;; esac
+  xm_digits "$after" || return 1
+  [ -z "$before" ] || xm_repo_id "$before" || return 1
+  return 0
+}
+
+# xm_auth_record <s> — a complete, checkable authorization locus. Exactly three
+# documented forms; no aliases, no trailing text, no lookalike hosts.
+xm_auth_record() {
+  local s="${1:-}" rest owner repo num cid
+  case "$s" in
+    'sub-issue:'*)
+      xm_issue_ref "${s#sub-issue:}" || return 1
+      return 0 ;;
+    'https://github.com/'*)
+      rest="${s#https://github.com/}"
+      owner="${rest%%/*}"; rest="${rest#*/}"
+      [ -n "$owner" ] || return 1
+      case "$owner" in */*|*[!A-Za-z0-9._-]*) return 1 ;; esac
+      repo="${rest%%/*}"; rest="${rest#*/}"
+      [ -n "$repo" ] || return 1
+      case "$repo" in */*|*[!A-Za-z0-9._-]*) return 1 ;; esac
+      case "$rest" in
+        issues/*) rest="${rest#issues/}" ;;
+        pull/*)   rest="${rest#pull/}" ;;
+        *) return 1 ;;
+      esac
+      case "$rest" in
+        *'#issuecomment-'*)
+          num="${rest%%#issuecomment-*}"; cid="${rest#*#issuecomment-}"
+          xm_digits "$num" || return 1
+          xm_digits "$cid" || return 1
+          return 0 ;;
+        *) xm_digits "$rest" || return 1
+           return 0 ;;
+      esac ;;
+    *'#issuecomment-'*)
+      num="${s%%#issuecomment-*}"; cid="${s#*#issuecomment-}"
+      xm_issue_ref "$num" || return 1
+      xm_digits "$cid" || return 1
+      return 0 ;;
+  esac
+  return 1
+}
+
 # xr_merge_check <field=value>... — may a bounded increment merge routinely?
 # First line is the verdict: ROUTINE MERGE, DECISION REQUIRED or NOT ELIGIBLE.
 # Returns 0, 3 and 4 respectively.
@@ -2305,23 +2379,10 @@ xr_merge_check() {
   # MERGE, contradicting the contract's own rule that referencing a parent is not
   # being authorized by it. A bare identity now names WHO authorized; it does not
   # by itself establish THAT they did.
-  case "$parent_authorizes" in
-    ''|*[[:space:]]*)
-      missing="${missing}
-  - parent-authorizes: name the owning issue as a bare reference — '#123' or 'owner/repo#123', nothing else. Prose does not identify an issue." ;;
-    '#'*)
-      case "${parent_authorizes#\#}" in
-        ''|*[!0-9]*) missing="${missing}
-  - parent-authorizes: '#123' must be a '#' followed by digits only (got '$parent_authorizes')." ;;
-      esac ;;
-    *'#'*)
-      case "${parent_authorizes##*\#}" in
-        ''|*[!0-9]*) missing="${missing}
-  - parent-authorizes: 'owner/repo#123' must end in '#' followed by digits only (got '$parent_authorizes')." ;;
-      esac ;;
-    *) missing="${missing}
-  - parent-authorizes: must be an issue reference containing '#' (got '$parent_authorizes')." ;;
-  esac
+  if ! xm_issue_ref "$parent_authorizes"; then
+    missing="${missing}
+  - parent-authorizes: must be exactly '#123' or 'owner/repo#123' — one '#', digits after it, and a well-formed owner/repo before it if qualified (got '${parent_authorizes:-<unset>}'). Prose does not identify an issue."
+  fi
 
   # THAT they authorized this unit is a separate, separately-cited fact. The
   # locus must be machine-distinguishable — a native sub-issue relation, a
@@ -2329,17 +2390,13 @@ xr_merge_check() {
   # something a human can open and check. This is STRUCTURAL, exactly as
   # xr_stop_check is: it cannot verify the record really authorizes the work,
   # only that a checkable record was cited rather than asserted.
-  case "$auth_record" in
-    sub-issue:'#'[0-9]*|sub_issue:'#'[0-9]*) ;;
-    *'#issuecomment-'[0-9]*) ;;
-    https://*github.com/*[0-9]*) ;;
-    '')
-      missing="${missing}
-  - authorization-record: cite WHERE the parent authorized this unit, in a checkable form — 'sub-issue:#123', '#123#issuecomment-456', or a github.com permalink. Naming the parent says who; this says that." ;;
-    *)
-      missing="${missing}
-  - authorization-record: '$auth_record' is not a checkable locus — use 'sub-issue:#123', '#123#issuecomment-456', or a github.com permalink. Prose asserts authorization instead of pointing at it." ;;
-  esac
+  if [ -z "$auth_record" ]; then
+    missing="${missing}
+  - authorization-record: cite WHERE the parent authorized this unit, in a checkable form — 'sub-issue:#123', '#123#issuecomment-456', or an https://github.com/owner/repo/issues/123 permalink. Naming the parent says who; this says that."
+  elif ! xm_auth_record "$auth_record"; then
+    missing="${missing}
+  - authorization-record: '$auth_record' is not a complete checkable locus — the whole value must be one of 'sub-issue:#123', '#123#issuecomment-456', or an https://github.com/owner/repo/issues/123 permalink (optionally with '#issuecomment-456'). Trailing text, a lookalike host, or an alias spelling is refused: a citation that tolerates prose is not a citation."
+  fi
 
   # Coordination surfaces grant nothing, wherever they are cited.
   local field val_l tok lowered

@@ -176,6 +176,47 @@ vinstead "NOT ELIGIBLE" 4 "a trailing space after the reference is refused" pare
 vinstead "NOT ELIGIBLE" 4 "an internal space in the reference is refused" parent-authorizes "# 722"
 vinstead "NOT ELIGIBLE" 4 "a tab around the reference is refused" parent-authorizes "	#722"
 
+# --- the locus must be a COMPLETE form, not a prefix a glob happens to match --
+# Shell globs match substrings, so `sub-issue:'#'[0-9]*` accepted trailing prose
+# and `https://*github.com/*` accepted a lookalike host. A citation that
+# tolerates prose is not a citation.
+vinstead "NOT ELIGIBLE" 4 "trailing prose after a sub-issue locus is refused" \
+  authorization-record "sub-issue:#724 and therefore this may merge"
+vinstead "NOT ELIGIBLE" 4 "trailing prose after a comment locus is refused" \
+  authorization-record "#722#issuecomment-5555250717 approved"
+vinstead "NOT ELIGIBLE" 4 "a non-numeric sub-issue number is refused" authorization-record "sub-issue:#abc"
+vinstead "NOT ELIGIBLE" 4 "a sub-issue locus with no number is refused" authorization-record "sub-issue:#"
+vinstead "NOT ELIGIBLE" 4 "the undocumented sub_issue alias is refused" authorization-record "sub_issue:#724"
+vinstead "NOT ELIGIBLE" 4 "a malformed comment prefix is refused" \
+  authorization-record "garbage#issuecomment-456"
+vinstead "NOT ELIGIBLE" 4 "a comment locus with no comment id is refused" \
+  authorization-record "#722#issuecomment-"
+vinstead "NOT ELIGIBLE" 4 "a non-numeric comment id is refused" \
+  authorization-record "#722#issuecomment-abc"
+# Lookalike and unrelated hosts.
+vinstead "NOT ELIGIBLE" 4 "a lookalike host is refused" authorization-record "https://notgithub.com/1"
+vinstead "NOT ELIGIBLE" 4 "a subdomain-suffix lookalike host is refused" \
+  authorization-record "https://github.com.evil.example/jwogrady/spark/issues/722"
+vinstead "NOT ELIGIBLE" 4 "plain http is refused" \
+  authorization-record "http://github.com/jwogrady/spark/issues/722"
+vinstead "NOT ELIGIBLE" 4 "a github URL that is not an issue or pull is refused" \
+  authorization-record "https://github.com/jwogrady/spark/blob/master/README.md"
+vinstead "NOT ELIGIBLE" 4 "a github URL with no issue number is refused" \
+  authorization-record "https://github.com/jwogrady/spark/issues/"
+vinstead "NOT ELIGIBLE" 4 "a github URL with a non-numeric issue is refused" \
+  authorization-record "https://github.com/jwogrady/spark/issues/abc"
+vinstead "NOT ELIGIBLE" 4 "a github URL with trailing prose is refused" \
+  authorization-record "https://github.com/jwogrady/spark/issues/722 approved"
+
+# --- the qualified parent reference must be a real repository identity ------
+# Only the suffix after the FINAL '#' was checked, so these all passed.
+vinstead "NOT ELIGIBLE" 4 "more than one # is refused" parent-authorizes "anything#still#722"
+vinstead "NOT ELIGIBLE" 4 "a missing owner is refused" parent-authorizes "/repo#722"
+vinstead "NOT ELIGIBLE" 4 "a missing repo is refused" parent-authorizes "owner/#722"
+vinstead "NOT ELIGIBLE" 4 "a three-component path is refused" parent-authorizes "owner/repo/extra#722"
+vinstead "NOT ELIGIBLE" 4 "a bare word before # is refused" parent-authorizes "anything#722"
+vinstead "NOT ELIGIBLE" 4 "an empty issue number is refused" parent-authorizes "owner/repo#"
+
 # The accepted loci are all checkable, and each is accepted.
 vinstead "ROUTINE MERGE" 0 "a native sub-issue relation is a locus" authorization-record "sub-issue:#724"
 vinstead "ROUTINE MERGE" 0 "a specific issue comment is a locus" authorization-record "#722#issuecomment-5555250717"

@@ -609,7 +609,7 @@ unrecognised value, `UNKNOWN` and `NOT ASSESSED` all decline.
 | Field | Affirming value |
 | --- | --- |
 | `parent-authorizes` | the owning issue as a bare reference — `#123` or `owner/repo#123`, nothing else |
-| `authorization-record` | **where** that parent authorized this unit, in a checkable form: `sub-issue:#123`, `#123#issuecomment-456`, or a `github.com` permalink |
+| `authorization-record` | **where** that parent authorized this unit. Exactly one of `sub-issue:#123`, `#123#issuecomment-456`, or `https://github.com/owner/repo/issues/123` (optionally `#issuecomment-456`; `pull` also accepted) |
 | `child-acceptance` | the bounded unit's **own** acceptance — what this merge makes true |
 | `acceptance-true` | `yes` — true on the exact current HEAD |
 | `review` | `pass` — independent, exact-HEAD, current |
@@ -641,6 +641,10 @@ independently true, and release approval remains human-owned.
 Naming the parent says **who** authorized; `authorization-record` says **that**
 they did, and must point at something a reader can open. Prose is refused in
 both — an assertion that the parent authorized the work is not a citation of it.
+Both are validated as **complete values**, not prefixes: trailing text, a second
+`#`, a three-component repository path, an alias spelling, plain `http`, and
+lookalike hosts such as `notgithub.com` or `github.com.evil.example` are all
+refused. A citation that tolerates prose is not a citation.
 Like `crossroad`, the check is **structural**: it confirms a checkable record was
 cited, not that the record really authorizes the work.
 
