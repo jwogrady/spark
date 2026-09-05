@@ -23,7 +23,21 @@ yellow(){ printf '\033[33m%s\033[0m\n' "$1"; }
 
 # git_root — the repo top-level, or empty when not inside a git repo (#276).
 # The one place the git plumbing is spelled, so callers stop re-deriving it.
-git_root() { git rev-parse --show-toplevel 2>/dev/null || true; }
+# Memoized per process when $__SPARK_MEMO is set (#722): the repo root does not
+# change within one command, and callers derive it repeatedly. Unset the var to
+# recompute from scratch (the negative control); sourced/test contexts never set
+# it, so their behaviour is unchanged.
+git_root() {
+  local memo="${__SPARK_MEMO:-}"
+  if [ -n "$memo" ] && [ -f "$memo/gitroot" ]; then
+    cat "$memo/gitroot"; return 0
+  fi
+  local r rendered=""
+  r="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  [ -n "$r" ] && rendered="$r"$'\n'
+  [ -n "$memo" ] && printf '%s' "$rendered" > "$memo/gitroot" 2>/dev/null || true
+  printf '%s' "$rendered"
+}
 
 # check_json <file> — true when the file parses as JSON. jq, then python3; with
 # neither validator present it returns 0 (skip), so a zero-dependency
@@ -269,21 +283,35 @@ read_flat_json() {
 # standard, source ∈ default|operator|project. Keys keep first-seen order so
 # the shipped defaults define the listing; later tiers override the value.
 resolve_prefs() {
-  local top
+  # Memoized per process when $__SPARK_MEMO is set (#722): the merge reads three
+  # JSON files and forks jq+awk several times, and a single command resolves it
+  # repeatedly (the brief header, the standards summary, each pref_get). The
+  # resolved standard does not change within one command. Unset the var to
+  # recompute (the negative control); sourced/test contexts never set it.
+  local memo="${__SPARK_MEMO:-}"
+  if [ -n "$memo" ] && [ -f "$memo/prefs" ]; then
+    cat "$memo/prefs"; return 0
+  fi
+  local top out rendered=""
   top="$(git_root)"
-  {
-    read_flat_json "$SPARK_ROOT/preferences/defaults.json" \
-      | awk -F'\t' 'NF >= 2 { print $0 "\tdefault" }'
-    read_flat_json "$(prefs_operator_path)" \
-      | awk -F'\t' 'NF >= 2 { print $0 "\toperator" }'
-    if [ -n "$top" ]; then
-      read_flat_json "$top/.spark/preferences.json" \
-        | awk -F'\t' 'NF >= 2 { print $0 "\tproject" }'
-    fi
-  } | awk -F'\t' '
-      !($1 in v) { order[++n] = $1 }
-      { v[$1] = $2; s[$1] = $3 }
-      END { for (i = 1; i <= n; i++) print order[i] "\t" v[order[i]] "\t" s[order[i]] }'
+  out="$(
+    {
+      read_flat_json "$SPARK_ROOT/preferences/defaults.json" \
+        | awk -F'\t' 'NF >= 2 { print $0 "\tdefault" }'
+      read_flat_json "$(prefs_operator_path)" \
+        | awk -F'\t' 'NF >= 2 { print $0 "\toperator" }'
+      if [ -n "$top" ]; then
+        read_flat_json "$top/.spark/preferences.json" \
+          | awk -F'\t' 'NF >= 2 { print $0 "\tproject" }'
+      fi
+    } | awk -F'\t' '
+        !($1 in v) { order[++n] = $1 }
+        { v[$1] = $2; s[$1] = $3 }
+        END { for (i = 1; i <= n; i++) print order[i] "\t" v[order[i]] "\t" s[order[i]] }'
+  )"
+  [ -n "$out" ] && rendered="$out"$'\n'
+  [ -n "$memo" ] && printf '%s' "$rendered" > "$memo/prefs" 2>/dev/null || true
+  printf '%s' "$rendered"
 }
 
 # pref_get <key> — print the single resolved value; exit 1 when the key is
@@ -8675,6 +8703,19 @@ EOF_ROWS3
 if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
   verb="${1:-help}"
   case "$verb" in -h|--help) verb=help ;; esac
+  # Per-process memoization of pure, repeatedly-derived facts (#722): a scratch
+  # dir the whole process and its subshells share, so git_root and resolve_prefs
+  # compute once per command instead of on every call. Best-effort — if mktemp
+  # is unavailable the run is simply unmemoized. Set SPARK_NO_MEMO=1 to disable
+  # it (the negative control: the saved forks reappear). Cleaned up on exit.
+  if [ -n "${SPARK_NO_MEMO:-}" ]; then
+    __SPARK_MEMO=""
+  elif __SPARK_MEMO="$(mktemp -d 2>/dev/null)"; then
+    export __SPARK_MEMO
+    trap 'rm -rf "$__SPARK_MEMO"' EXIT
+  else
+    __SPARK_MEMO=""
+  fi
   handler=""
   while IFS='|' read -r v h _; do
     [ "$v" = "$verb" ] && { handler="$h"; break; }
