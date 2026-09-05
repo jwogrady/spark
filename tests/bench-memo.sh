@@ -93,8 +93,8 @@ median() { printf '%s\n' "$@" | LC_ALL=C sort -n | awk '{ v[NR]=$1 } END { print
 # environment: setting some other variable leaves an inherited SPARK_NO_MEMO in
 # force, and both sides would then run unmemoized while the report claimed a
 # comparison. `env -u` is the only thing that guarantees the ON side is on.
-off_env=(env SPARK_NO_MEMO=1 SPARK_MEMO_STATE_FILE="$TMP/state.off")
-on_env=(env -u SPARK_NO_MEMO SPARK_MEMO_STATE_FILE="$TMP/state.on")
+off_env=(env SPARK_NO_MEMO=1)
+on_env=(env -u SPARK_NO_MEMO)
 
 # A verb outside the dispatcher's allowlist is never memoized, so "ON" would
 # silently be a second control and the comparison would be off-vs-off. Measuring
@@ -150,15 +150,21 @@ parser_selfcheck() {
 # Every measured invocation writes its OWN state file and is checked. Asserting
 # once after a warmup would let a later run whose mktemp failed contribute an
 # unmemoized sample to a series still labelled memo ON.
-run_state=0
-state_args() { # <expected> -> echoes the per-invocation state file path
-  run_state=$(( run_state + 1 ))
-  echo "$TMP/state.$1.$run_state"
+#
+# The path must be unique WITHOUT a shared counter: these helpers are themselves
+# called inside command substitution, so a parent-side counter never increments —
+# every run would reuse one path and a later invocation that wrote no state could
+# pass on the previous run's file. $BASHPID differs per subshell, and the file is
+# deleted before the run so the assertion demands a freshly created record.
+state_path() { # <expected> -> a fresh, unique state file path
+  local p="$TMP/state.$1.$BASHPID.$RANDOM"
+  rm -f "$p"
+  echo "$p"
 }
 
 one_run() { # <env-array-name> <expected-state> -> elapsed ms; aborts on failure
   local -n e_ref="$1"; local want="$2"
-  local s e rc sf; sf="$(state_args "$want")"
+  local s e rc sf; sf="$(state_path "$want")"
   s="$(now_ms)"
   ( cd "$FIX" && "${e_ref[@]}" SPARK_MEMO_STATE_FILE="$sf" "$SPARK" $VERB >/dev/null 2>&1 ); rc=$?
   e="$(now_ms)"
@@ -170,16 +176,17 @@ one_run() { # <env-array-name> <expected-state> -> elapsed ms; aborts on failure
 capture() { # <env-array-name> <prefix> -> records the COMPLETE observable result
   # stdout, stderr and status all count: a run that printed a warning to stderr,
   # or exited differently, did not do the same job even if stdout matched.
-  local -n c_ref="$1"; local pre="$2" rc
-  ( cd "$FIX" && "${c_ref[@]}" "$SPARK" $VERB >"$pre.out" 2>"$pre.err" ); rc=$?
+  local -n c_ref="$1"; local pre="$2" want="$3" rc sf; sf="$(state_path "$want")"
+  ( cd "$FIX" && "${c_ref[@]}" SPARK_MEMO_STATE_FILE="$sf" "$SPARK" $VERB >"$pre.out" 2>"$pre.err" ); rc=$?
   printf '%s\n' "$rc" > "$pre.rc"
   [ "$rc" -eq 0 ] || die "'$VERB' exited $rc under ${c_ref[*]} — refusing to report figures for a failed run"
+  assert_state "$sf" "$want" "the outcome-comparison $want run"
 }
 
 counts_for() { # <label> <env-array-name> -> "total parsers"; aborts on failure
   local label="$1"; local -n k_ref="$2"
   local counts="$TMP/c.$label"; : > "$counts"
-  local rc sf; sf="$(state_args "$3")"
+  local rc sf; sf="$(state_path "$3")"
   ( cd "$FIX" && BENCH_COUNT="$counts" PATH="$TMP/bin:$PATH" "${k_ref[@]}" SPARK_MEMO_STATE_FILE="$sf" "$SPARK" $VERB >/dev/null 2>&1 ); rc=$?
   [ "$rc" -eq 0 ] || die "'$VERB' exited $rc while counting under ${k_ref[*]}"
   assert_state "$sf" "$3" "the counted $3 run"
@@ -189,7 +196,7 @@ counts_for() { # <label> <env-array-name> -> "total parsers"; aborts on failure
 execve_for() { # <label> <env-array-name> -> total execve, or n/a
   local label="$1"; local -n x_ref="$2"
   if [ -n "$use_strace" ] && command -v strace >/dev/null 2>&1; then
-    local slog="$TMP/s.$label" rc sf; sf="$(state_args "$3")"
+    local slog="$TMP/s.$label" rc sf; sf="$(state_path "$3")"
     ( cd "$FIX" && strace -f -qq -e trace=execve -o "$slog" "${x_ref[@]}" SPARK_MEMO_STATE_FILE="$sf" "$SPARK" $VERB >/dev/null 2>&1 ); rc=$?
     [ "$rc" -eq 0 ] || die "'$VERB' exited $rc under strace with ${x_ref[*]}"
     assert_state "$sf" "$3" "the traced $3 run"
@@ -219,11 +226,8 @@ one_run on_env  on  >/dev/null
 
 # Equal outcome BEFORE any figure is reported: a faster run that produced
 # different output is not a faster run, it is a different job.
-capture off_env "$TMP/res.off"
-capture on_env  "$TMP/res.on"
-# Prove the two configurations really were off and on before anything is reported.
-assert_state "$TMP/state.off" off "the control run"
-assert_state "$TMP/state.on"  on  "the memo-on run"
+capture off_env "$TMP/res.off" off
+capture on_env  "$TMP/res.on"  on
 cmp -s "$TMP/res.off.out" "$TMP/res.on.out" \
   || die "'$VERB' stdout differs between memo off and on — not the same work, so no figures are reported"
 cmp -s "$TMP/res.off.err" "$TMP/res.on.err" \
