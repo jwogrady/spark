@@ -200,22 +200,31 @@ if [ "$left" -eq 0 ]; then ok; else bad "the run left $left entry(ies) in its ow
 
 # The failure mode is a trap that re-reads the MUTABLE variable at exit, so the
 # fixture must mutate it *after* the trap is installed — supplying it beforehand
-# only proves the dispatcher overwrites its input. A runtime module is sourced
-# after the memo is set up, so appending a reassignment there runs inside the
-# process at exactly the right moment. Cleanup must still remove only the
-# directory this run created, leaving the reassigned path untouched.
+# only proves the dispatcher overwrites its input.
+#
+# The mutation is injected into the sandbox dispatcher immediately after the trap
+# is installed, and it runs ONLY once it has confirmed the memo directory exists.
+# That confirmation is the point: an earlier version of this fixture reassigned
+# the variable from a runtime module loaded by `telemetry`, and when the
+# eligibility allowlist was narrowed `telemetry` stopped installing a memo at
+# all — every assertion then passed while testing nothing. None of the eligible
+# verbs load a runtime module, so the hook goes where the trap is.
 decoy2="$WORK/decoy-runtime"; mkdir -p "$decoy2"; : > "$decoy2/keep.txt"
-# The appended code also drops a marker, so the probe can PROVE it executed. If
-# the verb exited before loading the module, both cleanup assertions would pass
-# vacuously and the fixture would be testing nothing.
 marker="$WORK/mutation-ran"
-printf '\n__SPARK_MEMO="%s"; export __SPARK_MEMO; : > "%s"\n' "$decoy2" "$marker" \
-  >> "$WORK/plugin/lib/execution.sh"
+hook="if [ -n \"\${__SPARK_MEMO:-}\" ] \&\& [ -d \"\$__SPARK_MEMO\" ]; then : > \"$marker\"; __SPARK_MEMO=\"$decoy2\"; export __SPARK_MEMO; fi"
+# Anchor on ANY exit trap, not the current one's exact text: anchoring on the
+# correct form would make a regressed implementation fail to inject and the
+# fixture would then fail for the wrong reason instead of catching the bug.
+sed -i "/trap .*EXIT/a\\    $hook" "$WORK/plugin/bin/spark"
+if grep -q "$marker" "$WORK/plugin/bin/spark"; then ok; else bad "the post-trap hook was not injected into the sandbox dispatcher"; fi
+
 iso2="$WORK/memotmp2"; rm -rf "$iso2"; mkdir -p "$iso2"; rm -f "$marker"
-( cd "$repo" && TMPDIR="$iso2" "$SPARK" telemetry >/dev/null 2>&1 )
+( cd "$repo" && TMPDIR="$iso2" "$SPARK" brief --short >/dev/null 2>&1 )   # an ELIGIBLE verb
 tel_rc=$?
-if [ "$tel_rc" -eq 0 ]; then ok; else bad "the module-loading verb failed (rc=$tel_rc); the mutation probe proves nothing"; fi
-if [ -f "$marker" ]; then ok; else bad "the appended module assignment never executed — the post-trap mutation was not exercised"; fi
+if [ "$tel_rc" -eq 0 ]; then ok; else bad "the eligible verb failed (rc=$tel_rc); the mutation probe proves nothing"; fi
+# The marker only appears if the memo directory existed when the hook ran, so its
+# presence proves a memo and trap were actually installed before the mutation.
+if [ -f "$marker" ]; then ok; else bad "no memo/trap was installed, so the post-trap mutation was never exercised"; fi
 left2="$(find "$iso2" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l | tr -d ' ')"
 if [ -d "$decoy2" ] && [ -f "$decoy2/keep.txt" ]; then ok; else bad "a post-trap reassignment of \$__SPARK_MEMO redirected cleanup at the replacement path"; fi
 if [ "$left2" -eq 0 ]; then ok; else bad "the run left $left2 entry(ies) in its own TMPDIR after a post-trap reassignment"; fi
