@@ -10,19 +10,22 @@
 # same fixture, same binary — with one variable: SPARK_NO_MEMO=1. That is why it
 # is a fair comparison and a cross-version one is not.
 #
-# WHAT IS COUNTED. Process creation is counted by prepending counting shims for a
-# fixed tool list. That list deliberately includes the operations the memo itself
-# introduces (mktemp, mv, rm — a cache HIT reads with the mapfile builtin and
-# forks nothing) — counting only the parsers it removes would
-# report a saving while total process creation stayed flat. It remains a LOWER
-# BOUND: anything not on the list, and every fork a shimmed program makes
-# internally, is invisible.
+# WHAT IS COUNTED. `tools` counts INVOCATIONS OF A FIXED LIST OF SELECTED TOOLS,
+# measured by prepending counting shims for that list. It is not a count of
+# processes and must never be reported as one. The list deliberately includes
+# the operations the memo itself introduces (mktemp, mv, rm — a cache HIT reads
+# with the mapfile builtin and forks nothing), because counting only the parsers
+# the memo removes would report a saving while the real work stayed flat. It is
+# a LOWER BOUND on selected tool invocations: anything not on the list, and
+# everything a shimmed program does internally, is invisible.
 #
 # `--strace` adds two SEPARATE syscall counts, because they measure different
-# things: `execs` counts execve, i.e. program images actually executed, and
-# `procs` counts process creation — clone/clone3/fork/vfork that SUCCEEDED and
-# did not carry CLONE_THREAD — which includes subshells the shell forks WITHOUT
-# exec, and excludes threads and failed attempts. A shell-only subshell is invisible to
+# things: `execs` counts execve calls that SUCCEEDED, i.e. program images
+# actually executed — a failed attempt (`= -1 ENOENT`, which PATH searching
+# produces routinely) replaced no image and is not counted — and `procs` counts
+# process creation: clone/clone3/fork/vfork that SUCCEEDED and did not carry
+# CLONE_THREAD, which includes subshells the shell forks WITHOUT exec, and
+# excludes threads and failed attempts. A shell-only subshell is invisible to
 # execve and to the shims, so execve alone must never be called a total.
 set -uo pipefail
 
@@ -228,11 +231,19 @@ count_procs() {
   printf '%s' "$n"
 }
 
-# count_execs <strace-log> — program images executed, with the same
+# count_execs <strace-log> — program images actually executed, with the same
 # one-integer-always guarantee.
 count_execs() {
   local n
-  n="$(grep -c 'execve(' "$1" 2>/dev/null)" || true
+  # A FAILED execve ("= -1 ENOENT") replaced no program image, so counting it
+  # would contradict the published definition. PATH-searching shims make this
+  # concrete: a shim resolved through several PATH entries produces one failed
+  # attempt per miss. Only successful calls are counted. Split records are
+  # handled exactly as in count_procs: the unfinished half carries no result
+  # and is refused; the resumed half carries it and is judged on it.
+  n="$( { grep 'execve(' "$1" 2>/dev/null | grep -v '<unfinished'
+          grep '<\.\.\. execve resumed' "$1" 2>/dev/null ; } \
+        | grep -cv '= -1')" || true
   case "$n" in ''|*[!0-9]*) n=0 ;; esac
   printf '%s' "$n"
 }
@@ -292,6 +303,20 @@ syscall_selfcheck() {
   } > "$probe" || die "could not write the split-record self-check log"
   got="$(count_procs "$probe")"
   [ "$got" = "1" ] || die "the process-creation metric mishandles split strace records: expected 1 (one split success, one split failure), counted $got"
+
+  # The exec metric gets the same treatment, because "program images executed"
+  # excludes attempts that executed nothing. This log holds two successful
+  # execve calls, one that failed with ENOENT (the shape a PATH-searching shim
+  # produces on every miss), and one split success. Three images ran.
+  {
+    printf 'execve("/usr/bin/git", ["git", "rev-parse"], 0x7ffd) = 0\n'
+    printf 'execve("/usr/local/bin/mktemp", ["mktemp", "-d"], 0x7ffd) = -1 ENOENT (No such file or directory)\n'
+    printf 'execve("/usr/bin/mktemp", ["mktemp", "-d"], 0x7ffd) = 0\n'
+    printf 'execve( <unfinished ...>\n'
+    printf '<... execve resumed>) = 0\n'
+  } > "$probe" || die "could not write the exec self-check log"
+  got="$(count_execs "$probe")"
+  [ "$got" = "3" ] || die "the exec metric counts failed or unfinished execve calls as executed program images: expected 3 (two plain successes, one ENOENT failure, one split success), counted $got"
 
   # Zero is part of the declared domain: a workload with no qualifying process
   # creation must still yield exactly one integer. `grep -c` exits 1 on no
@@ -363,6 +388,13 @@ echo "raw wall samples (ms), in collection order:"
 echo "  OFF: ${off_times[*]}"
 echo "  ON : ${on_times[*]}"
 echo
-echo "Counts are invocations of a fixed tool list (a lower bound on subprocesses,"
-echo "including the memo's own mktemp/mv/rm), not a full accounting."
-[ -n "$use_strace" ] || echo "Run with --strace to add execs (program images) and procs (process creation, subshells included)."
+echo "tools = invocations of a fixed list of selected tools (including the memo's own"
+echo "mktemp/mv/rm). It is a lower bound on those invocations, not a process count."
+if [ -n "$use_strace" ]; then
+  echo "execs = execve calls that SUCCEEDED (program images actually executed; failed"
+  echo "attempts such as PATH-search misses executed nothing and are not counted)."
+  echo "procs = successful clone/clone3/fork/vfork without CLONE_THREAD, subshells included."
+else
+  echo "Run with --strace to add execs (successful execve) and procs (process creation,"
+  echo "subshells included)."
+fi
