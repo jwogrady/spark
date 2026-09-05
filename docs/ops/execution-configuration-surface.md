@@ -218,9 +218,13 @@ What the harness guarantees, which is why its output can be trusted as evidence:
   replaced no image and is not counted) and **procs** (`clone`/`clone3`/`fork`/
   `vfork` that succeeded and did not carry `CLONE_THREAD` — process creation
   *including subshells the shell forks without exec*). `execve` alone is not a
-  process-creation total and is never reported as one. Self-checks prove each
-  metric against synthetic logs holding successful, failed, split and
-  zero-result records, and prove the procs metric catches a shell-only subshell.
+  process-creation total and is never reported as one. Both counters match
+  success **positively** — `= 0` for `execve`, `= <pid>` for process creation —
+  rather than inferring it by excluding `= -1`, so a result that proves nothing
+  (`= ? ERESTARTNOINTR`, a bare `= ?`) is never published as a success.
+  Self-checks prove each metric against synthetic logs holding successful,
+  failed, split, unproven-result and zero-result records, and prove the procs
+  metric catches a shell-only subshell.
 
 The suite (`tests/test-hot-path-memo.sh`) asserts the *properties* — transparency,
 a strict reduction, and the negative control; the harness produces the *figures*.

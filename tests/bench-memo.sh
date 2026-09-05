@@ -223,9 +223,14 @@ count_procs() {
   # it would report a process for a call that may have failed; the resumed half
   # carries the result and is counted when it succeeded. Completed one-line
   # calls are counted directly. (-ff avoids producing splits at all.)
+  # Success is matched POSITIVELY: a successful clone/fork returns the new
+  # process id, so the record must end in "= <positive integer>". Excluding
+  # "= -1" instead would infer success from the absence of one known failure
+  # and count results that prove nothing — "= ? ERESTARTNOINTR", "= ?" from a
+  # detached trace, or any future strace spelling — as created processes.
   n="$( { grep -E '(clone3?|v?fork)\(' "$1" 2>/dev/null | grep -v '<unfinished'
           grep -E '<\.\.\. (clone3?|v?fork) resumed' "$1" 2>/dev/null ; } \
-        | grep -v '= -1' \
+        | grep -E '= [1-9][0-9]*$' \
         | grep -cv 'CLONE_THREAD')" || true
   case "$n" in ''|*[!0-9]*) n=0 ;; esac
   printf '%s' "$n"
@@ -241,9 +246,13 @@ count_execs() {
   # attempt per miss. Only successful calls are counted. Split records are
   # handled exactly as in count_procs: the unfinished half carries no result
   # and is refused; the resumed half carries it and is judged on it.
+  # Success is matched POSITIVELY: a successful execve returns 0, so the record
+  # must end in exactly "= 0". Excluding "= -1" instead would infer success from
+  # the absence of one known failure, so "= ? ERESTARTNOINTR" or a bare "= ?"
+  # would be published as a program image that ran when nothing proves it did.
   n="$( { grep 'execve(' "$1" 2>/dev/null | grep -v '<unfinished'
           grep '<\.\.\. execve resumed' "$1" 2>/dev/null ; } \
-        | grep -cv '= -1')" || true
+        | grep -cE '= 0$')" || true
   case "$n" in ''|*[!0-9]*) n=0 ;; esac
   printf '%s' "$n"
 }
@@ -303,6 +312,30 @@ syscall_selfcheck() {
   } > "$probe" || die "could not write the split-record self-check log"
   got="$(count_procs "$probe")"
   [ "$got" = "1" ] || die "the process-creation metric mishandles split strace records: expected 1 (one split success, one split failure), counted $got"
+
+  # Results that are neither a proven success nor "= -1". An interrupted call
+  # reports "= ? ERESTARTNOINTR" and a trace that lost the result reports a bare
+  # "= ?". Neither proves a process was created, so neither may be counted. A
+  # counter that merely excludes "= -1" counts all of them. One genuine success
+  # is included so the log cannot pass by counting nothing at all.
+  {
+    printf 'clone(child_stack=NULL, flags=SIGCHLD) = ? ERESTARTNOINTR (To be restarted if no handler)\n'
+    printf 'clone3({flags=0, exit_signal=SIGCHLD}, 88) = ? ERESTARTSYS (To be restarted if SA_RESTART is set)\n'
+    printf 'vfork() = ?\n'
+    printf 'fork() = 7331\n'
+  } > "$probe" || die "could not write the unproven-result self-check log"
+  got="$(count_procs "$probe")"
+  [ "$got" = "1" ] || die "the process-creation metric infers success instead of proving it: expected 1 (three unproven results, one real fork), counted $got"
+
+  # The same for the exec metric: an interrupted or result-less execve executed
+  # no program image that this trace can demonstrate.
+  {
+    printf 'execve("/usr/bin/git", ["git"], 0x7ffd) = ? ERESTARTNOINTR (To be restarted if no handler)\n'
+    printf 'execve("/usr/bin/sed", ["sed"], 0x7ffd) = ?\n'
+    printf 'execve("/usr/bin/awk", ["awk"], 0x7ffd) = 0\n'
+  } > "$probe" || die "could not write the unproven-exec self-check log"
+  got="$(count_execs "$probe")"
+  [ "$got" = "1" ] || die "the exec metric infers success instead of proving it: expected 1 (two unproven results, one real exec), counted $got"
 
   # The exec metric gets the same treatment, because "program images executed"
   # excludes attempts that executed nothing. This log holds two successful
