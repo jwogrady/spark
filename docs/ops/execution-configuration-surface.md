@@ -178,7 +178,9 @@ that inconsistency was wrong and is withdrawn.
 **The one equal-workload comparison available is not cross-version at all.** It
 is the per-process memo measured on the *same* binary — memo on versus
 `SPARK_NO_MEMO=1` — where the workload is identical by construction and the
-output is asserted byte-identical by `tests/test-hot-path-memo.sh`.
+output is asserted byte-identical by `tests/test-hot-path-memo.sh`, which
+compares captured **files** with `cmp` — command substitution strips trailing
+newlines, so comparing its results could not establish byte identity.
 
 It is reproducible from the repository rather than quoted here. Run:
 
@@ -227,8 +229,15 @@ measured saving.
 
 ## What this record does not establish
 
-- **No Lord's Prayer fixture exists in this repository.** None was created here;
-  if one is wanted it needs defining first. Nothing in this document depends on it.
+- **The Lord's Prayer calibration fixture required by #722 is outstanding.** It
+  is defined there — a bounded, diagnostic epistemic-calibration fixture on a
+  pinned public-domain source, with mechanical source-fidelity checks, the
+  fact/interpretation/human-meaning boundary preserved, and at least two
+  controllable execution configurations compared without treating subjective
+  meaning as correctness evidence. It does not exist in this repository yet, and
+  nothing in this document depends on it; it remains required for #722, not
+  optional. (An earlier revision of this record wrongly described it as undefined
+  and needing definition first — it is defined in the issue.)
 - Token, cost, model-comparison, and thinking-effort dimensions are
   `NOT ASSESSED` — no instrumentation exposes them to a run, and no estimate is
   substituted.

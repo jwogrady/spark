@@ -64,13 +64,16 @@ count_forks() { # <memo-env> -> echoes fork count for brief --short
   ( cd "$repo" && SPARK_FORKLOG="$log" PATH="$shim:$PATH" env "$@" "$SPARK" brief --short >/dev/null 2>&1 )
   local n; n="$(wc -c < "$log" | tr -d ' ')"; rm -f "$log"; echo "$n"
 }
-out_on="$( cd "$repo" && "$SPARK" brief --short 2>/dev/null )"
-out_off="$( cd "$repo" && SPARK_NO_MEMO=1 "$SPARK" brief --short 2>/dev/null )"
+# Captured to FILES, not command substitution: `$( )` strips trailing newlines,
+# so comparing its results cannot establish byte identity — which is exactly what
+# this asserts.
+( cd "$repo" && "$SPARK" brief --short >"$WORK/out.on" 2>/dev/null )
+( cd "$repo" && SPARK_NO_MEMO=1 "$SPARK" brief --short >"$WORK/out.off" 2>/dev/null )
 forks_on="$(count_forks)"
 forks_off="$(count_forks SPARK_NO_MEMO=1)"
 
 # Transparency for the real command: identical output on and off.
-if [ "$out_on" = "$out_off" ]; then ok; else bad "brief --short output changed with the memo (should be transparent)"; fi
+if cmp -s "$WORK/out.on" "$WORK/out.off"; then ok; else bad "brief --short output is not byte-identical with the memo on and off"; fi
 # Effectiveness: the memo strictly reduces TOTAL external process creation
 # across the complete tool set — including the mktemp/cat/mv/rm it introduces —
 # not merely the parser calls it removes.
@@ -315,5 +318,35 @@ if [ "$(cat "$force_state" 2>/dev/null)" = "off" ]; then ok; else bad "an inelig
 inherit_state="$WORK/inherit.state"
 ( cd "$repo" && __SPARK_MEMO_STATE=on SPARK_MEMO_STATE_FILE="$inherit_state" "$SPARK" orient >/dev/null 2>&1 ) || true
 if [ "$(cat "$inherit_state" 2>/dev/null)" = "off" ]; then ok; else bad "an inherited __SPARK_MEMO_STATE was reported instead of the effective state"; fi
+
+# --- A deep but valid repository path. Flattening $PWD into one filename made a
+# deep path exceed the component limit, so the cache write failed and memo-on
+# could diverge from memo-off. The key mirrors the path as directories instead;
+# this fixture keeps that honest for both cached facts.
+deep="$repo"
+for i in 1 2 3 4 5 6 7 8; do deep="$deep/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"; done
+mkdir -p "$deep/.spark"
+printf '{ "stack": "deep-path-stack" }\n' > "$repo/.spark/preferences.json"
+cat > "$WORK/deep.sh" <<EOS
+#!/usr/bin/env bash
+. "$SPARK"
+set +e
+export __SPARK_MEMO="\$(mktemp -d)"
+cd "$deep" || exit 1
+printf 'R1:%s\n' "\$(git_root)"
+printf 'R2:%s\n' "\$(git_root)"
+printf 'P1:%s\n' "\$(resolve_prefs | tr '\\n' ' ')"
+printf 'P2:%s\n' "\$(resolve_prefs | tr '\\n' ' ')"
+rm -rf "\$__SPARK_MEMO"
+EOS
+deep_out="$(bash "$WORK/deep.sh" 2>"$WORK/deep.err")"
+r1="$(printf '%s\n' "$deep_out" | grep '^R1:')"; r2="$(printf '%s\n' "$deep_out" | grep '^R2:')"
+p1="$(printf '%s\n' "$deep_out" | grep '^P1:')"; p2="$(printf '%s\n' "$deep_out" | grep '^P2:')"
+# A cached second call must agree with the first, and both must be right.
+if [ "${r1#R1:}" = "${r2#R2:}" ] && [ "${r1#R1:}" = "$repo" ]; then ok; else bad "git_root deep-path mismatch ($r1 vs $r2)"; fi
+if [ "$p1" = "${p2/P2:/P1:}" ]; then ok; else bad "resolve_prefs disagreed with itself under a deep path"; fi
+case "$p1" in *deep-path-stack*) ok ;; *) bad "resolve_prefs lost the project tier under a deep path" ;; esac
+# And nothing may leak to stderr — a failed redirect would surface there.
+if [ ! -s "$WORK/deep.err" ]; then ok; else bad "a deep path produced stderr output: $(head -1 "$WORK/deep.err")"; fi
 
 finish

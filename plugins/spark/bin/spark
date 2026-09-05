@@ -32,9 +32,12 @@ git_root() {
   if [ -n "$memo" ]; then
     # Key by the current directory: the root depends on where we are, so a run
     # that moves between directories/repositories must not reuse a stale entry.
-    # Encode reversibly (% then /) so distinct paths never collide, with no
-    # hashing subprocess.
-    local key="${PWD//\%/%25}"; key="$memo/gitroot.${key//\//%2f}"; f="$key"
+    # The key MIRRORS $PWD as a directory path rather than flattening it into a
+    # single filename: a flattened absolute path becomes one component, and a
+    # deep but perfectly valid repository then exceeds the filesystem's
+    # component limit — the write fails and memo-on stops matching memo-off.
+    # Mirroring keeps every component exactly as long as the real one already is.
+    f="$memo/by-path$PWD/gitroot"
     [ -f "$f" ] && { cat "$f"; return 0; }
   fi
   local r rendered=""
@@ -45,9 +48,16 @@ git_root() {
   # subshell inherits), so two concurrent misses for one key never share a temp.
   # Miss-path only. A hit still forks one `cat`; the saving is that one cheap
   # read replaces the full derivation, not that the hit path forks nothing.
+  # The whole write is wrapped so a failed redirect cannot reach the real stderr:
+  # bash reports an error like "File name too long" against stderr as it stands
+  # when the redirect is attempted, so a trailing 2>/dev/null arrives too late.
   if [ -n "$f" ]; then
-    local tmp="$f.$BASHPID.$RANDOM.tmp"
-    printf '%s' "$rendered" > "$tmp" 2>/dev/null && mv -f "$tmp" "$f" 2>/dev/null || rm -f "$tmp" 2>/dev/null
+    {
+      mkdir -p "${f%/*}" && {
+        local tmp="$f.$BASHPID.$RANDOM.tmp"
+        printf '%s' "$rendered" > "$tmp" && mv -f "$tmp" "$f" || rm -f "$tmp"
+      }
+    } 2>/dev/null || true
   fi
   printf '%s' "$rendered"
 }
@@ -305,8 +315,9 @@ resolve_prefs() {
   if [ -n "$memo" ]; then
     # Key by the current directory: the project tier is read from the repo root,
     # which depends on where we are, so a run that changes directory/repository
-    # must resolve fresh. Same reversible, fork-free encoding as git_root.
-    local key="${PWD//\%/%25}"; key="$memo/prefs.${key//\//%2f}"; f="$key"
+    # must resolve fresh. Mirrors $PWD as a directory path, exactly as git_root
+    # does, so a deep repository cannot exceed a filename component limit.
+    f="$memo/by-path$PWD/prefs"
     [ -f "$f" ] && { cat "$f"; return 0; }
   fi
   local top out rendered=""
@@ -331,9 +342,15 @@ resolve_prefs() {
   # subshell; $$ does not), so concurrent misses for one key never share a temp
   # and a reader never observes a half-written entry. A hit still forks one `cat`;
   # it replaces the jq+awk derivation rather than avoiding a fork entirely.
+  # Wrapped so a failed redirect cannot reach the real stderr — a trailing
+  # 2>/dev/null would be applied after bash has already reported the error.
   if [ -n "$f" ]; then
-    local tmp="$f.$BASHPID.$RANDOM.tmp"
-    printf '%s' "$rendered" > "$tmp" 2>/dev/null && mv -f "$tmp" "$f" 2>/dev/null || rm -f "$tmp" 2>/dev/null
+    {
+      mkdir -p "${f%/*}" && {
+        local tmp="$f.$BASHPID.$RANDOM.tmp"
+        printf '%s' "$rendered" > "$tmp" && mv -f "$tmp" "$f" || rm -f "$tmp"
+      }
+    } 2>/dev/null || true
   fi
   printf '%s' "$rendered"
 }
