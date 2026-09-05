@@ -8746,15 +8746,19 @@ if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
   # `orient`/`docs-impact` +4. Only these six measured a net reduction —
   # doctor -20, brief -14, triage -14, footprint -8, governance -2, labels -2.
   # Re-measure with tests/bench-memo.sh --verb before adding to this list.
+  # Start from "off" explicitly: an inherited __SPARK_MEMO_STATE would otherwise
+  # let a run that fell back to unmemoized still report itself as memoized.
+  __SPARK_MEMO_STATE=off
   case " brief triage governance doctor footprint labels " in
     *" $verb "*) __SPARK_MEMO_ELIGIBLE=1 ;;
-    # SPARK_MEMO_FORCE exists so a CANDIDATE verb can be measured before it is
-    # added to the list above — otherwise the instruction to measure first is
-    # impossible to follow. It is a measurement switch only: it enables the
-    # cache and nothing else, and it must not be set for real work, because the
-    # list is what keeps the cache away from verbs that can change its sources.
-    *)           __SPARK_MEMO_ELIGIBLE="${SPARK_MEMO_FORCE:+1}" ;;
+    *)           __SPARK_MEMO_ELIGIBLE="" ;;
   esac
+  # There is deliberately NO environment switch that widens this list. One would
+  # be inheritable, and an accidental setting would restore the stale-cache
+  # defect on exactly the verbs excluded for being able to run `git init` or
+  # write preferences. Measuring a candidate is a benchmark concern: the harness
+  # patches this list in its own throwaway copy of the plugin, which cannot
+  # affect a real command.
   if [ -n "${SPARK_NO_MEMO:-}" ] || [ -z "$__SPARK_MEMO_ELIGIBLE" ]; then
     __SPARK_MEMO=""
   elif __SPARK_MEMO="$(mktemp -d 2>/dev/null)"; then

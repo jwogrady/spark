@@ -300,4 +300,20 @@ case "$(grep -o 'case " [a-z0-9 -]*" in' "$SPARK" | head -n1)" in
   *) ok ;;
 esac
 
+# --- No environment switch may widen eligibility. Such a switch is inheritable,
+# and an accidental setting would restore the stale-cache defect on exactly the
+# verbs excluded for being able to run `git init` or write preferences. A
+# candidate is measured by patching a throwaway copy of the plugin, never by a
+# variable the shipped dispatcher honours.
+if grep -q 'SPARK_MEMO_FORCE' "$SPARK"; then bad "the dispatcher honours an environment switch that widens memo eligibility"; else ok; fi
+force_state="$WORK/force.state"
+( cd "$repo" && SPARK_MEMO_FORCE=1 SPARK_MEMO_STATE_FILE="$force_state" "$SPARK" orient >/dev/null 2>&1 ) || true
+if [ "$(cat "$force_state" 2>/dev/null)" = "off" ]; then ok; else bad "an ineligible verb was memoized when SPARK_MEMO_FORCE was set (state=$(cat "$force_state" 2>/dev/null))"; fi
+
+# An inherited effective-state variable must not let a fallback report itself as
+# memoized: the dispatcher resets it before deciding.
+inherit_state="$WORK/inherit.state"
+( cd "$repo" && __SPARK_MEMO_STATE=on SPARK_MEMO_STATE_FILE="$inherit_state" "$SPARK" orient >/dev/null 2>&1 ) || true
+if [ "$(cat "$inherit_state" 2>/dev/null)" = "off" ]; then ok; else bad "an inherited __SPARK_MEMO_STATE was reported instead of the effective state"; fi
+
 finish

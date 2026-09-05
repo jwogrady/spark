@@ -98,14 +98,23 @@ on_env=(env -u SPARK_NO_MEMO SPARK_MEMO_STATE_FILE="$TMP/state.on")
 
 # A verb outside the dispatcher's allowlist is never memoized, so "ON" would
 # silently be a second control and the comparison would be off-vs-off. Measuring
-# a CANDIDATE is the whole point of doing this before allowlisting it, so the
-# candidate case is supported explicitly and labelled, not faked.
+# a CANDIDATE before allowlisting it is the point of this tool, so it is done
+# HERE rather than through an environment switch in the shipped dispatcher: an
+# env switch is inheritable and could re-enable caching for a mutating verb
+# during real work. Instead the plugin is copied and the list widened in the
+# copy, which cannot affect any command outside this script. Both sides then run
+# the same patched binary, so the only variable is still the memo.
 verb_word="${VERB%% *}"
 if grep -q "case \" [a-z0-9 -]*\b${verb_word}\b[a-z0-9 -]*\" in" "$SPARK" 2>/dev/null; then
   memo_mode="eligible"
 else
-  memo_mode="candidate (forced for measurement)"
-  on_env=(env -u SPARK_NO_MEMO SPARK_MEMO_FORCE=1 SPARK_MEMO_STATE_FILE="$TMP/state.on")
+  memo_mode="candidate (measured in a patched throwaway copy)"
+  cp -r "$root/plugins/spark" "$TMP/candidate-plugin" || die "could not copy the plugin for a candidate measurement"
+  SPARK="$TMP/candidate-plugin/bin/spark"
+  sed -i "s|case \" brief triage governance doctor footprint labels \" in|case \" brief triage governance doctor footprint labels ${verb_word} \" in|" "$SPARK" \
+    || die "could not widen the allowlist in the throwaway copy"
+  grep -q "footprint labels ${verb_word} " "$SPARK" \
+    || die "the candidate verb was not added to the throwaway copy's allowlist"
 fi
 
 assert_state() { # <file> <expected> <label>
@@ -138,13 +147,23 @@ parser_selfcheck() {
   [ "$got" = "0" ] || die "parser metric counts non-parser entries: expected 0, counted $got"
 }
 
-one_run() { # <env-array-name> -> elapsed ms; aborts if the command fails
-  local -n e_ref="$1"
-  local s e rc
+# Every measured invocation writes its OWN state file and is checked. Asserting
+# once after a warmup would let a later run whose mktemp failed contribute an
+# unmemoized sample to a series still labelled memo ON.
+run_state=0
+state_args() { # <expected> -> echoes the per-invocation state file path
+  run_state=$(( run_state + 1 ))
+  echo "$TMP/state.$1.$run_state"
+}
+
+one_run() { # <env-array-name> <expected-state> -> elapsed ms; aborts on failure
+  local -n e_ref="$1"; local want="$2"
+  local s e rc sf; sf="$(state_args "$want")"
   s="$(now_ms)"
-  ( cd "$FIX" && "${e_ref[@]}" "$SPARK" $VERB >/dev/null 2>&1 ); rc=$?
+  ( cd "$FIX" && "${e_ref[@]}" SPARK_MEMO_STATE_FILE="$sf" "$SPARK" $VERB >/dev/null 2>&1 ); rc=$?
   e="$(now_ms)"
   [ "$rc" -eq 0 ] || die "'$VERB' exited $rc under ${e_ref[*]} — refusing to report timings for a failed run"
+  assert_state "$sf" "$want" "a timed $want run"
   echo "$(( e - s ))"
 }
 
@@ -160,18 +179,20 @@ capture() { # <env-array-name> <prefix> -> records the COMPLETE observable resul
 counts_for() { # <label> <env-array-name> -> "total parsers"; aborts on failure
   local label="$1"; local -n k_ref="$2"
   local counts="$TMP/c.$label"; : > "$counts"
-  local rc
-  ( cd "$FIX" && BENCH_COUNT="$counts" PATH="$TMP/bin:$PATH" "${k_ref[@]}" "$SPARK" $VERB >/dev/null 2>&1 ); rc=$?
+  local rc sf; sf="$(state_args "$3")"
+  ( cd "$FIX" && BENCH_COUNT="$counts" PATH="$TMP/bin:$PATH" "${k_ref[@]}" SPARK_MEMO_STATE_FILE="$sf" "$SPARK" $VERB >/dev/null 2>&1 ); rc=$?
   [ "$rc" -eq 0 ] || die "'$VERB' exited $rc while counting under ${k_ref[*]}"
+  assert_state "$sf" "$3" "the counted $3 run"
   printf '%s %s' "$(wc -l < "$counts" | tr -d ' ')" "$(count_parsers "$counts")"
 }
 
 execve_for() { # <label> <env-array-name> -> total execve, or n/a
   local label="$1"; local -n x_ref="$2"
   if [ -n "$use_strace" ] && command -v strace >/dev/null 2>&1; then
-    local slog="$TMP/s.$label" rc
-    ( cd "$FIX" && strace -f -qq -e trace=execve -o "$slog" "${x_ref[@]}" "$SPARK" $VERB >/dev/null 2>&1 ); rc=$?
+    local slog="$TMP/s.$label" rc sf; sf="$(state_args "$3")"
+    ( cd "$FIX" && strace -f -qq -e trace=execve -o "$slog" "${x_ref[@]}" SPARK_MEMO_STATE_FILE="$sf" "$SPARK" $VERB >/dev/null 2>&1 ); rc=$?
     [ "$rc" -eq 0 ] || die "'$VERB' exited $rc under strace with ${x_ref[*]}"
+    assert_state "$sf" "$3" "the traced $3 run"
     grep -c 'execve(' "$slog" 2>/dev/null || echo 0
   else
     echo "n/a"
@@ -193,8 +214,8 @@ echo
 # an apparent result.
 parser_selfcheck
 
-one_run off_env >/dev/null
-one_run on_env  >/dev/null
+one_run off_env off >/dev/null
+one_run on_env  on  >/dev/null
 
 # Equal outcome BEFORE any figure is reported: a faster run that produced
 # different output is not a faster run, it is a different job.
@@ -213,22 +234,22 @@ cmp -s "$TMP/res.off.rc" "$TMP/res.on.rc" \
 off_times=() on_times=()
 for i in $(seq 1 "$RUNS"); do
   if [ $(( i % 2 )) -eq 1 ]; then
-    off_times+=("$(one_run off_env)")
-    on_times+=("$(one_run on_env)")
+    off_times+=("$(one_run off_env off)")
+    on_times+=("$(one_run on_env on)")
   else
-    on_times+=("$(one_run on_env)")   # flip the order on even iterations
-    off_times+=("$(one_run off_env)")
+    on_times+=("$(one_run on_env on)")   # flip the order on even iterations
+    off_times+=("$(one_run off_env off)")
   fi
 done
 
 read -r off_total off_parsers <<EOF
-$(counts_for off off_env)
+$(counts_for off off_env off)
 EOF
 read -r on_total on_parsers <<EOF
-$(counts_for on on_env)
+$(counts_for on on_env on)
 EOF
-off_ex="$(execve_for off off_env)"
-on_ex="$(execve_for on on_env)"
+off_ex="$(execve_for off off_env off)"
+on_ex="$(execve_for on on_env on)"
 
 printf '%-22s median %5s ms | tools %4s | parsers %4s | execve %s\n' \
   "memo OFF (control)" "$(median "${off_times[@]}")" "$off_total" "$off_parsers" "$off_ex"
