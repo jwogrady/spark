@@ -215,7 +215,13 @@ counts_for() { # <label> <env-array-name> -> "total parsers"; aborts on failure
 # `read`. The count is captured into a variable and printed once instead.
 count_procs() {
   local n
-  n="$(grep -E '(clone3?|v?fork)\(' "$1" 2>/dev/null \
+  # A call interleaved with another appears as "<unfinished ...>" and a later
+  # "<... resumed> ... = N". The unfinished half carries no result, so counting
+  # it would report a process for a call that may have failed; the resumed half
+  # carries the result and is counted when it succeeded. Completed one-line
+  # calls are counted directly. (-ff avoids producing splits at all.)
+  n="$( { grep -E '(clone3?|v?fork)\(' "$1" 2>/dev/null | grep -v '<unfinished'
+          grep -E '<\.\.\. (clone3?|v?fork) resumed' "$1" 2>/dev/null ; } \
         | grep -v '= -1' \
         | grep -cv 'CLONE_THREAD')" || true
   case "$n" in ''|*[!0-9]*) n=0 ;; esac
@@ -235,8 +241,13 @@ syscalls_for() { # <label> <env-array-name> <expected-state> -> "execs procs"
   local label="$1"; local -n x_ref="$2"
   if [ -n "$use_strace" ] && command -v strace >/dev/null 2>&1; then
     local slog="$TMP/s.$label" rc sf; sf="$(state_path "$3")"
-    ( cd "$FIX" && strace -f -qq -e trace=execve,clone,clone3,fork,vfork -o "$slog" \
+    # -ff writes one file per traced process, so calls are never split into
+    # "<unfinished ...>" / "<... resumed>" halves by interleaving. The counter
+    # rejects those halves anyway, but not producing them is the real fix.
+    local sdir="$TMP/tr.$label"; rm -rf "$sdir"; mkdir -p "$sdir"
+    ( cd "$FIX" && strace -ff -qq -e trace=execve,clone,clone3,fork,vfork -o "$sdir/t" \
         "${x_ref[@]}" SPARK_MEMO_STATE_FILE="$sf" "$SPARK" $VERB >/dev/null 2>&1 ); rc=$?
+    cat "$sdir"/t.* > "$slog" 2>/dev/null || : > "$slog"
     [ "$rc" -eq 0 ] || die "'$VERB' exited $rc under strace with ${x_ref[*]}"
     assert_state "$sf" "$3" "the traced $3 run"
     printf '%s %s' "$(count_execs "$slog")" "$(count_procs "$slog")"
@@ -269,6 +280,18 @@ syscall_selfcheck() {
   } > "$probe" || die "could not write the process-metric self-check log"
   got="$(count_procs "$probe")"
   [ "$got" = "1" ] || die "the process-creation metric counts failed attempts or threads as processes: expected 1 from the self-check log, counted $got"
+
+  # Split records: an interleaved call arrives as two halves. A split SUCCESS is
+  # one process; a split FAILURE is none. Counting the unfinished half would turn
+  # the failure into a phantom process.
+  {
+    printf 'clone( <unfinished ...>\n'
+    printf '<... clone resumed>child_stack=NULL, flags=SIGCHLD) = 5150\n'
+    printf 'clone3( <unfinished ...>\n'
+    printf '<... clone3 resumed>) = -1 ENOSYS (Function not implemented)\n'
+  } > "$probe" || die "could not write the split-record self-check log"
+  got="$(count_procs "$probe")"
+  [ "$got" = "1" ] || die "the process-creation metric mishandles split strace records: expected 1 (one split success, one split failure), counted $got"
 
   # Zero is part of the declared domain: a workload with no qualifying process
   # creation must still yield exactly one integer. `grep -c` exits 1 on no
