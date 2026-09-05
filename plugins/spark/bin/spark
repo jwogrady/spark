@@ -45,13 +45,14 @@ __spark_memo_key() {
 # `mapfile` builtin rather than `cat`, so a hit costs no subprocess at all, and
 # verifies the recorded directory before trusting the entry.
 __spark_memo_read() {
-  local -a lines=(); local i n
+  local -a lines=(); local i n owner
   # Wrapped, not `2>/dev/null` on the command: a failed INPUT redirect is
   # reported against stderr as it stands when the redirect is attempted, so the
   # trailing form would arrive too late — the same trap as on the write side.
   { mapfile -t lines < "$1"; } 2>/dev/null || return 1
   [ "${#lines[@]}" -gt 0 ] || return 1
-  [ "${lines[0]-}" = "$PWD" ] || return 1        # digest collision, or a stale file
+  owner="${PWD//\%/%25}"; owner="${owner//$'\n'/%0a}"
+  [ "${lines[0]-}" = "$owner" ] || return 1      # digest collision, or a stale file
   n=${#lines[@]}
   for (( i = 1; i < n; i++ )); do printf '%s\n' "${lines[i]}"; done
   return 0
@@ -77,8 +78,8 @@ git_root() {
   # Write atomically (writer-unique temp then mv) so a concurrent subshell never
   # reads a half-written entry. $BASHPID is per-subshell (unlike $$, which every
   # subshell inherits), so two concurrent misses for one key never share a temp.
-  # Miss-path only. A hit still forks one `cat`; the saving is that one cheap
-  # read replaces the full derivation, not that the hit path forks nothing.
+  # Miss-path only. A hit reads with the mapfile builtin, so it costs no
+  # subprocess at all; the miss path pays one mv to publish the entry.
   # The whole write is wrapped so a failed redirect cannot reach the real stderr:
   # bash reports an error like "File name too long" against stderr as it stands
   # when the redirect is attempted, so a trailing 2>/dev/null arrives too late.
@@ -86,8 +87,12 @@ git_root() {
   # collision is detected on read instead of returning another path's answer.
   if [ -n "$f" ]; then
     {
-      local tmp="$f.$BASHPID.$RANDOM.tmp"
-      { printf '%s\n' "$PWD"; printf '%s' "$rendered"; } > "$tmp" \
+      local tmp="$f.$BASHPID.$RANDOM.tmp" owner
+      # A newline is a legal character in a directory name, so the ownership
+      # record is encoded to a single line; a raw $PWD would make such a
+      # directory miss its own cache forever and pay the miss path every call.
+      owner="${PWD//\%/%25}"; owner="${owner//$'\n'/%0a}"
+      { printf '%s\n' "$owner"; printf '%s' "$rendered"; } > "$tmp" \
         && mv -f "$tmp" "$f" || rm -f "$tmp"
     } 2>/dev/null || true
   fi
@@ -371,15 +376,19 @@ resolve_prefs() {
   [ -n "$out" ] && rendered="$out"$'\n'
   # Atomic write on a miss only, with a writer-unique temp ($BASHPID differs per
   # subshell; $$ does not), so concurrent misses for one key never share a temp
-  # and a reader never observes a half-written entry. A hit still forks one `cat`;
-  # it replaces the jq+awk derivation rather than avoiding a fork entirely.
+  # and a reader never observes a half-written entry. A hit reads with the
+  # mapfile builtin and forks nothing at all.
   # Wrapped so a failed redirect cannot reach the real stderr — a trailing
   # 2>/dev/null would be applied after bash has already reported the error. The
   # first line records the directory, so a digest collision is caught on read.
   if [ -n "$f" ]; then
     {
-      local tmp="$f.$BASHPID.$RANDOM.tmp"
-      { printf '%s\n' "$PWD"; printf '%s' "$rendered"; } > "$tmp" \
+      local tmp="$f.$BASHPID.$RANDOM.tmp" owner
+      # A newline is a legal character in a directory name, so the ownership
+      # record is encoded to a single line; a raw $PWD would make such a
+      # directory miss its own cache forever and pay the miss path every call.
+      owner="${PWD//\%/%25}"; owner="${owner//$'\n'/%0a}"
+      { printf '%s\n' "$owner"; printf '%s' "$rendered"; } > "$tmp" \
         && mv -f "$tmp" "$f" || rm -f "$tmp"
     } 2>/dev/null || true
   fi
@@ -8792,7 +8801,7 @@ if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
   # not at all pays for the scratch directory and gains nothing: `help` and
   # `version` measured +2 tool processes, `state`/`telemetry`/`ci` +3,
   # `orient`/`docs-impact` +4. Only these six measured a net reduction —
-  # doctor -20, brief -14, triage -14, footprint -8, governance -2, labels -2.
+  # doctor -32, brief -19, triage -19, footprint -11, governance -5, labels -5.
   # Re-measure with tests/bench-memo.sh --verb before adding to this list.
   # Start from "off" explicitly: an inherited __SPARK_MEMO_STATE would otherwise
   # let a run that fell back to unmemoized still report itself as memoized.

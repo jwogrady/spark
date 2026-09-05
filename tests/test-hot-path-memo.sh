@@ -46,7 +46,7 @@ if [ "$root_unmemo" = "$root_memo" ] && [ -n "$root_unmemo" ]; then ok; else bad
 # the memo. On must fork strictly fewer than off.
 #
 # The tool list must include the operations the memo ITSELF introduces — mktemp
-# for the scratch dir, cat to read a hit, mv to publish a miss, rm to drop a
+# for the scratch dir, mv to publish a miss, rm to drop a
 # failed temp. Counting only the parsers it removes would let the test report a
 # saving while total process creation stayed flat or regressed.
 shim="$WORK/shim"
@@ -75,7 +75,7 @@ forks_off="$(count_forks SPARK_NO_MEMO=1)"
 # Transparency for the real command: identical output on and off.
 if cmp -s "$WORK/out.on" "$WORK/out.off"; then ok; else bad "brief --short output is not byte-identical with the memo on and off"; fi
 # Effectiveness: the memo strictly reduces TOTAL external process creation
-# across the complete tool set — including the mktemp/cat/mv/rm it introduces —
+# across the complete tool set — including the mktemp/mv/rm it introduces —
 # not merely the parser calls it removes.
 if [ "$forks_on" -lt "$forks_off" ]; then ok; else bad "memo did not reduce total tool process creation (on=$forks_on off=$forks_off)"; fi
 # Negative control sanity: disabling the memo must not itself error to zero.
@@ -323,12 +323,25 @@ if [ "$(cat "$inherit_state" 2>/dev/null)" = "off" ]; then ok; else bad "an inhe
 # deep path exceed the component limit, so the cache write failed and memo-on
 # could diverge from memo-off. The key mirrors the path as directories instead;
 # this fixture keeps that honest for both cached facts.
-# Long enough to matter at BOTH limits a naive key hits: a flattened key would
-# exceed the per-component limit, and a mirrored key would push the total path
-# past PATH_MAX once the scratch prefix is prepended. The bounded digest key is
-# a fixed short filename regardless, so this must simply work.
+# Built to the ACTUAL filesystem limit rather than an arbitrary depth, so it
+# exercises both limits a naive key hits: a flattened key exceeds the
+# per-component limit, and a mirrored key pushes the total past PATH_MAX once the
+# scratch prefix is prepended. The bounded digest key is a short fixed filename
+# regardless, so this must simply work.
+path_max="$(getconf PATH_MAX / 2>/dev/null || echo 4096)"
 deep="$repo"
-for i in $(seq 1 40); do deep="$deep/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"; done
+while [ "${#deep}" -lt $(( path_max - 100 )) ]; do
+  next="$deep/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  mkdir -p "$next" 2>/dev/null || break        # stop at whatever this filesystem allows
+  deep="$next"
+done
+# The property that makes the key safe is that it is BOUNDED: the entry filename
+# is a short constant regardless of how long $PWD is. A flattened key grew with
+# the path and blew the component limit; a mirrored key grew with it and pushed
+# the total path toward PATH_MAX. Asserting boundedness directly is provable
+# here; asserting that the abandoned schemes would overflow is not, because this
+# filesystem caps a creatable path below the point where the mirrored form fails.
+if [ "${#deep}" -gt 3000 ]; then ok; else bad "the deep fixture is only ${#deep} characters; too short to exercise long-path behaviour"; fi
 mkdir -p "$deep/.spark"
 printf '{ "stack": "deep-path-stack" }\n' > "$repo/.spark/preferences.json"
 cat > "$WORK/deep.sh" <<EOS
@@ -341,6 +354,8 @@ printf 'R1:%s\n' "\$(git_root)"
 printf 'R2:%s\n' "\$(git_root)"
 printf 'P1:%s\n' "\$(resolve_prefs | tr '\\n' ' ')"
 printf 'P2:%s\n' "\$(resolve_prefs | tr '\\n' ' ')"
+# The key must be BOUNDED: a short constant name however long \$PWD is.
+printf 'KEYLEN:%s\n' "\$(find "\$__SPARK_MEMO" -type f -name 'gitroot.*' -printf '%f' | wc -c)"
 rm -rf "\$__SPARK_MEMO"
 EOS
 deep_out="$(bash "$WORK/deep.sh" 2>"$WORK/deep.err")"
@@ -352,6 +367,9 @@ if [ "$p1" = "${p2/P2:/P1:}" ]; then ok; else bad "resolve_prefs disagreed with 
 case "$p1" in *deep-path-stack*) ok ;; *) bad "resolve_prefs lost the project tier under a deep path" ;; esac
 # And nothing may leak to stderr — a failed redirect would surface there.
 if [ ! -s "$WORK/deep.err" ]; then ok; else bad "a deep path produced stderr output: $(head -1 "$WORK/deep.err")"; fi
+# Boundedness, measured: the entry name stays short for a ~4000-character $PWD.
+keylen="$(printf '%s\n' "$deep_out" | grep '^KEYLEN:' | cut -d: -f2)"
+if [ -n "$keylen" ] && [ "$keylen" -gt 0 ] && [ "$keylen" -lt 64 ]; then ok; else bad "the cache entry name is not bounded for a ${#deep}-character path (name length=$keylen)"; fi
 # Negative control: the same deep path with the memo disabled must give the same
 # answers, so a long path is never the reason memoized and unmemoized differ.
 cat > "$WORK/deep-off.sh" <<EOS
@@ -367,5 +385,36 @@ deep_off="$(bash "$WORK/deep-off.sh" 2>"$WORK/deep-off.err")"
 if [ "$(printf '%s\n' "$deep_off" | grep '^R:')" = "R:${r1#R1:}" ]; then ok; else bad "deep-path git_root differs with the memo disabled"; fi
 if [ "$(printf '%s\n' "$deep_off" | grep '^P:')" = "${p1/P1:/P:}" ]; then ok; else bad "deep-path resolve_prefs differs with the memo disabled"; fi
 if [ ! -s "$WORK/deep-off.err" ]; then ok; else bad "a deep path produced stderr with the memo disabled"; fi
+
+# --- A newline is legal in a directory name. The cached entry records which
+# directory it belongs to, so that record must survive one: a raw $PWD written as
+# the first line would make such a repository miss its own cache on every call
+# and pay the derivation every time, silently.
+nl_repo="$WORK/nl$(printf '\n')dir"
+make_repo "$nl_repo"; mkdir -p "$nl_repo/.spark"
+printf '{ "stack": "newline-stack" }\n' > "$nl_repo/.spark/preferences.json"
+cat > "$WORK/nl.sh" <<EOS
+#!/usr/bin/env bash
+. "$SPARK"
+set +e
+export __SPARK_MEMO="\$(mktemp -d)"
+cd "\$1" || exit 1
+printf 'R1:%s\n' "\$(git_root)"
+printf 'R2:%s\n' "\$(git_root)"
+printf 'P1:%s\n' "\$(resolve_prefs | tr '\\n' ' ')"
+printf 'P2:%s\n' "\$(resolve_prefs | tr '\\n' ' ')"
+# A second call must have HIT the cache: exactly one entry per fact.
+printf 'ENTRIES:%s\n' "\$(find "\$__SPARK_MEMO" -type f -name 'gitroot.*' | wc -l)"
+rm -rf "\$__SPARK_MEMO"
+EOS
+nl_out="$(bash "$WORK/nl.sh" "$nl_repo" 2>"$WORK/nl.err")"
+nr1="$(printf '%s\n' "$nl_out" | grep '^R1:')"; nr2="$(printf '%s\n' "$nl_out" | grep '^R2:')"
+np1="$(printf '%s\n' "$nl_out" | grep '^P1:')"; np2="$(printf '%s\n' "$nl_out" | grep '^P2:')"
+if [ "${nr1#R1:}" = "${nr2#R2:}" ] && [ -n "${nr1#R1:}" ]; then ok; else bad "git_root disagreed with itself in a directory whose name contains a newline"; fi
+if [ "${np1#P1:}" = "${np2#P2:}" ]; then ok; else bad "resolve_prefs disagreed with itself in a newline-named directory"; fi
+case "$np1" in *newline-stack*) ok ;; *) bad "resolve_prefs lost the project tier in a newline-named directory" ;; esac
+# One entry, not two: a second entry would mean the ownership check never matched.
+if [ "$(printf '%s\n' "$nl_out" | grep '^ENTRIES:' | cut -d: -f2)" = "1" ]; then ok; else bad "a newline-named directory never hit its own cache (it wrote more than one entry)"; fi
+if [ ! -s "$WORK/nl.err" ]; then ok; else bad "a newline-named directory produced stderr: $(head -1 "$WORK/nl.err")"; fi
 
 finish

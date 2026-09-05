@@ -38,7 +38,7 @@ while [ "$#" -gt 0 ]; do
       echo
       echo "  Measures one verb with the memo on and with SPARK_NO_MEMO=1:"
       echo "  median wall ms, and invocations of a fixed tool list that includes"
-      echo "  the memo's own mktemp/cat/mv/rm. --strace adds total execve."
+      echo "  the memo's own mktemp/mv/rm. --strace adds total execve."
       exit 0 ;;
     *) echo "bench-memo.sh: unknown argument $1" >&2; exit 2 ;;
   esac
@@ -265,5 +265,5 @@ echo "  OFF: ${off_times[*]}"
 echo "  ON : ${on_times[*]}"
 echo
 echo "Counts are invocations of a fixed tool list (a lower bound on subprocesses,"
-echo "including the memo's own mktemp/cat/mv/rm), not a full accounting."
+echo "including the memo's own mktemp/mv/rm), not a full accounting."
 [ -n "$use_strace" ] || echo "Run with --strace for a true total execve count where strace is available."
