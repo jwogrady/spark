@@ -2177,6 +2177,180 @@ xr_stop_check() {
   return 0
 }
 
+# ---------------------------------------------------------------------------
+# Bounded-increment merge authority (#726)
+#
+# A broad outcome issue (#722, "prove the performance gate with equal-workload
+# benchmarks") can durably authorize a bounded work unit (#724, one memoization
+# optimization) whose own acceptance is complete long before the parent's is.
+# The standing #677 contract had no route for that: it required the OWNING
+# issue's acceptance to be true and the merge to make the OWNING issue true, so
+# every routine increment beneath a deliberately-incomplete parent hit a human
+# stop. That is ceremony, not governance.
+#
+# This classifier is the mirror image of xr_stop_check above, and the difference
+# is deliberate. That one fails toward CONTINUE because its defect (#688) was a
+# FALSE STOP. This one fails toward NOT ELIGIBLE because its defect is the
+# opposite and far more expensive: MANUFACTURED MERGE AUTHORITY. So every
+# condition must be affirmed POSITIVELY with the exact expected token. Absence,
+# emptiness, whitespace, an unknown key, an unrecognised value, UNKNOWN and NOT
+# ASSESSED all decline — never because a failure was spotted, always because
+# eligibility was not proven. Inferring authority from the absence of an
+# objection is precisely how a broad issue gets silently closed by a child.
+#
+# What it does NOT do: close, satisfy or imply the parent outcome. A ROUTINE
+# MERGE verdict says one bounded unit may land; the parent stays open until its
+# own acceptance is independently true. Every verdict repeats that, because the
+# expensive mistake is reading child completion as parent completion.
+#
+# Human boundaries are untouched. Final release approval, genuinely new
+# authority, destructive/irreversible external action and real Crossroads remain
+# human-owned; a named reserved boundary routes to DECISION REQUIRED here too.
+
+# Every field that must be positively affirmed, and the ONE token that affirms
+# each. A field carrying anything else — including a plausible synonym — does
+# not affirm it.
+XM_REQUIRED_FIELDS="parent-authorizes child-acceptance acceptance-true review checks stale-head scope"
+
+# Surfaces that never create merge authority however confidently they are cited.
+# #585 stops at governed close-out and says so; a reviewer PASS is evidence, not
+# permission; relay/orchestrator coordination moves work, it does not authorize
+# it. Citing one of these as the parent authorization is the exact failure #726
+# names, so it is refused by name rather than left to judgment.
+XM_NON_AUTHORIZING="585 relay orchestrator coordination reviewer review-pass pass consensus comment"
+
+# xr_merge_check <field=value>... — may a bounded increment merge routinely?
+# First line is the verdict: ROUTINE MERGE, DECISION REQUIRED or NOT ELIGIBLE.
+# Returns 0, 3 and 4 respectively.
+xr_merge_check() {
+  local parent_authorizes="" child_acceptance="" acceptance_true="" \
+        review="" checks="" stale_head="" scope="" boundary="" surface="" \
+        arg key val unknown=""
+
+  for arg in "$@"; do
+    case "$arg" in
+      *=*) key="${arg%%=*}"; val="${arg#*=}" ;;
+      # A bare word cannot be a field. Accepting one positionally would let a
+      # typo land in whichever slot happened to be next.
+      *)   unknown="${unknown} ${arg}"; continue ;;
+    esac
+    case "$key" in
+      parent-authorizes) parent_authorizes="$val" ;;
+      child-acceptance)  child_acceptance="$val" ;;
+      acceptance-true)   acceptance_true="$val" ;;
+      review)            review="$val" ;;
+      checks)            checks="$val" ;;
+      stale-head)        stale_head="$val" ;;
+      scope)             scope="$val" ;;
+      reserved-boundary) boundary="$val" ;;
+      surface)           surface="$val" ;;
+      # An unknown key is never ignored. Silently dropping it would let
+      # "acceptance_true=yes" (underscore) read as an unset field that some
+      # future edit defaults to true.
+      *)                 unknown="${unknown} ${key}" ;;
+    esac
+  done
+
+  if [ -n "$unknown" ]; then
+    echo "NOT ELIGIBLE"
+    echo "reason: unrecognised input —${unknown}; every field must be given as one of: $XM_REQUIRED_FIELDS reserved-boundary surface"
+    return 4
+  fi
+
+  # A named reserved boundary outranks everything else: no amount of green
+  # evidence converts a human-owned decision into a routine merge. The same
+  # name-and-cite discipline as xr_stop_check applies, so an unnamed worry
+  # cannot manufacture a stop here either.
+  local b_named=0 s_named=0
+  case "$boundary" in *[![:space:]]*) b_named=1 ;; esac
+  case "$surface"  in *[![:space:]]*) s_named=1 ;; esac
+  if [ "$b_named" = 1 ] && [ "$s_named" = 1 ]; then
+    echo "DECISION REQUIRED"
+    echo "claimed authority: $boundary — cited as reserved to the human by $surface; a bounded increment never merges past a reserved boundary, and merging would not close the parent outcome either"
+    return 3
+  fi
+  if [ "$b_named" = 1 ]; then
+    echo "NOT ELIGIBLE"
+    echo "reason: a reserved boundary '$boundary' was claimed without citing the durable surface reserving it — cite the surface to stop, or drop the claim; eligibility is not granted while an uncited boundary claim stands"
+    return 4
+  fi
+
+  # Positive affirmation, field by field. Each check names the exact token it
+  # wanted, so a declined verdict tells the agent what to establish rather than
+  # sending it to re-read the model.
+  local missing=""
+  case "$parent_authorizes" in
+    *[![:space:]]*) ;;
+    *) missing="${missing}
+  - parent-authorizes: cite the durable record in which the broader issue authorizes THIS subordinate work unit (a sub-issue link or an explicit authorization block). Referencing the parent is not being authorized by it." ;;
+  esac
+  if [ -n "$parent_authorizes" ]; then
+    local tok lowered
+    lowered="$(printf '%s' "$parent_authorizes" | tr '[:upper:]' '[:lower:]')"
+    for tok in $XM_NON_AUTHORIZING; do
+      case " $lowered " in
+        *[!a-z0-9]"$tok"[!a-z0-9]*|"$tok"[!a-z0-9]*|*[!a-z0-9]"$tok")
+          echo "NOT ELIGIBLE"
+          echo "reason: '$parent_authorizes' cites '$tok', which grants no merge authority — #585 and relay/orchestrator coordination stop at governed close-out and a reviewer PASS is evidence, not permission; cite the owning issue's own durable authorization of this work unit"
+          return 4 ;;
+      esac
+    done
+  fi
+  case "$child_acceptance" in
+    *[![:space:]]*) ;;
+    *) missing="${missing}
+  - child-acceptance: state the bounded unit's OWN acceptance — what this merge makes true. Without it there is nothing for the merge to satisfy, and attaching a PR to a broad issue would be enough to merge it." ;;
+  esac
+  [ "$acceptance_true" = yes ] || missing="${missing}
+  - acceptance-true=yes: the bounded acceptance must be TRUE on the exact current HEAD (got '${acceptance_true:-<unset>}'). UNKNOWN and NOT ASSESSED are not yes; a PR that only moves evidence has not satisfied its own acceptance."
+  [ "$review" = pass ] || missing="${missing}
+  - review=pass: independent exact-HEAD review must be current and passing (got '${review:-<unset>}')."
+  [ "$checks" = green ] || missing="${missing}
+  - checks=green: required checks must be green on that same exact HEAD (got '${checks:-<unset>}')."
+  [ "$stale_head" = protected ] || missing="${missing}
+  - stale-head=protected: exact-head protection must hold, so the reviewed HEAD is the merged HEAD (got '${stale_head:-<unset>}')."
+  [ "$scope" = routine-reversible ] || missing="${missing}
+  - scope=routine-reversible: the merge must be routine, reversible repository work (got '${scope:-<unset>}'). Release acts, destructive or irreversible external actions and new authority grants are never routine."
+
+  if [ -n "$missing" ]; then
+    echo "NOT ELIGIBLE"
+    echo "reason: routine merge authority is not established. Each condition must be proven, not assumed:${missing}"
+    return 4
+  fi
+
+  echo "ROUTINE MERGE"
+  echo "bounded unit: $child_acceptance — authorized by $parent_authorizes, true on the exact reviewed HEAD with review passing, checks green, exact-head protection holding and routine reversible scope"
+  echo "parent outcome: NOT closed and NOT satisfied by this merge — it advances the broader outcome only; the parent stays open until its own acceptance is independently true, and release approval remains human-owned"
+  return 0
+}
+
+# cmd_merge_authority <field=value>... — expose xr_merge_check on the CLI so an
+# agent can derive the merge decision from durable facts BEFORE implementing,
+# rather than discovering the authority question after a PR reaches PASS. Exits
+# 0 for a routine merge, 3 at a reserved boundary, 4 when not established.
+cmd_merge_authority() {
+  if [ "$#" -eq 0 ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    echo "usage: spark merge-authority <field=value>..."
+    echo "  may a bounded increment merge routinely beneath a broader owning issue?"
+    echo "  every field must be affirmed positively; anything unproven declines."
+    echo "    parent-authorizes=<durable record authorizing THIS work unit>"
+    echo "    child-acceptance=<the bounded unit's own acceptance>"
+    echo "    acceptance-true=yes            (true on the exact current HEAD)"
+    echo "    review=pass                    (independent, exact-HEAD, current)"
+    echo "    checks=green                   (same exact HEAD)"
+    echo "    stale-head=protected"
+    echo "    scope=routine-reversible"
+    echo "  optional, to route a real human boundary:"
+    echo "    reserved-boundary=<authority> surface=<durable surface reserving it>"
+    echo "  verdicts: ROUTINE MERGE (0) | DECISION REQUIRED (3) | NOT ELIGIBLE (4)"
+    echo "  a ROUTINE MERGE never closes, satisfies or implies the parent outcome."
+    return 0
+  fi
+  local rc=0
+  xr_merge_check "$@" || rc=$?
+  return "$rc"
+}
+
 # cmd_crossroad <kind> [authority] [surface] — expose xr_stop_check on the CLI so
 # an agent can check itself before a human handoff. Exits 0 to continue, 3 at a
 # genuine Crossroad.

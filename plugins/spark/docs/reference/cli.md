@@ -590,6 +590,61 @@ $ spark crossroad new-authority "a write-capable deploy key" "AGENTS.md guardrai
 DECISION REQUIRED                           # exit 3
 ```
 
+## `spark merge-authority <field=value>...`
+
+Classify whether a **bounded increment** may merge routinely beneath a **broader
+owning issue**. A broad outcome issue can durably authorize a small work unit
+whose own acceptance completes long before the parent's does; without a model
+for that, every routine increment beneath a deliberately-incomplete parent needs
+a human stop, which is ceremony rather than governance.
+
+This is the mirror image of [`crossroad`](#spark-crossroad-kind-authority-surface),
+and the inversion is deliberate. `crossroad` fails toward `CONTINUE` because its
+defect was a *false stop*. `merge-authority` fails toward `NOT ELIGIBLE` because
+its defect would be *manufactured authority*. **Eligibility is never inferred
+from the absence of a disqualifier** — every condition must be affirmed
+positively with its exact token. Absence, whitespace, an unknown field, an
+unrecognised value, `UNKNOWN` and `NOT ASSESSED` all decline.
+
+| Field | Affirming value |
+| --- | --- |
+| `parent-authorizes` | the durable record in which the broader issue authorizes **this** work unit |
+| `child-acceptance` | the bounded unit's **own** acceptance — what this merge makes true |
+| `acceptance-true` | `yes` — true on the exact current HEAD |
+| `review` | `pass` — independent, exact-HEAD, current |
+| `checks` | `green` — same exact HEAD |
+| `stale-head` | `protected` |
+| `scope` | `routine-reversible` |
+| `reserved-boundary` + `surface` | optional; a named **and** cited human boundary routes to `DECISION REQUIRED` |
+
+| Verdict | Exit |
+| --- | --- |
+| `ROUTINE MERGE` | `0` |
+| `DECISION REQUIRED` | `3` |
+| `NOT ELIGIBLE` | `4` |
+
+A `ROUTINE MERGE` **never closes, satisfies or implies the parent outcome** —
+every verdict says so, because reading child completion as parent completion is
+the expensive mistake. The parent stays open until its own acceptance is
+independently true, and release approval remains human-owned.
+
+Merely referencing a broad issue creates nothing, and neither does coordination:
+`#585`, relay/orchestrator handoffs, reviewer `PASS`, and comment consensus are
+refused by name as parent authorization. A reviewer PASS is evidence, not
+permission.
+
+```
+$ spark merge-authority parent-authorizes="#722 authorizes bounded increments" \
+    child-acceptance="memoize git_root and resolve_prefs" \
+    acceptance-true=yes review=pass checks=green \
+    stale-head=protected scope=routine-reversible
+ROUTINE MERGE                               # exit 0
+$ spark merge-authority ... acceptance-true=UNKNOWN
+NOT ELIGIBLE                                # exit 4
+$ spark merge-authority ... reserved-boundary="release approval" surface="ADR-0019"
+DECISION REQUIRED                           # exit 3
+```
+
 ## `spark hub [--set <owner/repo|url|none>]`
 
 Reports the memory hub this project declares — the one repository designated
