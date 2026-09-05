@@ -45,15 +45,28 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 
-TMP="$(mktemp -d)"; trap 'rm -rf -- "$TMP"' EXIT
-FIX="$TMP/fixture"; mkdir -p "$FIX"
-git -C "$FIX" init -q
-printf 'seed\n' > "$FIX/seed.txt"
-mkdir -p "$FIX/.spark"
-printf '{ "stack": "python-uv", "release": "release-please" }\n' > "$FIX/.spark/preferences.json"
-git -C "$FIX" add . >/dev/null 2>&1
+die() { printf 'bench-memo.sh: %s\n' "$1" >&2; exit 1; }
+
+# Every setup step is checked. This script deliberately does not set errexit (a
+# measured command is allowed to be slow, not silently fatal), so an unchecked
+# failure here would leave it benchmarking a directory that is not the fixture it
+# claims to measure.
+TMP="$(mktemp -d)" || die "mktemp failed; cannot build the fixture"
+trap 'rm -rf -- "$TMP"' EXIT
+FIX="$TMP/fixture"
+mkdir -p "$FIX" || die "could not create the fixture directory"
+git -C "$FIX" init -q || die "git init failed in the fixture"
+printf 'seed\n' > "$FIX/seed.txt" || die "could not write the fixture seed file"
+mkdir -p "$FIX/.spark" || die "could not create the fixture .spark directory"
+printf '{ "stack": "python-uv", "release": "release-please" }\n' > "$FIX/.spark/preferences.json" \
+  || die "could not write the fixture preference file"
+git -C "$FIX" add . >/dev/null 2>&1 || die "git add failed in the fixture"
 git -C "$FIX" -c user.email=bench@example.invalid -c user.name=Bench \
-  commit -qm "chore: bench fixture" >/dev/null 2>&1
+  commit -qm "chore: bench fixture" >/dev/null 2>&1 || die "git commit failed in the fixture"
+# The claim is "a fresh single-commit repo with a project preference file" — verify it.
+[ "$(git -C "$FIX" rev-list --count HEAD 2>/dev/null)" = "1" ] \
+  || die "the fixture is not the single-commit repository this script claims to measure"
+[ -f "$FIX/.spark/preferences.json" ] || die "the fixture lost its project preference file"
 
 TOOLS="awk sed grep cut tr jq git cat mv rm mktemp sort uniq head tail wc find date basename dirname"
 mkdir -p "$TMP/bin"
@@ -76,8 +89,6 @@ median() { printf '%s\n' "$@" | LC_ALL=C sort -n | awk '{ v[NR]=$1 } END { print
 off_env=(env SPARK_NO_MEMO=1)
 on_env=(env -u SPARK_NO_MEMO)
 
-die() { printf 'bench-memo.sh: %s\n' "$1" >&2; exit 1; }
-
 one_run() { # <env-array-name> -> elapsed ms; aborts if the command fails
   local -n e_ref="$1"
   local s e rc
@@ -88,9 +99,12 @@ one_run() { # <env-array-name> -> elapsed ms; aborts if the command fails
   echo "$(( e - s ))"
 }
 
-capture() { # <env-array-name> <outfile> -> stdout of one run; aborts on failure
-  local -n c_ref="$1"; local out="$2" rc
-  ( cd "$FIX" && "${c_ref[@]}" "$SPARK" $VERB >"$out" 2>/dev/null ); rc=$?
+capture() { # <env-array-name> <prefix> -> records the COMPLETE observable result
+  # stdout, stderr and status all count: a run that printed a warning to stderr,
+  # or exited differently, did not do the same job even if stdout matched.
+  local -n c_ref="$1"; local pre="$2" rc
+  ( cd "$FIX" && "${c_ref[@]}" "$SPARK" $VERB >"$pre.out" 2>"$pre.err" ); rc=$?
+  printf '%s\n' "$rc" > "$pre.rc"
   [ "$rc" -eq 0 ] || die "'$VERB' exited $rc under ${c_ref[*]} — refusing to report figures for a failed run"
 }
 
@@ -134,11 +148,14 @@ one_run on_env  >/dev/null
 
 # Equal outcome BEFORE any figure is reported: a faster run that produced
 # different output is not a faster run, it is a different job.
-capture off_env "$TMP/out.off"
-capture on_env  "$TMP/out.on"
-if ! cmp -s "$TMP/out.off" "$TMP/out.on"; then
-  die "'$VERB' output differs between memo off and on — the two sides are not the same work, so no figures are reported"
-fi
+capture off_env "$TMP/res.off"
+capture on_env  "$TMP/res.on"
+cmp -s "$TMP/res.off.out" "$TMP/res.on.out" \
+  || die "'$VERB' stdout differs between memo off and on — not the same work, so no figures are reported"
+cmp -s "$TMP/res.off.err" "$TMP/res.on.err" \
+  || die "'$VERB' stderr differs between memo off and on — not the same work, so no figures are reported"
+cmp -s "$TMP/res.off.rc" "$TMP/res.on.rc" \
+  || die "'$VERB' exit status differs between memo off and on — not the same work, so no figures are reported"
 
 off_times=() on_times=()
 for i in $(seq 1 "$RUNS"); do

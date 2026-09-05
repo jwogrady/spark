@@ -180,29 +180,37 @@ is the per-process memo measured on the *same* binary — memo on versus
 `SPARK_NO_MEMO=1` — where the workload is identical by construction and the
 output is asserted byte-identical by `tests/test-hot-path-memo.sh`.
 
-It is reproducible from the repository. **`tests/bench-memo.sh`** builds its own
-fixture (a fresh single-commit repo carrying a project preference file), warms
-both configurations, then **alternates** them inside each iteration — timing one
-side fully before the other hands the second a warmed environment and turns
-ordering into an apparent result. It prints the raw samples, the commit under
-test, and the runtime. On that fixture, `brief --short`, 7 paired runs:
+It is reproducible from the repository rather than quoted here. Run:
 
-| dimension | memo OFF | memo ON |
-|---|---|---|
-| total `execve` (requires `--strace`) | 44 | 36 |
-| fixed tool set (includes the memo's own mktemp/cat/mv/rm) | 33 | 25 |
-| parser calls | 19 | 11 |
-| median wall | 71 ms | 61 ms |
+```sh
+tests/bench-memo.sh --runs 7 --strace     # --strace optional; adds a true execve total
+```
 
-Raw wall samples for that run — OFF `71 73 72 69 71 71 70`, ON
-`61 60 60 62 62 61 61` — do not overlap, which is what separates this from the
-cross-version ranges above. Process counts are deterministic across repeats.
+**No figures are reproduced in this document.** Numbers copied into prose drift
+from the code that produced them and carry no proof of which commit, machine, or
+fixture they came from. The harness prints its own provenance on every run — the
+commit under test, the runtime, the fixture description, the raw per-run samples
+and the medians — so read them there.
 
-These remain figures from one harness, one fixture, one machine: re-run it rather
-than treating them as constants. The tool count is a **lower bound** on
-subprocesses, not a full accounting. The suite asserts the *properties*
-(transparency, a strict reduction, the negative control); the script produces the
-*figures*.
+What the harness guarantees, which is why its output can be trusted as evidence:
+
+- **Same job, verified.** It compares stdout, stderr *and* exit status between the
+  two configurations and refuses to print any figure if they differ.
+- **The ON side is really on.** It clears `SPARK_NO_MEMO` with `env -u` rather
+  than setting an unrelated variable, so an inherited value cannot silently
+  disable both sides.
+- **No order bias.** It warms both configurations, then alternates them inside
+  each iteration and flips which side leads.
+- **No failed run reported.** Every timed, counted and traced invocation checks
+  exit status and aborts on failure, and every fixture setup step is validated —
+  including that the fixture really is a single-commit repository with a project
+  preference file.
+- **Honest counting.** The tool count includes the operations the memo itself
+  introduces (`mktemp`/`cat`/`mv`/`rm`) and is still a **lower bound** on
+  subprocesses, not a full accounting.
+
+The suite (`tests/test-hot-path-memo.sh`) asserts the *properties* — transparency,
+a strict reduction, and the negative control; the harness produces the *figures*.
 
 A defensible v0.22 → v0.23 comparison still needs exactly what #722 asks for:
 outcome contracts per workload, a committed harness, pinned versions and fixture
