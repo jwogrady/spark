@@ -189,8 +189,19 @@ before="$(ls -1d "${TMPDIR:-/tmp}"/tmp.* 2>/dev/null | wc -l | tr -d ' ')"
 after="$(ls -1d "${TMPDIR:-/tmp}"/tmp.* 2>/dev/null | wc -l | tr -d ' ')"
 if [ -d "$decoy" ] && [ -f "$decoy/keep.txt" ]; then ok; else bad "cleanup deleted the inherited \$__SPARK_MEMO path instead of the created one"; fi
 if [ "$after" -le "$before" ]; then ok; else bad "the run leaked its scratch directory (before=$before after=$after)"; fi
-# The trap itself must reference the captured readonly path, not the mutable var.
-if grep -q "trap 'rm -rf -- \"\$__SPARK_MEMO_DIR\"' EXIT" "$SPARK"; then ok; else bad "EXIT trap does not delete a captured readonly path with --"; fi
-if grep -q 'readonly __SPARK_MEMO_DIR=' "$SPARK"; then ok; else bad "the created scratch path is not captured in an immutable variable"; fi
+
+# The failure mode is a trap that re-reads the MUTABLE variable at exit, so the
+# fixture must mutate it *after* the trap is installed — supplying it beforehand
+# only proves the dispatcher overwrites its input. A runtime module is sourced
+# after the memo is set up, so appending a reassignment there runs inside the
+# process at exactly the right moment. Cleanup must still remove only the
+# directory this run created, leaving the reassigned path untouched.
+decoy2="$WORK/decoy-runtime"; mkdir -p "$decoy2"; : > "$decoy2/keep.txt"
+printf '\n__SPARK_MEMO="%s"; export __SPARK_MEMO\n' "$decoy2" >> "$WORK/plugin/lib/execution.sh"
+before2="$(ls -1d "${TMPDIR:-/tmp}"/tmp.* 2>/dev/null | wc -l | tr -d ' ')"
+( cd "$repo" && "$SPARK" telemetry >/dev/null 2>&1 ) || true   # loads the mutated module
+after2="$(ls -1d "${TMPDIR:-/tmp}"/tmp.* 2>/dev/null | wc -l | tr -d ' ')"
+if [ -d "$decoy2" ] && [ -f "$decoy2/keep.txt" ]; then ok; else bad "a post-trap reassignment of \$__SPARK_MEMO redirected cleanup at the replacement path"; fi
+if [ "$after2" -le "$before2" ]; then ok; else bad "the run leaked its scratch dir after a post-trap reassignment (before=$before2 after=$after2)"; fi
 
 finish

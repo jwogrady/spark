@@ -96,9 +96,13 @@ Human attention is a real resource. Removing an *unnecessary* interruption while
 preserving the boundary is a genuine efficiency gain; removing the boundary is
 not.
 
+Every metric below is **`NOT ASSESSED`**: no counter for any of them is exposed to
+a run. A metric is not "observed" because an instance of it is known — a count
+that cannot be mechanically derived is not a measurement.
+
 | Metric | Status | Basis |
 |---|---|---|
-| `false_positive_blocks` | `OBSERVED` (class established, count not mechanically derivable) | The compound-command guard refuses legitimate multi-part `gh`/`git` invocations and forces them to be split or written to a script. Durably owned by **#680**. Each occurrence costs a retry and operator-visible noise while blocking nothing dangerous. |
+| `false_positive_blocks` | `NOT ASSESSED` | No counter exists. (A *known example class* is recorded separately below — that is observed evidence of the class, not a measurement of the metric.) |
 | `permission_prompts` | `NOT ASSESSED` | No per-run counter is exposed to the session. |
 | `operator_interventions` | `NOT ASSESSED` | Not mechanically countable from inside a run. |
 | `false_negative_boundary_events` | `NOT ASSESSED` | Would require an independent oracle for "should have blocked". |
@@ -106,9 +110,15 @@ not.
 | `operator_wait_time` | `NOT ASSESSED` | Requires wall-clock instrumentation the harness does not expose. |
 | `successful_work_units_without_interruption` | `NOT ASSESSED` | Depends on the counters above. |
 
-Only the first has established evidence, and it is a *class* with a named owner,
-not a measured count. Nothing here may be reported as a measured improvement
-until a counter exists.
+**Observed evidence of one class (not a metric value).** The compound-command
+guard refuses legitimate multi-part `gh`/`git` invocations, forcing them to be
+split or written to a script — a retry and operator-visible noise while blocking
+nothing dangerous. This class is durably owned by **#680**. Recording that the
+class exists is `OBSERVED`; the *number* of such blocks in a run remains
+`NOT ASSESSED`, and the two must not be conflated.
+
+Nothing in this section may be reported as a measured improvement until a counter
+exists.
 
 ## Provider abstraction (deliberately minimal for v0.23)
 
