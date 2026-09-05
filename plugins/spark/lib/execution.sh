@@ -2191,46 +2191,67 @@ xr_stop_check() {
 # This classifier is the mirror image of xr_stop_check above, and the difference
 # is deliberate. That one fails toward CONTINUE because its defect (#688) was a
 # FALSE STOP. This one fails toward NOT ELIGIBLE because its defect is the
-# opposite and far more expensive: MANUFACTURED MERGE AUTHORITY. So every
-# condition must be affirmed POSITIVELY with the exact expected token. Absence,
-# emptiness, whitespace, an unknown key, an unrecognised value, UNKNOWN and NOT
-# ASSESSED all decline — never because a failure was spotted, always because
-# eligibility was not proven. Inferring authority from the absence of an
-# objection is precisely how a broad issue gets silently closed by a child.
+# opposite and far more expensive: MANUFACTURED MERGE AUTHORITY.
+#
+# TWO RULES EARNED THE HARD WAY, both from real defects found in review:
+#
+#   SHAPE IS NOT AUTHORIZATION. A well-formed citation proves nothing. Earlier
+#   revisions accepted a bare "#722", then a citation of an unrelated issue,
+#   then any comment on the right issue. Each looked strict and authorized
+#   nothing real. Authority now requires TRUSTED READ-BACK: the cited comment is
+#   fetched from GitHub and must carry a structured marker naming this exact
+#   bounded unit and this exact acceptance identity.
+#
+#   UNTRUSTED INPUT MUST NEVER IMPERSONATE TRUSTED OUTPUT. Caller values are
+#   echoed into the verdict, so a newline in one forged a
+#   "parent outcome: CLOSED and fully satisfied" line above the real disclaimer,
+#   at exit 0, in this function's own voice. Control-bearing input is refused
+#   before a single byte is emitted, and only canonical validated identities are
+#   ever echoed back.
 #
 # What it does NOT do: close, satisfy or imply the parent outcome. A ROUTINE
-# MERGE verdict says one bounded unit may land; the parent stays open until its
-# own acceptance is independently true. Every verdict repeats that, because the
-# expensive mistake is reading child completion as parent completion.
+# MERGE says one bounded unit may land; the parent stays open until its own
+# acceptance is independently true. Every verdict repeats that.
 #
 # Human boundaries are untouched. Final release approval, genuinely new
 # authority, destructive/irreversible external action and real Crossroads remain
 # human-owned; a named reserved boundary routes to DECISION REQUIRED here too.
 
-# Every field that must be positively affirmed, and the ONE token that affirms
-# each. A field carrying anything else — including a plausible synonym — does
-# not affirm it.
-XM_REQUIRED_FIELDS="parent-authorizes authorization-record child-acceptance acceptance-true review checks stale-head scope"
+XM_REQUIRED_FIELDS="parent-authorizes authorization-record child acceptance-id review checks stale-head scope"
 
 # Surfaces that never create merge authority however confidently they are cited.
 # #585 stops at governed close-out and says so; a reviewer PASS is evidence, not
 # permission; relay/orchestrator coordination moves work, it does not authorize
-# it. Citing one of these as the parent authorization is the exact failure #726
-# names, so it is refused by name rather than left to judgment.
-XM_NON_AUTHORIZING="585 relay orchestrator coordination reviewer review-pass pass consensus comment"
+# it. Held as an ARRAY so a sourced caller who reassigned IFS cannot collapse
+# the list to a single token and silently disable the whole check.
+XM_NON_AUTHORIZING=(585 relay orchestrator coordination reviewer review-pass pass consensus comment)
+# Markers that identify a comment as a coordination/review surface. A record
+# carrying one is machinery talking to machinery, never a grant of authority.
+XM_COORDINATION_MARKERS=(spark-openai-review spark-openai-review-reservation)
 
-# Shell globs match SUBSTRINGS, so `sub-issue:'#'[0-9]*` happily accepts
-# "sub-issue:#724 and therefore I may merge". A citation that accepts trailing
-# prose is not a citation. These helpers validate COMPLETE forms by
-# decomposition — the repo has no regex idiom, and `case` alone cannot anchor.
-
-# xm_digits <s> — s is one or more digits and nothing else.
-xm_digits() {
-  case "${1:-}" in ''|*[!0-9]*) return 1 ;; esac
+# xm_num <s> — a CANONICAL positive identity: digits, no leading zero, never
+# zero. Leading zeros are not tidiness. "#0585" is issue 585 once parsed, but
+# the coordination denylist matches text, so the padded spelling walked past a
+# refusal the bare "#585" correctly triggers. Refusing the alias removes the
+# second spelling instead of chasing it.
+xm_num() {
+  case "${1:-}" in
+    ''|*[!0-9]*) return 1 ;;
+    0*)          return 1 ;;
+  esac
   return 0
 }
 
-# xm_repo_id <s> — s is exactly "owner/repo", one slash, safe components.
+# xm_token <s> — a canonical opaque identifier: [A-Za-z0-9._-]+ and nothing
+# else. Safe to echo, and impossible to confuse with prose.
+xm_token() {
+  case "${1:-}" in
+    ''|*[!A-Za-z0-9._-]*) return 1 ;;
+  esac
+  return 0
+}
+
+# xm_repo_id <s> — exactly "owner/repo", one slash, safe components.
 xm_repo_id() {
   local s="${1:-}" owner repo
   case "$s" in */*) ;; *) return 1 ;; esac
@@ -2242,55 +2263,65 @@ xm_repo_id() {
   return 0
 }
 
-# xm_issue_ref <s> — "#123" or "owner/repo#123". Exactly one '#', digits after,
-# a well-formed repository identity (or nothing) before.
+# xm_issue_ref <s> — "#123" or "owner/repo#123", exactly one '#', a canonical
+# number after it, a well-formed repository identity (or nothing) before.
 xm_issue_ref() {
   local s="${1:-}" before after
   case "$s" in *'#'*) ;; *) return 1 ;; esac
   before="${s%%#*}"; after="${s#*#}"
   case "$after" in *'#'*) return 1 ;; esac
-  xm_digits "$after" || return 1
+  xm_num "$after" || return 1
   [ -z "$before" ] || xm_repo_id "$before" || return 1
   return 0
 }
 
-# xm_auth_record <record> <parent-ref> — the record must be a locus ON THE
-# PARENT ISSUE ITSELF, not merely a well-formed citation of something.
+# xm_issue_num <ref> — the canonical number out of a validated issue reference.
+xm_issue_num() {
+  case "${1:-}" in '#'*) printf '%s' "${1#\#}" ;; *) printf '%s' "${1##*\#}" ;; esac
+}
+
+# xm_denied <value...> — true when any value cites a surface that grants no
+# authority. Matched on whole words against the canonical text.
+xm_denied() {
+  local field tok lowered
+  for field in "$@"; do
+    [ -n "$field" ] || continue
+    lowered="$(printf '%s' "$field" | tr '[:upper:]' '[:lower:]')"
+    for tok in "${XM_NON_AUTHORIZING[@]}"; do
+      case " $lowered " in
+        *[!a-z0-9]"$tok"[!a-z0-9]*) XM_DENIED_TOKEN="$tok"; return 0 ;;
+      esac
+    done
+  done
+  return 1
+}
+
+# xm_auth_record <record> <parent-ref> — parse and bind the citation, setting
+# XM_REC_SLUG / XM_REC_CID for the read-back. Shape only; this decides nothing.
 #
-# Shape alone was never authorization: with the parent at "#722", a record of
-# "#999#issuecomment-1" or a permalink to another repository's issue produced
-# ROUTINE MERGE. A citation that need not be RELATED to the authorizing issue
-# authorizes nothing. So the record is now BOUND: same issue number, and same
-# repository when the parent names one.
+# A record must anchor a COMMENT. A bare issue reference or bare issue URL says
+# "somewhere on this issue", which cannot be read back without guessing which
+# part was meant, so it is never an authorization record.
 #
-# The "sub-issue:#123" form is deliberately GONE. It asserted a hierarchy
-# relationship, and a pure classifier cannot verify that #123 really is
-# subordinate to the parent — accepting the assertion would be exactly the
-# self-certification this refuses everywhere else. Cite the parent's own
-# authorization locus instead, which is something a reader can open. Verifying a
-# native relationship needs a trusted read-back and belongs to governance
-# validation, not to a string check.
-#
-# The pairing is exact so that neither form is ambiguous:
-#   bare parent      "#123"            -> record "#123#issuecomment-456"
-#   qualified parent "owner/repo#123"  -> record the github.com permalink to
-#                                         owner/repo issue 123 (optional comment)
-# A bare "#123" carries no repository, so a permalink cannot be checked against
-# it; a qualified parent must therefore be cited by permalink.
+#   bare parent      "#123"           -> "#123#issuecomment-456"
+#   qualified parent "owner/repo#123" -> "https://github.com/owner/repo/issues/123#issuecomment-456"
 xm_auth_record() {
   local s="${1:-}" parent="${2:-}" prepo pnum rest owner repo num cid
+  XM_REC_SLUG=""; XM_REC_CID=""
   xm_issue_ref "$parent" || return 1
   case "$parent" in
-    '#'*) prepo=""; pnum="${parent#\#}" ;;
-    *)    prepo="${parent%%#*}"; pnum="${parent##*\#}" ;;
+    '#'*) prepo="" ;;
+    *)    prepo="${parent%%#*}" ;;
   esac
+  pnum="$(xm_issue_num "$parent")"
 
   case "$s" in
     '#'*'#issuecomment-'*)
       [ -z "$prepo" ] || return 1
       num="${s%%#issuecomment-*}"; cid="${s#*#issuecomment-}"
       [ "$num" = "#$pnum" ] || return 1
-      xm_digits "$cid" || return 1
+      xm_num "$cid" || return 1
+      XM_REC_CID="$cid"
       return 0 ;;
     'https://github.com/'*)
       [ -n "$prepo" ] || return 1
@@ -2302,32 +2333,83 @@ xm_auth_record() {
       [ -n "$repo" ] || return 1
       case "$repo" in */*|*[!A-Za-z0-9._-]*) return 1 ;; esac
       [ "$owner/$repo" = "$prepo" ] || return 1
-      case "$rest" in
-        issues/*) rest="${rest#issues/}" ;;
-        *) return 1 ;;
-      esac
-      case "$rest" in
-        *'#issuecomment-'*)
-          num="${rest%%#issuecomment-*}"; cid="${rest#*#issuecomment-}"
-          [ "$num" = "$pnum" ] || return 1
-          xm_digits "$cid" || return 1
-          return 0 ;;
-        *) [ "$rest" = "$pnum" ] || return 1
-           return 0 ;;
-      esac ;;
+      case "$rest" in issues/*) rest="${rest#issues/}" ;; *) return 1 ;; esac
+      case "$rest" in *'#issuecomment-'*) ;; *) return 1 ;; esac
+      num="${rest%%#issuecomment-*}"; cid="${rest#*#issuecomment-}"
+      [ "$num" = "$pnum" ] || return 1
+      xm_num "$cid" || return 1
+      XM_REC_SLUG="$owner/$repo"; XM_REC_CID="$cid"
+      return 0 ;;
   esac
   return 1
+}
+
+# xm_read_record <slug-or-empty> <comment-id> — TRUSTED READ-BACK. Prints the
+# comment's issue_url on the first line and its body after. Non-zero on any
+# failure: unreadable evidence fails closed rather than being assumed
+# favourable. An empty slug resolves against the bound repository.
+xm_read_record() {
+  local slug="${1:-}" cid="${2:-}" path
+  command -v gh >/dev/null 2>&1 || return 1
+  if [ -n "$slug" ]; then path="repos/$slug/issues/comments/$cid"
+  else                    path="repos/{owner}/{repo}/issues/comments/$cid"
+  fi
+  gh api "$path" --jq '.issue_url, .body' 2>/dev/null
+}
+
+# The structured grant a parent comment must carry. Free prose is not evidence:
+# "authorizes #724" in a sentence is a coincidence of words, so the record is
+# parsed, not searched. EXACTLY ONE marker may appear — two would make the
+# comment ambiguous about what was granted, and ambiguity declines.
+#
+#   spark-authorizes child=#724 acceptance=<canonical-acceptance-id>
+XM_MARKER_PREFIX="spark-authorizes"
+
+# xm_marker_scan <body> — sets XM_MARKER_CHILD / XM_MARKER_ACC from the single
+# marker in the body. Returns 1 when there is not exactly one well-formed one.
+xm_marker_scan() {
+  local body="${1:-}" line seen=0 rest child acc field
+  XM_MARKER_CHILD=""; XM_MARKER_ACC=""
+  while IFS= read -r line; do
+    case "$line" in
+      "$XM_MARKER_PREFIX "*) ;;
+      *) continue ;;
+    esac
+    seen=$((seen + 1))
+    [ "$seen" -le 1 ] || return 1
+    child=""; acc=""
+    rest="${line#"$XM_MARKER_PREFIX" }"
+    for field in $rest; do
+      case "$field" in
+        child=*)      [ -z "$child" ] || return 1; child="${field#child=}" ;;
+        acceptance=*) [ -z "$acc" ]   || return 1; acc="${field#acceptance=}" ;;
+        *) return 1 ;;
+      esac
+    done
+    xm_issue_ref "$child" || return 1
+    xm_token "$acc" || return 1
+    XM_MARKER_CHILD="$child"; XM_MARKER_ACC="$acc"
+  done <<EOF
+$body
+EOF
+  [ "$seen" -eq 1 ] || return 1
+  return 0
 }
 
 # xr_merge_check <field=value>... — may a bounded increment merge routinely?
 # First line is the verdict: ROUTINE MERGE, DECISION REQUIRED or NOT ELIGIBLE.
 # Returns 0, 3 and 4 respectively.
 xr_merge_check() {
-  local parent_authorizes="" auth_record="" child_acceptance="" acceptance_true="" \
+  local parent_authorizes="" auth_record="" child="" acceptance_id="" \
         review="" checks="" stale_head="" scope="" boundary="" surface="" \
-        arg key val unknown="" seen="" dup=""
+        arg key val unknown="" seen="" dup="" ctrl=""
 
   for arg in "$@"; do
+    # Refused BEFORE anything is echoed. A newline here forged a whole verdict
+    # line; an ESC hid the disclaimer on a terminal while the exit stayed 0.
+    case "$arg" in
+      *[[:cntrl:]]*) ctrl="${ctrl} ${arg%%=*}"; continue ;;
+    esac
     case "$arg" in
       *=*) key="${arg%%=*}"; val="${arg#*=}" ;;
       # A bare word cannot be a field. Accepting one positionally would let a
@@ -2335,31 +2417,34 @@ xr_merge_check() {
       *)   unknown="${unknown} ${arg}"; continue ;;
     esac
     # A repeated field is REFUSED, never last-write-wins. Overwriting would let
-    # "review=fail review=pass" become eligible, and would let a trailing
-    # whitespace value erase a named reserved boundary — turning a supplied
-    # non-affirming value into a pass, which is exactly what this must not do.
+    # "review=fail review=pass" become eligible, and a trailing whitespace value
+    # erase a named reserved boundary.
     case " $seen " in
       *" $key "*) dup="${dup} ${key}"; continue ;;
       *)          seen="${seen} ${key}" ;;
     esac
     case "$key" in
-      parent-authorizes)   parent_authorizes="$val" ;;
+      parent-authorizes)    parent_authorizes="$val" ;;
       authorization-record) auth_record="$val" ;;
-      child-acceptance)  child_acceptance="$val" ;;
-      acceptance-true)   acceptance_true="$val" ;;
-      review)            review="$val" ;;
-      checks)            checks="$val" ;;
-      stale-head)        stale_head="$val" ;;
-      scope)             scope="$val" ;;
-      reserved-boundary) boundary="$val" ;;
-      surface)           surface="$val" ;;
+      child)                child="$val" ;;
+      acceptance-id)        acceptance_id="$val" ;;
+      review)               review="$val" ;;
+      checks)               checks="$val" ;;
+      stale-head)           stale_head="$val" ;;
+      scope)                scope="$val" ;;
+      reserved-boundary)    boundary="$val" ;;
+      surface)              surface="$val" ;;
       # An unknown key is never ignored. Silently dropping it would let
-      # "acceptance_true=yes" (underscore) read as an unset field that some
-      # future edit defaults to true.
-      *)                 unknown="${unknown} ${key}" ;;
+      # "acceptance_id=x" (underscore) read as an unset field.
+      *)                    unknown="${unknown} ${key}" ;;
     esac
   done
 
+  if [ -n "$ctrl" ]; then
+    echo "NOT ELIGIBLE"
+    echo "reason: control characters in field(s) —${ctrl}. Values reach the verdict text, so a newline could forge an extra verdict line; every value must be one line of printable text."
+    return 4
+  fi
   if [ -n "$unknown" ]; then
     echo "NOT ELIGIBLE"
     echo "reason: unrecognised input —${unknown}; every field must be given as one of: $XM_REQUIRED_FIELDS reserved-boundary surface"
@@ -2372,22 +2457,16 @@ xr_merge_check() {
   fi
 
   # A named reserved boundary outranks everything else: no amount of green
-  # evidence converts a human-owned decision into a routine merge. The same
-  # name-and-cite discipline as xr_stop_check applies, so an unnamed worry
-  # cannot manufacture a stop here either.
+  # evidence converts a human-owned decision into a routine merge.
   local b_named=0 s_named=0 b_given=0 s_given=0
   case "$boundary" in *[![:space:]]*) b_named=1 ;; esac
   case "$surface"  in *[![:space:]]*) s_named=1 ;; esac
   case " $seen " in *" reserved-boundary "*) b_given=1 ;; esac
   case " $seen " in *" surface "*)           s_given=1 ;; esac
-  # SUPPLIED but blank, or one-sided, must fail closed rather than be ignored.
-  # Ignoring them let `surface=X` alone — or `reserved-boundary=""` — pass
-  # straight through to eligibility, so a half-expressed boundary concern
-  # silently became a routine merge.
   if { [ "$b_given" = 1 ] || [ "$s_given" = 1 ]; } \
      && { [ "$b_named" = 0 ] || [ "$s_named" = 0 ]; }; then
     echo "NOT ELIGIBLE"
-    echo "reason: reserved-boundary and surface must be supplied together and both non-blank, or neither. A one-sided or blank boundary input is refused rather than ignored — a half-stated boundary concern must never fall through to a routine merge. Give both to stop, or omit both."
+    echo "reason: reserved-boundary and surface must be supplied together and both non-blank, or neither. A one-sided or blank boundary input is refused rather than ignored — a half-stated boundary concern must never fall through to a routine merge."
     return 4
   fi
   if [ "$b_named" = 1 ] && [ "$s_named" = 1 ]; then
@@ -2395,64 +2474,27 @@ xr_merge_check() {
     echo "claimed authority: $boundary — cited as reserved to the human by $surface; a bounded increment never merges past a reserved boundary, and merging would not close the parent outcome either"
     return 3
   fi
-  # Positive affirmation, field by field. Each check names the exact token it
-  # wanted, so a declined verdict tells the agent what to establish rather than
-  # sending it to re-read the model.
-  local missing=""
-  # The parent is an ISSUE IDENTITY, in a strict shape: "#123" or "owner/repo#123"
-  # and nothing else. Free prose was the hole the reviewer found — "#722" alone,
-  # or any sentence, satisfied a mere non-whitespace test and produced ROUTINE
-  # MERGE, contradicting the contract's own rule that referencing a parent is not
-  # being authorized by it. A bare identity now names WHO authorized; it does not
-  # by itself establish THAT they did.
-  if ! xm_issue_ref "$parent_authorizes"; then
-    missing="${missing}
-  - parent-authorizes: must be exactly '#123' or 'owner/repo#123' — one '#', digits after it, and a well-formed owner/repo before it if qualified (got '${parent_authorizes:-<unset>}'). Prose does not identify an issue."
-  fi
 
-  # THAT they authorized this unit is a separate, separately-cited fact. The
-  # locus must be machine-distinguishable — a native sub-issue relation, a
-  # specific issue comment, or a GitHub permalink — so the claim points at
-  # something a human can open and check. This is STRUCTURAL, exactly as
-  # xr_stop_check is: it cannot verify the record really authorizes the work,
-  # only that a checkable record was cited rather than asserted.
+  # Positive affirmation, field by field.
+  local missing=""
+  xm_issue_ref "$parent_authorizes" || missing="${missing}
+  - parent-authorizes: must be exactly '#123' or 'owner/repo#123' — one '#', a canonical number (no zero, no leading zeros) after it, and a well-formed owner/repo before it if qualified. Prose does not identify an issue."
+  xm_issue_ref "$child" || missing="${missing}
+  - child: the bounded work unit needs a MACHINE identity — '#123' or 'owner/repo#123'. Free text cannot be matched against the parent's durable record."
+  xm_token "$acceptance_id" || missing="${missing}
+  - acceptance-id: a canonical acceptance identifier ([A-Za-z0-9._-]), the same one the parent's record binds. Prose, punctuation placeholders and blanks state nothing and cannot be matched."
+  [ "$review" = pass ] || missing="${missing}
+  - review=pass: independent exact-HEAD review must be current and passing."
+  [ "$checks" = green ] || missing="${missing}
+  - checks=green: required checks must be green on that same exact HEAD."
+  [ "$stale_head" = protected ] || missing="${missing}
+  - stale-head=protected: exact-head protection must hold, so the reviewed HEAD is the merged HEAD."
+  [ "$scope" = routine-reversible ] || missing="${missing}
+  - scope=routine-reversible: the merge must be routine, reversible repository work. Release acts, destructive or irreversible external actions and new authority grants are never routine."
   if [ -z "$auth_record" ]; then
     missing="${missing}
-  - authorization-record: cite WHERE the parent authorized this unit — a locus ON THE PARENT ISSUE. For a bare parent '#123' that is '#123#issuecomment-456'; for 'owner/repo#123' it is the https://github.com/owner/repo/issues/123 permalink (optionally with '#issuecomment-456'). Naming the parent says who; this says that."
-  elif ! xm_auth_record "$auth_record" "$parent_authorizes"; then
-    missing="${missing}
-  - authorization-record: '$auth_record' is not a locus on the authorizing issue '${parent_authorizes:-<unset>}'. It must be the SAME issue — a well-formed citation of some other issue, repository, or an unverifiable hierarchy claim authorizes nothing. Use '#123#issuecomment-456' for a bare parent, or the matching https://github.com/owner/repo/issues/123 permalink for a qualified one."
+  - authorization-record: cite the COMMENT on the parent that grants this — '#123#issuecomment-456' for a bare parent, or the matching https://github.com/owner/repo/issues/123#issuecomment-456 permalink. A bare issue reference or issue URL is not an authorization record."
   fi
-
-  # Coordination surfaces grant nothing, wherever they are cited.
-  local field val_l tok lowered
-  for field in "$parent_authorizes" "$auth_record"; do
-    [ -n "$field" ] || continue
-    lowered="$(printf '%s' "$field" | tr '[:upper:]' '[:lower:]')"
-    for tok in $XM_NON_AUTHORIZING; do
-      case " $lowered " in
-        *[!a-z0-9]"$tok"[!a-z0-9]*)
-          echo "NOT ELIGIBLE"
-          echo "reason: '$field' cites '$tok', which grants no merge authority — #585 and relay/orchestrator coordination stop at governed close-out and a reviewer PASS is evidence, not permission; cite the owning issue's own durable authorization of this work unit"
-          return 4 ;;
-      esac
-    done
-  done
-  case "$child_acceptance" in
-    *[![:space:]]*) ;;
-    *) missing="${missing}
-  - child-acceptance: state the bounded unit's OWN acceptance — what this merge makes true. Without it there is nothing for the merge to satisfy, and attaching a PR to a broad issue would be enough to merge it." ;;
-  esac
-  [ "$acceptance_true" = yes ] || missing="${missing}
-  - acceptance-true=yes: the bounded acceptance must be TRUE on the exact current HEAD (got '${acceptance_true:-<unset>}'). UNKNOWN and NOT ASSESSED are not yes; a PR that only moves evidence has not satisfied its own acceptance."
-  [ "$review" = pass ] || missing="${missing}
-  - review=pass: independent exact-HEAD review must be current and passing (got '${review:-<unset>}')."
-  [ "$checks" = green ] || missing="${missing}
-  - checks=green: required checks must be green on that same exact HEAD (got '${checks:-<unset>}')."
-  [ "$stale_head" = protected ] || missing="${missing}
-  - stale-head=protected: exact-head protection must hold, so the reviewed HEAD is the merged HEAD (got '${stale_head:-<unset>}')."
-  [ "$scope" = routine-reversible ] || missing="${missing}
-  - scope=routine-reversible: the merge must be routine, reversible repository work (got '${scope:-<unset>}'). Release acts, destructive or irreversible external actions and new authority grants are never routine."
 
   if [ -n "$missing" ]; then
     echo "NOT ELIGIBLE"
@@ -2460,8 +2502,66 @@ xr_merge_check() {
     return 4
   fi
 
+  # Coordination surfaces grant nothing, checked against canonical identities.
+  if xm_denied "$parent_authorizes" "$child"; then
+    echo "NOT ELIGIBLE"
+    echo "reason: the cited identity names '$XM_DENIED_TOKEN', which grants no merge authority — #585 and relay/orchestrator coordination stop at governed close-out, and a reviewer PASS is evidence, not permission."
+    return 4
+  fi
+
+  if ! xm_auth_record "$auth_record" "$parent_authorizes"; then
+    echo "NOT ELIGIBLE"
+    echo "reason: the authorization record is not a comment on the authorizing issue '$parent_authorizes'. It must anchor a specific comment on that same issue — a bare issue URL, another issue, another repository, or a hierarchy assertion is not a durable authorization locus."
+    return 4
+  fi
+
+  # SHAPE IS NOT AUTHORIZATION. Read the cited comment back from GitHub and
+  # require it to grant THIS unit and THIS acceptance. Every failure declines:
+  # unreadable, missing, ambiguous, malformed or mismatched evidence is never
+  # resolved in favour of merging.
+  local rb rb_url rb_body pnum
+  pnum="$(xm_issue_num "$parent_authorizes")"
+  if ! rb="$(xm_read_record "$XM_REC_SLUG" "$XM_REC_CID")" || [ -z "$rb" ]; then
+    echo "NOT ELIGIBLE"
+    echo "reason: comment $XM_REC_CID could not be read back from GitHub. Unreadable or unavailable evidence fails closed — a citation that cannot be opened proves nothing, and 'gh' must be present and authorized for this check."
+    return 4
+  fi
+  rb_url="${rb%%$'\n'*}"
+  rb_body="${rb#*$'\n'}"
+  case "$rb_url" in
+    */issues/"$pnum") ;;
+    *)
+      echo "NOT ELIGIBLE"
+      echo "reason: comment $XM_REC_CID does not belong to issue $pnum. A comment id alone does not place a record on the parent."
+      return 4 ;;
+  esac
+  local marker
+  for marker in "${XM_COORDINATION_MARKERS[@]}"; do
+    case "$rb_body" in
+      *"$marker"*)
+        echo "NOT ELIGIBLE"
+        echo "reason: comment $XM_REC_CID is a coordination or review surface, not a grant. Machinery reporting to machinery never authorizes a merge."
+        return 4 ;;
+    esac
+  done
+  if ! xm_marker_scan "$rb_body"; then
+    echo "NOT ELIGIBLE"
+    echo "reason: comment $XM_REC_CID does not carry exactly one well-formed '$XM_MARKER_PREFIX child=#N acceptance=<id>' record. Prose mentioning an issue is a coincidence of words, and two records are ambiguous about what was granted; both decline."
+    return 4
+  fi
+  if [ "$(xm_issue_num "$XM_MARKER_CHILD")" != "$(xm_issue_num "$child")" ]; then
+    echo "NOT ELIGIBLE"
+    echo "reason: the record on $parent_authorizes authorizes $XM_MARKER_CHILD, not $child."
+    return 4
+  fi
+  if [ "$XM_MARKER_ACC" != "$acceptance_id" ]; then
+    echo "NOT ELIGIBLE"
+    echo "reason: the record on $parent_authorizes binds acceptance '$XM_MARKER_ACC', not '$acceptance_id'. The acceptance must be the one the human wrote durably, not one supplied at merge time."
+    return 4
+  fi
+
   echo "ROUTINE MERGE"
-  echo "bounded unit: $child_acceptance — authorized by $parent_authorizes, true on the exact reviewed HEAD with review passing, checks green, exact-head protection holding and routine reversible scope"
+  echo "bounded unit: $child, acceptance $acceptance_id — granted by $parent_authorizes in comment $XM_REC_CID, read back and verified, on an exact HEAD with review passing, checks green, exact-head protection holding and routine reversible scope"
   echo "parent outcome: NOT closed and NOT satisfied by this merge — it advances the broader outcome only; the parent stays open until its own acceptance is independently true, and release approval remains human-owned"
   return 0
 }
@@ -2472,9 +2572,8 @@ xr_merge_check() {
 # 0 for a routine merge, 3 at a reserved boundary, 4 when not established.
 cmd_merge_authority() {
   # A bare invocation must NOT exit 0. Exit 0 is ROUTINE MERGE, so a caller that
-  # checks only the status would read "no evidence at all" as merge authority —
-  # the precise inversion this classifier exists to prevent. Help stays the one
-  # explicit success path, because it is asked for by name.
+  # checks only the status would read "no evidence at all" as merge authority.
+  # Help stays the one explicit success path, because it is asked for by name.
   if [ "$#" -eq 0 ]; then
     echo "NOT ELIGIBLE"
     echo "reason: no evidence was supplied — nothing was established, so nothing is authorized. Run 'spark merge-authority --help' for the fields."
@@ -2484,20 +2583,22 @@ cmd_merge_authority() {
     echo "usage: spark merge-authority <field=value>..."
     echo "  may a bounded increment merge routinely beneath a broader owning issue?"
     echo "  every field must be affirmed positively; anything unproven declines."
-    echo "    parent-authorizes=#123            (or owner/repo#123 — a bare issue ref)"
-    echo "    authorization-record=<a locus ON THAT SAME issue:"
-    echo "                          bare parent #123      -> #123#issuecomment-456"
-    echo "                          owner/repo#123        -> the matching"
-    echo "                          https://github.com/owner/repo/issues/123"
-    echo "                          permalink, optional #issuecomment-456>"
-    echo "    child-acceptance=<the bounded unit's own acceptance>"
-    echo "    acceptance-true=yes            (true on the exact current HEAD)"
-    echo "    review=pass                    (independent, exact-HEAD, current)"
-    echo "    checks=green                   (same exact HEAD)"
+    echo "    parent-authorizes=#123            (or owner/repo#123)"
+    echo "    authorization-record=<the COMMENT on that issue granting this:"
+    echo "                          #123#issuecomment-456, or the matching"
+    echo "                          https://github.com/owner/repo/issues/123#issuecomment-456>"
+    echo "    child=#124                        (the bounded unit's machine identity)"
+    echo "    acceptance-id=<canonical acceptance identifier>"
+    echo "    review=pass                       (independent, exact-HEAD, current)"
+    echo "    checks=green                      (same exact HEAD)"
     echo "    stale-head=protected"
     echo "    scope=routine-reversible"
     echo "  optional, to route a real human boundary — both together, or neither:"
     echo "    reserved-boundary=<authority> surface=<durable surface reserving it>"
+    echo
+    echo "  The cited comment is READ BACK from GitHub and must carry exactly one"
+    echo "    $XM_MARKER_PREFIX child=#124 acceptance=<id>"
+    echo "  record. Unreadable, ambiguous or mismatched evidence declines."
     echo "  verdicts: ROUTINE MERGE (0) | DECISION REQUIRED (3) | NOT ELIGIBLE (4)"
     echo "  a ROUTINE MERGE never closes, satisfies or implies the parent outcome."
     return 0
@@ -2506,7 +2607,6 @@ cmd_merge_authority() {
   xr_merge_check "$@" || rc=$?
   return "$rc"
 }
-
 # cmd_crossroad <kind> [authority] [surface] — expose xr_stop_check on the CLI so
 # an agent can check itself before a human handoff. Exits 0 to continue, 3 at a
 # genuine Crossroad.

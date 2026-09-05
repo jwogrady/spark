@@ -608,15 +608,15 @@ unrecognised value, `UNKNOWN` and `NOT ASSESSED` all decline.
 
 | Field | Affirming value |
 | --- | --- |
-| `parent-authorizes` | the owning issue as a bare reference — `#123` or `owner/repo#123`, nothing else |
-| `authorization-record` | **where** that parent authorized this unit — a locus on **that same issue**. Bare parent `#123` → `#123#issuecomment-456`. Qualified parent `owner/repo#123` → `https://github.com/owner/repo/issues/123`, optionally `#issuecomment-456` |
-| `child-acceptance` | the bounded unit's **own** acceptance — what this merge makes true |
-| `acceptance-true` | `yes` — true on the exact current HEAD |
+| `parent-authorizes` | the owning issue as a canonical reference — `#123` or `owner/repo#123` |
+| `authorization-record` | the **comment on that issue** granting this: `#123#issuecomment-456`, or the matching `https://github.com/owner/repo/issues/123#issuecomment-456` |
+| `child` | the bounded unit's machine identity — `#124` or `owner/repo#124` |
+| `acceptance-id` | the canonical acceptance identifier the record binds |
 | `review` | `pass` — independent, exact-HEAD, current |
 | `checks` | `green` — same exact HEAD |
 | `stale-head` | `protected` |
 | `scope` | `routine-reversible` |
-| `reserved-boundary` + `surface` | optional; a named **and** cited human boundary routes to `DECISION REQUIRED` |
+| `reserved-boundary` + `surface` | optional, **both or neither**; a named and cited human boundary routes to `DECISION REQUIRED` |
 
 | Verdict | Exit |
 | --- | --- |
@@ -625,60 +625,57 @@ unrecognised value, `UNKNOWN` and `NOT ASSESSED` all decline.
 | `NOT ELIGIBLE` | `4` |
 
 Because `0` means `ROUTINE MERGE`, **no other path exits `0`**: a bare
-invocation with no evidence returns `4`, and `--help` is the single explicit
-success path. A caller that checks only the status can never read absent
-evidence as authority.
+invocation returns `4`, and `--help` is the single explicit success path.
 
-Each field must be supplied **exactly once**. A repeated field is refused rather
-than overwritten — last-write-wins would let `review=fail review=pass` become
-eligible, and let a trailing empty value erase a named reserved boundary.
+### Shape is not authorization
+
+A well-formed citation proves nothing on its own, so the cited comment is
+**read back from GitHub** and must carry exactly one structured record:
+
+```
+spark-authorizes child=#124 acceptance=<canonical-acceptance-id>
+```
+
+The read-back must show the comment really belongs to the authorizing issue,
+that the record names **this** child, and that it binds **this** acceptance
+identifier. Prose that mentions the child is a coincidence of words, not a
+grant. Two records are ambiguous about what was granted. A comment carrying a
+reviewer or relay marker is machinery reporting to machinery. **Unreadable,
+missing, ambiguous, malformed, mismatched or unrelated evidence all decline** —
+evidence that cannot be opened is never resolved in favour of merging.
+
+A bare issue reference or bare issue URL is never an authorization record: it
+says "somewhere on this issue", which cannot be read back without guessing.
+There is deliberately no `sub-issue:` form either — a hierarchy assertion is a
+claim this verb cannot verify, and native hierarchy can become authority
+evidence only through trusted read-back, never by caller assertion.
+
+Identities are canonical: no zero, no leading zeros. `#0585` is issue 585 once
+parsed, so accepting the padded spelling would let it walk past a refusal the
+bare form triggers. `#1585` is a different issue and still authorizes.
+
+### Nothing the caller supplies may impersonate the verdict
+
+Values reach the verdict text, so a newline in one could forge a
+`parent outcome: CLOSED and fully satisfied` line above the real disclaimer, at
+exit 0, in the classifier's own voice. **Control-bearing input is refused before
+a single byte is emitted**, and only canonical validated identities are echoed
+back. The machine contract remains "exit status plus the first line", but the
+implementation does not rely on every caller remembering that to stay safe.
 
 A `ROUTINE MERGE` **never closes, satisfies or implies the parent outcome** —
-every verdict says so, because reading child completion as parent completion is
-the expensive mistake. The parent stays open until its own acceptance is
-independently true, and release approval remains human-owned.
-
-Naming the parent says **who** authorized; `authorization-record` says **that**
-they did, and must point at something a reader can open. Prose is refused in
-both — an assertion that the parent authorized the work is not a citation of it.
-Both are validated as **complete values**, not prefixes: trailing text, a second
-`#`, a three-component repository path, an alias spelling, plain `http`, and
-lookalike hosts such as `notgithub.com` or `github.com.evil.example` are all
-refused. A citation that tolerates prose is not a citation.
-
-The record is also **bound to the parent**. A well-formed citation of some
-*other* issue or repository authorizes nothing, so `parent-authorizes=#722` with
-`authorization-record=#999#issuecomment-1` is refused. The two forms are paired
-exactly, because a bare `#123` names no repository and so cannot be checked
-against a permalink: a bare parent is cited by the bare comment form, a
-qualified parent by the matching permalink.
-
-There is deliberately **no `sub-issue:` form**. It asserted a hierarchy
-relationship, and this classifier cannot verify that one issue is really
-subordinate to another — accepting the assertion would be the self-certification
-refused everywhere else here. Cite the parent's own authorization locus, which a
-reader can open. Verifying a native relationship needs a trusted read-back and
-belongs to governance validation, not to a string check.
-Like `crossroad`, the check is **structural**: it confirms a checkable record was
-cited, not that the record really authorizes the work.
-
-`reserved-boundary` and `surface` are supplied **together or not at all**. A
-one-sided or blank boundary input is refused rather than ignored, so a
-half-stated boundary concern can never fall through to a routine merge.
-
-Merely referencing a broad issue creates nothing, and neither does coordination:
-`#585`, relay/orchestrator handoffs, reviewer `PASS`, and comment consensus are
-refused by name as parent authorization. A reviewer PASS is evidence, not
-permission.
+every verdict says so. The parent stays open until its own acceptance is
+independently true, and release approval remains human-owned. `#585`,
+relay/orchestrator handoffs, reviewer `PASS` and comment consensus are refused
+by name: a reviewer PASS is evidence, not permission.
 
 ```
 $ spark merge-authority parent-authorizes="#722" \
     authorization-record="#722#issuecomment-456" \
-    child-acceptance="memoize git_root and resolve_prefs" \
-    acceptance-true=yes review=pass checks=green \
-    stale-head=protected scope=routine-reversible
+    child="#724" acceptance-id="memo-transparency-v1" \
+    review=pass checks=green stale-head=protected scope=routine-reversible
 ROUTINE MERGE                               # exit 0
-$ spark merge-authority ... acceptance-true=UNKNOWN
+$ spark merge-authority ... acceptance-id=UNKNOWN
 NOT ELIGIBLE                                # exit 4
 $ spark merge-authority ... reserved-boundary="release approval" surface="ADR-0019"
 DECISION REQUIRED                           # exit 3

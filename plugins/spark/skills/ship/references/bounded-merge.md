@@ -18,8 +18,9 @@ Never merge on your own reading of the situation. Ask the classifier, on the
 spark merge-authority \
   parent-authorizes="#722" \
   authorization-record="#722#issuecomment-456" \
-  child-acceptance="<the unit's OWN acceptance>" \
-  acceptance-true=yes review=pass checks=green \
+  child="#724" \
+  acceptance-id="<canonical acceptance identifier>" \
+  review=pass checks=green \
   stale-head=protected scope=routine-reversible
 ```
 
@@ -32,22 +33,32 @@ spark merge-authority \
 **Fail closed.** Anything that is not `ROUTINE MERGE` on exit `0` means do not
 merge. A non-zero exit, an unreadable verdict, a missing verb, an older
 installed governor that does not carry it — every one of those is a stop, not a
-reason to fall back on judgment.
+reason to fall back on judgment. A bare invocation exits `4`, not `0`; only
+`--help` succeeds without a verdict.
 
-`parent-authorizes` names **who** authorized (a bare `#123` or
-`owner/repo#123`); `authorization-record` cites **where** they did it, and must
-be a locus **on that same issue** — `#123#issuecomment-456` for a bare parent,
-or the matching `https://github.com/owner/repo/issues/123` permalink for a
-qualified one. Prose is refused in both, and so is a well-formed citation of a
-*different* issue or repository: asserting that the parent authorized the work,
-or pointing somewhere unrelated, is not citing the place it did. There is no
-`sub-issue:` form — a hierarchy claim cannot be verified here, and this never
-accepts an assertion in place of a checkable record. Supply `reserved-boundary` and `surface`
-together or not at all; a one-sided or blank pair is refused, not ignored.
+## What the parent must have written
 
-Supply each field **exactly once**; a repeated field is refused, so you cannot
-correct a value by appending a better one. And note that a bare invocation
-exits `4`, not `0` — only `--help` succeeds without a verdict.
+The gate is not satisfied by citing the parent. The cited **comment on the
+parent issue** is read back from GitHub and must carry exactly one record:
+
+```
+spark-authorizes child=#724 acceptance=<canonical-acceptance-id>
+```
+
+So the authorization is something the human wrote durably, in advance, naming
+the work unit and the acceptance by machine identity. Your job is to cite it,
+not to describe it. Prose that mentions the child does not count, two records
+are ambiguous, and a comment carrying a reviewer or relay marker is coordination
+rather than a grant.
+
+Everything here declines: unreadable or missing records, a comment belonging to
+another issue, a record naming a different child, a record binding a different
+acceptance, a bare issue reference or bare issue URL, and any hierarchy claim
+such as `sub-issue:#724` — that asserts a relationship this gate cannot verify.
+
+Supply each field exactly once; a repeated field is refused, so you cannot
+correct a value by appending a better one. Identities are canonical: `#0585` is
+refused as an alias of `#585`. Values must be one line of printable text.
 
 If the HEAD moves after the check, the answer is stale. Re-run it.
 
@@ -63,11 +74,7 @@ If the HEAD moves after the check, the answer is stale. Re-run it.
 
 ## What cannot create the authority
 
-Three plausible-sounding citations grant nothing, and the classifier refuses
-them by name:
-
-- **Reference** — attaching a PR to a broad issue, or citing it, is not being
-  authorized by it.
+- **Reference** — citing a broad issue is not being authorized by it.
 - **Evidence movement** — advancing evidence without satisfying the bounded
   acceptance has not earned a merge.
 - **Coordination** — `#585`, relay/orchestrator handoffs, a reviewer `PASS`, and
