@@ -33,6 +33,10 @@ merge. A non-zero exit, an unreadable verdict, a missing verb, an older
 installed governor that does not carry it — every one of those is a stop, not a
 reason to fall back on judgment.
 
+Supply each field **exactly once**; a repeated field is refused, so you cannot
+correct a value by appending a better one. And note that a bare invocation
+exits `4`, not `0` — only `--help` succeeds without a verdict.
+
 If the HEAD moves after the check, the answer is stale. Re-run it.
 
 ## What this never does

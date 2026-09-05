@@ -623,6 +623,15 @@ unrecognised value, `UNKNOWN` and `NOT ASSESSED` all decline.
 | `DECISION REQUIRED` | `3` |
 | `NOT ELIGIBLE` | `4` |
 
+Because `0` means `ROUTINE MERGE`, **no other path exits `0`**: a bare
+invocation with no evidence returns `4`, and `--help` is the single explicit
+success path. A caller that checks only the status can never read absent
+evidence as authority.
+
+Each field must be supplied **exactly once**. A repeated field is refused rather
+than overwritten — last-write-wins would let `review=fail review=pass` become
+eligible, and let a trailing empty value erase a named reserved boundary.
+
 A `ROUTINE MERGE` **never closes, satisfies or implies the parent outcome** —
 every verdict says so, because reading child completion as parent completion is
 the expensive mistake. The parent stays open until its own acceptance is

@@ -84,7 +84,9 @@ A merge to trunk is **integration, not a release**. The release act remains exac
 - The merge question becomes **derivable before implementation** from durable facts, rather than discovered after a PR reaches `PASS`. `spark merge-authority` is meant to be consulted at planning time.
 - A bounded unit without its own written acceptance cannot merge routinely. This is a real cost and an intended one: it pushes acceptance into the plan, where it belongs, instead of leaving it to be improvised at merge time.
 - ADR-0019 and ADR-0027 keep their historical decision text intact; only their status/alignment blocks gain a pointer to this record, per the append-only ADR convention.
-- `plugins/spark/skills/ship/SKILL.md` still instructs the agent never to merge without explicit instruction. That predates this decision and does not yet reflect it. Reconciling that shipped instruction would widen an agent's standing latitude, so it is **deliberately left unchanged here** and raised for a separate human decision rather than folded into this record.
+- `plugins/spark/skills/ship/SKILL.md` is reconciled with this decision: its merge prohibition stands, with one encoded exception gated on `spark merge-authority` returning `ROUTINE MERGE` for the exact current HEAD, failing closed otherwise. The detail is in `references/bounded-merge.md`. This is projection of the authority granted here, not an expansion of it — a shipped instruction that forbade acting on this model would leave the decision documented but inoperable.
+- **Exit codes are part of the contract.** `0` means `ROUTINE MERGE`, so no path may exit `0` without one: a bare invocation returns `4`/`NOT ELIGIBLE`, and `--help` is the single explicit success path because it is asked for by name. A status-only caller must never read absent evidence as authority.
+- **A repeated field is refused, not overwritten.** Last-write-wins would let `review=fail review=pass` become eligible and let a trailing empty value erase a named reserved boundary, converting a supplied non-affirming value into a pass.
 
 ## Related Docs
 

@@ -251,8 +251,16 @@ case "$(printf '%s\n' "$out" | head -1)" in
   "ROUTINE MERGE") bad "help must not emit a verdict as its first line" ;;
   *) ok ;;
 esac
+# A bare invocation must NOT share its exit code with ROUTINE MERGE. This
+# fixture previously asserted rc 0 for the usage text, which enshrined exactly
+# the hole it should have caught: a status-only caller would have read "no
+# evidence supplied" as merge authority.
 rc=0; out="$(cmd_merge_authority 2>&1)" || rc=$?
-[ "$rc" = 0 ] && ok || bad "bare invocation must show usage, not a verdict (got $rc)"
+[ "$rc" = 4 ] && ok || bad "a bare invocation must exit 4, never 0 — 0 means ROUTINE MERGE (got $rc)"
+case "$(printf '%s\n' "$out" | head -1)" in
+  "NOT ELIGIBLE") ok ;;
+  *) bad "a bare invocation must declare NOT ELIGIBLE, not print usage as if nothing were wrong" ;;
+esac
 
 # --- the verb is reachable through the dispatcher ---------------------------
 # The classifier is worthless if `spark merge-authority` does not route to it.
@@ -263,6 +271,42 @@ case "$out" in "ROUTINE MERGE"*) ok ;; *) bad "the verb must emit the verdict; g
 mk_instead checks red
 rc=0; "$spark_bin" merge-authority "${A[@]}" >/dev/null 2>&1 || rc=$?
 [ "$rc" = 4 ] && ok || bad "the verb must propagate the NOT ELIGIBLE exit code (got $rc)"
+# The bare verb is the likeliest accidental call; it must never exit 0.
+rc=0; "$spark_bin" merge-authority >/dev/null 2>&1 || rc=$?
+[ "$rc" = 4 ] && ok || bad "the bare verb must exit 4, never 0 (got $rc)"
+# Help is the one deliberate success path, and must not look like a verdict.
+rc=0; out="$("$spark_bin" merge-authority --help 2>&1)" || rc=$?
+[ "$rc" = 0 ] && ok || bad "the verb's --help must exit 0 (got $rc)"
+case "$(printf '%s\n' "$out" | head -1)" in
+  usage:*) ok ;;
+  *) bad "the verb's --help must lead with usage, not a verdict" ;;
+esac
+
+# --- duplicate fields are refused, never last-write-wins --------------------
+# Overwriting would let a non-affirming value be talked over by a later one:
+# "review=fail review=pass" must not become eligible, and a trailing whitespace
+# value must not erase a named reserved boundary.
+verdict "NOT ELIGIBLE" 4 "a repeated review field is refused" \
+  "${ELIGIBLE[@]}" review=pass
+verdict "NOT ELIGIBLE" 4 "a failing value cannot be overwritten by a passing one" \
+  "${ELIGIBLE[@]/review=pass/review=fail}" review=pass
+verdict "NOT ELIGIBLE" 4 "a repeated acceptance-true is refused" \
+  "${ELIGIBLE[@]}" acceptance-true=yes
+verdict "NOT ELIGIBLE" 4 "a repeated parent-authorizes is refused" \
+  "${ELIGIBLE[@]}" parent-authorizes="#722 again"
+# A reserved boundary must not be erasable by a later empty value.
+verdict "DECISION REQUIRED" 3 "a cited boundary stands on its own" \
+  "${ELIGIBLE[@]}" reserved-boundary="release approval" surface="ADR-0019"
+verdict "NOT ELIGIBLE" 4 "a second boundary value cannot erase the first" \
+  "${ELIGIBLE[@]}" reserved-boundary="release approval" surface="ADR-0019" reserved-boundary=""
+verdict "NOT ELIGIBLE" 4 "a second surface value cannot erase the citation" \
+  "${ELIGIBLE[@]}" reserved-boundary="release approval" surface="ADR-0019" surface="   "
+# The decline must say which field repeated, not merely that something did.
+dupout="$(xr_merge_check "${ELIGIBLE[@]}" review=pass 2>&1)" || true
+case "$dupout" in
+  *"repeated field"*review*) ok ;;
+  *) bad "a duplicate decline must name the repeated field" ;;
+esac
 
 echo "  $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

@@ -2225,7 +2225,7 @@ XM_NON_AUTHORIZING="585 relay orchestrator coordination reviewer review-pass pas
 xr_merge_check() {
   local parent_authorizes="" child_acceptance="" acceptance_true="" \
         review="" checks="" stale_head="" scope="" boundary="" surface="" \
-        arg key val unknown=""
+        arg key val unknown="" seen="" dup=""
 
   for arg in "$@"; do
     case "$arg" in
@@ -2233,6 +2233,14 @@ xr_merge_check() {
       # A bare word cannot be a field. Accepting one positionally would let a
       # typo land in whichever slot happened to be next.
       *)   unknown="${unknown} ${arg}"; continue ;;
+    esac
+    # A repeated field is REFUSED, never last-write-wins. Overwriting would let
+    # "review=fail review=pass" become eligible, and would let a trailing
+    # whitespace value erase a named reserved boundary — turning a supplied
+    # non-affirming value into a pass, which is exactly what this must not do.
+    case " $seen " in
+      *" $key "*) dup="${dup} ${key}"; continue ;;
+      *)          seen="${seen} ${key}" ;;
     esac
     case "$key" in
       parent-authorizes) parent_authorizes="$val" ;;
@@ -2254,6 +2262,11 @@ xr_merge_check() {
   if [ -n "$unknown" ]; then
     echo "NOT ELIGIBLE"
     echo "reason: unrecognised input —${unknown}; every field must be given as one of: $XM_REQUIRED_FIELDS reserved-boundary surface"
+    return 4
+  fi
+  if [ -n "$dup" ]; then
+    echo "NOT ELIGIBLE"
+    echo "reason: repeated field(s) —${dup}; each field must be supplied exactly once. A second value is refused rather than allowed to overwrite the first, so a non-affirming value can never be talked over by a later one."
     return 4
   fi
 
@@ -2329,7 +2342,16 @@ xr_merge_check() {
 # rather than discovering the authority question after a PR reaches PASS. Exits
 # 0 for a routine merge, 3 at a reserved boundary, 4 when not established.
 cmd_merge_authority() {
-  if [ "$#" -eq 0 ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+  # A bare invocation must NOT exit 0. Exit 0 is ROUTINE MERGE, so a caller that
+  # checks only the status would read "no evidence at all" as merge authority —
+  # the precise inversion this classifier exists to prevent. Help stays the one
+  # explicit success path, because it is asked for by name.
+  if [ "$#" -eq 0 ]; then
+    echo "NOT ELIGIBLE"
+    echo "reason: no evidence was supplied — nothing was established, so nothing is authorized. Run 'spark merge-authority --help' for the fields."
+    return 4
+  fi
+  if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
     echo "usage: spark merge-authority <field=value>..."
     echo "  may a bounded increment merge routinely beneath a broader owning issue?"
     echo "  every field must be affirmed positively; anything unproven declines."
