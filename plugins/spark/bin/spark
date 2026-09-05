@@ -43,7 +43,8 @@ git_root() {
   # Write atomically (writer-unique temp then mv) so a concurrent subshell never
   # reads a half-written entry. $BASHPID is per-subshell (unlike $$, which every
   # subshell inherits), so two concurrent misses for one key never share a temp.
-  # Miss-path only, so the hit path stays fork-free.
+  # Miss-path only. A hit still forks one `cat`; the saving is that one cheap
+  # read replaces the full derivation, not that the hit path forks nothing.
   if [ -n "$f" ]; then
     local tmp="$f.$BASHPID.$RANDOM.tmp"
     printf '%s' "$rendered" > "$tmp" 2>/dev/null && mv -f "$tmp" "$f" 2>/dev/null || rm -f "$tmp" 2>/dev/null
@@ -328,7 +329,8 @@ resolve_prefs() {
   [ -n "$out" ] && rendered="$out"$'\n'
   # Atomic write on a miss only, with a writer-unique temp ($BASHPID differs per
   # subshell; $$ does not), so concurrent misses for one key never share a temp
-  # and a reader never observes a half-written entry. Hit path stays fork-free.
+  # and a reader never observes a half-written entry. A hit still forks one `cat`;
+  # it replaces the jq+awk derivation rather than avoiding a fork entirely.
   if [ -n "$f" ]; then
     local tmp="$f.$BASHPID.$RANDOM.tmp"
     printf '%s' "$rendered" > "$tmp" 2>/dev/null && mv -f "$tmp" "$f" 2>/dev/null || rm -f "$tmp" 2>/dev/null

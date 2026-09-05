@@ -82,7 +82,8 @@ are visible as such.
 | Reasoning / thinking effort | `UNAVAILABLE` | `UNKNOWN` | No in-session control surface. |
 | Context amount / retrieval strategy | `PERFORMANCE CONTROL` (partial) | `OBSERVED` for repo-side retrieval | Repo-side controllable (what a command reads, how much a suite loads). Session-side context budget is `UNAVAILABLE`. |
 | Auto-compaction | `UNAVAILABLE` | `UNKNOWN` | Harness-managed; not settable or observable per run. |
-| Presentation / verbosity style | `UX ONLY` | `DECLARED` (output style) | Affects how a response is presented. Not a cost control. |
+| Presentation / formatting style | `UX ONLY` | `DECLARED` (output style) | Layout and tone only — how the same content is arranged. Does not change how much is generated. |
+| Response-length verbosity | `UNAVAILABLE` | `UNKNOWN` | Distinct from formatting: how *much* is generated changes output volume, latency, and token cost, so it is a performance and economic control wherever it can be set. No such surface is exposed here, and its effects are `NOT ASSESSED`. |
 | Maximum output / token budget | `UNAVAILABLE` | `UNKNOWN` | A distinct control from presentation style, and a genuine `PERFORMANCE CONTROL` wherever it can be set — but no such surface is exposed here. Its token and cost effects are `NOT ASSESSED`. |
 | Cache / evidence reuse | `PERFORMANCE CONTROL` | `OBSERVED` | Repo-side: the #722 per-process memo, and #576 evidence reuse. Measurable. Provider-side prompt caching is `UNAVAILABLE`. |
 | Retry / escalation policy | `PERFORMANCE CONTROL` | `DECLARED` (#575 routing, #558 budgets) | Governed by existing convergence budgets. |
@@ -174,13 +175,27 @@ offline verbs' wall-time ranges overlap, so their latency differences are
 of them a regression while treating the same overlap elsewhere as unassessed;
 that inconsistency was wrong and is withdrawn.
 
-**The one rigorous equal-workload comparison available is not cross-version at
-all.** It is the per-process memo measured on the *same* binary — memo on versus
+**The one equal-workload comparison available is not cross-version at all.** It
+is the per-process memo measured on the *same* binary — memo on versus
 `SPARK_NO_MEMO=1` — where the workload is identical by construction and the
-output is asserted byte-identical by `tests/test-hot-path-memo.sh`. That
-comparison (total process creation 47 → 39, complete tool set 36 → 28, parser
-calls 21 → 13, median wall 84 → 68 ms) lives with its negative control in PR
-#724.
+output is asserted byte-identical by `tests/test-hot-path-memo.sh`.
+
+It is reproducible from the repository. **`tests/bench-memo.sh`** builds its own
+fixture (a fresh single-commit repo carrying a project preference file) and
+reports both sides. On that fixture, `brief --short`, 7 runs:
+
+| dimension | memo OFF | memo ON |
+|---|---|---|
+| total `execve` (requires `--strace`) | 44 | 36 |
+| fixed tool set (includes the memo's own mktemp/cat/mv/rm) | 33 | 25 |
+| parser calls | 19 | 11 |
+| median wall | 69 ms | 60 ms |
+
+These are figures from that harness, on that fixture, on one machine — re-run it
+rather than treating them as constants. The tool count is a **lower bound** on
+subprocesses, not a full accounting. The suite asserts the *properties*
+(transparency, a strict reduction, the negative control); the script produces the
+*figures*.
 
 A defensible v0.22 → v0.23 comparison still needs exactly what #722 asks for:
 outcome contracts per workload, a committed harness, pinned versions and fixture
