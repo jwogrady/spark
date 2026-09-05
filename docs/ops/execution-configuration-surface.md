@@ -57,8 +57,11 @@ Where these facts live — the existing derive-first contract is preserved:
   run time, never hand-asserted.
 - **Run evidence** → immutable benchmark/telemetry artifacts.
 
-`\.spark/state.json` is **not** a home for any of this. State stays derived and
-current-state-only; configuration and run evidence are separate layers.
+`\.spark/state.json` is **not** a home for any of this. Configuration and run
+evidence are separate layers and are excluded from it. That is a statement about
+those two layers only — it does not imply everything in state is derivable: state
+retains the non-derivable judgments it owns (for example `next_action` and
+`blockers`) while mechanically current facts are derived.
 
 ## Controllable settings inventory
 
@@ -79,7 +82,8 @@ are visible as such.
 | Reasoning / thinking effort | `UNAVAILABLE` | `UNKNOWN` | No in-session control surface. |
 | Context amount / retrieval strategy | `PERFORMANCE CONTROL` (partial) | `OBSERVED` for repo-side retrieval | Repo-side controllable (what a command reads, how much a suite loads). Session-side context budget is `UNAVAILABLE`. |
 | Auto-compaction | `UNAVAILABLE` | `UNKNOWN` | Harness-managed; not settable or observable per run. |
-| Output token / verbosity budget | `UX ONLY` from here | `DECLARED` (output style) | Affects presentation; no measured effect on repo-side cost. Token accounting is `NOT ASSESSED`. |
+| Presentation / verbosity style | `UX ONLY` | `DECLARED` (output style) | Affects how a response is presented. Not a cost control. |
+| Maximum output / token budget | `UNAVAILABLE` | `UNKNOWN` | A distinct control from presentation style, and a genuine `PERFORMANCE CONTROL` wherever it can be set — but no such surface is exposed here. Its token and cost effects are `NOT ASSESSED`. |
 | Cache / evidence reuse | `PERFORMANCE CONTROL` | `OBSERVED` | Repo-side: the #722 per-process memo, and #576 evidence reuse. Measurable. Provider-side prompt caching is `UNAVAILABLE`. |
 | Retry / escalation policy | `PERFORMANCE CONTROL` | `DECLARED` (#575 routing, #558 budgets) | Governed by existing convergence budgets. |
 | Dynamic workflow size | `PERFORMANCE CONTROL` | `DECLARED` | Harness setting; affects agent fan-out cost. |
@@ -132,12 +136,53 @@ where one is currently available:
 | `reasoning_effort` | none | `UNAVAILABLE` |
 | `context_strategy` | repo-side read/retrieval choices | partial |
 | `context_compaction` | none | `UNAVAILABLE` |
-| `output_budget` | output style | `UX ONLY` |
+| `output_budget` | none (presentation style is a separate `UX ONLY` control) | `UNAVAILABLE` |
 | `retry_escalation` | #558 budgets, #575 routing | available |
 | `verification_depth` | `tests/run.sh --only` vs full | available |
 
-Anything requiring cross-provider routing is v0.25+ (#701/#714) or the deferred
-provider-neutral horizon (#700) and is explicitly out of scope here.
+Anything requiring cross-provider routing is **out of scope here and not
+currently scheduled**. Provider-neutral execution is the closed *Later* horizon
+([#700](https://github.com/jwogrady/spark/issues/700)); it is **not** v0.25
+scope, which is Versioned Blueprints (#701/#714). This record asserts no release
+placement for it and has no authority to assign one.
+
+## Equal-workload probe: released v0.22.0 vs the v0.23 candidate
+
+The first bounded attempt could not compare the two releases because it ran them
+against the Spark repository itself — whose plugin tree differs by version — and
+against an archived v0.22 tree where several verbs short-circuited or failed.
+
+Running both binaries against **one neutral fixture repository** removes both
+problems for the verbs that operate on the *target* repo. All four verbs below
+return the same exit status in both versions, so the outcome is held constant.
+
+**Equal workload** (operates on the fixture): `brief --short`, `triage`,
+`governance`. **Not equal workload**: `doctor` and `footprint` inspect Spark's
+*own* plugin tree, which is larger in v0.23 — a difference in the job, not in
+efficiency.
+
+| verb | v0.22 median wall (min–max, n=15) | v0.23 median wall | processes v0.22 → v0.23 |
+|---|---|---|---|
+| `brief --short` | 59 ms (58–62) | **56 ms (55–57)** | 30 → **24** |
+| `triage` | 659 ms (636–673) | 651 ms (617–680) | 97 → **86** |
+| `governance` | 93 ms (92–99) | **98 ms (96–101)** | 49 → 48 |
+
+What this does and does not support:
+
+- `brief --short` improves on **two** dimensions — wall latency (the ranges do
+  not overlap) and process creation (−20%, deterministic).
+- `triage` improves on process creation (−11%, deterministic); its wall ranges
+  **overlap**, so the latency difference is `NOT ASSESSED`, not an improvement.
+- `governance` **regressed** on wall latency (~+5%, ranges barely overlapping)
+  while process creation is flat. Recorded as a regression, not omitted.
+- `doctor` costs more in v0.23 (1722 → 1774 ms, 843 → 859 processes) but is
+  **not** an equal-workload comparison, so it is neither an efficiency regression
+  claim nor an excuse.
+
+This is a probe, not the #480 proof. One verb improving two dimensions, one
+improving one, and one regressing does not establish "material improvement in at
+least two dimensions across representative comparable workloads". Token, cost,
+and model dimensions remain `NOT ASSESSED`.
 
 ## What this record does not establish
 
