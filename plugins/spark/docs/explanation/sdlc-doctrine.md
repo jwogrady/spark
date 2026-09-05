@@ -181,12 +181,20 @@ a reviewer `PASS` are evidence and sequencing, never permission.
 consulted *before* implementation, so the merge question is derivable from
 durable facts rather than discovered after a PR reaches `PASS`.
 
-This does not move the human approval point that ADR-0019 fixes. The human still
-owns intent, judgment, **acceptance** and the release decision: they author the
-bounded acceptance durably and in advance, and the agent only verifies that what
-the human already accepted is now true. Nothing ships without human approval —
-a merge to the trunk is not a release, and the release act stays exactly where
-ADR-0027 and ADR-0026 put it.
+This **does** move an approval point, and ADR-0032 records that explicitly
+rather than letting it drift. What moves is the *routine trunk integration*:
+where the owning issue durably authorized a bounded unit and its acceptance in
+advance, Spark may verify those facts and integrate without a further per-merge
+human approval. ADR-0032 supersedes ADR-0019 and ADR-0027 in that one respect,
+and in no other.
+
+What does not move: the human still owns intent, judgment, and **acceptance
+definition and authorization**. They author the bounded acceptance durably and
+in advance; the agent only verifies that what the human already accepted is now
+true, and never invents acceptance or reads the absence of a blocker as
+permission. And a merge to the trunk is **integration, not a release** — the
+release act stays exactly where ADR-0026, ADR-0006 and ADR-0009 put it, with the
+human merging the Release Please PR. Nothing ships without human approval.
 
 ## The loop closes
 
