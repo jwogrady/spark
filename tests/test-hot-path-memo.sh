@@ -134,4 +134,41 @@ done
 if [ "$bad_p" -eq 0 ]; then ok; else bad "$bad_p/24 concurrent resolve_prefs readers saw truncated/incorrect prefs"; fi
 if [ "$bad_r" -eq 0 ]; then ok; else bad "$bad_r/24 concurrent git_root readers saw a truncated/incorrect root"; fi
 
+# --- Writer uniqueness, deterministically. The completeness check above is
+# behavioural but probabilistic: a small payload rarely loses the race, so it can
+# pass even with a shared temp. This fixture proves the property directly —
+# shim `mv`, record the SOURCE path every concurrent writer renames from, and
+# require them all to differ. A temp built from the inherited $$ makes every
+# writer log the same path, so this fails on the unsafe implementation. The
+# shim's short delay holds the rename open, guaranteeing the workers overlap and
+# genuinely miss together rather than serialising behind the first write.
+mvlog="$WORK/mv.log"; : > "$mvlog"
+mvshim="$WORK/mvshim"; mkdir -p "$mvshim"
+real_mv="$(command -v mv)"
+cat > "$mvshim/mv" <<EOF
+#!/usr/bin/env bash
+# The call is \`mv -f SRC DST\`, so the source is the second-to-last argument;
+# logging \$1 would only ever record the option.
+printf '%s\n' "\${@: -2:1}" >> "$mvlog"
+sleep 0.05
+exec $real_mv "\$@"
+EOF
+chmod +x "$mvshim/mv"
+
+memo_u="$(mktemp -d)"
+(
+  export __SPARK_MEMO="$memo_u"; export PATH="$mvshim:$PATH"
+  . "$SPARK"; cd "$conc"
+  i=0
+  while [ "$i" -lt 12 ]; do ( resolve_prefs >/dev/null 2>&1 ) & i=$((i + 1)); done
+  wait
+)
+rm -rf "$memo_u"
+mv_total="$(grep -c . "$mvlog" 2>/dev/null || echo 0)"
+mv_distinct="$(sort -u "$mvlog" 2>/dev/null | grep -c . || echo 0)"
+# Several writers must have raced (otherwise the fixture proves nothing) ...
+if [ "$mv_total" -gt 1 ]; then ok; else bad "no concurrent cache writes observed (fixture did not race; total=$mv_total)"; fi
+# ... and each must have renamed from its own temp path.
+if [ "$mv_distinct" -eq "$mv_total" ]; then ok; else bad "concurrent writers shared a temp path ($mv_distinct distinct of $mv_total) — writer uniqueness lost"; fi
+
 finish
