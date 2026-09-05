@@ -2210,7 +2210,7 @@ xr_stop_check() {
 # Every field that must be positively affirmed, and the ONE token that affirms
 # each. A field carrying anything else — including a plausible synonym — does
 # not affirm it.
-XM_REQUIRED_FIELDS="parent-authorizes child-acceptance acceptance-true review checks stale-head scope"
+XM_REQUIRED_FIELDS="parent-authorizes authorization-record child-acceptance acceptance-true review checks stale-head scope"
 
 # Surfaces that never create merge authority however confidently they are cited.
 # #585 stops at governed close-out and says so; a reviewer PASS is evidence, not
@@ -2223,7 +2223,7 @@ XM_NON_AUTHORIZING="585 relay orchestrator coordination reviewer review-pass pas
 # First line is the verdict: ROUTINE MERGE, DECISION REQUIRED or NOT ELIGIBLE.
 # Returns 0, 3 and 4 respectively.
 xr_merge_check() {
-  local parent_authorizes="" child_acceptance="" acceptance_true="" \
+  local parent_authorizes="" auth_record="" child_acceptance="" acceptance_true="" \
         review="" checks="" stale_head="" scope="" boundary="" surface="" \
         arg key val unknown="" seen="" dup=""
 
@@ -2243,7 +2243,8 @@ xr_merge_check() {
       *)          seen="${seen} ${key}" ;;
     esac
     case "$key" in
-      parent-authorizes) parent_authorizes="$val" ;;
+      parent-authorizes)   parent_authorizes="$val" ;;
+      authorization-record) auth_record="$val" ;;
       child-acceptance)  child_acceptance="$val" ;;
       acceptance-true)   acceptance_true="$val" ;;
       review)            review="$val" ;;
@@ -2274,41 +2275,86 @@ xr_merge_check() {
   # evidence converts a human-owned decision into a routine merge. The same
   # name-and-cite discipline as xr_stop_check applies, so an unnamed worry
   # cannot manufacture a stop here either.
-  local b_named=0 s_named=0
+  local b_named=0 s_named=0 b_given=0 s_given=0
   case "$boundary" in *[![:space:]]*) b_named=1 ;; esac
   case "$surface"  in *[![:space:]]*) s_named=1 ;; esac
+  case " $seen " in *" reserved-boundary "*) b_given=1 ;; esac
+  case " $seen " in *" surface "*)           s_given=1 ;; esac
+  # SUPPLIED but blank, or one-sided, must fail closed rather than be ignored.
+  # Ignoring them let `surface=X` alone — or `reserved-boundary=""` — pass
+  # straight through to eligibility, so a half-expressed boundary concern
+  # silently became a routine merge.
+  if { [ "$b_given" = 1 ] || [ "$s_given" = 1 ]; } \
+     && { [ "$b_named" = 0 ] || [ "$s_named" = 0 ]; }; then
+    echo "NOT ELIGIBLE"
+    echo "reason: reserved-boundary and surface must be supplied together and both non-blank, or neither. A one-sided or blank boundary input is refused rather than ignored — a half-stated boundary concern must never fall through to a routine merge. Give both to stop, or omit both."
+    return 4
+  fi
   if [ "$b_named" = 1 ] && [ "$s_named" = 1 ]; then
     echo "DECISION REQUIRED"
     echo "claimed authority: $boundary — cited as reserved to the human by $surface; a bounded increment never merges past a reserved boundary, and merging would not close the parent outcome either"
     return 3
   fi
-  if [ "$b_named" = 1 ]; then
-    echo "NOT ELIGIBLE"
-    echo "reason: a reserved boundary '$boundary' was claimed without citing the durable surface reserving it — cite the surface to stop, or drop the claim; eligibility is not granted while an uncited boundary claim stands"
-    return 4
-  fi
-
   # Positive affirmation, field by field. Each check names the exact token it
   # wanted, so a declined verdict tells the agent what to establish rather than
   # sending it to re-read the model.
   local missing=""
+  # The parent is an ISSUE IDENTITY, in a strict shape: "#123" or "owner/repo#123"
+  # and nothing else. Free prose was the hole the reviewer found — "#722" alone,
+  # or any sentence, satisfied a mere non-whitespace test and produced ROUTINE
+  # MERGE, contradicting the contract's own rule that referencing a parent is not
+  # being authorized by it. A bare identity now names WHO authorized; it does not
+  # by itself establish THAT they did.
   case "$parent_authorizes" in
-    *[![:space:]]*) ;;
+    ''|*[[:space:]]*)
+      missing="${missing}
+  - parent-authorizes: name the owning issue as a bare reference — '#123' or 'owner/repo#123', nothing else. Prose does not identify an issue." ;;
+    '#'*)
+      case "${parent_authorizes#\#}" in
+        ''|*[!0-9]*) missing="${missing}
+  - parent-authorizes: '#123' must be a '#' followed by digits only (got '$parent_authorizes')." ;;
+      esac ;;
+    *'#'*)
+      case "${parent_authorizes##*\#}" in
+        ''|*[!0-9]*) missing="${missing}
+  - parent-authorizes: 'owner/repo#123' must end in '#' followed by digits only (got '$parent_authorizes')." ;;
+      esac ;;
     *) missing="${missing}
-  - parent-authorizes: cite the durable record in which the broader issue authorizes THIS subordinate work unit (a sub-issue link or an explicit authorization block). Referencing the parent is not being authorized by it." ;;
+  - parent-authorizes: must be an issue reference containing '#' (got '$parent_authorizes')." ;;
   esac
-  if [ -n "$parent_authorizes" ]; then
-    local tok lowered
-    lowered="$(printf '%s' "$parent_authorizes" | tr '[:upper:]' '[:lower:]')"
+
+  # THAT they authorized this unit is a separate, separately-cited fact. The
+  # locus must be machine-distinguishable — a native sub-issue relation, a
+  # specific issue comment, or a GitHub permalink — so the claim points at
+  # something a human can open and check. This is STRUCTURAL, exactly as
+  # xr_stop_check is: it cannot verify the record really authorizes the work,
+  # only that a checkable record was cited rather than asserted.
+  case "$auth_record" in
+    sub-issue:'#'[0-9]*|sub_issue:'#'[0-9]*) ;;
+    *'#issuecomment-'[0-9]*) ;;
+    https://*github.com/*[0-9]*) ;;
+    '')
+      missing="${missing}
+  - authorization-record: cite WHERE the parent authorized this unit, in a checkable form — 'sub-issue:#123', '#123#issuecomment-456', or a github.com permalink. Naming the parent says who; this says that." ;;
+    *)
+      missing="${missing}
+  - authorization-record: '$auth_record' is not a checkable locus — use 'sub-issue:#123', '#123#issuecomment-456', or a github.com permalink. Prose asserts authorization instead of pointing at it." ;;
+  esac
+
+  # Coordination surfaces grant nothing, wherever they are cited.
+  local field val_l tok lowered
+  for field in "$parent_authorizes" "$auth_record"; do
+    [ -n "$field" ] || continue
+    lowered="$(printf '%s' "$field" | tr '[:upper:]' '[:lower:]')"
     for tok in $XM_NON_AUTHORIZING; do
       case " $lowered " in
-        *[!a-z0-9]"$tok"[!a-z0-9]*|"$tok"[!a-z0-9]*|*[!a-z0-9]"$tok")
+        *[!a-z0-9]"$tok"[!a-z0-9]*)
           echo "NOT ELIGIBLE"
-          echo "reason: '$parent_authorizes' cites '$tok', which grants no merge authority — #585 and relay/orchestrator coordination stop at governed close-out and a reviewer PASS is evidence, not permission; cite the owning issue's own durable authorization of this work unit"
+          echo "reason: '$field' cites '$tok', which grants no merge authority — #585 and relay/orchestrator coordination stop at governed close-out and a reviewer PASS is evidence, not permission; cite the owning issue's own durable authorization of this work unit"
           return 4 ;;
       esac
     done
-  fi
+  done
   case "$child_acceptance" in
     *[![:space:]]*) ;;
     *) missing="${missing}
@@ -2355,14 +2401,17 @@ cmd_merge_authority() {
     echo "usage: spark merge-authority <field=value>..."
     echo "  may a bounded increment merge routinely beneath a broader owning issue?"
     echo "  every field must be affirmed positively; anything unproven declines."
-    echo "    parent-authorizes=<durable record authorizing THIS work unit>"
+    echo "    parent-authorizes=#123            (or owner/repo#123 — a bare issue ref)"
+    echo "    authorization-record=<where that parent authorized THIS unit:"
+    echo "                          sub-issue:#123 | #123#issuecomment-456 | a"
+    echo "                          github.com permalink>"
     echo "    child-acceptance=<the bounded unit's own acceptance>"
     echo "    acceptance-true=yes            (true on the exact current HEAD)"
     echo "    review=pass                    (independent, exact-HEAD, current)"
     echo "    checks=green                   (same exact HEAD)"
     echo "    stale-head=protected"
     echo "    scope=routine-reversible"
-    echo "  optional, to route a real human boundary:"
+    echo "  optional, to route a real human boundary — both together, or neither:"
     echo "    reserved-boundary=<authority> surface=<durable surface reserving it>"
     echo "  verdicts: ROUTINE MERGE (0) | DECISION REQUIRED (3) | NOT ELIGIBLE (4)"
     echo "  a ROUTINE MERGE never closes, satisfies or implies the parent outcome."

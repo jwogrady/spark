@@ -16,7 +16,8 @@ Never merge on your own reading of the situation. Ask the classifier, on the
 
 ```sh
 spark merge-authority \
-  parent-authorizes="<durable record authorizing THIS work unit>" \
+  parent-authorizes="#722" \
+  authorization-record="sub-issue:#724" \
   child-acceptance="<the unit's OWN acceptance>" \
   acceptance-true=yes review=pass checks=green \
   stale-head=protected scope=routine-reversible
@@ -32,6 +33,13 @@ spark merge-authority \
 merge. A non-zero exit, an unreadable verdict, a missing verb, an older
 installed governor that does not carry it — every one of those is a stop, not a
 reason to fall back on judgment.
+
+`parent-authorizes` names **who** authorized (a bare `#123` or
+`owner/repo#123`); `authorization-record` cites **where** they did it, and must
+be checkable — `sub-issue:#123`, `#123#issuecomment-456`, or a `github.com`
+permalink. Prose is refused in both: asserting that the parent authorized the
+work is not citing the place it did. Supply `reserved-boundary` and `surface`
+together or not at all; a one-sided or blank pair is refused, not ignored.
 
 Supply each field **exactly once**; a repeated field is refused, so you cannot
 correct a value by appending a better one. And note that a bare invocation

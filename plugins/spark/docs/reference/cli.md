@@ -608,7 +608,8 @@ unrecognised value, `UNKNOWN` and `NOT ASSESSED` all decline.
 
 | Field | Affirming value |
 | --- | --- |
-| `parent-authorizes` | the durable record in which the broader issue authorizes **this** work unit |
+| `parent-authorizes` | the owning issue as a bare reference — `#123` or `owner/repo#123`, nothing else |
+| `authorization-record` | **where** that parent authorized this unit, in a checkable form: `sub-issue:#123`, `#123#issuecomment-456`, or a `github.com` permalink |
 | `child-acceptance` | the bounded unit's **own** acceptance — what this merge makes true |
 | `acceptance-true` | `yes` — true on the exact current HEAD |
 | `review` | `pass` — independent, exact-HEAD, current |
@@ -637,13 +638,24 @@ every verdict says so, because reading child completion as parent completion is
 the expensive mistake. The parent stays open until its own acceptance is
 independently true, and release approval remains human-owned.
 
+Naming the parent says **who** authorized; `authorization-record` says **that**
+they did, and must point at something a reader can open. Prose is refused in
+both — an assertion that the parent authorized the work is not a citation of it.
+Like `crossroad`, the check is **structural**: it confirms a checkable record was
+cited, not that the record really authorizes the work.
+
+`reserved-boundary` and `surface` are supplied **together or not at all**. A
+one-sided or blank boundary input is refused rather than ignored, so a
+half-stated boundary concern can never fall through to a routine merge.
+
 Merely referencing a broad issue creates nothing, and neither does coordination:
 `#585`, relay/orchestrator handoffs, reviewer `PASS`, and comment consensus are
 refused by name as parent authorization. A reviewer PASS is evidence, not
 permission.
 
 ```
-$ spark merge-authority parent-authorizes="#722 authorizes bounded increments" \
+$ spark merge-authority parent-authorizes="#722" \
+    authorization-record="sub-issue:#724" \
     child-acceptance="memoize git_root and resolve_prefs" \
     acceptance-true=yes review=pass checks=green \
     stale-head=protected scope=routine-reversible

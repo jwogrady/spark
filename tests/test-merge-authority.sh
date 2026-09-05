@@ -43,7 +43,8 @@ verdict() {
 # EXACTLY the field under test — otherwise a control could pass for the wrong
 # reason.
 ELIGIBLE=(
-  parent-authorizes="#722 authorizes bounded optimization increments"
+  parent-authorizes="#722"
+  authorization-record="sub-issue:#724"
   child-acceptance="memoize git_root and resolve_prefs, transparently, for measured verbs"
   acceptance-true=yes
   review=pass
@@ -85,13 +86,13 @@ vinstead() { local w="$1" r="$2" d="$3" f="$4" v="$5"; mk_instead "$f" "$v"; ver
 # every negative control below would pass for the wrong reason.
 verdict "ROUTINE MERGE" 0 "the shared base set is eligible before any control mutates it" "${ELIGIBLE[@]}"
 mk_without review
-[ "${#A[@]}" = 6 ] && ok || bad "mk_without must drop exactly one field (got ${#A[@]})"
+[ "${#A[@]}" = 7 ] && ok || bad "mk_without must drop exactly one field (got ${#A[@]})"
 mk_instead review fail
-[ "${#A[@]}" = 7 ] && ok || bad "mk_instead must preserve the field count (got ${#A[@]})"
+[ "${#A[@]}" = 8 ] && ok || bad "mk_instead must preserve the field count (got ${#A[@]})"
 case " ${A[*]} " in *" review=fail "*) ok ;; *) bad "mk_instead must substitute the value" ;; esac
 # A multi-word value must survive as ONE argument, or the controls test the parser.
 mk_instead child-acceptance "two words here"
-[ "${#A[@]}" = 7 ] && ok || bad "a multi-word value must stay one argument (got ${#A[@]})"
+[ "${#A[@]}" = 8 ] && ok || bad "a multi-word value must stay one argument (got ${#A[@]})"
 
 # --- the #722 -> #724 case: this is the whole point of the issue ------------
 # Broad parent open and incomplete, bounded child fully accepted, exact HEAD
@@ -140,16 +141,46 @@ vinstead "NOT ELIGIBLE" 4 "'YES' is not the affirming token" acceptance-true YES
 # --- negative control: #585 / relay cannot manufacture authority ------------
 # #726 names this explicitly. #585 stops at governed close-out; a reviewer PASS
 # is evidence, not permission; relay coordination moves work without granting.
-vinstead "NOT ELIGIBLE" 4 "#585 cannot authorize a merge" parent-authorizes "#585 selected this writer"
-vinstead "NOT ELIGIBLE" 4 "a relay handoff cannot authorize a merge" parent-authorizes "relay handoff 5555178239"
-vinstead "NOT ELIGIBLE" 4 "orchestrator coordination cannot authorize a merge" parent-authorizes "external orchestrator coordination"
-vinstead "NOT ELIGIBLE" 4 "a reviewer PASS cannot authorize a merge" parent-authorizes "#584 reviewer PASS on this HEAD"
-vinstead "NOT ELIGIBLE" 4 "comment consensus cannot authorize a merge" parent-authorizes "consensus in the PR comment thread"
+vinstead "NOT ELIGIBLE" 4 "#585 cannot authorize a merge" parent-authorizes "#585"
+vinstead "NOT ELIGIBLE" 4 "a relay handoff cannot authorize a merge" authorization-record "sub-issue:#724 relay handoff"
+vinstead "NOT ELIGIBLE" 4 "orchestrator coordination cannot authorize a merge" authorization-record "sub-issue:#724 orchestrator"
+vinstead "NOT ELIGIBLE" 4 "a reviewer PASS cannot authorize a merge" authorization-record "sub-issue:#724 reviewer pass"
+vinstead "NOT ELIGIBLE" 4 "comment consensus cannot authorize a merge" authorization-record "sub-issue:#724 consensus"
 
 # The denylist must match whole words, not substrings — a real issue reference
 # that merely CONTAINS one of those letters is a legitimate authorization.
-vinstead "ROUTINE MERGE" 0 "an issue number containing 585 as a substring still authorizes" parent-authorizes "#1585 authorizes this bounded unit"
-vinstead "ROUTINE MERGE" 0 "a word containing 'pass' as a substring still authorizes" parent-authorizes "#722 compasses this bounded work unit"
+vinstead "ROUTINE MERGE" 0 "an issue number containing 585 as a substring still authorizes" parent-authorizes "#1585"
+vinstead "ROUTINE MERGE" 0 "an owner/repo qualified reference authorizes" parent-authorizes "jwogrady/spark#722"
+
+# --- negative control: a bare reference is not an authorization -------------
+# The reviewer's finding: with every other field eligible, a bare "#722" or
+# arbitrary prose produced ROUTINE MERGE, contradicting the contract's own rule
+# that referencing a parent is not being authorized by it. These are FULL
+# eligible-shaped inputs so they isolate parent authorization alone.
+vwithout "NOT ELIGIBLE" 4 "a bare parent reference with no authorization record does not merge" authorization-record
+vinstead "NOT ELIGIBLE" 4 "arbitrary prose is not an authorization record" \
+  authorization-record "#722 authorizes bounded optimization increments"
+vinstead "NOT ELIGIBLE" 4 "an assertion that the parent authorized it is not a locus" \
+  authorization-record "the owning issue authorizes this work unit"
+vinstead "NOT ELIGIBLE" 4 "a bare issue number is not a locus" authorization-record "#722"
+vinstead "NOT ELIGIBLE" 4 "prose in parent-authorizes is refused" \
+  parent-authorizes "#722 authorizes bounded optimization increments"
+vinstead "NOT ELIGIBLE" 4 "a non-numeric issue reference is refused" parent-authorizes "#seven-two-two"
+vinstead "NOT ELIGIBLE" 4 "a reference with no # is refused" parent-authorizes "722"
+vinstead "NOT ELIGIBLE" 4 "a trailing word after the reference is refused" parent-authorizes "#722 ok"
+# Whitespace around the reference must be refused too. Without the explicit
+# space check, " #722" slips past the digit test — the tail after the last '#'
+# is "722", all digits — and an unnormalised value becomes an identity.
+vinstead "NOT ELIGIBLE" 4 "a leading space before the reference is refused" parent-authorizes " #722"
+vinstead "NOT ELIGIBLE" 4 "a trailing space after the reference is refused" parent-authorizes "#722 "
+vinstead "NOT ELIGIBLE" 4 "an internal space in the reference is refused" parent-authorizes "# 722"
+vinstead "NOT ELIGIBLE" 4 "a tab around the reference is refused" parent-authorizes "	#722"
+
+# The accepted loci are all checkable, and each is accepted.
+vinstead "ROUTINE MERGE" 0 "a native sub-issue relation is a locus" authorization-record "sub-issue:#724"
+vinstead "ROUTINE MERGE" 0 "a specific issue comment is a locus" authorization-record "#722#issuecomment-5555250717"
+vinstead "ROUTINE MERGE" 0 "a github permalink is a locus" \
+  authorization-record "https://github.com/jwogrady/spark/issues/722#issuecomment-5555250717"
 
 # --- negative control: missing parent authorization -------------------------
 vwithout "NOT ELIGIBLE" 4 "no parent authorization does not merge" parent-authorizes
@@ -183,9 +214,19 @@ verdict "NOT ELIGIBLE" 4 "an uncited boundary claim neither stops nor merges" \
   "${ELIGIBLE[@]}" reserved-boundary="something feels reserved"
 verdict "NOT ELIGIBLE" 4 "a whitespace surface does not cite a boundary" \
   "${ELIGIBLE[@]}" reserved-boundary="release policy" surface="   "
-# A whitespace-only boundary is no boundary at all, so eligibility stands.
-verdict "ROUTINE MERGE" 0 "a whitespace-only boundary claim does not block an established merge" \
+# A SUPPLIED but blank boundary must fail closed, not be ignored. This fixture
+# previously asserted ROUTINE MERGE here, enshrining the hole: a half-stated
+# boundary concern fell straight through to a routine merge.
+verdict "NOT ELIGIBLE" 4 "a supplied but blank boundary fails closed" \
   "${ELIGIBLE[@]}" reserved-boundary="   "
+verdict "NOT ELIGIBLE" 4 "an explicitly empty boundary fails closed" \
+  "${ELIGIBLE[@]}" reserved-boundary=""
+verdict "NOT ELIGIBLE" 4 "a surface with no boundary fails closed" \
+  "${ELIGIBLE[@]}" surface="ADR-0019"
+verdict "NOT ELIGIBLE" 4 "an empty surface with no boundary fails closed" \
+  "${ELIGIBLE[@]}" surface=""
+# Omitting BOTH is the only way to have no boundary.
+verdict "ROUTINE MERGE" 0 "omitting both boundary fields leaves eligibility intact" "${ELIGIBLE[@]}"
 
 # --- input discipline: unknown fields fail closed ---------------------------
 # A typo must never read as an unset field that some later edit defaults true.
