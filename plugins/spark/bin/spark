@@ -28,14 +28,21 @@ yellow(){ printf '\033[33m%s\033[0m\n' "$1"; }
 # recompute from scratch (the negative control); sourced/test contexts never set
 # it, so their behaviour is unchanged.
 git_root() {
-  local memo="${__SPARK_MEMO:-}"
-  if [ -n "$memo" ] && [ -f "$memo/gitroot" ]; then
-    cat "$memo/gitroot"; return 0
+  local memo="${__SPARK_MEMO:-}" f=""
+  if [ -n "$memo" ]; then
+    # Key by the current directory: the root depends on where we are, so a run
+    # that moves between directories/repositories must not reuse a stale entry.
+    # Encode reversibly (% then /) so distinct paths never collide, with no
+    # hashing subprocess.
+    local key="${PWD//\%/%25}"; key="$memo/gitroot.${key//\//%2f}"; f="$key"
+    [ -f "$f" ] && { cat "$f"; return 0; }
   fi
   local r rendered=""
   r="$(git rev-parse --show-toplevel 2>/dev/null || true)"
   [ -n "$r" ] && rendered="$r"$'\n'
-  [ -n "$memo" ] && printf '%s' "$rendered" > "$memo/gitroot" 2>/dev/null || true
+  # Write atomically (temp then mv) so a concurrent subshell never reads a
+  # half-written entry. Only on a miss, so the hit path stays fork-free.
+  [ -n "$f" ] && { printf '%s' "$rendered" > "$f.$$.tmp" 2>/dev/null && mv -f "$f.$$.tmp" "$f" 2>/dev/null; } || true
   printf '%s' "$rendered"
 }
 
@@ -288,9 +295,13 @@ resolve_prefs() {
   # repeatedly (the brief header, the standards summary, each pref_get). The
   # resolved standard does not change within one command. Unset the var to
   # recompute (the negative control); sourced/test contexts never set it.
-  local memo="${__SPARK_MEMO:-}"
-  if [ -n "$memo" ] && [ -f "$memo/prefs" ]; then
-    cat "$memo/prefs"; return 0
+  local memo="${__SPARK_MEMO:-}" f=""
+  if [ -n "$memo" ]; then
+    # Key by the current directory: the project tier is read from the repo root,
+    # which depends on where we are, so a run that changes directory/repository
+    # must resolve fresh. Same reversible, fork-free encoding as git_root.
+    local key="${PWD//\%/%25}"; key="$memo/prefs.${key//\//%2f}"; f="$key"
+    [ -f "$f" ] && { cat "$f"; return 0; }
   fi
   local top out rendered=""
   top="$(git_root)"
@@ -310,7 +321,9 @@ resolve_prefs() {
         END { for (i = 1; i <= n; i++) print order[i] "\t" v[order[i]] "\t" s[order[i]] }'
   )"
   [ -n "$out" ] && rendered="$out"$'\n'
-  [ -n "$memo" ] && printf '%s' "$rendered" > "$memo/prefs" 2>/dev/null || true
+  # Atomic write on a miss only (temp then mv), so a concurrent subshell never
+  # reads a half-written entry and the hit path stays fork-free.
+  [ -n "$f" ] && { printf '%s' "$rendered" > "$f.$$.tmp" 2>/dev/null && mv -f "$f.$$.tmp" "$f" 2>/dev/null; } || true
   printf '%s' "$rendered"
 }
 

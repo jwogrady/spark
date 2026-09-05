@@ -71,4 +71,36 @@ if [ "$forks_on" -lt "$forks_off" ]; then ok; else bad "memo did not reduce fork
 # Negative control sanity: disabling the memo must not itself error to zero.
 if [ "$forks_off" -gt 0 ]; then ok; else bad "fork counter produced no signal (harness broken)"; fi
 
+# --- Context safety: both cached facts depend on the current directory, so a
+# single memo scope reused across repositories, or from outside a repository to
+# inside one, must never hand back a stale first result. These fixtures fail
+# against a process-global cache with one entry.
+repoA="$WORK/repoA"; repoB="$WORK/repoB"; outside="$WORK/outside"
+make_repo "$repoA"; mkdir -p "$repoA/.spark"
+printf '{ "stack": "alpha-stack" }\n' > "$repoA/.spark/preferences.json"
+make_repo "$repoB"; mkdir -p "$repoB/.spark"
+printf '{ "stack": "beta-stack" }\n' > "$repoB/.spark/preferences.json"
+mkdir -p "$outside"   # a plain directory, not a git repository
+
+ctx="$WORK/ctx"; mkdir -p "$ctx"
+memo_ctx="$(mktemp -d)"
+(
+  export __SPARK_MEMO="$memo_ctx"; . "$SPARK"
+  cd "$repoA"; resolve_prefs > "$ctx/a.prefs"; git_root > "$ctx/a.root"
+  cd "$repoB"; resolve_prefs > "$ctx/b.prefs"; git_root > "$ctx/b.root"   # same memo scope
+  cd "$outside"; git_root > "$ctx/out.root"                               # outside a repo
+  cd "$repoA"; git_root > "$ctx/back.root"                                # back inside
+)
+rm -rf "$memo_ctx"
+
+# Cross-repository: each repo resolves its own project preference, not the first.
+case "$(cat "$ctx/a.prefs")" in *alpha-stack*) ok ;; *) bad "repoA resolve_prefs lost its own stack" ;; esac
+case "$(cat "$ctx/b.prefs")" in *beta-stack*)  ok ;; *) bad "repoB got stale repoA preferences from the memo" ;; esac
+case "$(cat "$ctx/b.prefs")" in *alpha-stack*) bad "repoB leaked repoA's stale preferences" ;; *) ok ;; esac
+# git_root is repo-specific across the same memo scope.
+if [ "$(cat "$ctx/a.root")" != "$(cat "$ctx/b.root")" ] && [ -n "$(cat "$ctx/a.root")" ]; then ok; else bad "git_root returned the same/blank root for two repos"; fi
+# Outside-to-inside: outside is blank, and moving inside does not reuse the blank.
+if [ -z "$(cat "$ctx/out.root")" ]; then ok; else bad "git_root outside a repo should be empty"; fi
+if [ -n "$(cat "$ctx/back.root")" ] && [ "$(cat "$ctx/back.root")" = "$(cat "$ctx/a.root")" ]; then ok; else bad "git_root reused the stale empty result after cd into a repo"; fi
+
 finish
