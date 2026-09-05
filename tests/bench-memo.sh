@@ -47,6 +47,13 @@ done
 
 die() { printf 'bench-memo.sh: %s\n' "$1" >&2; exit 1; }
 
+# A run count that is zero, negative or non-numeric would collect no samples and
+# then print an empty median as though it were a measurement.
+case "$RUNS" in
+  ''|*[!0-9]*) die "--runs must be a positive integer, got '$RUNS'" ;;
+esac
+[ "$RUNS" -ge 1 ] || die "--runs must be at least 1, got '$RUNS'"
+
 # Every setup step is checked. This script deliberately does not set errexit (a
 # measured command is allowed to be slow, not silently fatal), so an unchecked
 # failure here would leave it benchmarking a directory that is not the fixture it

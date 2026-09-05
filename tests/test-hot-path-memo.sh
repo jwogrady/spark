@@ -271,4 +271,24 @@ if grep -q '__SPARK_MEMO_ELIGIBLE' "$SPARK"; then ok; else bad "memoization is n
 # `setup` is not on the allowlist, so it must run unmemoized.
 case " $(grep -o 'case " [a-z0-9 -]*" in' "$SPARK" | head -n1) " in *" setup "*) bad "a preference-seeding verb is on the memo allowlist" ;; *) ok ;; esac
 
+# --- The memo must not tax commands it cannot help. A verb that resolves these
+# facts once or not at all still pays for the scratch directory, so eligibility
+# is measured, not assumed: `help` gains processes when memoized and is therefore
+# NOT eligible. This asserts the allowlist stays evidence-based — a verb added
+# without measuring would make a low-work command slower.
+low_forks() { # <verb> <env...> -> tool process count
+  local verb="$1"; shift
+  local log; log="$(mktemp)"
+  ( cd "$repo" && SPARK_FORKLOG="$log" PATH="$shim:$PATH" env "$@" "$SPARK" "$verb" >/dev/null 2>&1 )
+  local n; n="$(wc -c < "$log" | tr -d ' ')"; rm -f "$log"; echo "$n"
+}
+help_off="$(low_forks help SPARK_NO_MEMO=1)"
+help_on="$(low_forks help -u SPARK_NO_MEMO)"
+if [ "$help_on" -le "$help_off" ]; then ok; else bad "a low-work verb gained $(( help_on - help_off )) process(es) from the memo (off=$help_off on=$help_on) — it must not be eligible"; fi
+# And the allowlist itself must not name a verb known to regress.
+case "$(grep -o 'case " [a-z0-9 -]*" in' "$SPARK" | head -n1)" in
+  *" help "*|*" version "*|*" state "*|*" orient "*) bad "the memo allowlist names a verb measured to regress" ;;
+  *) ok ;;
+esac
+
 finish

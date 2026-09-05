@@ -8740,7 +8740,13 @@ if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
   # run. Those verbs keep the original derive-on-every-call behaviour. Extending
   # this list requires showing the verb cannot change a repo association or a
   # preference file mid-run.
-  case " brief triage governance doctor footprint next course orient state telemetry evidence budget route ci crossroad docs-impact labels version help " in
+  # The list is MEASURED, not assumed. A verb that resolves these facts once or
+  # not at all pays for the scratch directory and gains nothing: `help` and
+  # `version` measured +2 tool processes, `state`/`telemetry`/`ci` +3,
+  # `orient`/`docs-impact` +4. Only these six measured a net reduction —
+  # doctor -20, brief -14, triage -14, footprint -8, governance -2, labels -2.
+  # Re-measure with tests/bench-memo.sh --verb before adding to this list.
+  case " brief triage governance doctor footprint labels " in
     *" $verb "*) __SPARK_MEMO_ELIGIBLE=1 ;;
     *)           __SPARK_MEMO_ELIGIBLE="" ;;
   esac
