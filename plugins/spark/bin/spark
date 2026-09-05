@@ -367,7 +367,11 @@ resolve_prefs() {
     __spark_memo_read "$f" && return 0
   fi
   local top rendered=""
-  top="$(git_root)"
+  # git_root emits the root followed by git's newline. `$( )` would strip ALL
+  # trailing newlines, so a repository whose name ends in one would yield a
+  # wrong .spark path and silently lose the project tier. Keep the bytes and
+  # remove exactly the one delimiter.
+  top="$(git_root; printf x)"; top="${top%x}"; top="${top%$'\n'}"
   # Same sentinel as git_root: preserve the pipeline's exact trailing bytes
   # instead of letting command substitution strip them.
   rendered="$(

@@ -329,14 +329,11 @@ inherit_state="$WORK/inherit.state"
 ( cd "$repo" && __SPARK_MEMO_STATE=on SPARK_MEMO_STATE_FILE="$inherit_state" "$SPARK" orient >/dev/null 2>&1 ) || true
 if [ "$(cat "$inherit_state" 2>/dev/null)" = "off" ]; then ok; else bad "an inherited __SPARK_MEMO_STATE was reported instead of the effective state"; fi
 
-# --- A deep but valid repository path. Flattening $PWD into one filename made a
-# deep path exceed the component limit, so the cache write failed and memo-on
-# could diverge from memo-off. The key mirrors the path as directories instead;
-# this fixture keeps that honest for both cached facts.
-# Built to the ACTUAL filesystem limit rather than an arbitrary depth, so it
-# exercises a long path rather than an arbitrary depth. What this proves is the
-# BOUNDED-KEY property: the entry filename stays a short constant however long
-# $PWD is, and both cached facts still resolve correctly there.
+# --- A deep but valid repository path. What this proves is the BOUNDED-KEY
+# property: the key is a fixed-length digest of $PWD, so the entry filename
+# stays a short constant however long $PWD is, and both cached facts still
+# resolve correctly there. Built to the ACTUAL filesystem limit rather than an
+# arbitrary depth, so it exercises a genuinely long path.
 path_max="$(getconf PATH_MAX / 2>/dev/null || echo 4096)"
 deep="$repo"
 while [ "${#deep}" -lt $(( path_max - 100 )) ]; do
@@ -469,16 +466,26 @@ cat > "$WORK/tn.sh" <<EOS
 . "$SPARK"
 set +e
 cd "\$1" || exit 1
-export __SPARK_MEMO="\$(mktemp -d)"
-git_root > "\$2.first"
-git_root > "\$2.second"
-rm -rf "\$__SPARK_MEMO"
+if [ "\$3" = on ]; then export __SPARK_MEMO="\$(mktemp -d)"; else unset __SPARK_MEMO; fi
+git_root      > "\$2.first"
+git_root      > "\$2.second"
+resolve_prefs > "\$2.p1"
+resolve_prefs > "\$2.p2"
+[ "\$3" = on ] && rm -rf "\$__SPARK_MEMO"
 exit 0
 EOS
-bash "$WORK/tn.sh" "$tn_repo" "$WORK/tnout" 2>"$WORK/tn.err"
+bash "$WORK/tn.sh" "$tn_repo" "$WORK/tnout"    on  2>"$WORK/tn.err"
+bash "$WORK/tn.sh" "$tn_repo" "$WORK/tnoffout" off 2>"$WORK/tn.off.err"
 if cmp -s "$WORK/tnout.first" "$WORK/tn.git"; then ok; else bad "git_root lost bytes for a repository path ending in a newline"; fi
 if cmp -s "$WORK/tnout.first" "$WORK/tnout.second"; then ok; else bad "the cached value differs from the derived one for a newline-terminated path"; fi
-if [ ! -s "$WORK/tn.err" ]; then ok; else bad "a newline-terminated repository path produced stderr"; fi
+# resolve_prefs consumes git_root to locate .spark/preferences.json. If those
+# bytes are lost the path is wrong and the PROJECT tier vanishes silently, so
+# the tier is asserted directly rather than inferred from the root alone.
+case "$(cat "$WORK/tnout.p1")" in *trailing-stack*) ok ;; *) bad "resolve_prefs lost the project tier for a newline-terminated repository path" ;; esac
+if cmp -s "$WORK/tnout.p1" "$WORK/tnout.p2"; then ok; else bad "cached preferences differ from derived ones for a newline-terminated path"; fi
+if cmp -s "$WORK/tnout.p1" "$WORK/tnoffout.p1"; then ok; else bad "preferences differ with the memo on and off for a newline-terminated path"; fi
+if cmp -s "$WORK/tnout.first" "$WORK/tnoffout.first"; then ok; else bad "git_root differs with the memo on and off for a newline-terminated path"; fi
+if [ ! -s "$WORK/tn.err" ] && [ ! -s "$WORK/tn.off.err" ]; then ok; else bad "a newline-terminated repository path produced stderr"; fi
 
 # --- Independent hit proof per cached function. An aggregate fork reduction can
 # hide a broken cache: either function could still be missing while the other's
