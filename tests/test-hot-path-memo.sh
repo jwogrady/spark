@@ -324,10 +324,9 @@ if [ "$(cat "$inherit_state" 2>/dev/null)" = "off" ]; then ok; else bad "an inhe
 # could diverge from memo-off. The key mirrors the path as directories instead;
 # this fixture keeps that honest for both cached facts.
 # Built to the ACTUAL filesystem limit rather than an arbitrary depth, so it
-# exercises both limits a naive key hits: a flattened key exceeds the
-# per-component limit, and a mirrored key pushes the total past PATH_MAX once the
-# scratch prefix is prepended. The bounded digest key is a short fixed filename
-# regardless, so this must simply work.
+# exercises a long path rather than an arbitrary depth. What this proves is the
+# BOUNDED-KEY property: the entry filename stays a short constant however long
+# $PWD is, and both cached facts still resolve correctly there.
 path_max="$(getconf PATH_MAX / 2>/dev/null || echo 4096)"
 deep="$repo"
 while [ "${#deep}" -lt $(( path_max - 100 )) ]; do
@@ -335,12 +334,9 @@ while [ "${#deep}" -lt $(( path_max - 100 )) ]; do
   mkdir -p "$next" 2>/dev/null || break        # stop at whatever this filesystem allows
   deep="$next"
 done
-# The property that makes the key safe is that it is BOUNDED: the entry filename
-# is a short constant regardless of how long $PWD is. A flattened key grew with
-# the path and blew the component limit; a mirrored key grew with it and pushed
-# the total path toward PATH_MAX. Asserting boundedness directly is provable
-# here; asserting that the abandoned schemes would overflow is not, because this
-# filesystem caps a creatable path below the point where the mirrored form fails.
+# Boundedness is the property asserted, because it is the one provable here: the
+# entry filename is a short constant regardless of $PWD's length. This test makes
+# no claim about how any alternative key scheme would behave.
 if [ "${#deep}" -gt 3000 ]; then ok; else bad "the deep fixture is only ${#deep} characters; too short to exercise long-path behaviour"; fi
 mkdir -p "$deep/.spark"
 printf '{ "stack": "deep-path-stack" }\n' > "$repo/.spark/preferences.json"
@@ -447,5 +443,69 @@ case "$(cat "$WORK/nlon.p1")" in *newline-stack*) ok ;; *) bad "resolve_prefs lo
 # would fork as many times as the unmemoized one.
 if [ "$nl_on_forks" -lt "$nl_off_forks" ]; then ok; else bad "a newline-named directory never hit its own cache (derivation forks on=$nl_on_forks off=$nl_off_forks)"; fi
 if [ ! -s "$WORK/nl.on.err" ] && [ ! -s "$WORK/nl.off.err" ]; then ok; else bad "a newline-named directory produced stderr"; fi
+
+# --- A repository path that ENDS in a newline. This is the case a mid-name
+# newline does not reach: command substitution strips trailing newlines, so a
+# capture-based implementation silently eats the last byte of the path itself,
+# not just git's delimiter. The value is compared against git's own output
+# captured to a file, so the expectation is git's bytes and not this test's idea
+# of them.
+tn_repo="$WORK/tn"$'\n'
+make_repo "$tn_repo"; mkdir -p "$tn_repo/.spark"
+printf '{ "stack": "trailing-stack" }\n' > "$tn_repo/.spark/preferences.json"
+( cd "$tn_repo" && git rev-parse --show-toplevel ) > "$WORK/tn.git" 2>/dev/null
+cat > "$WORK/tn.sh" <<EOS
+#!/usr/bin/env bash
+. "$SPARK"
+set +e
+cd "\$1" || exit 1
+export __SPARK_MEMO="\$(mktemp -d)"
+git_root > "\$2.first"
+git_root > "\$2.second"
+rm -rf "\$__SPARK_MEMO"
+exit 0
+EOS
+bash "$WORK/tn.sh" "$tn_repo" "$WORK/tnout" 2>"$WORK/tn.err"
+if cmp -s "$WORK/tnout.first" "$WORK/tn.git"; then ok; else bad "git_root lost bytes for a repository path ending in a newline"; fi
+if cmp -s "$WORK/tnout.first" "$WORK/tnout.second"; then ok; else bad "the cached value differs from the derived one for a newline-terminated path"; fi
+if [ ! -s "$WORK/tn.err" ]; then ok; else bad "a newline-terminated repository path produced stderr"; fi
+
+# --- Independent hit proof per cached function. An aggregate fork reduction can
+# hide a broken cache: either function could still be missing while the other's
+# saving keeps the total lower. So each is probed alone, counting only the tool
+# its own derivation shells out to — git for git_root, jq for the preference
+# merge — and each must fall on its own.
+onefn_shim="$WORK/onefn"; mkdir -p "$onefn_shim"
+for t in git jq; do
+  real="$(command -v "$t" 2>/dev/null || true)"; [ -n "$real" ] || continue
+  { printf '#!/usr/bin/env bash\n'
+    printf 'printf x >> "$ONEFN_%s"\n' "$(printf '%s' "$t" | tr 'a-z' 'A-Z')"
+    printf 'exec %s "$@"\n' "$real"; } > "$onefn_shim/$t"
+  chmod +x "$onefn_shim/$t"
+done
+cat > "$WORK/onefn.sh" <<EOS
+#!/usr/bin/env bash
+. "$SPARK"
+set +e
+cd "\$1" || exit 1
+if [ "\$2" = on ]; then export __SPARK_MEMO="\$(mktemp -d)"; else unset __SPARK_MEMO; fi
+"\$3" >/dev/null
+"\$3" >/dev/null
+[ "\$2" = on ] && rm -rf "\$__SPARK_MEMO"
+exit 0
+EOS
+onefn_count() { # <fn> <mode> <counter-var-suffix> -> forks of that tool
+  local fn="$1" mode="$2" tool="$3"
+  local log="$WORK/onefn.$fn.$mode.$tool"; : > "$log"
+  ( ONEFN_GIT="$WORK/onefn.$fn.$mode.GIT" ONEFN_JQ="$WORK/onefn.$fn.$mode.JQ" \
+    PATH="$onefn_shim:$PATH" bash "$WORK/onefn.sh" "$nl_repo" "$mode" "$fn" ) >/dev/null 2>&1
+  wc -c < "$WORK/onefn.$fn.$mode.$tool" 2>/dev/null | tr -d ' '
+}
+: > "$WORK/onefn.git_root.on.GIT";      : > "$WORK/onefn.git_root.off.GIT"
+: > "$WORK/onefn.resolve_prefs.on.JQ";  : > "$WORK/onefn.resolve_prefs.off.JQ"
+gr_on="$(onefn_count git_root on GIT)";            gr_off="$(onefn_count git_root off GIT)"
+rp_on="$(onefn_count resolve_prefs on JQ)";        rp_off="$(onefn_count resolve_prefs off JQ)"
+if [ "${gr_on:-0}" -lt "${gr_off:-0}" ]; then ok; else bad "git_root alone did not hit its cache (git forks on=$gr_on off=$gr_off)"; fi
+if [ "${rp_on:-0}" -lt "${rp_off:-0}" ]; then ok; else bad "resolve_prefs alone did not hit its cache (jq forks on=$rp_on off=$rp_off)"; fi
 
 finish
