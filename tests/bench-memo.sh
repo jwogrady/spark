@@ -12,7 +12,8 @@
 #
 # WHAT IS COUNTED. Process creation is counted by prepending counting shims for a
 # fixed tool list. That list deliberately includes the operations the memo itself
-# introduces (mktemp, cat, mv, rm) — counting only the parsers it removes would
+# introduces (mktemp, mv, rm — a cache HIT reads with the mapfile builtin and
+# forks nothing) — counting only the parsers it removes would
 # report a saving while total process creation stayed flat. It remains a LOWER
 # BOUND: anything not on the list, and every fork a shimmed program makes
 # internally, is invisible. `--strace` adds a true total via execve tracing where

@@ -390,31 +390,62 @@ if [ ! -s "$WORK/deep-off.err" ]; then ok; else bad "a deep path produced stderr
 # directory it belongs to, so that record must survive one: a raw $PWD written as
 # the first line would make such a repository miss its own cache on every call
 # and pay the derivation every time, silently.
-nl_repo="$WORK/nl$(printf '\n')dir"
+nl_repo="$WORK/nl"$'\n'"dir"
 make_repo "$nl_repo"; mkdir -p "$nl_repo/.spark"
 printf '{ "stack": "newline-stack" }\n' > "$nl_repo/.spark/preferences.json"
+
+# Results go to FILES and are compared byte-for-byte: a value containing a
+# newline cannot be parsed back out of a line-oriented capture, and an earlier
+# version of this fixture silently truncated the root at the embedded newline.
+#
+# Counting entries cannot prove a cache HIT either, because repeated misses
+# overwrite the same filename. Derivation forks can: git_root shells out to git
+# only on a miss, so two calls cost two git invocations if the ownership check
+# never matches and one if it does. The shim counts those.
+nlshim="$WORK/nlshim"; mkdir -p "$nlshim"
+for t in git jq; do
+  real="$(command -v "$t" 2>/dev/null || true)"; [ -n "$real" ] || continue
+  { printf '#!/usr/bin/env bash\n'
+    printf 'printf x >> "$NL_DERIVE"\n'
+    printf 'exec %s "$@"\n' "$real"; } > "$nlshim/$t"
+  chmod +x "$nlshim/$t"
+done
 cat > "$WORK/nl.sh" <<EOS
 #!/usr/bin/env bash
 . "$SPARK"
 set +e
-export __SPARK_MEMO="\$(mktemp -d)"
 cd "\$1" || exit 1
-printf 'R1:%s\n' "\$(git_root)"
-printf 'R2:%s\n' "\$(git_root)"
-printf 'P1:%s\n' "\$(resolve_prefs | tr '\\n' ' ')"
-printf 'P2:%s\n' "\$(resolve_prefs | tr '\\n' ' ')"
-# A second call must have HIT the cache: exactly one entry per fact.
-printf 'ENTRIES:%s\n' "\$(find "\$__SPARK_MEMO" -type f -name 'gitroot.*' | wc -l)"
-rm -rf "\$__SPARK_MEMO"
+if [ "\$2" = on ]; then export __SPARK_MEMO="\$(mktemp -d)"; else unset __SPARK_MEMO; fi
+git_root      > "\$3.r1"
+git_root      > "\$3.r2"
+resolve_prefs > "\$3.p1"
+resolve_prefs > "\$3.p2"
+[ "\$2" = on ] && rm -rf "\$__SPARK_MEMO"
+exit 0
 EOS
-nl_out="$(bash "$WORK/nl.sh" "$nl_repo" 2>"$WORK/nl.err")"
-nr1="$(printf '%s\n' "$nl_out" | grep '^R1:')"; nr2="$(printf '%s\n' "$nl_out" | grep '^R2:')"
-np1="$(printf '%s\n' "$nl_out" | grep '^P1:')"; np2="$(printf '%s\n' "$nl_out" | grep '^P2:')"
-if [ "${nr1#R1:}" = "${nr2#R2:}" ] && [ -n "${nr1#R1:}" ]; then ok; else bad "git_root disagreed with itself in a directory whose name contains a newline"; fi
-if [ "${np1#P1:}" = "${np2#P2:}" ]; then ok; else bad "resolve_prefs disagreed with itself in a newline-named directory"; fi
-case "$np1" in *newline-stack*) ok ;; *) bad "resolve_prefs lost the project tier in a newline-named directory" ;; esac
-# One entry, not two: a second entry would mean the ownership check never matched.
-if [ "$(printf '%s\n' "$nl_out" | grep '^ENTRIES:' | cut -d: -f2)" = "1" ]; then ok; else bad "a newline-named directory never hit its own cache (it wrote more than one entry)"; fi
-if [ ! -s "$WORK/nl.err" ]; then ok; else bad "a newline-named directory produced stderr: $(head -1 "$WORK/nl.err")"; fi
+nl_run() { # <mode> <out-prefix> -> derivation fork count
+  local mode="$1" pre="$2"; local log="$WORK/nl.$mode.derive"; : > "$log"
+  ( NL_DERIVE="$log" PATH="$nlshim:$PATH" bash "$WORK/nl.sh" "$nl_repo" "$mode" "$pre" ) 2>"$WORK/nl.$mode.err"
+  wc -c < "$log" | tr -d ' '
+}
+nl_on_forks="$(nl_run on  "$WORK/nlon")"
+nl_off_forks="$(nl_run off "$WORK/nloff")"
+
+# Transparency: every value identical with the memo on and off, bytes included.
+nl_same=0
+for part in r1 r2 p1 p2; do
+  cmp -s "$WORK/nlon.$part" "$WORK/nloff.$part" || nl_same=1
+done
+if [ "$nl_same" -eq 0 ]; then ok; else bad "a newline-named directory produced different results with the memo on and off"; fi
+# Self-consistency: the second call agrees with the first, byte-for-byte.
+if cmp -s "$WORK/nlon.r1" "$WORK/nlon.r2" && cmp -s "$WORK/nlon.p1" "$WORK/nlon.p2"; then ok; else bad "repeated calls disagreed in a newline-named directory"; fi
+# The value really is the newline-containing root, not a truncation of it.
+if [ "$(cat "$WORK/nlon.r1")" = "$nl_repo" ]; then ok; else bad "git_root returned a truncated root for a newline-named directory"; fi
+case "$(cat "$WORK/nlon.p1")" in *newline-stack*) ok ;; *) bad "resolve_prefs lost the project tier in a newline-named directory" ;; esac
+# Effectiveness: the memo must actually HIT here. If the ownership record could
+# not survive the newline, the second calls would re-derive and the memoized run
+# would fork as many times as the unmemoized one.
+if [ "$nl_on_forks" -lt "$nl_off_forks" ]; then ok; else bad "a newline-named directory never hit its own cache (derivation forks on=$nl_on_forks off=$nl_off_forks)"; fi
+if [ ! -s "$WORK/nl.on.err" ] && [ ! -s "$WORK/nl.off.err" ]; then ok; else bad "a newline-named directory produced stderr"; fi
 
 finish

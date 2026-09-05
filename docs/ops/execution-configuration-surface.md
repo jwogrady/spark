@@ -208,7 +208,8 @@ What the harness guarantees, which is why its output can be trusted as evidence:
   including that the fixture really is a single-commit repository with a project
   preference file.
 - **Honest counting.** The tool count includes the operations the memo itself
-  introduces (`mktemp`/`cat`/`mv`/`rm`) and is still a **lower bound** on
+  introduces (`mktemp`/`mv`/`rm` — a cache *hit* reads with the `mapfile`
+  builtin and forks nothing) and is still a **lower bound** on
   subprocesses, not a full accounting.
 
 The suite (`tests/test-hot-path-memo.sh`) asserts the *properties* — transparency,
