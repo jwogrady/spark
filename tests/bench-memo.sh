@@ -20,8 +20,9 @@
 #
 # `--strace` adds two SEPARATE syscall counts, because they measure different
 # things: `execs` counts execve, i.e. program images actually executed, and
-# `procs` counts clone/clone3/fork/vfork, i.e. process creation including
-# subshells the shell forks WITHOUT exec. A shell-only subshell is invisible to
+# `procs` counts process creation — clone/clone3/fork/vfork that SUCCEEDED and
+# did not carry CLONE_THREAD — which includes subshells the shell forks WITHOUT
+# exec, and excludes threads and failed attempts. A shell-only subshell is invisible to
 # execve and to the shims, so execve alone must never be called a total.
 set -uo pipefail
 
@@ -199,6 +200,20 @@ counts_for() { # <label> <env-array-name> -> "total parsers"; aborts on failure
   printf '%s %s' "$(wc -l < "$counts" | tr -d ' ')" "$(count_parsers "$counts")"
 }
 
+# count_procs <strace-log> — processes created, which is narrower than
+# "clone/fork syscalls seen" in two ways that both matter:
+#
+#   - a failed attempt is not a creation. A clone3 that fails with ENOSYS and
+#     falls back to clone is ONE process, and strace marks the failure "= -1".
+#   - a successful clone carrying CLONE_THREAD creates a THREAD sharing the
+#     process, not a new process. Counting it would inflate the figure with
+#     something the claim does not mean.
+count_procs() {
+  grep -E '(clone3?|v?fork)\(' "$1" 2>/dev/null \
+    | grep -v '= -1' \
+    | grep -cv 'CLONE_THREAD' || echo 0
+}
+
 syscalls_for() { # <label> <env-array-name> <expected-state> -> "execs procs"
   local label="$1"; local -n x_ref="$2"
   if [ -n "$use_strace" ] && command -v strace >/dev/null 2>&1; then
@@ -207,12 +222,9 @@ syscalls_for() { # <label> <env-array-name> <expected-state> -> "execs procs"
         "${x_ref[@]}" SPARK_MEMO_STATE_FILE="$sf" "$SPARK" $VERB >/dev/null 2>&1 ); rc=$?
     [ "$rc" -eq 0 ] || die "'$VERB' exited $rc under strace with ${x_ref[*]}"
     assert_state "$sf" "$3" "the traced $3 run"
-    # A failed clone3 followed by a clone fallback is ONE process created, not
-    # two attempts. strace marks a failure with "= -1", so those lines are
-    # excluded: this counts processes created, not syscalls issued.
     printf '%s %s' \
       "$(grep -c 'execve(' "$slog" 2>/dev/null || echo 0)" \
-      "$(grep -E '(clone3?|v?fork)\(' "$slog" 2>/dev/null | grep -cv '= -1' || echo 0)"
+      "$(count_procs "$slog")"
   else
     printf 'n/a n/a'
   fi
@@ -227,15 +239,21 @@ syscall_selfcheck() {
   strace -f -qq -e trace=execve,clone,clone3,fork,vfork -o "$log" \
     bash -c 'x=$(:); :' >/dev/null 2>&1
   execs="$(grep -c 'execve(' "$log" 2>/dev/null || echo 0)"
-  local attempts created failed
-  attempts="$(grep -cE '(clone3?|v?fork)\(' "$log" 2>/dev/null || echo 0)"
-  created="$(grep -E '(clone3?|v?fork)\(' "$log" 2>/dev/null | grep -cv '= -1' || echo 0)"
-  failed=$(( attempts - created ))
+  local created; created="$(count_procs "$log")"
   [ "$created" -gt 0 ] || die "the process-creation metric missed a shell-only subshell (execs=$execs created=$created); it cannot be reported as process creation"
-  # If this kernel/libc produced any failed attempt, prove they are excluded.
-  if [ "$failed" -gt 0 ] && [ "$created" -ge "$attempts" ]; then
-    die "the process-creation metric counts failed syscall attempts as processes (attempts=$attempts created=$created)"
-  fi
+
+  # The two exclusions are proven against a synthetic log rather than hoping the
+  # kernel exercises them: one ordinary fork, one failed clone3, one threading
+  # clone. Exactly one process was created, so anything else means the metric
+  # counts something other than what it is published as.
+  local probe="$TMP/procs-selfcheck" got
+  {
+    printf 'clone(child_stack=NULL, flags=CLONE_CHILD_CLEARTID|SIGCHLD) = 4242\n'
+    printf 'clone3({flags=0, exit_signal=SIGCHLD}, 88) = -1 ENOSYS (Function not implemented)\n'
+    printf 'clone(child_stack=0x7f00, flags=CLONE_VM|CLONE_FS|CLONE_THREAD|CLONE_SIGHAND) = 4243\n'
+  } > "$probe" || die "could not write the process-metric self-check log"
+  got="$(count_procs "$probe")"
+  [ "$got" = "1" ] || die "the process-creation metric counts failed attempts or threads as processes: expected 1 from the self-check log, counted $got"
 }
 
 echo "verb:    $VERB"
