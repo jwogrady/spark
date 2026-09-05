@@ -181,18 +181,25 @@ is the per-process memo measured on the *same* binary — memo on versus
 output is asserted byte-identical by `tests/test-hot-path-memo.sh`.
 
 It is reproducible from the repository. **`tests/bench-memo.sh`** builds its own
-fixture (a fresh single-commit repo carrying a project preference file) and
-reports both sides. On that fixture, `brief --short`, 7 runs:
+fixture (a fresh single-commit repo carrying a project preference file), warms
+both configurations, then **alternates** them inside each iteration — timing one
+side fully before the other hands the second a warmed environment and turns
+ordering into an apparent result. It prints the raw samples, the commit under
+test, and the runtime. On that fixture, `brief --short`, 7 paired runs:
 
 | dimension | memo OFF | memo ON |
 |---|---|---|
 | total `execve` (requires `--strace`) | 44 | 36 |
 | fixed tool set (includes the memo's own mktemp/cat/mv/rm) | 33 | 25 |
 | parser calls | 19 | 11 |
-| median wall | 69 ms | 60 ms |
+| median wall | 71 ms | 61 ms |
 
-These are figures from that harness, on that fixture, on one machine — re-run it
-rather than treating them as constants. The tool count is a **lower bound** on
+Raw wall samples for that run — OFF `71 73 72 69 71 71 70`, ON
+`61 60 60 62 62 61 61` — do not overlap, which is what separates this from the
+cross-version ranges above. Process counts are deterministic across repeats.
+
+These remain figures from one harness, one fixture, one machine: re-run it rather
+than treating them as constants. The tool count is a **lower bound** on
 subprocesses, not a full accounting. The suite asserts the *properties*
 (transparency, a strict reduction, the negative control); the script produces the
 *figures*.

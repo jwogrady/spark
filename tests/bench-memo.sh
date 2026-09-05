@@ -69,32 +69,77 @@ now_ms() { local n; n="$(date +%s%N 2>/dev/null)"
   case "$n" in *N*|'') echo "$(( $(date +%s) * 1000 ))" ;; *) echo "$(( n / 1000000 ))" ;; esac; }
 median() { printf '%s\n' "$@" | LC_ALL=C sort -n | awk '{ v[NR]=$1 } END { print v[int((NR+1)/2)] }'; }
 
-measure() { # <label> <env...>
+one_run() { # <env...> -> elapsed ms for a single invocation
+  local s e
+  s="$(now_ms)"
+  ( cd "$FIX" && env "$@" "$SPARK" $VERB >/dev/null 2>&1 )
+  e="$(now_ms)"
+  echo "$(( e - s ))"
+}
+
+counts_for() { # <label> <env...> -> "total parsers"
   local label="$1"; shift
-  local i s e times=() counts="$TMP/c.$label"
-  : > "$counts"
-  for i in $(seq 1 "$RUNS"); do
-    s="$(now_ms)"
-    ( cd "$FIX" && env "$@" "$SPARK" $VERB >/dev/null 2>&1 )
-    e="$(now_ms)"; times+=("$(( e - s ))")
-  done
+  local counts="$TMP/c.$label"; : > "$counts"
   ( cd "$FIX" && BENCH_COUNT="$counts" PATH="$TMP/bin:$PATH" env "$@" "$SPARK" $VERB >/dev/null 2>&1 )
-  local total parsers ex="n/a"
-  total="$(wc -l < "$counts" | tr -d ' ')"
-  parsers="$(awk 'BEGIN{p=" awk sed grep cut tr "}{if(index(p," "$1" "))n++}END{print n+0}' "$counts")"
+  printf '%s %s' \
+    "$(wc -l < "$counts" | tr -d ' ')" \
+    "$(awk 'BEGIN{p=" awk sed grep cut tr "}{if(index(p," "$1" "))n++}END{print n+0}' "$counts")"
+}
+
+execve_for() { # <label> <env...> -> total execve, or n/a
+  local label="$1"; shift
   if [ -n "$use_strace" ] && command -v strace >/dev/null 2>&1; then
     local slog="$TMP/s.$label"
     ( cd "$FIX" && strace -f -qq -e trace=execve -o "$slog" env "$@" "$SPARK" $VERB >/dev/null 2>&1 )
-    ex="$(grep -c 'execve(' "$slog" 2>/dev/null || echo 0)"
+    grep -c 'execve(' "$slog" 2>/dev/null || echo 0
+  else
+    echo "n/a"
   fi
-  printf '%-22s median %5s ms | tools %4s | parsers %4s | execve %s\n' \
-    "$label" "$(median "${times[@]}")" "$total" "$parsers" "$ex"
 }
 
-echo "verb: $VERB   runs: $RUNS   fixture: a fresh single-commit repo with a project preference file"
-echo "spark: $SPARK"
-measure "memo OFF (control)" SPARK_NO_MEMO=1
-measure "memo ON" SPARK_MEMO_BENCH=1
+echo "verb:    $VERB"
+echo "runs:    $RUNS paired, interleaved (OFF/ON alternate within each iteration)"
+echo "fixture: a fresh single-commit repo with a project preference file, built by this script"
+echo "spark:   $SPARK"
+echo "commit:  $(git -C "$root" rev-parse HEAD 2>/dev/null || echo 'not a git checkout')"
+echo "runtime: $(uname -sr) | bash ${BASH_VERSION}"
+echo
+
+# Warm the filesystem and process caches for BOTH configurations before timing,
+# then alternate them inside each iteration. Timing all of one side and then all
+# of the other hands the second side a warmed environment and turns ordering into
+# an apparent result.
+one_run SPARK_NO_MEMO=1 >/dev/null
+one_run SPARK_MEMO_BENCH=1 >/dev/null
+
+off_times=() on_times=()
+for i in $(seq 1 "$RUNS"); do
+  if [ $(( i % 2 )) -eq 1 ]; then
+    off_times+=("$(one_run SPARK_NO_MEMO=1)")
+    on_times+=("$(one_run SPARK_MEMO_BENCH=1)")
+  else
+    on_times+=("$(one_run SPARK_MEMO_BENCH=1)")   # flip the order on even iterations
+    off_times+=("$(one_run SPARK_NO_MEMO=1)")
+  fi
+done
+
+read -r off_total off_parsers <<EOF
+$(counts_for off SPARK_NO_MEMO=1)
+EOF
+read -r on_total on_parsers <<EOF
+$(counts_for on SPARK_MEMO_BENCH=1)
+EOF
+off_ex="$(execve_for off SPARK_NO_MEMO=1)"
+on_ex="$(execve_for on SPARK_MEMO_BENCH=1)"
+
+printf '%-22s median %5s ms | tools %4s | parsers %4s | execve %s\n' \
+  "memo OFF (control)" "$(median "${off_times[@]}")" "$off_total" "$off_parsers" "$off_ex"
+printf '%-22s median %5s ms | tools %4s | parsers %4s | execve %s\n' \
+  "memo ON" "$(median "${on_times[@]}")" "$on_total" "$on_parsers" "$on_ex"
+echo
+echo "raw wall samples (ms), in collection order:"
+echo "  OFF: ${off_times[*]}"
+echo "  ON : ${on_times[*]}"
 echo
 echo "Counts are invocations of a fixed tool list (a lower bound on subprocesses,"
 echo "including the memo's own mktemp/cat/mv/rm), not a full accounting."

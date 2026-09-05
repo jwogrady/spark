@@ -183,12 +183,20 @@ if [ "$mv_distinct" -eq "$mv_total" ]; then ok; else bad "concurrent writers sha
 # redirect `rm -rf` at the replacement path. A decoy directory named by the
 # inherited environment must therefore survive, the run's own scratch dir must be
 # removed, and the trap must delete a captured readonly path with `--`.
+# The run gets its own TMPDIR, so the directory it creates is the ONLY entry
+# there and can be identified exactly. Counting /tmp/tmp.* globally would let an
+# unrelated process hide a leak or invent a failure, and the glob can fail
+# outright under pipefail when nothing matches.
+leak_probe() { # <isolated-tmpdir> <env...> -> entries left behind
+  local iso="$1"; shift
+  rm -rf "$iso"; mkdir -p "$iso"
+  ( cd "$repo" && TMPDIR="$iso" env "$@" "$SPARK" brief --short >/dev/null 2>&1 )
+  find "$iso" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l | tr -d ' '
+}
 decoy="$WORK/decoy"; mkdir -p "$decoy"; : > "$decoy/keep.txt"
-before="$(ls -1d "${TMPDIR:-/tmp}"/tmp.* 2>/dev/null | wc -l | tr -d ' ')"
-( cd "$repo" && __SPARK_MEMO="$decoy" "$SPARK" brief --short >/dev/null 2>&1 )
-after="$(ls -1d "${TMPDIR:-/tmp}"/tmp.* 2>/dev/null | wc -l | tr -d ' ')"
+left="$(leak_probe "$WORK/memotmp" __SPARK_MEMO="$decoy")"
 if [ -d "$decoy" ] && [ -f "$decoy/keep.txt" ]; then ok; else bad "cleanup deleted the inherited \$__SPARK_MEMO path instead of the created one"; fi
-if [ "$after" -le "$before" ]; then ok; else bad "the run leaked its scratch directory (before=$before after=$after)"; fi
+if [ "$left" -eq 0 ]; then ok; else bad "the run left $left entry(ies) in its own TMPDIR — the scratch dir it created was not removed"; fi
 
 # The failure mode is a trap that re-reads the MUTABLE variable at exit, so the
 # fixture must mutate it *after* the trap is installed — supplying it beforehand
@@ -198,11 +206,11 @@ if [ "$after" -le "$before" ]; then ok; else bad "the run leaked its scratch dir
 # directory this run created, leaving the reassigned path untouched.
 decoy2="$WORK/decoy-runtime"; mkdir -p "$decoy2"; : > "$decoy2/keep.txt"
 printf '\n__SPARK_MEMO="%s"; export __SPARK_MEMO\n' "$decoy2" >> "$WORK/plugin/lib/execution.sh"
-before2="$(ls -1d "${TMPDIR:-/tmp}"/tmp.* 2>/dev/null | wc -l | tr -d ' ')"
-( cd "$repo" && "$SPARK" telemetry >/dev/null 2>&1 ) || true   # loads the mutated module
-after2="$(ls -1d "${TMPDIR:-/tmp}"/tmp.* 2>/dev/null | wc -l | tr -d ' ')"
+iso2="$WORK/memotmp2"; rm -rf "$iso2"; mkdir -p "$iso2"
+( cd "$repo" && TMPDIR="$iso2" "$SPARK" telemetry >/dev/null 2>&1 ) || true   # loads the mutated module
+left2="$(find "$iso2" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l | tr -d ' ')"
 if [ -d "$decoy2" ] && [ -f "$decoy2/keep.txt" ]; then ok; else bad "a post-trap reassignment of \$__SPARK_MEMO redirected cleanup at the replacement path"; fi
-if [ "$after2" -le "$before2" ]; then ok; else bad "the run leaked its scratch dir after a post-trap reassignment (before=$before2 after=$after2)"; fi
+if [ "$left2" -eq 0 ]; then ok; else bad "the run left $left2 entry(ies) in its own TMPDIR after a post-trap reassignment"; fi
 
 # --- Source mutation inside one directory. Keying by $PWD alone would not notice
 # a directory that BECOMES a repository, or a preference file written, during a
