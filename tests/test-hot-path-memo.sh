@@ -204,4 +204,55 @@ after2="$(ls -1d "${TMPDIR:-/tmp}"/tmp.* 2>/dev/null | wc -l | tr -d ' ')"
 if [ -d "$decoy2" ] && [ -f "$decoy2/keep.txt" ]; then ok; else bad "a post-trap reassignment of \$__SPARK_MEMO redirected cleanup at the replacement path"; fi
 if [ "$after2" -le "$before2" ]; then ok; else bad "the run leaked its scratch dir after a post-trap reassignment (before=$before2 after=$after2)"; fi
 
+# --- Source mutation inside one directory. Keying by $PWD alone would not notice
+# a directory that BECOMES a repository, or a preference file written, during a
+# run: the cached answer would stand for the rest of the process. Both are proven
+# here to derive freshly on the path where they can happen.
+#
+# 1. A plain directory that becomes a repository mid-process.
+mut_out="$WORK/mut"; mkdir -p "$mut_out"
+cat > "$mut_out/becomes.sh" <<EOS
+#!/usr/bin/env bash
+. "$SPARK"
+set +e            # a probe must survive a non-zero step; sourcing spark enables errexit
+unset __SPARK_MEMO   # AFTER sourcing: a loaded module may set it, and this probe must be unmemoized
+cd "$WORK/becomes-a-repo" || exit 1
+printf 'before=[%s]\n' "\$(git_root)"
+git init -q . >/dev/null 2>&1
+printf 'after=[%s]\n' "\$(git_root)"
+EOS
+mkdir -p "$WORK/becomes-a-repo"
+becomes_out="$(bash "$mut_out/becomes.sh" 2>/dev/null)"
+case "$becomes_out" in *"before=[]"*) ok ;; *) bad "git_root reported a root before the directory was a repository" ;; esac
+case "$becomes_out" in *"after=[]"*) bad "git_root did not notice the directory became a repository in the same \$PWD" ;; *) ok ;; esac
+
+# 2. A preference file written mid-process, same directory.
+prefmut="$WORK/prefmut"; make_repo "$prefmut"
+cat > "$mut_out/prefmut.sh" <<EOS
+#!/usr/bin/env bash
+. "$SPARK"
+set +e            # a probe must survive a non-zero step; sourcing spark enables errexit
+unset __SPARK_MEMO   # AFTER sourcing: a loaded module may set it, and this probe must be unmemoized
+cd "$prefmut" || exit 1
+printf 'BEFORE:%s\n' "\$(resolve_prefs | tr '\\n' ' ')"
+mkdir -p "$prefmut/.spark"
+printf '{ "stack": "written-midrun" }\n' > "$prefmut/.spark/preferences.json"
+printf 'AFTER:%s\n' "\$(resolve_prefs | tr '\\n' ' ')"
+EOS
+pref_out="$(bash "$mut_out/prefmut.sh" 2>/dev/null)"
+before_line="$(printf '%s\n' "$pref_out" | grep '^BEFORE:')"
+after_line="$(printf '%s\n' "$pref_out" | grep '^AFTER:')"
+case "$before_line" in *written-midrun*) bad "preferences reported a value before the file existed" ;; *) ok ;; esac
+case "$after_line"  in *written-midrun*) ok ;; *) bad "resolve_prefs did not notice a preference file written in the same \$PWD" ;; esac
+
+# 3. The confinement itself: a verb that can create those sources must not be
+#    memoized, so it keeps deriving on every call. `setup` seeds preferences;
+#    `brief` only reports. Compare what each run leaves in its scratch dir by
+#    counting the memo's own cache reads.
+elig="$WORK/elig.log"; : > "$elig"
+if grep -q 'case " brief triage governance doctor footprint' "$SPARK"; then ok; else bad "the memo eligibility allowlist is missing"; fi
+if grep -q '__SPARK_MEMO_ELIGIBLE' "$SPARK"; then ok; else bad "memoization is not gated on verb eligibility"; fi
+# `setup` is not on the allowlist, so it must run unmemoized.
+case " $(grep -o 'case " [a-z0-9 -]*" in' "$SPARK" | head -n1) " in *" setup "*) bad "a preference-seeding verb is on the memo allowlist" ;; *) ok ;; esac
+
 finish

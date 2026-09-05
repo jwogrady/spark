@@ -8730,7 +8730,19 @@ if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
   # compute once per command instead of on every call. Best-effort — if mktemp
   # is unavailable the run is simply unmemoized. Set SPARK_NO_MEMO=1 to disable
   # it (the negative control: the saved forks reappear). Cleaned up on exit.
-  if [ -n "${SPARK_NO_MEMO:-}" ]; then
+  #
+  # Caching is CONFINED to verbs that report rather than mutate. The cached facts
+  # are derived from the repository association and the preference files, and a
+  # verb that can create either of those — `setup` seeding preferences, a scaffold
+  # running `git init` — would otherwise read a stale answer for the rest of the
+  # run. Those verbs keep the original derive-on-every-call behaviour. Extending
+  # this list requires showing the verb cannot change a repo association or a
+  # preference file mid-run.
+  case " brief triage governance doctor footprint next course orient state telemetry evidence budget route ci crossroad docs-impact labels version help " in
+    *" $verb "*) __SPARK_MEMO_ELIGIBLE=1 ;;
+    *)           __SPARK_MEMO_ELIGIBLE="" ;;
+  esac
+  if [ -n "${SPARK_NO_MEMO:-}" ] || [ -z "$__SPARK_MEMO_ELIGIBLE" ]; then
     __SPARK_MEMO=""
   elif __SPARK_MEMO="$(mktemp -d 2>/dev/null)"; then
     export __SPARK_MEMO
