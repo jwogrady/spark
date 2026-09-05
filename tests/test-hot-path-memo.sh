@@ -180,8 +180,12 @@ memo_u="$(mktemp -d)"
   wait
 )
 rm -rf "$memo_u"
-mv_total="$(grep -c . "$mvlog" 2>/dev/null || echo 0)"
-mv_distinct="$(sort -u "$mvlog" 2>/dev/null | grep -c . || echo 0)"
+# `grep -c` prints 0 AND exits 1 when nothing matches, so a `|| echo 0` fallback
+# would emit a second zero and the arithmetic tests below would fail on "0\n0".
+mv_total="$(grep -c . "$mvlog" 2>/dev/null)" || true
+mv_distinct="$(sort -u "$mvlog" 2>/dev/null | grep -c .)" || true
+case "$mv_total"    in ''|*[!0-9]*) mv_total=0 ;; esac
+case "$mv_distinct" in ''|*[!0-9]*) mv_distinct=0 ;; esac
 # Several writers must have raced (otherwise the fixture proves nothing) ...
 if [ "$mv_total" -gt 1 ]; then ok; else bad "no concurrent cache writes observed (fixture did not race; total=$mv_total)"; fi
 # ... and each must have renamed from its own temp path.

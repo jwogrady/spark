@@ -208,10 +208,27 @@ counts_for() { # <label> <env-array-name> -> "total parsers"; aborts on failure
 #   - a successful clone carrying CLONE_THREAD creates a THREAD sharing the
 #     process, not a new process. Counting it would inflate the figure with
 #     something the claim does not mean.
+#
+# It must emit EXACTLY ONE integer for every input. `grep -c` already prints 0
+# when nothing matches and then exits 1, so a trailing `|| echo 0` would print a
+# second zero and the function would return "0\n0" — corrupting the caller's
+# `read`. The count is captured into a variable and printed once instead.
 count_procs() {
-  grep -E '(clone3?|v?fork)\(' "$1" 2>/dev/null \
-    | grep -v '= -1' \
-    | grep -cv 'CLONE_THREAD' || echo 0
+  local n
+  n="$(grep -E '(clone3?|v?fork)\(' "$1" 2>/dev/null \
+        | grep -v '= -1' \
+        | grep -cv 'CLONE_THREAD')" || true
+  case "$n" in ''|*[!0-9]*) n=0 ;; esac
+  printf '%s' "$n"
+}
+
+# count_execs <strace-log> — program images executed, with the same
+# one-integer-always guarantee.
+count_execs() {
+  local n
+  n="$(grep -c 'execve(' "$1" 2>/dev/null)" || true
+  case "$n" in ''|*[!0-9]*) n=0 ;; esac
+  printf '%s' "$n"
 }
 
 syscalls_for() { # <label> <env-array-name> <expected-state> -> "execs procs"
@@ -222,9 +239,7 @@ syscalls_for() { # <label> <env-array-name> <expected-state> -> "execs procs"
         "${x_ref[@]}" SPARK_MEMO_STATE_FILE="$sf" "$SPARK" $VERB >/dev/null 2>&1 ); rc=$?
     [ "$rc" -eq 0 ] || die "'$VERB' exited $rc under strace with ${x_ref[*]}"
     assert_state "$sf" "$3" "the traced $3 run"
-    printf '%s %s' \
-      "$(grep -c 'execve(' "$slog" 2>/dev/null || echo 0)" \
-      "$(count_procs "$slog")"
+    printf '%s %s' "$(count_execs "$slog")" "$(count_procs "$slog")"
   else
     printf 'n/a n/a'
   fi
@@ -238,7 +253,7 @@ syscall_selfcheck() {
   local log="$TMP/s.selfcheck" execs procs
   strace -f -qq -e trace=execve,clone,clone3,fork,vfork -o "$log" \
     bash -c 'x=$(:); :' >/dev/null 2>&1
-  execs="$(grep -c 'execve(' "$log" 2>/dev/null || echo 0)"
+  execs="$(count_execs "$log")"
   local created; created="$(count_procs "$log")"
   [ "$created" -gt 0 ] || die "the process-creation metric missed a shell-only subshell (execs=$execs created=$created); it cannot be reported as process creation"
 
@@ -254,6 +269,16 @@ syscall_selfcheck() {
   } > "$probe" || die "could not write the process-metric self-check log"
   got="$(count_procs "$probe")"
   [ "$got" = "1" ] || die "the process-creation metric counts failed attempts or threads as processes: expected 1 from the self-check log, counted $got"
+
+  # Zero is part of the declared domain: a workload with no qualifying process
+  # creation must still yield exactly one integer. `grep -c` exits 1 on no
+  # match, so a naive fallback emits a second zero and corrupts the caller.
+  printf 'openat("/dev/null", O_RDONLY) = 3\n' > "$probe" \
+    || die "could not write the zero-result self-check log"
+  got="$(count_procs "$probe")"
+  [ "$got" = "0" ] || die "the process-creation metric does not return a single 0 for a log with no process creation (got '$got')"
+  got="$(count_execs "$probe")"
+  [ "$got" = "0" ] || die "the exec metric does not return a single 0 for a log with no exec (got '$got')"
 }
 
 echo "verb:    $VERB"
