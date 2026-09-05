@@ -207,9 +207,12 @@ syscalls_for() { # <label> <env-array-name> <expected-state> -> "execs procs"
         "${x_ref[@]}" SPARK_MEMO_STATE_FILE="$sf" "$SPARK" $VERB >/dev/null 2>&1 ); rc=$?
     [ "$rc" -eq 0 ] || die "'$VERB' exited $rc under strace with ${x_ref[*]}"
     assert_state "$sf" "$3" "the traced $3 run"
+    # A failed clone3 followed by a clone fallback is ONE process created, not
+    # two attempts. strace marks a failure with "= -1", so those lines are
+    # excluded: this counts processes created, not syscalls issued.
     printf '%s %s' \
       "$(grep -c 'execve(' "$slog" 2>/dev/null || echo 0)" \
-      "$(grep -cE '(clone3?|v?fork)\(' "$slog" 2>/dev/null || echo 0)"
+      "$(grep -E '(clone3?|v?fork)\(' "$slog" 2>/dev/null | grep -cv '= -1' || echo 0)"
   else
     printf 'n/a n/a'
   fi
@@ -224,8 +227,15 @@ syscall_selfcheck() {
   strace -f -qq -e trace=execve,clone,clone3,fork,vfork -o "$log" \
     bash -c 'x=$(:); :' >/dev/null 2>&1
   execs="$(grep -c 'execve(' "$log" 2>/dev/null || echo 0)"
-  procs="$(grep -cE '(clone3?|v?fork)\(' "$log" 2>/dev/null || echo 0)"
-  [ "$procs" -gt 0 ] || die "the process-creation metric missed a shell-only subshell (execs=$execs procs=$procs); it cannot be reported as process creation"
+  local attempts created failed
+  attempts="$(grep -cE '(clone3?|v?fork)\(' "$log" 2>/dev/null || echo 0)"
+  created="$(grep -E '(clone3?|v?fork)\(' "$log" 2>/dev/null | grep -cv '= -1' || echo 0)"
+  failed=$(( attempts - created ))
+  [ "$created" -gt 0 ] || die "the process-creation metric missed a shell-only subshell (execs=$execs created=$created); it cannot be reported as process creation"
+  # If this kernel/libc produced any failed attempt, prove they are excluded.
+  if [ "$failed" -gt 0 ] && [ "$created" -ge "$attempts" ]; then
+    die "the process-creation metric counts failed syscall attempts as processes (attempts=$attempts created=$created)"
+  fi
 }
 
 echo "verb:    $VERB"

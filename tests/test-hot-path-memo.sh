@@ -40,15 +40,21 @@ root_memo="$( cd "$repo" && export __SPARK_MEMO="$memo_dir2"; . "$SPARK"; git_ro
 rm -rf "$memo_dir2"
 if [ "$root_unmemo" = "$root_memo" ] && [ -n "$root_unmemo" ]; then ok; else bad "git_root memoized output differs from unmemoized"; fi
 
-# --- Effectiveness + negative control: count subprocess forks for `brief
-# --short` with the memo on (default) and off (SPARK_NO_MEMO=1). Shims prepend a
-# counting wrapper; the same shims are used both ways, so the only variable is
-# the memo. On must fork strictly fewer than off.
+# --- Effectiveness + negative control for `brief --short`, memo on (default)
+# versus off (SPARK_NO_MEMO=1). The same shims are used both ways, so the only
+# variable is the memo.
 #
-# The tool list must include the operations the memo ITSELF introduces — mktemp
-# for the scratch dir, mv to publish a miss, rm to drop a
-# failed temp. Counting only the parsers it removes would let the test report a
-# saving while total process creation stayed flat or regressed.
+# WHAT THIS COUNTS, precisely: invocations of a FIXED tool vocabulary. It is a
+# lower bound on selected tool invocations — not total process creation. It
+# cannot see shell-only subshells, nor any program outside the list, nor forks a
+# shimmed program makes internally. tests/bench-memo.sh --strace measures actual
+# process creation; this assertion is deliberately the weaker, dependency-free
+# one, and its wording must not claim more than that.
+#
+# The vocabulary still includes the operations the memo ITSELF introduces —
+# mktemp for the scratch dir, mv to publish a miss, rm to drop a failed temp —
+# because counting only the parsers it removes would let the test report a
+# saving while the memo's own cost went unmeasured.
 shim="$WORK/shim"
 mkdir -p "$shim"
 for t in awk sed grep cut tr jq git cat mv rm mkdir mktemp sort uniq head tail wc find date basename dirname; do
@@ -74,10 +80,10 @@ forks_off="$(count_forks SPARK_NO_MEMO=1)"
 
 # Transparency for the real command: identical output on and off.
 if cmp -s "$WORK/out.on" "$WORK/out.off"; then ok; else bad "brief --short output is not byte-identical with the memo on and off"; fi
-# Effectiveness: the memo strictly reduces TOTAL external process creation
-# across the complete tool set — including the mktemp/mv/rm it introduces —
-# not merely the parser calls it removes.
-if [ "$forks_on" -lt "$forks_off" ]; then ok; else bad "memo did not reduce total tool process creation (on=$forks_on off=$forks_off)"; fi
+# Effectiveness: the memo strictly reduces invocations across the counted tool
+# vocabulary — including the mktemp/mv/rm it introduces, not merely the parser
+# calls it removes. This is a lower bound, not a total.
+if [ "$forks_on" -lt "$forks_off" ]; then ok; else bad "memo did not reduce counted tool invocations (on=$forks_on off=$forks_off)"; fi
 # Negative control sanity: disabling the memo must not itself error to zero.
 if [ "$forks_off" -gt 0 ]; then ok; else bad "fork counter produced no signal (harness broken)"; fi
 
