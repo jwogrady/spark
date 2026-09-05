@@ -42,11 +42,16 @@ if [ "$root_unmemo" = "$root_memo" ] && [ -n "$root_unmemo" ]; then ok; else bad
 
 # --- Effectiveness + negative control: count subprocess forks for `brief
 # --short` with the memo on (default) and off (SPARK_NO_MEMO=1). Shims prepend a
-# counting wrapper for a fixed tool list; the same shims are used both ways, so
-# the only variable is the memo. On must fork strictly fewer than off.
+# counting wrapper; the same shims are used both ways, so the only variable is
+# the memo. On must fork strictly fewer than off.
+#
+# The tool list must include the operations the memo ITSELF introduces — mktemp
+# for the scratch dir, cat to read a hit, mv to publish a miss, rm to drop a
+# failed temp. Counting only the parsers it removes would let the test report a
+# saving while total process creation stayed flat or regressed.
 shim="$WORK/shim"
 mkdir -p "$shim"
-for t in awk sed grep cut tr jq git; do
+for t in awk sed grep cut tr jq git cat mv rm mktemp sort uniq head tail wc find date basename dirname; do
   real="$(command -v "$t" 2>/dev/null || true)"; [ -n "$real" ] || continue
   { printf '#!/usr/bin/env bash\n'
     printf 'printf x >> "$SPARK_FORKLOG"\n'
@@ -66,8 +71,10 @@ forks_off="$(count_forks SPARK_NO_MEMO=1)"
 
 # Transparency for the real command: identical output on and off.
 if [ "$out_on" = "$out_off" ]; then ok; else bad "brief --short output changed with the memo (should be transparent)"; fi
-# Effectiveness: memo strictly reduces forks.
-if [ "$forks_on" -lt "$forks_off" ]; then ok; else bad "memo did not reduce forks (on=$forks_on off=$forks_off)"; fi
+# Effectiveness: the memo strictly reduces TOTAL external process creation
+# across the complete tool set — including the mktemp/cat/mv/rm it introduces —
+# not merely the parser calls it removes.
+if [ "$forks_on" -lt "$forks_off" ]; then ok; else bad "memo did not reduce total tool process creation (on=$forks_on off=$forks_off)"; fi
 # Negative control sanity: disabling the memo must not itself error to zero.
 if [ "$forks_off" -gt 0 ]; then ok; else bad "fork counter produced no signal (harness broken)"; fi
 
