@@ -51,7 +51,7 @@ if [ "$root_unmemo" = "$root_memo" ] && [ -n "$root_unmemo" ]; then ok; else bad
 # saving while total process creation stayed flat or regressed.
 shim="$WORK/shim"
 mkdir -p "$shim"
-for t in awk sed grep cut tr jq git cat mv rm mktemp sort uniq head tail wc find date basename dirname; do
+for t in awk sed grep cut tr jq git cat mv rm mkdir mktemp sort uniq head tail wc find date basename dirname; do
   real="$(command -v "$t" 2>/dev/null || true)"; [ -n "$real" ] || continue
   { printf '#!/usr/bin/env bash\n'
     printf 'printf x >> "$SPARK_FORKLOG"\n'
@@ -323,8 +323,12 @@ if [ "$(cat "$inherit_state" 2>/dev/null)" = "off" ]; then ok; else bad "an inhe
 # deep path exceed the component limit, so the cache write failed and memo-on
 # could diverge from memo-off. The key mirrors the path as directories instead;
 # this fixture keeps that honest for both cached facts.
+# Long enough to matter at BOTH limits a naive key hits: a flattened key would
+# exceed the per-component limit, and a mirrored key would push the total path
+# past PATH_MAX once the scratch prefix is prepended. The bounded digest key is
+# a fixed short filename regardless, so this must simply work.
 deep="$repo"
-for i in 1 2 3 4 5 6 7 8; do deep="$deep/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"; done
+for i in $(seq 1 40); do deep="$deep/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"; done
 mkdir -p "$deep/.spark"
 printf '{ "stack": "deep-path-stack" }\n' > "$repo/.spark/preferences.json"
 cat > "$WORK/deep.sh" <<EOS
@@ -348,5 +352,20 @@ if [ "$p1" = "${p2/P2:/P1:}" ]; then ok; else bad "resolve_prefs disagreed with 
 case "$p1" in *deep-path-stack*) ok ;; *) bad "resolve_prefs lost the project tier under a deep path" ;; esac
 # And nothing may leak to stderr — a failed redirect would surface there.
 if [ ! -s "$WORK/deep.err" ]; then ok; else bad "a deep path produced stderr output: $(head -1 "$WORK/deep.err")"; fi
+# Negative control: the same deep path with the memo disabled must give the same
+# answers, so a long path is never the reason memoized and unmemoized differ.
+cat > "$WORK/deep-off.sh" <<EOS
+#!/usr/bin/env bash
+. "$SPARK"
+set +e
+unset __SPARK_MEMO
+cd "$deep" || exit 1
+printf 'R:%s\n' "\$(git_root)"
+printf 'P:%s\n' "\$(resolve_prefs | tr '\\n' ' ')"
+EOS
+deep_off="$(bash "$WORK/deep-off.sh" 2>"$WORK/deep-off.err")"
+if [ "$(printf '%s\n' "$deep_off" | grep '^R:')" = "R:${r1#R1:}" ]; then ok; else bad "deep-path git_root differs with the memo disabled"; fi
+if [ "$(printf '%s\n' "$deep_off" | grep '^P:')" = "${p1/P1:/P:}" ]; then ok; else bad "deep-path resolve_prefs differs with the memo disabled"; fi
+if [ ! -s "$WORK/deep-off.err" ]; then ok; else bad "a deep path produced stderr with the memo disabled"; fi
 
 finish

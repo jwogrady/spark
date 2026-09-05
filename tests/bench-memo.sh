@@ -75,7 +75,7 @@ git -C "$FIX" -c user.email=bench@example.invalid -c user.name=Bench \
   || die "the fixture is not the single-commit repository this script claims to measure"
 [ -f "$FIX/.spark/preferences.json" ] || die "the fixture lost its project preference file"
 
-TOOLS="awk sed grep cut tr jq git cat mv rm mktemp sort uniq head tail wc find date basename dirname"
+TOOLS="awk sed grep cut tr jq git cat mv rm mkdir mktemp sort uniq head tail wc find date basename dirname"
 mkdir -p "$TMP/bin"
 for t in $TOOLS; do
   real="$(command -v "$t" 2>/dev/null || true)"; [ -n "$real" ] || continue
