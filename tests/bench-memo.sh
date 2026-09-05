@@ -69,28 +69,48 @@ now_ms() { local n; n="$(date +%s%N 2>/dev/null)"
   case "$n" in *N*|'') echo "$(( $(date +%s) * 1000 ))" ;; *) echo "$(( n / 1000000 ))" ;; esac; }
 median() { printf '%s\n' "$@" | LC_ALL=C sort -n | awk '{ v[NR]=$1 } END { print v[int((NR+1)/2)] }'; }
 
-one_run() { # <env...> -> elapsed ms for a single invocation
-  local s e
+# The two configurations. ON must explicitly REMOVE SPARK_NO_MEMO from the
+# environment: setting some other variable leaves an inherited SPARK_NO_MEMO in
+# force, and both sides would then run unmemoized while the report claimed a
+# comparison. `env -u` is the only thing that guarantees the ON side is on.
+off_env=(env SPARK_NO_MEMO=1)
+on_env=(env -u SPARK_NO_MEMO)
+
+die() { printf 'bench-memo.sh: %s\n' "$1" >&2; exit 1; }
+
+one_run() { # <env-array-name> -> elapsed ms; aborts if the command fails
+  local -n e_ref="$1"
+  local s e rc
   s="$(now_ms)"
-  ( cd "$FIX" && env "$@" "$SPARK" $VERB >/dev/null 2>&1 )
+  ( cd "$FIX" && "${e_ref[@]}" "$SPARK" $VERB >/dev/null 2>&1 ); rc=$?
   e="$(now_ms)"
+  [ "$rc" -eq 0 ] || die "'$VERB' exited $rc under ${e_ref[*]} — refusing to report timings for a failed run"
   echo "$(( e - s ))"
 }
 
-counts_for() { # <label> <env...> -> "total parsers"
-  local label="$1"; shift
+capture() { # <env-array-name> <outfile> -> stdout of one run; aborts on failure
+  local -n c_ref="$1"; local out="$2" rc
+  ( cd "$FIX" && "${c_ref[@]}" "$SPARK" $VERB >"$out" 2>/dev/null ); rc=$?
+  [ "$rc" -eq 0 ] || die "'$VERB' exited $rc under ${c_ref[*]} — refusing to report figures for a failed run"
+}
+
+counts_for() { # <label> <env-array-name> -> "total parsers"; aborts on failure
+  local label="$1"; local -n k_ref="$2"
   local counts="$TMP/c.$label"; : > "$counts"
-  ( cd "$FIX" && BENCH_COUNT="$counts" PATH="$TMP/bin:$PATH" env "$@" "$SPARK" $VERB >/dev/null 2>&1 )
+  local rc
+  ( cd "$FIX" && BENCH_COUNT="$counts" PATH="$TMP/bin:$PATH" "${k_ref[@]}" "$SPARK" $VERB >/dev/null 2>&1 ); rc=$?
+  [ "$rc" -eq 0 ] || die "'$VERB' exited $rc while counting under ${k_ref[*]}"
   printf '%s %s' \
     "$(wc -l < "$counts" | tr -d ' ')" \
     "$(awk 'BEGIN{p=" awk sed grep cut tr "}{if(index(p," "$1" "))n++}END{print n+0}' "$counts")"
 }
 
-execve_for() { # <label> <env...> -> total execve, or n/a
-  local label="$1"; shift
+execve_for() { # <label> <env-array-name> -> total execve, or n/a
+  local label="$1"; local -n x_ref="$2"
   if [ -n "$use_strace" ] && command -v strace >/dev/null 2>&1; then
-    local slog="$TMP/s.$label"
-    ( cd "$FIX" && strace -f -qq -e trace=execve -o "$slog" env "$@" "$SPARK" $VERB >/dev/null 2>&1 )
+    local slog="$TMP/s.$label" rc
+    ( cd "$FIX" && strace -f -qq -e trace=execve -o "$slog" "${x_ref[@]}" "$SPARK" $VERB >/dev/null 2>&1 ); rc=$?
+    [ "$rc" -eq 0 ] || die "'$VERB' exited $rc under strace with ${x_ref[*]}"
     grep -c 'execve(' "$slog" 2>/dev/null || echo 0
   else
     echo "n/a"
@@ -109,28 +129,36 @@ echo
 # then alternate them inside each iteration. Timing all of one side and then all
 # of the other hands the second side a warmed environment and turns ordering into
 # an apparent result.
-one_run SPARK_NO_MEMO=1 >/dev/null
-one_run SPARK_MEMO_BENCH=1 >/dev/null
+one_run off_env >/dev/null
+one_run on_env  >/dev/null
+
+# Equal outcome BEFORE any figure is reported: a faster run that produced
+# different output is not a faster run, it is a different job.
+capture off_env "$TMP/out.off"
+capture on_env  "$TMP/out.on"
+if ! cmp -s "$TMP/out.off" "$TMP/out.on"; then
+  die "'$VERB' output differs between memo off and on — the two sides are not the same work, so no figures are reported"
+fi
 
 off_times=() on_times=()
 for i in $(seq 1 "$RUNS"); do
   if [ $(( i % 2 )) -eq 1 ]; then
-    off_times+=("$(one_run SPARK_NO_MEMO=1)")
-    on_times+=("$(one_run SPARK_MEMO_BENCH=1)")
+    off_times+=("$(one_run off_env)")
+    on_times+=("$(one_run on_env)")
   else
-    on_times+=("$(one_run SPARK_MEMO_BENCH=1)")   # flip the order on even iterations
-    off_times+=("$(one_run SPARK_NO_MEMO=1)")
+    on_times+=("$(one_run on_env)")   # flip the order on even iterations
+    off_times+=("$(one_run off_env)")
   fi
 done
 
 read -r off_total off_parsers <<EOF
-$(counts_for off SPARK_NO_MEMO=1)
+$(counts_for off off_env)
 EOF
 read -r on_total on_parsers <<EOF
-$(counts_for on SPARK_MEMO_BENCH=1)
+$(counts_for on on_env)
 EOF
-off_ex="$(execve_for off SPARK_NO_MEMO=1)"
-on_ex="$(execve_for on SPARK_MEMO_BENCH=1)"
+off_ex="$(execve_for off off_env)"
+on_ex="$(execve_for on on_env)"
 
 printf '%-22s median %5s ms | tools %4s | parsers %4s | execve %s\n' \
   "memo OFF (control)" "$(median "${off_times[@]}")" "$off_total" "$off_parsers" "$off_ex"

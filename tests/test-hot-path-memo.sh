@@ -205,9 +205,17 @@ if [ "$left" -eq 0 ]; then ok; else bad "the run left $left entry(ies) in its ow
 # process at exactly the right moment. Cleanup must still remove only the
 # directory this run created, leaving the reassigned path untouched.
 decoy2="$WORK/decoy-runtime"; mkdir -p "$decoy2"; : > "$decoy2/keep.txt"
-printf '\n__SPARK_MEMO="%s"; export __SPARK_MEMO\n' "$decoy2" >> "$WORK/plugin/lib/execution.sh"
-iso2="$WORK/memotmp2"; rm -rf "$iso2"; mkdir -p "$iso2"
-( cd "$repo" && TMPDIR="$iso2" "$SPARK" telemetry >/dev/null 2>&1 ) || true   # loads the mutated module
+# The appended code also drops a marker, so the probe can PROVE it executed. If
+# the verb exited before loading the module, both cleanup assertions would pass
+# vacuously and the fixture would be testing nothing.
+marker="$WORK/mutation-ran"
+printf '\n__SPARK_MEMO="%s"; export __SPARK_MEMO; : > "%s"\n' "$decoy2" "$marker" \
+  >> "$WORK/plugin/lib/execution.sh"
+iso2="$WORK/memotmp2"; rm -rf "$iso2"; mkdir -p "$iso2"; rm -f "$marker"
+( cd "$repo" && TMPDIR="$iso2" "$SPARK" telemetry >/dev/null 2>&1 )
+tel_rc=$?
+if [ "$tel_rc" -eq 0 ]; then ok; else bad "the module-loading verb failed (rc=$tel_rc); the mutation probe proves nothing"; fi
+if [ -f "$marker" ]; then ok; else bad "the appended module assignment never executed — the post-trap mutation was not exercised"; fi
 left2="$(find "$iso2" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l | tr -d ' ')"
 if [ -d "$decoy2" ] && [ -f "$decoy2/keep.txt" ]; then ok; else bad "a post-trap reassignment of \$__SPARK_MEMO redirected cleanup at the replacement path"; fi
 if [ "$left2" -eq 0 ]; then ok; else bad "the run left $left2 entry(ies) in its own TMPDIR after a post-trap reassignment"; fi
