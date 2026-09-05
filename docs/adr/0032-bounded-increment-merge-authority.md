@@ -3,6 +3,7 @@
 Date: 2026-09-05
 Status: Accepted
 Owner: jwogrady
+Human approval: [#726 comment 5555250717](https://github.com/jwogrady/spark/issues/726#issuecomment-5555250717) — "Human product/governance decision — bounded subordinate merge authority approved" (jwogrady, 2026-09-05)
 
 > Moves the **routine trunk-integration approval point** for bounded work units
 > beneath a broader owning issue. It supersedes ADR-0019 and ADR-0027 in that
@@ -18,6 +19,7 @@ Owner: jwogrady
   - Neither supersession touches the **release** act. ADR-0026, ADR-0006 and ADR-0009 keep their release semantics in full.
 - **Superseded by:** nothing.
 - **Status tracks evidence:** Accepted on implementation. Shipped as `xr_merge_check` / `spark merge-authority` in `plugins/spark/lib/execution.sh`; covered by `tests/test-merge-authority.sh`, whose fixtures are each verified to fail against a deliberately regressed implementation.
+- **Where the acceptance comes from.** This record moves trunk-integration authority, so its `Accepted` status cannot rest on this file asserting it — the file is written by the PR it governs. The authority is the durable human decision on **#726 (comment 5555250717)**, made before implementation began and linked above; this ADR records that decision, it does not constitute it. Anyone auditing the claim should read the linked comment, not this header.
 
 ## Context
 
