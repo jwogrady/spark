@@ -17,7 +17,7 @@ Never merge on your own reading of the situation. Ask the classifier, on the
 ```sh
 spark merge-authority \
   parent-authorizes="#722" \
-  authorization-record="sub-issue:#724" \
+  authorization-record="#722#issuecomment-456" \
   child-acceptance="<the unit's OWN acceptance>" \
   acceptance-true=yes review=pass checks=green \
   stale-head=protected scope=routine-reversible
@@ -36,9 +36,13 @@ reason to fall back on judgment.
 
 `parent-authorizes` names **who** authorized (a bare `#123` or
 `owner/repo#123`); `authorization-record` cites **where** they did it, and must
-be checkable — `sub-issue:#123`, `#123#issuecomment-456`, or a `github.com`
-permalink. Prose is refused in both: asserting that the parent authorized the
-work is not citing the place it did. Supply `reserved-boundary` and `surface`
+be a locus **on that same issue** — `#123#issuecomment-456` for a bare parent,
+or the matching `https://github.com/owner/repo/issues/123` permalink for a
+qualified one. Prose is refused in both, and so is a well-formed citation of a
+*different* issue or repository: asserting that the parent authorized the work,
+or pointing somewhere unrelated, is not citing the place it did. There is no
+`sub-issue:` form — a hierarchy claim cannot be verified here, and this never
+accepts an assertion in place of a checkable record. Supply `reserved-boundary` and `surface`
 together or not at all; a one-sided or blank pair is refused, not ignored.
 
 Supply each field **exactly once**; a repeated field is refused, so you cannot

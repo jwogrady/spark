@@ -609,7 +609,7 @@ unrecognised value, `UNKNOWN` and `NOT ASSESSED` all decline.
 | Field | Affirming value |
 | --- | --- |
 | `parent-authorizes` | the owning issue as a bare reference — `#123` or `owner/repo#123`, nothing else |
-| `authorization-record` | **where** that parent authorized this unit. Exactly one of `sub-issue:#123`, `#123#issuecomment-456`, or `https://github.com/owner/repo/issues/123` (optionally `#issuecomment-456`; `pull` also accepted) |
+| `authorization-record` | **where** that parent authorized this unit — a locus on **that same issue**. Bare parent `#123` → `#123#issuecomment-456`. Qualified parent `owner/repo#123` → `https://github.com/owner/repo/issues/123`, optionally `#issuecomment-456` |
 | `child-acceptance` | the bounded unit's **own** acceptance — what this merge makes true |
 | `acceptance-true` | `yes` — true on the exact current HEAD |
 | `review` | `pass` — independent, exact-HEAD, current |
@@ -645,6 +645,20 @@ Both are validated as **complete values**, not prefixes: trailing text, a second
 `#`, a three-component repository path, an alias spelling, plain `http`, and
 lookalike hosts such as `notgithub.com` or `github.com.evil.example` are all
 refused. A citation that tolerates prose is not a citation.
+
+The record is also **bound to the parent**. A well-formed citation of some
+*other* issue or repository authorizes nothing, so `parent-authorizes=#722` with
+`authorization-record=#999#issuecomment-1` is refused. The two forms are paired
+exactly, because a bare `#123` names no repository and so cannot be checked
+against a permalink: a bare parent is cited by the bare comment form, a
+qualified parent by the matching permalink.
+
+There is deliberately **no `sub-issue:` form**. It asserted a hierarchy
+relationship, and this classifier cannot verify that one issue is really
+subordinate to another — accepting the assertion would be the self-certification
+refused everywhere else here. Cite the parent's own authorization locus, which a
+reader can open. Verifying a native relationship needs a trusted read-back and
+belongs to governance validation, not to a string check.
 Like `crossroad`, the check is **structural**: it confirms a checkable record was
 cited, not that the record really authorizes the work.
 
@@ -659,7 +673,7 @@ permission.
 
 ```
 $ spark merge-authority parent-authorizes="#722" \
-    authorization-record="sub-issue:#724" \
+    authorization-record="#722#issuecomment-456" \
     child-acceptance="memoize git_root and resolve_prefs" \
     acceptance-true=yes review=pass checks=green \
     stale-head=protected scope=routine-reversible

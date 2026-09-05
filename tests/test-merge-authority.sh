@@ -44,7 +44,7 @@ verdict() {
 # reason.
 ELIGIBLE=(
   parent-authorizes="#722"
-  authorization-record="sub-issue:#724"
+  authorization-record="#722#issuecomment-5555250717"
   child-acceptance="memoize git_root and resolve_prefs, transparently, for measured verbs"
   acceptance-true=yes
   review=pass
@@ -142,15 +142,21 @@ vinstead "NOT ELIGIBLE" 4 "'YES' is not the affirming token" acceptance-true YES
 # #726 names this explicitly. #585 stops at governed close-out; a reviewer PASS
 # is evidence, not permission; relay coordination moves work without granting.
 vinstead "NOT ELIGIBLE" 4 "#585 cannot authorize a merge" parent-authorizes "#585"
-vinstead "NOT ELIGIBLE" 4 "a relay handoff cannot authorize a merge" authorization-record "sub-issue:#724 relay handoff"
-vinstead "NOT ELIGIBLE" 4 "orchestrator coordination cannot authorize a merge" authorization-record "sub-issue:#724 orchestrator"
-vinstead "NOT ELIGIBLE" 4 "a reviewer PASS cannot authorize a merge" authorization-record "sub-issue:#724 reviewer pass"
-vinstead "NOT ELIGIBLE" 4 "comment consensus cannot authorize a merge" authorization-record "sub-issue:#724 consensus"
+vinstead "NOT ELIGIBLE" 4 "a relay handoff cannot authorize a merge" authorization-record "#722#issuecomment-1 relay handoff"
+vinstead "NOT ELIGIBLE" 4 "orchestrator coordination cannot authorize a merge" authorization-record "#722#issuecomment-1 orchestrator"
+vinstead "NOT ELIGIBLE" 4 "a reviewer PASS cannot authorize a merge" authorization-record "#722#issuecomment-1 reviewer pass"
+vinstead "NOT ELIGIBLE" 4 "comment consensus cannot authorize a merge" authorization-record "#722#issuecomment-1 consensus"
 
 # The denylist must match whole words, not substrings — a real issue reference
 # that merely CONTAINS one of those letters is a legitimate authorization.
-vinstead "ROUTINE MERGE" 0 "an issue number containing 585 as a substring still authorizes" parent-authorizes "#1585"
-vinstead "ROUTINE MERGE" 0 "an owner/repo qualified reference authorizes" parent-authorizes "jwogrady/spark#722"
+# The record moves WITH the parent — binding means a control that changes the
+# parent must re-cite it, or it fails for the binding rather than the denylist.
+mk_instead parent-authorizes "#1585"
+verdict "ROUTINE MERGE" 0 "an issue number containing 585 as a substring still authorizes" \
+  "${A[@]/authorization-record=*/authorization-record=#1585#issuecomment-1}"
+mk_instead parent-authorizes "jwogrady/spark#722"
+verdict "ROUTINE MERGE" 0 "an owner/repo qualified reference authorizes" \
+  "${A[@]/authorization-record=*/authorization-record=https://github.com/jwogrady/spark/issues/722}"
 
 # --- negative control: a bare reference is not an authorization -------------
 # The reviewer's finding: with every other field eligible, a bare "#722" or
@@ -180,12 +186,10 @@ vinstead "NOT ELIGIBLE" 4 "a tab around the reference is refused" parent-authori
 # Shell globs match substrings, so `sub-issue:'#'[0-9]*` accepted trailing prose
 # and `https://*github.com/*` accepted a lookalike host. A citation that
 # tolerates prose is not a citation.
-vinstead "NOT ELIGIBLE" 4 "trailing prose after a sub-issue locus is refused" \
-  authorization-record "sub-issue:#724 and therefore this may merge"
+vinstead "NOT ELIGIBLE" 4 "trailing prose after a comment locus is refused" \
+  authorization-record "#722#issuecomment-1 and therefore this may merge"
 vinstead "NOT ELIGIBLE" 4 "trailing prose after a comment locus is refused" \
   authorization-record "#722#issuecomment-5555250717 approved"
-vinstead "NOT ELIGIBLE" 4 "a non-numeric sub-issue number is refused" authorization-record "sub-issue:#abc"
-vinstead "NOT ELIGIBLE" 4 "a sub-issue locus with no number is refused" authorization-record "sub-issue:#"
 vinstead "NOT ELIGIBLE" 4 "the undocumented sub_issue alias is refused" authorization-record "sub_issue:#724"
 vinstead "NOT ELIGIBLE" 4 "a malformed comment prefix is refused" \
   authorization-record "garbage#issuecomment-456"
@@ -194,19 +198,27 @@ vinstead "NOT ELIGIBLE" 4 "a comment locus with no comment id is refused" \
 vinstead "NOT ELIGIBLE" 4 "a non-numeric comment id is refused" \
   authorization-record "#722#issuecomment-abc"
 # Lookalike and unrelated hosts.
-vinstead "NOT ELIGIBLE" 4 "a lookalike host is refused" authorization-record "https://notgithub.com/1"
-vinstead "NOT ELIGIBLE" 4 "a subdomain-suffix lookalike host is refused" \
-  authorization-record "https://github.com.evil.example/jwogrady/spark/issues/722"
-vinstead "NOT ELIGIBLE" 4 "plain http is refused" \
-  authorization-record "http://github.com/jwogrady/spark/issues/722"
-vinstead "NOT ELIGIBLE" 4 "a github URL that is not an issue or pull is refused" \
-  authorization-record "https://github.com/jwogrady/spark/blob/master/README.md"
-vinstead "NOT ELIGIBLE" 4 "a github URL with no issue number is refused" \
-  authorization-record "https://github.com/jwogrady/spark/issues/"
-vinstead "NOT ELIGIBLE" 4 "a github URL with a non-numeric issue is refused" \
-  authorization-record "https://github.com/jwogrady/spark/issues/abc"
-vinstead "NOT ELIGIBLE" 4 "a github URL with trailing prose is refused" \
-  authorization-record "https://github.com/jwogrady/spark/issues/722 approved"
+mk_instead parent-authorizes "jwogrady/spark#722"
+verdict "NOT ELIGIBLE" 4 "a lookalike host is refused" \
+  "${A[@]/authorization-record=*/authorization-record=https://notgithub.com/1}"
+mk_instead parent-authorizes "jwogrady/spark#722"
+verdict "NOT ELIGIBLE" 4 "a subdomain-suffix lookalike host is refused" \
+  "${A[@]/authorization-record=*/authorization-record=https://github.com.evil.example/jwogrady/spark/issues/722}"
+mk_instead parent-authorizes "jwogrady/spark#722"
+verdict "NOT ELIGIBLE" 4 "plain http is refused" \
+  "${A[@]/authorization-record=*/authorization-record=http://github.com/jwogrady/spark/issues/722}"
+mk_instead parent-authorizes "jwogrady/spark#722"
+verdict "NOT ELIGIBLE" 4 "a github URL that is not an issue or pull is refused" \
+  "${A[@]/authorization-record=*/authorization-record=https://github.com/jwogrady/spark/blob/master/README.md}"
+mk_instead parent-authorizes "jwogrady/spark#722"
+verdict "NOT ELIGIBLE" 4 "a github URL with no issue number is refused" \
+  "${A[@]/authorization-record=*/authorization-record=https://github.com/jwogrady/spark/issues/}"
+mk_instead parent-authorizes "jwogrady/spark#722"
+verdict "NOT ELIGIBLE" 4 "a github URL with a non-numeric issue is refused" \
+  "${A[@]/authorization-record=*/authorization-record=https://github.com/jwogrady/spark/issues/abc}"
+mk_instead parent-authorizes "jwogrady/spark#722"
+verdict "NOT ELIGIBLE" 4 "a github URL with trailing prose is refused" \
+  "${A[@]/authorization-record=*/authorization-record=https://github.com/jwogrady/spark/issues/722 approved}"
 
 # --- the qualified parent reference must be a real repository identity ------
 # Only the suffix after the FINAL '#' was checked, so these all passed.
@@ -217,11 +229,55 @@ vinstead "NOT ELIGIBLE" 4 "a three-component path is refused" parent-authorizes 
 vinstead "NOT ELIGIBLE" 4 "a bare word before # is refused" parent-authorizes "anything#722"
 vinstead "NOT ELIGIBLE" 4 "an empty issue number is refused" parent-authorizes "owner/repo#"
 
-# The accepted loci are all checkable, and each is accepted.
-vinstead "ROUTINE MERGE" 0 "a native sub-issue relation is a locus" authorization-record "sub-issue:#724"
-vinstead "ROUTINE MERGE" 0 "a specific issue comment is a locus" authorization-record "#722#issuecomment-5555250717"
-vinstead "ROUTINE MERGE" 0 "a github permalink is a locus" \
-  authorization-record "https://github.com/jwogrady/spark/issues/722#issuecomment-5555250717"
+# --- the record must be BOUND to the authorizing issue ----------------------
+# Shape alone was never authorization: a well-formed citation of some OTHER
+# issue or repository is not the parent authorizing this unit. These are fully
+# eligible-shaped, so they isolate the binding.
+vinstead "NOT ELIGIBLE" 4 "a comment on a different issue authorizes nothing" \
+  authorization-record "#999#issuecomment-1"
+vinstead "NOT ELIGIBLE" 4 "an off-by-one issue number authorizes nothing" \
+  authorization-record "#723#issuecomment-5555250717"
+vinstead "NOT ELIGIBLE" 4 "a permalink to an unrelated repository authorizes nothing" \
+  authorization-record "https://github.com/someone/other/issues/1"
+vinstead "NOT ELIGIBLE" 4 "a permalink is not accepted for a bare parent (repo unverifiable)" \
+  authorization-record "https://github.com/jwogrady/spark/issues/722"
+# The removed hierarchy assertion: a pure classifier cannot verify subordination,
+# so accepting the claim would be the self-certification refused everywhere else.
+vinstead "NOT ELIGIBLE" 4 "a sub-issue relation claim is no longer a locus" \
+  authorization-record "sub-issue:#724"
+vinstead "NOT ELIGIBLE" 4 "a qualified sub-issue claim is no longer a locus" \
+  authorization-record "sub-issue:owner/repo#724"
+# Undocumented grammars that reusing xm_issue_ref had let through.
+vinstead "NOT ELIGIBLE" 4 "a qualified comment reference is not the documented form" \
+  authorization-record "owner/repo#722#issuecomment-456"
+
+# The documented form for a bare parent is accepted.
+vinstead "ROUTINE MERGE" 0 "a comment on the authorizing issue is a locus" \
+  authorization-record "#722#issuecomment-5555250717"
+
+# A QUALIFIED parent is cited by the matching permalink, and only the matching one.
+mk_instead parent-authorizes "jwogrady/spark#722"
+QUAL=("${A[@]}")
+verdict "ROUTINE MERGE" 0 "a qualified parent is cited by its matching permalink" \
+  "${QUAL[@]/authorization-record=*/authorization-record=https://github.com/jwogrady/spark/issues/722}"
+verdict "ROUTINE MERGE" 0 "the matching permalink may carry a comment id" \
+  "${QUAL[@]/authorization-record=*/authorization-record=https://github.com/jwogrady/spark/issues/722#issuecomment-5555250717}"
+verdict "NOT ELIGIBLE" 4 "a permalink to another repo does not cite this parent" \
+  "${QUAL[@]/authorization-record=*/authorization-record=https://github.com/jwogrady/other/issues/722}"
+verdict "NOT ELIGIBLE" 4 "a permalink to another owner does not cite this parent" \
+  "${QUAL[@]/authorization-record=*/authorization-record=https://github.com/someone/spark/issues/722}"
+verdict "NOT ELIGIBLE" 4 "a permalink to a different issue does not cite this parent" \
+  "${QUAL[@]/authorization-record=*/authorization-record=https://github.com/jwogrady/spark/issues/999}"
+# The comment-carrying permalink is a SEPARATE branch and needs its own
+# mismatch control — a positive test of the form does not prove the binding.
+verdict "NOT ELIGIBLE" 4 "a comment permalink on a different issue does not cite this parent" \
+  "${QUAL[@]/authorization-record=*/authorization-record=https://github.com/jwogrady/spark/issues/999#issuecomment-1}"
+verdict "NOT ELIGIBLE" 4 "a comment permalink on another repo does not cite this parent" \
+  "${QUAL[@]/authorization-record=*/authorization-record=https://github.com/jwogrady/other/issues/722#issuecomment-1}"
+verdict "NOT ELIGIBLE" 4 "a bare comment form is not accepted for a qualified parent" \
+  "${QUAL[@]/authorization-record=*/authorization-record=#722#issuecomment-5555250717}"
+verdict "NOT ELIGIBLE" 4 "a pull permalink is not an issue authorization locus" \
+  "${QUAL[@]/authorization-record=*/authorization-record=https://github.com/jwogrady/spark/pull/722}"
 
 # --- negative control: missing parent authorization -------------------------
 vwithout "NOT ELIGIBLE" 4 "no parent authorization does not merge" parent-authorizes

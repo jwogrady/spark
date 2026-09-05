@@ -2254,15 +2254,46 @@ xm_issue_ref() {
   return 0
 }
 
-# xm_auth_record <s> — a complete, checkable authorization locus. Exactly three
-# documented forms; no aliases, no trailing text, no lookalike hosts.
+# xm_auth_record <record> <parent-ref> — the record must be a locus ON THE
+# PARENT ISSUE ITSELF, not merely a well-formed citation of something.
+#
+# Shape alone was never authorization: with the parent at "#722", a record of
+# "#999#issuecomment-1" or a permalink to another repository's issue produced
+# ROUTINE MERGE. A citation that need not be RELATED to the authorizing issue
+# authorizes nothing. So the record is now BOUND: same issue number, and same
+# repository when the parent names one.
+#
+# The "sub-issue:#123" form is deliberately GONE. It asserted a hierarchy
+# relationship, and a pure classifier cannot verify that #123 really is
+# subordinate to the parent — accepting the assertion would be exactly the
+# self-certification this refuses everywhere else. Cite the parent's own
+# authorization locus instead, which is something a reader can open. Verifying a
+# native relationship needs a trusted read-back and belongs to governance
+# validation, not to a string check.
+#
+# The pairing is exact so that neither form is ambiguous:
+#   bare parent      "#123"            -> record "#123#issuecomment-456"
+#   qualified parent "owner/repo#123"  -> record the github.com permalink to
+#                                         owner/repo issue 123 (optional comment)
+# A bare "#123" carries no repository, so a permalink cannot be checked against
+# it; a qualified parent must therefore be cited by permalink.
 xm_auth_record() {
-  local s="${1:-}" rest owner repo num cid
+  local s="${1:-}" parent="${2:-}" prepo pnum rest owner repo num cid
+  xm_issue_ref "$parent" || return 1
+  case "$parent" in
+    '#'*) prepo=""; pnum="${parent#\#}" ;;
+    *)    prepo="${parent%%#*}"; pnum="${parent##*\#}" ;;
+  esac
+
   case "$s" in
-    'sub-issue:'*)
-      xm_issue_ref "${s#sub-issue:}" || return 1
+    '#'*'#issuecomment-'*)
+      [ -z "$prepo" ] || return 1
+      num="${s%%#issuecomment-*}"; cid="${s#*#issuecomment-}"
+      [ "$num" = "#$pnum" ] || return 1
+      xm_digits "$cid" || return 1
       return 0 ;;
     'https://github.com/'*)
+      [ -n "$prepo" ] || return 1
       rest="${s#https://github.com/}"
       owner="${rest%%/*}"; rest="${rest#*/}"
       [ -n "$owner" ] || return 1
@@ -2270,25 +2301,20 @@ xm_auth_record() {
       repo="${rest%%/*}"; rest="${rest#*/}"
       [ -n "$repo" ] || return 1
       case "$repo" in */*|*[!A-Za-z0-9._-]*) return 1 ;; esac
+      [ "$owner/$repo" = "$prepo" ] || return 1
       case "$rest" in
         issues/*) rest="${rest#issues/}" ;;
-        pull/*)   rest="${rest#pull/}" ;;
         *) return 1 ;;
       esac
       case "$rest" in
         *'#issuecomment-'*)
           num="${rest%%#issuecomment-*}"; cid="${rest#*#issuecomment-}"
-          xm_digits "$num" || return 1
+          [ "$num" = "$pnum" ] || return 1
           xm_digits "$cid" || return 1
           return 0 ;;
-        *) xm_digits "$rest" || return 1
+        *) [ "$rest" = "$pnum" ] || return 1
            return 0 ;;
       esac ;;
-    *'#issuecomment-'*)
-      num="${s%%#issuecomment-*}"; cid="${s#*#issuecomment-}"
-      xm_issue_ref "$num" || return 1
-      xm_digits "$cid" || return 1
-      return 0 ;;
   esac
   return 1
 }
@@ -2392,10 +2418,10 @@ xr_merge_check() {
   # only that a checkable record was cited rather than asserted.
   if [ -z "$auth_record" ]; then
     missing="${missing}
-  - authorization-record: cite WHERE the parent authorized this unit, in a checkable form — 'sub-issue:#123', '#123#issuecomment-456', or an https://github.com/owner/repo/issues/123 permalink. Naming the parent says who; this says that."
-  elif ! xm_auth_record "$auth_record"; then
+  - authorization-record: cite WHERE the parent authorized this unit — a locus ON THE PARENT ISSUE. For a bare parent '#123' that is '#123#issuecomment-456'; for 'owner/repo#123' it is the https://github.com/owner/repo/issues/123 permalink (optionally with '#issuecomment-456'). Naming the parent says who; this says that."
+  elif ! xm_auth_record "$auth_record" "$parent_authorizes"; then
     missing="${missing}
-  - authorization-record: '$auth_record' is not a complete checkable locus — the whole value must be one of 'sub-issue:#123', '#123#issuecomment-456', or an https://github.com/owner/repo/issues/123 permalink (optionally with '#issuecomment-456'). Trailing text, a lookalike host, or an alias spelling is refused: a citation that tolerates prose is not a citation."
+  - authorization-record: '$auth_record' is not a locus on the authorizing issue '${parent_authorizes:-<unset>}'. It must be the SAME issue — a well-formed citation of some other issue, repository, or an unverifiable hierarchy claim authorizes nothing. Use '#123#issuecomment-456' for a bare parent, or the matching https://github.com/owner/repo/issues/123 permalink for a qualified one."
   fi
 
   # Coordination surfaces grant nothing, wherever they are cited.
@@ -2459,9 +2485,11 @@ cmd_merge_authority() {
     echo "  may a bounded increment merge routinely beneath a broader owning issue?"
     echo "  every field must be affirmed positively; anything unproven declines."
     echo "    parent-authorizes=#123            (or owner/repo#123 — a bare issue ref)"
-    echo "    authorization-record=<where that parent authorized THIS unit:"
-    echo "                          sub-issue:#123 | #123#issuecomment-456 | a"
-    echo "                          github.com permalink>"
+    echo "    authorization-record=<a locus ON THAT SAME issue:"
+    echo "                          bare parent #123      -> #123#issuecomment-456"
+    echo "                          owner/repo#123        -> the matching"
+    echo "                          https://github.com/owner/repo/issues/123"
+    echo "                          permalink, optional #issuecomment-456>"
     echo "    child-acceptance=<the bounded unit's own acceptance>"
     echo "    acceptance-true=yes            (true on the exact current HEAD)"
     echo "    review=pass                    (independent, exact-HEAD, current)"
