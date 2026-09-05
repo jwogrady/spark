@@ -93,8 +93,27 @@ median() { printf '%s\n' "$@" | LC_ALL=C sort -n | awk '{ v[NR]=$1 } END { print
 # environment: setting some other variable leaves an inherited SPARK_NO_MEMO in
 # force, and both sides would then run unmemoized while the report claimed a
 # comparison. `env -u` is the only thing that guarantees the ON side is on.
-off_env=(env SPARK_NO_MEMO=1)
-on_env=(env -u SPARK_NO_MEMO)
+off_env=(env SPARK_NO_MEMO=1 SPARK_MEMO_STATE_FILE="$TMP/state.off")
+on_env=(env -u SPARK_NO_MEMO SPARK_MEMO_STATE_FILE="$TMP/state.on")
+
+# A verb outside the dispatcher's allowlist is never memoized, so "ON" would
+# silently be a second control and the comparison would be off-vs-off. Measuring
+# a CANDIDATE is the whole point of doing this before allowlisting it, so the
+# candidate case is supported explicitly and labelled, not faked.
+verb_word="${VERB%% *}"
+if grep -q "case \" [a-z0-9 -]*\b${verb_word}\b[a-z0-9 -]*\" in" "$SPARK" 2>/dev/null; then
+  memo_mode="eligible"
+else
+  memo_mode="candidate (forced for measurement)"
+  on_env=(env -u SPARK_NO_MEMO SPARK_MEMO_FORCE=1 SPARK_MEMO_STATE_FILE="$TMP/state.on")
+fi
+
+assert_state() { # <file> <expected> <label>
+  local f="$1" want="$2" label="$3" got
+  [ -f "$f" ] || die "$label did not report its memo state — cannot prove the configuration under test"
+  got="$(cat "$f")"
+  [ "$got" = "$want" ] || die "$label ran with memo '$got', expected '$want' — refusing to report an unverified comparison"
+}
 
 # count_parsers <logfile> — how many logged invocations are parsers. The
 # vocabulary is passed IN with -v rather than embedded, so the program can never
@@ -165,6 +184,7 @@ echo "fixture: a fresh single-commit repo with a project preference file, built 
 echo "spark:   $SPARK"
 echo "commit:  $(git -C "$root" rev-parse HEAD 2>/dev/null || echo 'not a git checkout')"
 echo "runtime: $(uname -sr) | bash ${BASH_VERSION}"
+echo "memo:    $memo_mode"
 echo
 
 # Warm the filesystem and process caches for BOTH configurations before timing,
@@ -180,6 +200,9 @@ one_run on_env  >/dev/null
 # different output is not a faster run, it is a different job.
 capture off_env "$TMP/res.off"
 capture on_env  "$TMP/res.on"
+# Prove the two configurations really were off and on before anything is reported.
+assert_state "$TMP/state.off" off "the control run"
+assert_state "$TMP/state.on"  on  "the memo-on run"
 cmp -s "$TMP/res.off.out" "$TMP/res.on.out" \
   || die "'$VERB' stdout differs between memo off and on — not the same work, so no figures are reported"
 cmp -s "$TMP/res.off.err" "$TMP/res.on.err" \

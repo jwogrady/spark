@@ -8748,7 +8748,12 @@ if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
   # Re-measure with tests/bench-memo.sh --verb before adding to this list.
   case " brief triage governance doctor footprint labels " in
     *" $verb "*) __SPARK_MEMO_ELIGIBLE=1 ;;
-    *)           __SPARK_MEMO_ELIGIBLE="" ;;
+    # SPARK_MEMO_FORCE exists so a CANDIDATE verb can be measured before it is
+    # added to the list above — otherwise the instruction to measure first is
+    # impossible to follow. It is a measurement switch only: it enables the
+    # cache and nothing else, and it must not be set for real work, because the
+    # list is what keeps the cache away from verbs that can change its sources.
+    *)           __SPARK_MEMO_ELIGIBLE="${SPARK_MEMO_FORCE:+1}" ;;
   esac
   if [ -n "${SPARK_NO_MEMO:-}" ] || [ -z "$__SPARK_MEMO_ELIGIBLE" ]; then
     __SPARK_MEMO=""
@@ -8761,8 +8766,16 @@ if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
     # never read as an option.
     readonly __SPARK_MEMO_DIR="$__SPARK_MEMO"
     trap 'rm -rf -- "$__SPARK_MEMO_DIR"' EXIT
+    __SPARK_MEMO_STATE=on
   else
     __SPARK_MEMO=""
+  fi
+  # Report the EFFECTIVE state when asked. A caller measuring the cache must be
+  # able to prove the run it labels "on" was actually memoized: eligibility can
+  # be absent, and even an eligible run falls back to unmemoized when mktemp
+  # fails. Without this a harness can publish an off-vs-off comparison.
+  if [ -n "${SPARK_MEMO_STATE_FILE:-}" ]; then
+    printf '%s\n' "${__SPARK_MEMO_STATE:-off}" > "$SPARK_MEMO_STATE_FILE" 2>/dev/null || true
   fi
   handler=""
   while IFS='|' read -r v h _; do
