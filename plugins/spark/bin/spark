@@ -8734,7 +8734,13 @@ if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
     __SPARK_MEMO=""
   elif __SPARK_MEMO="$(mktemp -d 2>/dev/null)"; then
     export __SPARK_MEMO
-    trap 'rm -rf "$__SPARK_MEMO"' EXIT
+    # Clean up the directory this run actually created. The trap must not read
+    # the exported, mutable $__SPARK_MEMO at exit — a handler that reassigned it
+    # would redirect rm at the replacement path — so capture the mktemp result
+    # in a readonly variable and delete that, with -- so a leading-dash path is
+    # never read as an option.
+    readonly __SPARK_MEMO_DIR="$__SPARK_MEMO"
+    trap 'rm -rf -- "$__SPARK_MEMO_DIR"' EXIT
   else
     __SPARK_MEMO=""
   fi

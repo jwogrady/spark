@@ -178,4 +178,19 @@ if [ "$mv_total" -gt 1 ]; then ok; else bad "no concurrent cache writes observed
 # ... and each must have renamed from its own temp path.
 if [ "$mv_distinct" -eq "$mv_total" ]; then ok; else bad "concurrent writers shared a temp path ($mv_distinct distinct of $mv_total) — writer uniqueness lost"; fi
 
+# --- Cleanup targets only the directory this run created. The EXIT trap must not
+# re-read the exported, mutable $__SPARK_MEMO: code that reassigned it would
+# redirect `rm -rf` at the replacement path. A decoy directory named by the
+# inherited environment must therefore survive, the run's own scratch dir must be
+# removed, and the trap must delete a captured readonly path with `--`.
+decoy="$WORK/decoy"; mkdir -p "$decoy"; : > "$decoy/keep.txt"
+before="$(ls -1d "${TMPDIR:-/tmp}"/tmp.* 2>/dev/null | wc -l | tr -d ' ')"
+( cd "$repo" && __SPARK_MEMO="$decoy" "$SPARK" brief --short >/dev/null 2>&1 )
+after="$(ls -1d "${TMPDIR:-/tmp}"/tmp.* 2>/dev/null | wc -l | tr -d ' ')"
+if [ -d "$decoy" ] && [ -f "$decoy/keep.txt" ]; then ok; else bad "cleanup deleted the inherited \$__SPARK_MEMO path instead of the created one"; fi
+if [ "$after" -le "$before" ]; then ok; else bad "the run leaked its scratch directory (before=$before after=$after)"; fi
+# The trap itself must reference the captured readonly path, not the mutable var.
+if grep -q "trap 'rm -rf -- \"\$__SPARK_MEMO_DIR\"' EXIT" "$SPARK"; then ok; else bad "EXIT trap does not delete a captured readonly path with --"; fi
+if grep -q 'readonly __SPARK_MEMO_DIR=' "$SPARK"; then ok; else bad "the created scratch path is not captured in an immutable variable"; fi
+
 finish
