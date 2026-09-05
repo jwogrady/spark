@@ -96,6 +96,29 @@ median() { printf '%s\n' "$@" | LC_ALL=C sort -n | awk '{ v[NR]=$1 } END { print
 off_env=(env SPARK_NO_MEMO=1)
 on_env=(env -u SPARK_NO_MEMO)
 
+# count_parsers <logfile> — how many logged invocations are parsers. The
+# vocabulary is passed IN with -v rather than embedded, so the program can never
+# accidentally read a shell variable, and `$1` is unambiguously awk's field.
+count_parsers() {
+  awk -v vocab=" awk sed grep cut tr " \
+    '{ if (index(vocab, " " $1 " ")) n++ } END { print n + 0 }' "$1"
+}
+
+# Prove the parser metric actually discriminates before any figure depends on it:
+# a known log with five parser entries and six non-parser entries must count 5.
+# A metric that silently reported 0, or counted everything, would otherwise be
+# indistinguishable from a real result.
+parser_selfcheck() {
+  local probe="$TMP/parser-selfcheck" got
+  printf 'awk\nsed\ngrep\ncut\ntr\ngit\ncat\nmv\nrm\nmktemp\njq\n' > "$probe" \
+    || die "could not write the parser self-check log"
+  got="$(count_parsers "$probe")"
+  [ "$got" = "5" ] || die "parser metric is broken: expected 5 parser entries in the self-check log, counted $got"
+  printf 'x\n' > "$probe"                      # no parser entries at all
+  got="$(count_parsers "$probe")"
+  [ "$got" = "0" ] || die "parser metric counts non-parser entries: expected 0, counted $got"
+}
+
 one_run() { # <env-array-name> -> elapsed ms; aborts if the command fails
   local -n e_ref="$1"
   local s e rc
@@ -121,9 +144,7 @@ counts_for() { # <label> <env-array-name> -> "total parsers"; aborts on failure
   local rc
   ( cd "$FIX" && BENCH_COUNT="$counts" PATH="$TMP/bin:$PATH" "${k_ref[@]}" "$SPARK" $VERB >/dev/null 2>&1 ); rc=$?
   [ "$rc" -eq 0 ] || die "'$VERB' exited $rc while counting under ${k_ref[*]}"
-  printf '%s %s' \
-    "$(wc -l < "$counts" | tr -d ' ')" \
-    "$(awk 'BEGIN{p=" awk sed grep cut tr "}{if(index(p," "$1" "))n++}END{print n+0}' "$counts")"
+  printf '%s %s' "$(wc -l < "$counts" | tr -d ' ')" "$(count_parsers "$counts")"
 }
 
 execve_for() { # <label> <env-array-name> -> total execve, or n/a
@@ -150,6 +171,8 @@ echo
 # then alternate them inside each iteration. Timing all of one side and then all
 # of the other hands the second side a warmed environment and turns ordering into
 # an apparent result.
+parser_selfcheck
+
 one_run off_env >/dev/null
 one_run on_env  >/dev/null
 
