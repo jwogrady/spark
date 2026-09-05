@@ -185,7 +185,7 @@ newlines, so comparing its results could not establish byte identity.
 It is reproducible from the repository rather than quoted here. Run:
 
 ```sh
-tests/bench-memo.sh --runs 7 --strace     # --strace optional; adds a true execve total
+tests/bench-memo.sh --runs 7 --strace     # --strace optional; adds syscall counts
 ```
 
 **No figures are reproduced in this document.** Numbers copied into prose drift
@@ -209,7 +209,13 @@ What the harness guarantees, which is why its output can be trusted as evidence:
   preference file.
 - **Honest counting.** The tool count includes the operations the memo itself
   introduces (`mktemp`/`mv`/`rm` — a cache *hit* reads with the `mapfile`
-  builtin and forks nothing) and is still a **lower bound** on
+  builtin and forks nothing). Under `--strace` the harness reports two distinct
+  syscall counts, because they measure different things: **execs** (`execve`,
+  program images executed) and **procs** (`clone`/`fork`, process creation
+  *including subshells the shell forks without exec*). `execve` alone is not a
+  process-creation total and is never reported as one; a self-check proves the
+  procs metric catches a shell-only subshell. The tool count remains a
+  **lower bound** on
   subprocesses, not a full accounting.
 
 The suite (`tests/test-hot-path-memo.sh`) asserts the *properties* — transparency,

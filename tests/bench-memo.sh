@@ -16,8 +16,13 @@
 # forks nothing) — counting only the parsers it removes would
 # report a saving while total process creation stayed flat. It remains a LOWER
 # BOUND: anything not on the list, and every fork a shimmed program makes
-# internally, is invisible. `--strace` adds a true total via execve tracing where
-# strace is available.
+# internally, is invisible.
+#
+# `--strace` adds two SEPARATE syscall counts, because they measure different
+# things: `execs` counts execve, i.e. program images actually executed, and
+# `procs` counts clone/clone3/fork/vfork, i.e. process creation including
+# subshells the shell forks WITHOUT exec. A shell-only subshell is invisible to
+# execve and to the shims, so execve alone must never be called a total.
 set -uo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -39,7 +44,7 @@ while [ "$#" -gt 0 ]; do
       echo
       echo "  Measures one verb with the memo on and with SPARK_NO_MEMO=1:"
       echo "  median wall ms, and invocations of a fixed tool list that includes"
-      echo "  the memo's own mktemp/mv/rm. --strace adds total execve."
+      echo "  the memo's own mktemp/mv/rm. --strace adds execs and procs counts."
       exit 0 ;;
     *) echo "bench-memo.sh: unknown argument $1" >&2; exit 2 ;;
   esac
@@ -194,17 +199,33 @@ counts_for() { # <label> <env-array-name> -> "total parsers"; aborts on failure
   printf '%s %s' "$(wc -l < "$counts" | tr -d ' ')" "$(count_parsers "$counts")"
 }
 
-execve_for() { # <label> <env-array-name> -> total execve, or n/a
+syscalls_for() { # <label> <env-array-name> <expected-state> -> "execs procs"
   local label="$1"; local -n x_ref="$2"
   if [ -n "$use_strace" ] && command -v strace >/dev/null 2>&1; then
     local slog="$TMP/s.$label" rc sf; sf="$(state_path "$3")"
-    ( cd "$FIX" && strace -f -qq -e trace=execve -o "$slog" "${x_ref[@]}" SPARK_MEMO_STATE_FILE="$sf" "$SPARK" $VERB >/dev/null 2>&1 ); rc=$?
+    ( cd "$FIX" && strace -f -qq -e trace=execve,clone,clone3,fork,vfork -o "$slog" \
+        "${x_ref[@]}" SPARK_MEMO_STATE_FILE="$sf" "$SPARK" $VERB >/dev/null 2>&1 ); rc=$?
     [ "$rc" -eq 0 ] || die "'$VERB' exited $rc under strace with ${x_ref[*]}"
     assert_state "$sf" "$3" "the traced $3 run"
-    grep -c 'execve(' "$slog" 2>/dev/null || echo 0
+    printf '%s %s' \
+      "$(grep -c 'execve(' "$slog" 2>/dev/null || echo 0)" \
+      "$(grep -cE '(clone3?|v?fork)\(' "$slog" 2>/dev/null || echo 0)"
   else
-    echo "n/a"
+    printf 'n/a n/a'
   fi
+}
+
+# Prove the process-creation metric sees a subshell the shell forks WITHOUT
+# exec — precisely the kind the memo could add invisibly. If it cannot, the
+# figure is not a process-creation count and must not be published as one.
+syscall_selfcheck() {
+  [ -n "$use_strace" ] && command -v strace >/dev/null 2>&1 || return 0
+  local log="$TMP/s.selfcheck" execs procs
+  strace -f -qq -e trace=execve,clone,clone3,fork,vfork -o "$log" \
+    bash -c 'x=$(:); :' >/dev/null 2>&1
+  execs="$(grep -c 'execve(' "$log" 2>/dev/null || echo 0)"
+  procs="$(grep -cE '(clone3?|v?fork)\(' "$log" 2>/dev/null || echo 0)"
+  [ "$procs" -gt 0 ] || die "the process-creation metric missed a shell-only subshell (execs=$execs procs=$procs); it cannot be reported as process creation"
 }
 
 echo "verb:    $VERB"
@@ -221,6 +242,7 @@ echo
 # of the other hands the second side a warmed environment and turns ordering into
 # an apparent result.
 parser_selfcheck
+syscall_selfcheck
 
 one_run off_env off >/dev/null
 one_run on_env  on  >/dev/null
@@ -253,13 +275,13 @@ EOF
 read -r on_total on_parsers <<EOF
 $(counts_for on on_env on)
 EOF
-off_ex="$(execve_for off off_env off)"
-on_ex="$(execve_for on on_env on)"
+read -r off_execs off_procs <<< "$(syscalls_for off off_env off)"
+read -r on_execs on_procs  <<< "$(syscalls_for on on_env on)"
 
-printf '%-22s median %5s ms | tools %4s | parsers %4s | execve %s\n' \
-  "memo OFF (control)" "$(median "${off_times[@]}")" "$off_total" "$off_parsers" "$off_ex"
-printf '%-22s median %5s ms | tools %4s | parsers %4s | execve %s\n' \
-  "memo ON" "$(median "${on_times[@]}")" "$on_total" "$on_parsers" "$on_ex"
+printf '%-22s median %5s ms | tools %4s | parsers %4s | execs %s | procs %s\n' \
+  "memo OFF (control)" "$(median "${off_times[@]}")" "$off_total" "$off_parsers" "$off_execs" "$off_procs"
+printf '%-22s median %5s ms | tools %4s | parsers %4s | execs %s | procs %s\n' \
+  "memo ON" "$(median "${on_times[@]}")" "$on_total" "$on_parsers" "$on_execs" "$on_procs"
 echo
 echo "raw wall samples (ms), in collection order:"
 echo "  OFF: ${off_times[*]}"
@@ -267,4 +289,4 @@ echo "  ON : ${on_times[*]}"
 echo
 echo "Counts are invocations of a fixed tool list (a lower bound on subprocesses,"
 echo "including the memo's own mktemp/mv/rm), not a full accounting."
-[ -n "$use_strace" ] || echo "Run with --strace for a true total execve count where strace is available."
+[ -n "$use_strace" ] || echo "Run with --strace to add execs (program images) and procs (process creation, subshells included)."

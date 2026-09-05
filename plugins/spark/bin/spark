@@ -32,13 +32,16 @@ yellow(){ printf '\033[33m%s\033[0m\n' "$1"; }
 # no subprocess) plus the path length. A digest can collide, so the cached file
 # records the directory it was written for and a reader must match it; a
 # collision therefore costs a recompute, never a wrong answer.
+# Sets __SPARK_MEMO_KEY rather than printing it: a command substitution would
+# fork a subshell on EVERY memoized call, process creation the memo would then be
+# adding invisibly to its own measurements.
 __spark_memo_key() {
   local s="$PWD" h=2166136261 i c
   for (( i = 0; i < ${#s}; i++ )); do
     printf -v c '%d' "'${s:i:1}"
     h=$(( (h ^ c) * 16777619 & 0xFFFFFFFF ))
   done
-  printf '%08x.%d' "$h" "${#s}"
+  printf -v __SPARK_MEMO_KEY '%08x.%d' "$h" "${#s}"
 }
 
 # __spark_memo_read <file> — print a cached value, or return 1. Reads with the
@@ -73,7 +76,7 @@ git_root() {
   if [ -n "$memo" ]; then
     # Key by the current directory: the root depends on where we are, so a run
     # that moves between directories/repositories must not reuse a stale entry.
-    f="$memo/gitroot.$(__spark_memo_key)"
+    __spark_memo_key; f="$memo/gitroot.$__SPARK_MEMO_KEY"
     __spark_memo_read "$f" && return 0
   fi
   local rendered=""
@@ -360,7 +363,7 @@ resolve_prefs() {
     # Key by the current directory: the project tier is read from the repo root,
     # which depends on where we are, so a run that changes directory/repository
     # must resolve fresh. Bounded, collision-verified key, as git_root uses.
-    f="$memo/prefs.$(__spark_memo_key)"
+    __spark_memo_key; f="$memo/prefs.$__SPARK_MEMO_KEY"
     __spark_memo_read "$f" && return 0
   fi
   local top rendered=""
