@@ -147,14 +147,16 @@ C7 release-notes (3; fixture duplication certain, invariant overlap UNKNOWN).
 ## 6. Docs and governance baseline
 
 Full audit: `raw/agent-docs-governance-truth.md`. Dev prose (11,185 LOC) is 1.45× the shipped prose surface
-(7,689 LOC). Hand-maintained current copies per concept: lifecycle stages + nine skills **13**; attribution /
+(7,689 LOC). Hand-maintained current copies per concept: lifecycle stages + nine skills **17 copies** (10 documents +
+the banner in 7 `SKILL.md` files); attribution /
 literal `jwogrady` rule **10**; commit rules with `72` hard-coded **8** (while `defaults.json` treats it as a
 preference); release process **7**; delivery model **4 + an exported template** that contradicts AGENTS.md
 (`conventions.md:38` "Declare the dependency on the issue (`Blocked by #A`)" versus "prose does not create a
 dependency"); four tiers 4; CLI verb list 4 (3 mechanically locked by doctor); merge authority / #677 4
 near-disjoint statements and **no canonical definition of "#677 standing orchestration" in the tree**; version
 claims 4 (coherent); reviewer verdict vocabulary 3 (closed in code); benchmark vocabulary 2 (parity-tested);
-Status26 naming 1 (two mechanical guards). Nine verified stale/incomplete statements, including
+Status26 naming 1 (two mechanical guards). Eight verified stale/incomplete statements plus one UNKNOWN
+candidate (the `grill-me` skill reference, which cannot be verified from inside the repository), including
 `plugins/spark/docs/reference/stability.md:57` (Experimental row lists 5 verbs, tsv classifies 7; doctor checks
 only the Stable row), the dev-side ADR index `docs/README.md:15-45` omitting ADR-0030, the shipped docs index
 `plugins/spark/docs/README.md:66-77` omitting two shipped reference pages (`compatibility.md`, `stability.md`),
@@ -170,7 +172,8 @@ Candidates (audit only — no deletion target is set here):
 - The 10 concrete code duplicate pairs in the §4 source report, led by the four disagreeing required-check sets
   and the wholesale duplicated `gate-runner.sh` / `release-notes-runner.sh` pipeline.
 - 7 partially-superseded and 4 retired-machinery ADRs still listed inline in the current ADR index.
-- The nine stale/incomplete doc statements in §6; the stale `tests/test-commit-msg.sh:60` comment.
+- The eight verified stale/incomplete doc statements in §6 (plus the one UNKNOWN `grill-me` candidate); the stale
+  `tests/test-commit-msg.sh:60` comment.
 - `evaluations/` (1,606 LOC) — UNKNOWN, not dead: no observed run, and its own contract doc says nothing
   enforces it.
 - 22 private `assert_eq` copies and 26 private `gh` stubs in tests (#740 scope).

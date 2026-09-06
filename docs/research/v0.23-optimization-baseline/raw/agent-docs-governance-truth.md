@@ -11,7 +11,7 @@ Worktree `/home/john/code/spark/.claude/worktrees/baseline-921c982`. Read-only; 
 | Bucket | Files | Lines (`wc -l`) |
 |---|---:|---:|
 | `AGENTS.md` (284) + `CLAUDE.md` (8) | 2 | 292 |
-| `plugins/spark/docs/` **total** | 33 | 5908 |
+| `plugins/spark/docs/` **total** | 32 | 5908 |
 | — `README.md` | 1 | 92 |
 | — `glossary.md` | 1 | 167 |
 | — `tutorials/` | 3 | 552 |
@@ -42,11 +42,11 @@ Shipped-docs total (5908 + 766 + 1015 = 7689 prose lines) vs never-shipped dev p
 ## B) Duplicate current-truth concepts
 
 ### 1. Five lifecycle stages + nine core skills
-**Surfaces: 13 manually maintained current.**
+**Surfaces: 17 hand-maintained current copies — 10 documents plus the stage banner in 7 `SKILL.md` files — and 3 further historical/fixture appearances.** (Corrected 2026-09-06 after review: the original text said 13 and "6 SKILL.md files" while enumerating 7.)
 Most authoritative: `plugins/spark/docs/reference/skills.md:8-14` — self-declares "This page is the **canonical skill taxonomy**… if they ever disagree, this page wins", and `spark doctor` mechanically enforces core-skill presence here.
-Others: `AGENTS.md:18` + `AGENTS.md:78-104` (OPERATIVE AUTHORITY for agents); `README.md:268-274` (CURRENT REFERENCE-PROJECTION); `plugins/spark/docs/README.md:22` (PROJECTION); `plugins/spark/docs/glossary.md:98-103` (PROJECTION, "Always written with this exact stage order"); `plugins/spark/docs/explanation/sdlc-doctrine.md:11` (EXPLANATION); `plugins/spark/docs/explanation/identity.md:74` (EXPLANATION); `plugins/spark/docs/reference/stability.md:60` ("nine core skills", PROJECTION); `plugins/spark/docs/how-to/get-started.md:57` (PROJECTION); the stage banner repeated verbatim in 6 SKILL.md files (`ideate:8`, `plan:8`, `codify:8`, `validate:8`, `ship:8`, `onboard:99`, `bootstrap:82`) — CURRENT REFERENCE-PROJECTION; `docs/architecture/spark-internals.md:42,82,123` (EXPLANATION); `ROADMAP.md:36` (HISTORICAL — v0.2 section); `docs/governance/is-state-baseline-pre-v020.md:57` (HISTORICAL-RELEASE EVIDENCE); `evaluations/skill-routing/fixtures/routing/task.md:22` (test fixture).
+Others: `AGENTS.md:18` + `AGENTS.md:78-104` (OPERATIVE AUTHORITY for agents); `README.md:268-274` (CURRENT REFERENCE-PROJECTION); `plugins/spark/docs/README.md:22` (PROJECTION); `plugins/spark/docs/glossary.md:98-103` (PROJECTION, "Always written with this exact stage order"); `plugins/spark/docs/explanation/sdlc-doctrine.md:11` (EXPLANATION); `plugins/spark/docs/explanation/identity.md:74` (EXPLANATION); `plugins/spark/docs/reference/stability.md:60` ("nine core skills", PROJECTION); `plugins/spark/docs/how-to/get-started.md:57` (PROJECTION); the stage banner repeated verbatim in 7 SKILL.md files (`ideate:8`, `plan:8`, `codify:8`, `validate:8`, `ship:8`, `onboard:99`, `bootstrap:82`) — CURRENT REFERENCE-PROJECTION; `docs/architecture/spark-internals.md:42,82,123` (EXPLANATION); `ROADMAP.md:36` (HISTORICAL — v0.2 section); `docs/governance/is-state-baseline-pre-v020.md:57` (HISTORICAL-RELEASE EVIDENCE); `evaluations/skill-routing/fixtures/routing/task.md:22` (test fixture).
 Contradiction: **none found.** All say nine, all use the identical arrow string. Verified: 9 `SKILL.md` files exist and match the named nine.
-Fan-out risk: **HIGH by count, LOW by volatility** — 13 copies of a string that has been stable for many releases; the cost is only realized if the stage set or skill count ever changes.
+Fan-out risk: **HIGH by count, LOW by volatility** — 17 copies of a string that has been stable for many releases; the cost is only realized if the stage set or skill count ever changes.
 
 ### 2. The four tiers
 **Surfaces: 4 manually maintained current.**
@@ -178,7 +178,7 @@ Orphan in the other direction: **`docs/ops/openai-reviewer-lane.md` has no inbou
 
 | Rank | Concept | Manual current surfaces | Risk |
 |---|---|---:|---|
-| 1 | Lifecycle stages + nine skills (1) | 13 | HIGH count / LOW volatility |
+| 1 | Lifecycle stages + nine skills (1) | 17 copies (10 documents + 7 SKILL.md files) | HIGH count / LOW volatility |
 | 2 | Attribution, `jwogrady` rule (4) | 10 | HIGH |
 | 3 | Commit rules, `72` hard-coded (5) | 8 | HIGH |
 | 4 | Release process (6) | 7 | HIGH |
