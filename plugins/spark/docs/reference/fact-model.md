@@ -33,7 +33,7 @@ a **fragment**: useful to show one situation, never consumed as a snapshot
 | `work_unit` | `work_unit.identity` | required | `{kind: issue\|pull_request, id: <work-unit>, implements: <work-unit>\|none}` | Canonical identity of the task being executed; implements is the issue a pull request closes (GitHub's closing reference), none for an issue, so facts read from that issue are bound to this work unit by a declared relationship |
 | `repository` | `repository.identity` | required | `{id: <repository>, default_branch: <ref>}` | Canonical identity of the repository the work unit belongs to |
 | `placement` | `placement.current` | required | `{milestone: <milestone>\|none, release: <release>\|none, gate: <work-unit>\|none}` | Release / milestone / gate placement |
-| `graph` | `graph.native` | required | `{parent: {id: <work-unit>, state: <issue-state>}\|none, children: [{id: <work-unit>, state: <issue-state>}], blocked_by: [{id: <work-unit>, state: <issue-state>}]}` | Native parent / child / dependency relationships, each with its current state (a blocker is satisfied when its state is closed); a work unit appears at most once in each list, so one relationship can never carry two states |
+| `graph` | `graph.native` | required | `{parent: {kind: issue\|pull_request, id: <work-unit>, state: <issue-state>}\|none, children: [{kind: issue\|pull_request, id: <work-unit>, state: <issue-state>}], blocked_by: [{kind: issue\|pull_request, id: <work-unit>, state: <issue-state>}]}` | Native parent / child / dependency relationships, each with its current state (a blocker is satisfied when its state is closed); a work unit appears at most once in each list, so one relationship can never carry two states |
 | `authority` | `authority.standing` | required | `{grants: [{decision: <decision-record>, target: <repository>\|<work-unit>, scopes: [<scope>]}], human_boundaries: [{decision: <decision-record>, target: <repository>\|<work-unit>, boundary: <boundary>}]}` | Standing authority: each grant and each reserved boundary names its durable decision record, the repository or work unit it applies to, and a closed token; wording lives behind provenance Every decision named inside the value is the fact's own source.identity: one authority fact carries one durable decision record; authority resting on several records is UNKNOWN in this version, its detail naming them as candidates |
 | `acceptance` | `acceptance.contract` | required | `{contract: <work-unit>, head: <commit>, items: [{id: <item-id>, state: MET\|NOT_MET\|UNKNOWN}]}` | Acceptance contract identity and its satisfaction as judged on an exact HEAD; each item id is a scalar item-id, unique within the fact, so one item can never be both MET and NOT_MET |
 | `head` | `head.exact` | required | `{head: <commit>, base_ref: <ref>, base: <commit>, current: true\|false}` | Exact HEAD, base and staleness of the work unit's change |
@@ -111,7 +111,7 @@ is a projection and is never used to compare or bind.
 | verdict | The independent reviewer's closed vocabulary | `PASS`, `CHANGES REQUIRED`, `DECISION REQUIRED`, `NOT ASSESSED` |
 | action | The closed next-action vocabulary: only actions whose derivation rule (R15) this version defines; a new action is a new version | `wait-review`, `repair`, `merge`, `stop-decision-required` |
 | item-id | A scalar acceptance item id: one token, no whitespace, unique within its fact | `a1`, `acceptance/3` |
-| provenance | A pointer: an https URL or a repository-relative path, no whitespace; never the record itself | `https://github.com/acme/widgets/pull/42#issuecomment-9100`, `preferences/fact-model.tsv` |
+| provenance | A pointer: an https URL, or a normalized repository-relative path (slash-separated components, none empty, none . or .., no leading slash); never the record itself | `https://github.com/acme/widgets/pull/42#issuecomment-9100`, `preferences/fact-model.tsv` |
 | fact-key | the class's one canonical key (the key records) | `review.independent` |
 | issue-state | Current state of a related work unit; a blocked_by entry is satisfied exactly when closed | `open`, `closed` |
 | check-state | Normalized state of one required check on the exact HEAD: missing = required but no run observed | `success`, `failure`, `pending`, `missing` (required but no run observed) |
@@ -160,7 +160,7 @@ of the source type; a role name, a label, a summary, or a word such as
 |---|---|---|
 | `github-api` | a repository, work-unit, comment or milestone locator — the node that was read | the node's `updated_at` (ISO-8601 `Z`) or its etag in a delimiter-safe form (letters, digits, `. _ : / -`; never `;` or whitespace, so it can be carried inside a derived-version); the 40-hex head only on a HEAD-bound class, where it is that fact's own HEAD — never a numeric node id, which does not change when the node does |
 | `git` | `<repository>@<commit>` or `<repository>@ref/<ref>` | the 40-hex commit id observed (a ref target is recorded as the commit it pointed at) |
-| `repository-file` | `<repository>@<commit>:<path>` | the 40-hex commit id the file was read at |
+| `repository-file` | `<repository>@<commit>:<path>` — a normalized repository-relative path (slash-separated components, none empty, none `.` or `..`, no leading slash) | the 40-hex commit id the file was read at |
 | `human-decision` | the decision record itself: a comment locator or `<repository>@<commit>` | the recording comment's `updated_at` (ISO-8601 `Z`) — a comment can be edited, so its id alone cannot version the decision — or the 40-hex commit id that records it |
 | `derived` | `fact-model/<schema version>` | a `derived-version`: the schema version, then `<input key>@<that input's source.version>` for every input, sorted by key — so the version changes whenever any input's version does |
 
@@ -249,17 +249,18 @@ behavioral suite checks the two never drift.
   Neither carries prose, so freshness and drill-down are machine-normalized.
 - **R17** A fact's source identity is the node its value describes: work_unit
   and repository name their own id; review names its record and lists it as a
-  comment: invalidator; acceptance read from GitHub names its contract, and
-  within one set that contract is the work unit itself or the issue it
-  implements; the work unit belongs to the set's repository; placement and graph
-  name the work-unit node they were read from — within one set, the work unit
-  itself or the issue it implements, never an unrelated node — and list it as an
-  issue: or pull_request: invalidator; head read from GitHub names a work unit
-  and checks name a repository — within one set, the work unit's own node and
-  the repository's; a NOT_APPLICABLE HEAD-bound fact names the work unit it was
-  read from and lists it as an issue: or pull_request: invalidator. A graph
-  lists every parent, child and blocker whose state it represents as an issue:
-  or pull_request: invalidator; head lists its base as
+  comment: invalidator; acceptance read from GitHub names its contract, lists it
+  as an invalidator, and within one set that contract is the work unit itself or
+  the issue it implements; the work unit belongs to the set's repository;
+  placement and graph name the work-unit node they were read from — within one
+  set, the work unit itself or the issue it implements, never an unrelated node
+  — and list it as an invalidator; head read from GitHub names a work unit and
+  checks name a repository — within one set, the work unit's own node and the
+  repository's; a NOT_APPLICABLE HEAD-bound fact names the work unit it was read
+  from and lists it as an invalidator. A work-unit invalidator has one canonical
+  form — issue: for an issue, pull_request: for a pull request — and never both.
+  A graph lists every parent, child and blocker whose state it represents as an
+  invalidator of that relationship's kind; head lists its base as
   ref:<repository>/<base_ref>; checks list ruleset:<repository> for the
   repository whose rulesets require them. inputs and because list each key once.
 
@@ -314,7 +315,7 @@ action follows mechanically from named inputs.
    "observed_at": "2026-09-06T12:00:05Z", "invalidators": ["issue:github.com/acme/widgets#41", "milestone:github.com/acme/widgets/milestone/7"],
    "provenance": "https://github.com/acme/widgets/issues/41"},
   {"schema_version": "1", "key": "graph.native", "class": "graph", "status": "ESTABLISHED",
-   "value": {"parent": {"id": "github.com/acme/widgets#40", "state": "open"}, "children": [], "blocked_by": [{"id": "github.com/acme/widgets#39", "state": "closed"}]},
+   "value": {"parent": {"kind": "issue", "id": "github.com/acme/widgets#40", "state": "open"}, "children": [], "blocked_by": [{"kind": "issue", "id": "github.com/acme/widgets#39", "state": "closed"}]},
    "source": {"type": "github-api", "identity": "github.com/acme/widgets#41", "version": "2026-09-05T18:00:00Z"},
    "observed_at": "2026-09-06T12:00:05Z", "invalidators": ["issue:github.com/acme/widgets#41", "issue:github.com/acme/widgets#40", "issue:github.com/acme/widgets#39"],
    "provenance": "https://github.com/acme/widgets/issues/41"},
@@ -459,7 +460,7 @@ its target and confer nothing here, without anyone reading the decision record.
    "observed_at": "2026-09-06T16:00:05Z", "invalidators": ["pull_request:github.com/acme/widgets#42"],
    "provenance": "https://github.com/acme/widgets/pull/42"},
   {"schema_version": "1", "key": "graph.native", "class": "graph", "status": "ESTABLISHED",
-   "value": {"parent": {"id": "github.com/acme/program#42", "state": "open"}, "children": [], "blocked_by": [{"id": "github.com/acme/widgets#39", "state": "open"}]},
+   "value": {"parent": {"kind": "issue", "id": "github.com/acme/program#42", "state": "open"}, "children": [], "blocked_by": [{"kind": "issue", "id": "github.com/acme/widgets#39", "state": "open"}]},
    "source": {"type": "github-api", "identity": "github.com/acme/widgets#41", "version": "2026-09-06T15:30:00Z"},
    "observed_at": "2026-09-06T16:00:05Z", "invalidators": ["issue:github.com/acme/widgets#41", "issue:github.com/acme/program#42", "issue:github.com/acme/widgets#39"],
    "provenance": "https://github.com/acme/widgets/issues/41"},
