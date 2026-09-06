@@ -234,7 +234,8 @@ def matches(sh, v, where):
         else:
             if kind not in ids: fail(f"shape names undeclared identifier kind <{kind}>")
             if not isinstance(v, str) or not ids[kind].fullmatch(v): fail(f"{where} = {v!r} is not a canonical <{kind}> (R1/R14)")
-            if kind == "ref" and (v.startswith("refs/") or v.endswith(".lock")): fail(f"{where} = {v!r}: a ref is the branch name without refs/ and never ends in .lock (R1)")
+            if kind == "ref" and (v.startswith("refs/") or v.endswith(".lock") or v.endswith(".") or ".." in v or "@{" in v): fail(f"{where} = {v!r}: a ref is one branch name — no refs/, .., @{{, trailing . or .lock (R1)")
+            if kind in ("repository", "work-unit", "comment", "milestone", "decision-record") and re.search(r"\.git(#|/|@|$)", v): fail(f"{where} = {v!r}: a repository name never carries the .git suffix (R1)")
     else:
         lit = sh[1]
         if lit == "true":
@@ -279,6 +280,7 @@ def check_fact(f):
     src = f["source"]
     matches(ENVELOPE["source"], src, "source")
     if not sid[src["type"]].fullmatch(str(src["identity"])): fail(f"source.identity {src['identity']!r} is not in the {src['type']} grammar (R14)")
+    if re.search(r"\.git(#|/|@|:|$)", str(src["identity"])): fail("a repository name never carries the .git suffix (R1)")
     if not src["version"]: fail("source.version empty")
     if not sver[src["type"]].fullmatch(str(src["version"])): fail(f"source.version {src['version']!r} is not in the {src['type']} version grammar (R14)")
     # a github-api commit version is only ever a HEAD-bound fact keyed by its own HEAD (R14): for any other class
@@ -306,6 +308,7 @@ def check_fact(f):
     if not isinstance(f["invalidators"], list) or not f["invalidators"]: fail("invalidators must be a non-empty list")
     for tok in f["invalidators"]:
         if not isinstance(tok, str) or not any(rx.fullmatch(tok) for rx in invalidator_rx.values()): fail(f"invalidator {tok!r} is in no invalidator grammar (R16)")
+        if re.search(r"\.git(#|/|$)", tok): fail(f"invalidator {tok!r}: a repository name never carries the .git suffix (R1)")
     if len(set(f["invalidators"])) != len(f["invalidators"]): fail("an invalidator appears twice (R16)")
     if not isinstance(f["provenance"], str) or not ids["provenance"].fullmatch(f["provenance"]): fail(f"provenance {f['provenance']!r} is not a pointer in the provenance grammar (R16)")
     if f["class"] in HEAD_BOUND:
@@ -462,8 +465,9 @@ def check_set(facts, complete):
             if not (conflict or decision or by_boundary): fail("stop-decision-required requires a CONFLICT input, a DECISION REQUIRED verdict, or an applicable reserved boundary (R15)")
         else:
             fail(f"action {act} has no derivation rule in this version (R15)")
-        missing = used - set(f["inputs"])
+        missing = used - set(f["inputs"]); extra = set(f["inputs"]) - used
         if missing: fail(f"next_action consulted {sorted(missing)} but does not list them as inputs (R4/R15)")
+        if extra: fail(f"next_action lists {sorted(extra)} as inputs but its derivation never consulted them — one conclusion has one representation (R15)")
         if f["source"]["type"] == "derived":
             for part in f["source"]["version"].split(";")[1:]:
                 k, ver = part.split("@", 1)
@@ -598,6 +602,14 @@ accepts "$(printf '%s' "$wu" | python3 -c 'import json,sys; f=json.load(sys.stdi
 accepts "$(printf '%s' "$wu" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["value"]["implements"]="none"; print(json.dumps(f))')" && ok || bad "control: a pull request that implements no issue is a valid work unit"
 accepts "$(printf '%s' "$wu" | python3 -c 'import json,sys; f=json.load(sys.stdin); del f["value"]["implements"]; print(json.dumps(f))')" && bad "a work unit without the implements field must be rejected (R14)" || ok
 accepts "$(printf '%s' "$wu" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["value"]["id"]="github.com/Acme/widgets#42"; f["source"]["identity"]=f["value"]["id"]; f["invalidators"]=["pull_request:"+f["value"]["id"]]; print(json.dumps(f))')" && bad "a mixed-case owner in a work-unit id must be rejected (R1)" || ok
+accepts "$(printf '%s' "$wu" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["value"]["id"]="github.com/acme/widgets.git#42"; f["source"]["identity"]=f["value"]["id"]; f["invalidators"]=["pull_request:"+f["value"]["id"]]; print(json.dumps(f))')" && bad "a .git-suffixed repository name is the clone URL's spelling, never the identity (R1)" || ok
+rp='{"schema_version":"1","key":"repository.identity","class":"repository","status":"ESTABLISHED","value":{"id":"github.com/acme/widgets","default_branch":"master"},"source":{"type":"github-api","identity":"github.com/acme/widgets","version":"2026-09-01T08:00:00Z"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["repository:github.com/acme/widgets"],"provenance":"https://github.com/acme/widgets"}'
+accepts "$rp" && ok || bad "control: a canonical repository fact is accepted"
+accepts "$(printf '%s' "$rp" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["value"]["id"]="github.com/acme/widgets.git"; f["source"]["identity"]=f["value"]["id"]; f["invalidators"]=["repository:"+f["value"]["id"]]; print(json.dumps(f))')" && bad "a repository id ending in .git must be rejected (R1)" || ok
+# ETag round trip: a delimiter-safe etag versions a node and is carried inside a derived-version; a ';' etag is outside the grammar
+accepts "$(printf '%s' "$rp" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["source"]["version"]="W/\"a1b2c3d4:e5f6\""; print(json.dumps(f))')" && ok || bad "control: a delimiter-safe etag is a valid github-api version"
+accepts "$(printf '%s' "$rp" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["source"]["version"]="W/\"a1b2;c3d4\""; print(json.dumps(f))')" && bad "an etag containing ';' must be rejected — it could not be carried inside a derived-version (R4/R14)" || ok
+accepts "$(printf '%s' "$derived" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["source"]["version"]="1;review.independent@W/\"a1b2c3d4:e5f6\""; print(json.dumps(f))')" && ok || bad "control: a derived-version carrying an etag input version round-trips"
 acc='{"schema_version":"1","key":"acceptance.contract","class":"acceptance","status":"ESTABLISHED","value":{"contract":"github.com/acme/widgets#41","head":"0123456789abcdef0123456789abcdef01234567","items":[{"id":"a1","state":"MET"}]},"source":{"type":"github-api","identity":"github.com/acme/widgets#41","version":"2026-09-05T18:00:00Z"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["issue:github.com/acme/widgets#41","head:0123456789abcdef0123456789abcdef01234567"],"provenance":"https://github.com/acme/widgets/issues/41"}'
 accepts "$acc" && ok || bad "control: a canonical acceptance fact is accepted"
 accepts "$(printf '%s' "$acc" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["value"]["items"][0]["summary"]="done, I think"; print(json.dumps(f))')" && bad "acceptance.items[].summary must be rejected (R2/R14)" || ok
@@ -660,10 +672,13 @@ accepts "$(gmut 'f["invalidators"]=[i for i in f["invalidators"] if not i.endswi
 # head: the base ref is a freshness dependency the value implies
 hd0='{"schema_version":"1","key":"head.exact","class":"head","status":"ESTABLISHED","value":{"head":"0123456789abcdef0123456789abcdef01234567","base_ref":"master","base":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","current":true},"source":{"type":"github-api","identity":"github.com/acme/widgets#42","version":"0123456789abcdef0123456789abcdef01234567"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["head:0123456789abcdef0123456789abcdef01234567","ref:github.com/acme/widgets/master"],"provenance":"https://github.com/acme/widgets/pull/42/commits"}'
 # ref grammar: one spelling of a branch; refs/heads/…, empty or dotted components, .. and .lock are rejected
-for r in 'refs/heads/master' '/' 'foo//bar' 'foo..bar' 'master.lock' '.hidden' 'feat/' '/feat' 'a/.b' 'a b'; do
+for r in 'refs/heads/master' '/' 'foo//bar' 'foo..bar' 'master.lock' '.hidden' 'feat/' '/feat' 'a/.b' 'a b' 'a~b' 'a^b' 'a:b' 'a?b' 'a*b' 'a[b' 'a\\b' 'a@{b}' 'trail.'; do
   accepts "$(printf '%s' "$hd0" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["value"]["base_ref"]=sys.argv[1]; f["invalidators"][1]="ref:github.com/acme/widgets/"+sys.argv[1]; print(json.dumps(f))' "$r")" && bad "ref spelling '$r' must be rejected — one canonical branch name (R1)" || ok
 done
 accepts "$(printf '%s' "$hd0" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["value"]["base_ref"]="release/v1.2.x"; f["invalidators"][1]="ref:github.com/acme/widgets/release/v1.2.x"; print(json.dumps(f))')" && ok || bad "control: a dotted, slashed branch name is a valid ref"
+for r in 'feat/x+y' 'user@host' 'a#b' 'x=1' 'ünïcode'; do
+  accepts "$(printf '%s' "$hd0" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["value"]["base_ref"]=sys.argv[1]; f["invalidators"][1]="ref:github.com/acme/widgets/"+sys.argv[1]; print(json.dumps(f))' "$r")" && ok || bad "control: valid Git branch name '$r' is a valid ref"
+done
 hd='{"schema_version":"1","key":"head.exact","class":"head","status":"ESTABLISHED","value":{"head":"0123456789abcdef0123456789abcdef01234567","base_ref":"master","base":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","current":true},"source":{"type":"github-api","identity":"github.com/acme/widgets#42","version":"0123456789abcdef0123456789abcdef01234567"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["head:0123456789abcdef0123456789abcdef01234567","ref:github.com/acme/widgets/master"],"provenance":"https://github.com/acme/widgets/pull/42/commits"}'
 accepts "$hd" && ok || bad "control: a head fact listing its HEAD and base ref is accepted"
 accepts "$(printf '%s' "$hd" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["invalidators"]=["head:0123456789abcdef0123456789abcdef01234567"]; print(json.dumps(f))')" && bad "a head fact without ref:<repository>/<base_ref> must be rejected — the base moves without the HEAD moving (R17)" || ok
@@ -711,6 +726,7 @@ PY
 )"
 printf '%s' "$ex2" | grep -q '"action": "repair"' && ok || bad "control: Example 2 derives repair"
 sets "$(printf '{"complete": false, "facts": %s}' "$ex2")" && ok || bad "control: the page's repair fragment is accepted"
+sets "$(printf '{"complete": false, "facts": %s}' "$(printf '%s' "$ex2" | python3 -c 'import json,sys; s=json.load(sys.stdin); n=[f for f in s if f["class"]=="next_action"][0]; c=[f for f in s if f["class"]=="checks"][0]; n["inputs"].append("checks.required"); n["source"]["version"]="1;"+";".join(k+"@"+[f for f in s if f["key"]==k][0]["source"]["version"] for k in sorted(n["inputs"])); print(json.dumps(s))')")" && bad "a repair derivation listing an input it never consulted (checks) must be rejected — one conclusion, one representation (R15)" || ok
 sets "$(printf '{"complete": false, "facts": %s}' "$(printf '%s' "$ex2" | python3 -c 'import json,sys; s=json.load(sys.stdin); h=[f for f in s if f["class"]=="head"][0]; h["value"]["current"]=False; print(json.dumps(s))')")" && bad "repair on a HEAD that is not current must be rejected — a stale HEAD is re-reviewed, not repaired (R15)" || ok
 sets "$(printf '{"complete": true, "facts": %s}' "$(smut 'nx=[f for f in s if f["class"]=="authority"][0]; nx["value"]["grants"][0]["scopes"]=["close:issue"]')")" && bad "merge without a merge:routine grant must be rejected (R15)" || ok
 sets "$(printf '{"complete": true, "facts": %s}' "$(smut 'nx=[f for f in s if f["class"]=="authority"][0]; nx["value"]["grants"][0]["target"]="github.com/acme/program"')")" && bad "merge with a grant targeting another repository must be rejected (R15)" || ok

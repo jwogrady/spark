@@ -100,12 +100,12 @@ is a projection and is never used to compare or bind.
 
 | Kind | Canonical form | Example |
 |---|---|---|
-| repository | <host>/<owner>/<name>, all lower-case (GitHub compares owner and name case-insensitively, so one spelling is the identity), no scheme, no .git | `github.com/acme/widgets` |
+| repository | <host>/<owner>/<name>, all lower-case (GitHub compares owner and name case-insensitively, so one spelling is the identity), no scheme, and the name never ends in .git — that is the clone URL's spelling, a projection | `github.com/acme/widgets` |
 | work-unit | <repository>#<number>; a bare #<number> is a projection, never an identity | `github.com/acme/widgets#42` |
 | comment | <work-unit>/comment/<comment id> | `github.com/acme/widgets#42/comment/9001` |
 | milestone | <repository>/milestone/<number> | `github.com/acme/widgets/milestone/7` |
 | commit | Full 40-hex lower-case object id; abbreviations are projections | `4f3d…` (40 characters) |
-| ref | A branch name without the refs/heads/ prefix: slash-separated components, none empty, none starting with a dot, no .., never ending in .lock; refs/… and any other spelling of the same branch are projections | `master` |
+| ref | A branch name over Git's full ref domain, without the refs/heads/ prefix: slash-separated components, none empty or dot-led, no whitespace, ~ ^ : ? * [ or backslash, no .. or @{, never ending in / . or .lock; refs/… and any other spelling of the same branch are projections | `master`, `release/v1.2.x`, `feat/x+y` |
 | release | A release tag as published | `v0.22.0` |
 | login | An actor identity; naming an actor never confers authority | `login:github-actions[bot]` — naming an actor never confers authority |
 | verdict | The independent reviewer's closed vocabulary | `PASS`, `CHANGES REQUIRED`, `DECISION REQUIRED`, `NOT ASSESSED` |
@@ -158,7 +158,7 @@ of the source type; a role name, a label, a summary, or a word such as
 
 | Source type | Canonical `source.identity` | `source.version` grammar |
 |---|---|---|
-| `github-api` | a repository, work-unit, comment or milestone locator — the node that was read | the node's `updated_at` (ISO-8601 `Z`) or its etag; the 40-hex head only on a HEAD-bound class, where it is that fact's own HEAD — never a numeric node id, which does not change when the node does |
+| `github-api` | a repository, work-unit, comment or milestone locator — the node that was read | the node's `updated_at` (ISO-8601 `Z`) or its etag in a delimiter-safe form (letters, digits, `. _ : / -`; never `;` or whitespace, so it can be carried inside a derived-version); the 40-hex head only on a HEAD-bound class, where it is that fact's own HEAD — never a numeric node id, which does not change when the node does |
 | `git` | `<repository>@<commit>` or `<repository>@ref/<ref>` | the 40-hex commit id observed (a ref target is recorded as the commit it pointed at) |
 | `repository-file` | `<repository>@<commit>:<path>` | the 40-hex commit id the file was read at |
 | `human-decision` | the decision record itself: a comment locator or `<repository>@<commit>` | the recording comment's `updated_at` (ISO-8601 `Z`) — a comment can be edited, so its id alone cannot version the decision — or the 40-hex commit id that records it |
@@ -171,7 +171,8 @@ behavioral suite checks the two never drift.
 
 - **R1** Canonical identifiers have one representation; labels, abbreviations
   and pretty names are projections. Each class has exactly one canonical fact
-  key, so derived inputs and invalidation address a stable identity.
+  key, so derived inputs and invalidation address a stable identity. A
+  repository name never carries the .git suffix of its clone URL.
 - **R2** Raw issue or comment bodies, timelines and explanatory prose are not
   fact values; a fact points at them through provenance.
 - **R3** A fact states what is established now; provenance states why and how.
@@ -221,26 +222,27 @@ behavioral suite checks the two never drift.
   schema version equals the fact's schema_version and its derived-version
   prefix. Every grammar is matched against the whole string, and whitespace of
   any kind is outside every locator.
-- **R15** next_action is derived, never asserted, and every fact its derivation
-  consulted is in its inputs (so R4 re-versions it when any of them changes):
-  merge only when the review is PASS on the current HEAD, every required check
-  is success on it, every acceptance item is MET on it, the HEAD is current, a
-  grant with scope merge:routine targets the repository or work unit, every
-  blocker in the native graph is closed (the graph fact must be ESTABLISHED),
-  and no reserved boundary targeting the repository or work unit applies — for
-  every boundary-evidence record the fact it names is consulted, must be
-  ESTABLISHED, and must not satisfy the condition (review, checks, acceptance,
-  head, authority, repository, work_unit, graph and every boundary-evidence fact
-  are consulted); repair only on CHANGES REQUIRED for the current HEAD (review,
-  head); wait-review only when no verdict binds the current HEAD or a required
-  check is pending, missing or UNKNOWN (head, review, checks as present);
-  stop-decision-required only when an input is CONFLICT, the verdict is DECISION
-  REQUIRED, or boundary names a reserved boundary that applies here: the
-  authority fact is in because and carries that boundary token with a target
-  equal to the repository or work unit id (authority, repository, work_unit
-  consulted), and the boundary-evidence record for that token holds on the fact
-  it names, which is in because. boundary is none in every other case; a
-  boundary token with no boundary-evidence record has no derivation in this
+- **R15** next_action is derived, never asserted, and its inputs are exactly the
+  facts its derivation consulted — nothing omitted, nothing extra — so R4
+  re-versions it when any of them changes and one conclusion has one
+  representation: merge only when the review is PASS on the current HEAD, every
+  required check is success on it, every acceptance item is MET on it, the HEAD
+  is current, a grant with scope merge:routine targets the repository or work
+  unit, every blocker in the native graph is closed (the graph fact must be
+  ESTABLISHED), and no reserved boundary targeting the repository or work unit
+  applies — for every boundary-evidence record the fact it names is consulted,
+  must be ESTABLISHED, and must not satisfy the condition (review, checks,
+  acceptance, head, authority, repository, work_unit, graph and every
+  boundary-evidence fact are consulted); repair only on CHANGES REQUIRED for the
+  current HEAD (review, head); wait-review only when no verdict binds the
+  current HEAD or a required check is pending, missing or UNKNOWN (head, review,
+  checks as present); stop-decision-required only when an input is CONFLICT, the
+  verdict is DECISION REQUIRED, or boundary names a reserved boundary that
+  applies here: the authority fact is in because and carries that boundary token
+  with a target equal to the repository or work unit id (authority, repository,
+  work_unit consulted), and the boundary-evidence record for that token holds on
+  the fact it names, which is in because. boundary is none in every other case;
+  a boundary token with no boundary-evidence record has no derivation in this
   version.
 - **R16** Every invalidator is a token in one of the invalidator grammars and
   appears once per fact; provenance is a pointer in the provenance grammar.
@@ -380,9 +382,9 @@ observed on. Nothing here can be reused for another HEAD.
    "provenance": "https://github.com/acme/widgets/issues/41"},
   {"schema_version": "1", "key": "next_action.governed", "class": "next_action", "status": "ESTABLISHED",
    "value": {"action": "repair", "because": ["review.independent"], "boundary": "none"},
-   "source": {"type": "derived", "identity": "fact-model/1", "version": "1;checks.required@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;head.exact@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;review.independent@2026-09-06T12:59:00Z"},
+   "source": {"type": "derived", "identity": "fact-model/1", "version": "1;head.exact@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;review.independent@2026-09-06T12:59:00Z"},
    "observed_at": "2026-09-06T13:00:00Z", "invalidators": ["head:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
-   "provenance": "preferences/fact-model.tsv", "inputs": ["review.independent", "checks.required", "head.exact"]}
+   "provenance": "preferences/fact-model.tsv", "inputs": ["review.independent", "head.exact"]}
 ]
 ```
 
