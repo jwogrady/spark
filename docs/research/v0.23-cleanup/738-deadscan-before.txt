@@ -1,0 +1,65 @@
+### runtime bg_dir (plugins/spark/lib/execution.sh:642)
+indirect (prefix construction / string mention anywhere tracked):
+  plugins/spark/bin/spark:1501:    elif [ ! -d "$tmpl_dir" ]; then
+  plugins/spark/bin/spark:1511:      for tmpl in "$tmpl_dir"/*.yml; do
+  plugins/spark/bin/spark:2363:  if [ "$docs_dir" -eq 1 ] && [ "$readme" -eq 1 ]; then docs="docs/ + README"
+  plugins/spark/bin/spark:2364:  elif [ "$docs_dir" -eq 1 ]; then docs="docs/"
+  plugins/spark/bin/spark:2378:  [ "$docs_dir" -eq 1 ] && content=1
+  tests/run.sh:141:    log="$log_dir/$SPARK_RUN_ID.executions"
+  tests/run.sh:142:    if ! mkdir -p "$log_dir" 2>/dev/null ||
+  tests/test-hot-path-memo.sh:28:prefs_memo1="$( cd "$repo" && export __SPARK_MEMO="$memo_dir"; . "$SPARK"; resolve_prefs )"
+  tests/test-hot-path-memo.sh:29:prefs_memo2="$( cd "$repo" && export __SPARK_MEMO="$memo_dir"; . "$SPARK"; resolve_prefs )"  # reads the cache
+  tests/test-hot-path-memo.sh:30:rm -rf "$memo_dir"
+git log -S (commits that added/removed the string):
+  d86e78d 2026-08-30 refactor(runtime): extract the execution domain into a shell module
+  22a9f75 2026-08-30 feat(budget): bound autonomous runs by declared convergence
+git log -G (commits whose diff mentions the name):
+  d86e78d 2026-08-30 refactor(runtime): extract the execution domain into a shell module
+  22a9f75 2026-08-30 feat(budget): bound autonomous runs by declared convergence
+
+### runtime bg_get (plugins/spark/lib/execution.sh:645)
+indirect (prefix construction / string mention anywhere tracked):
+git log -S (commits that added/removed the string):
+  d86e78d 2026-08-30 refactor(runtime): extract the execution domain into a shell module
+  22a9f75 2026-08-30 feat(budget): bound autonomous runs by declared convergence
+git log -G (commits whose diff mentions the name):
+  d86e78d 2026-08-30 refactor(runtime): extract the execution domain into a shell module
+  22a9f75 2026-08-30 feat(budget): bound autonomous runs by declared convergence
+
+### runtime route_class_desc (plugins/spark/lib/execution.sh:1389)
+indirect (prefix construction / string mention anywhere tracked):
+git log -S (commits that added/removed the string):
+  d86e78d 2026-08-30 refactor(runtime): extract the execution domain into a shell module
+  0b84a82 2026-08-30 feat(route): pick the cheapest adequate class, escalate deliberately
+git log -G (commits whose diff mentions the name):
+  d86e78d 2026-08-30 refactor(runtime): extract the execution domain into a shell module
+  0b84a82 2026-08-30 feat(route): pick the cheapest adequate class, escalate deliberately
+
+### runtime ci_dir (plugins/spark/lib/execution.sh:1732)
+indirect (prefix construction / string mention anywhere tracked):
+  plugins/spark/bin/spark:1501:    elif [ ! -d "$tmpl_dir" ]; then
+  plugins/spark/bin/spark:1511:      for tmpl in "$tmpl_dir"/*.yml; do
+  plugins/spark/bin/spark:2363:  if [ "$docs_dir" -eq 1 ] && [ "$readme" -eq 1 ]; then docs="docs/ + README"
+  plugins/spark/bin/spark:2364:  elif [ "$docs_dir" -eq 1 ]; then docs="docs/"
+  plugins/spark/bin/spark:2378:  [ "$docs_dir" -eq 1 ] && content=1
+  tests/run.sh:141:    log="$log_dir/$SPARK_RUN_ID.executions"
+  tests/run.sh:142:    if ! mkdir -p "$log_dir" 2>/dev/null ||
+  tests/test-hot-path-memo.sh:28:prefs_memo1="$( cd "$repo" && export __SPARK_MEMO="$memo_dir"; . "$SPARK"; resolve_prefs )"
+  tests/test-hot-path-memo.sh:29:prefs_memo2="$( cd "$repo" && export __SPARK_MEMO="$memo_dir"; . "$SPARK"; resolve_prefs )"  # reads the cache
+  tests/test-hot-path-memo.sh:30:rm -rf "$memo_dir"
+git log -S (commits that added/removed the string):
+  d86e78d 2026-08-30 refactor(runtime): extract the execution domain into a shell module
+  96702b4 2026-08-30 feat(ci): hand off at the CI boundary instead of polling
+git log -G (commits whose diff mentions the name):
+  d86e78d 2026-08-30 refactor(runtime): extract the execution domain into a shell module
+  96702b4 2026-08-30 feat(ci): hand off at the CI boundary instead of polling
+
+### runtime ci_get (plugins/spark/lib/execution.sh:1735)
+indirect (prefix construction / string mention anywhere tracked):
+git log -S (commits that added/removed the string):
+  d86e78d 2026-08-30 refactor(runtime): extract the execution domain into a shell module
+  96702b4 2026-08-30 feat(ci): hand off at the CI boundary instead of polling
+git log -G (commits whose diff mentions the name):
+  d86e78d 2026-08-30 refactor(runtime): extract the execution domain into a shell module
+  96702b4 2026-08-30 feat(ci): hand off at the CI boundary instead of polling
+
