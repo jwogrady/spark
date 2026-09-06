@@ -233,7 +233,7 @@ def matches(sh, v, where):
             if v not in sources: fail(f"{where} = {v!r} is not a declared source type")
         else:
             if kind not in ids: fail(f"shape names undeclared identifier kind <{kind}>")
-            if not isinstance(v, str) or not ids[kind].match(v): fail(f"{where} = {v!r} is not a canonical <{kind}> (R1/R14)")
+            if not isinstance(v, str) or not ids[kind].fullmatch(v): fail(f"{where} = {v!r} is not a canonical <{kind}> (R1/R14)")
     else:
         lit = sh[1]
         if lit == "true":
@@ -245,7 +245,7 @@ def shape(c, v): matches(SHAPES[c], v, f"{c}.value")
 version = [r[1] for r in rows if r[0] == "version"][0]
 LOCATOR_KINDS = ("repository", "work-unit", "comment", "milestone", "commit")
 def locator(x):
-    return any(ids[k].match(x) for k in LOCATOR_KINDS) or any(rx.match(x) for rx in sid.values())
+    return any(ids[k].fullmatch(x) for k in LOCATOR_KINDS) or any(rx.fullmatch(x) for rx in sid.values())
 HEAD_BOUND = {"head", "review", "checks", "acceptance"}
 FORBIDDEN_KEYS = {"body", "comments", "timeline", "prose", "summary", "history"}
 ISO = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
@@ -262,7 +262,7 @@ def check_fact(f):
         t = ftypes[k]
         if t != "any" and not (isinstance(f[k], PY_TYPES[t]) and not (t != "boolean" and isinstance(f[k], bool))): fail(f"field {k} must be a {t} (R14)")
     if f["schema_version"] != version: fail("schema_version mismatch")
-    if not ids["fact-key"].match(f["key"]): fail(f"key not canonical: {f['key']}")
+    if not ids["fact-key"].fullmatch(f["key"]): fail(f"key not canonical: {f['key']}")
     if f["class"] not in classes: fail(f"unknown class {f['class']}")
     if f["key"].split(".")[0] != f["class"]: fail("key prefix must equal class")
     if f["key"] != canon[f["class"]]: fail(f"key {f['key']} is not the canonical key {canon[f['class']]} of class {f['class']} (R1)")
@@ -277,9 +277,15 @@ def check_fact(f):
         matches(ENVELOPE["detail"], f["detail"], "detail")
     src = f["source"]
     matches(ENVELOPE["source"], src, "source")
-    if not sid[src["type"]].match(str(src["identity"])): fail(f"source.identity {src['identity']!r} is not in the {src['type']} grammar (R14)")
+    if not sid[src["type"]].fullmatch(str(src["identity"])): fail(f"source.identity {src['identity']!r} is not in the {src['type']} grammar (R14)")
     if not src["version"]: fail("source.version empty")
-    if not sver[src["type"]].match(str(src["version"])): fail(f"source.version {src['version']!r} is not in the {src['type']} version grammar (R14)")
+    if not sver[src["type"]].fullmatch(str(src["version"])): fail(f"source.version {src['version']!r} is not in the {src['type']} version grammar (R14)")
+    # a github-api commit version is only ever a HEAD-bound fact keyed by its own HEAD (R14): for any other class
+    # an unrelated commit would never change when the node's metadata does
+    if src["type"] == "github-api" and re.fullmatch(r"[0-9a-f]{40}", str(src["version"])):
+        if f["class"] not in HEAD_BOUND: fail(f"a commit cannot version the mutable {f['class']} node (R14)")
+        heads = [i[5:] for i in f["invalidators"] if isinstance(i, str) and i.startswith("head:")]
+        if heads != [src["version"]]: fail("a commit version on a HEAD-bound fact must be that fact's own HEAD (R14)")
     # where the identity embeds the observed version, the two must agree (R14)
     if src["type"] in ("git", "repository-file", "human-decision"):
         m = re.search(r"@([0-9a-f]{40})(?::|$)", src["identity"])
@@ -288,18 +294,19 @@ def check_fact(f):
         if m and src["version"] != m.group(1): fail(f"source.version {src['version']} must equal the comment id its identity names, {m.group(1)} (R14)")
     if src["type"] == "derived":
         if not f.get("inputs"): fail("derived fact without inputs")
-        if not ids["derived-version"].match(src["version"]): fail("derived source.version is not a derived-version (R4)")
+        if src["identity"] != f"fact-model/{f['schema_version']}": fail(f"derived identity {src['identity']} must name the fact's own schema version {f['schema_version']} (R14)")
+        if not ids["derived-version"].fullmatch(src["version"]): fail("derived source.version is not a derived-version (R4)")
         parts = src["version"].split(";")
         if parts[0] != version: fail("derived-version must start with the schema version")
         vkeys = [p.split("@", 1)[0] for p in parts[1:]]
         if vkeys != sorted(f["inputs"]): fail("derived-version must list exactly the inputs, sorted by key (R4)")
-    if f.get("inputs") is not None and any(not ids["fact-key"].match(i) for i in f["inputs"]): fail("inputs must be fact keys")
-    if not ISO.match(f["observed_at"]): fail("observed_at not ISO-8601 Z")
+    if f.get("inputs") is not None and any(not ids["fact-key"].fullmatch(i) for i in f["inputs"]): fail("inputs must be fact keys")
+    if not ISO.fullmatch(f["observed_at"]): fail("observed_at not ISO-8601 Z")
     if not isinstance(f["invalidators"], list) or not f["invalidators"]: fail("invalidators must be a non-empty list")
     for tok in f["invalidators"]:
-        if not isinstance(tok, str) or not any(rx.match(tok) for rx in invalidator_rx.values()): fail(f"invalidator {tok!r} is in no invalidator grammar (R16)")
+        if not isinstance(tok, str) or not any(rx.fullmatch(tok) for rx in invalidator_rx.values()): fail(f"invalidator {tok!r} is in no invalidator grammar (R16)")
     if len(set(f["invalidators"])) != len(f["invalidators"]): fail("an invalidator appears twice (R16)")
-    if not isinstance(f["provenance"], str) or not ids["provenance"].match(f["provenance"]): fail(f"provenance {f['provenance']!r} is not a pointer in the provenance grammar (R16)")
+    if not isinstance(f["provenance"], str) or not ids["provenance"].fullmatch(f["provenance"]): fail(f"provenance {f['provenance']!r} is not a pointer in the provenance grammar (R16)")
     if f["class"] in HEAD_BOUND:
         heads = [i for i in f["invalidators"] if i.startswith("head:")]
         if f["status"] == "ESTABLISHED":
@@ -452,7 +459,10 @@ case "$out" in *"unknown=1 conflict=1 not_applicable=2"*) ok ;; *) bad "examples
 
 # ======================== mutation controls: the validator discriminates ========================
 base='{"schema_version":"1","key":"review.independent","class":"review","status":"ESTABLISHED","value":{"verdict":"PASS","head":"0123456789abcdef0123456789abcdef01234567","reviewer":"login:github-actions[bot]","record":"github.com/acme/widgets#42/comment/9100"},"source":{"type":"github-api","identity":"github.com/acme/widgets#42/comment/9100","version":"2026-09-06T11:58:00Z"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["head:0123456789abcdef0123456789abcdef01234567"],"provenance":"https://github.com/acme/widgets/pull/42#issuecomment-9100"}'
-accepts() { printf '%s' "$1" | python3 "$VAL" "$TSV" "$DOC" one >/dev/null 2>&1; }
+accepts() {
+  [ -n "$1" ] || { bad "control produced no fact — the mutation itself failed"; return 1; }
+  printf '%s' "$1" | python3 "$VAL" "$TSV" "$DOC" one >/dev/null 2>&1
+}
 accepts "$base" && ok || bad "control: the canonical review fact is accepted"
 mut() { printf '%s' "$base" | python3 -c "import json,sys; f=json.load(sys.stdin); exec(sys.argv[1]); print(json.dumps(f))" "$1"; }
 accepts "$(mut 'f["status"]="UNKNOWN"; f["detail"]={"reason":"x","candidates":[]}')" && bad "UNKNOWN with a value must be rejected (R6)" || ok
@@ -482,6 +492,9 @@ accepts "$derived" && ok || bad "control: a derived fact with inputs is accepted
 accepts "$(printf '%s' "$derived" | python3 -c 'import json,sys; f=json.load(sys.stdin); del f["inputs"]; print(json.dumps(f))')" && bad "a derived fact without inputs must be rejected (R4)" || ok
 accepts "$(printf '%s' "$derived" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["inputs"]="review.independent"; print(json.dumps(f))')" && bad "inputs as a string must be rejected: the field record says list (R14)" || ok
 accepts "$(printf '%s' "$derived" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["source"]["identity"]="fact-model"; print(json.dumps(f))')" && bad "a derived source identity outside its grammar must be rejected (R14)" || ok
+accepts "$(printf '%s' "$derived" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["source"]["identity"]="fact-model/2"; print(json.dumps(f))')" && bad "a derived identity naming another schema version than the fact's must be rejected (R14)" || ok
+accepts "$(printf '%s' "$derived" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["source"]["version"]="1;review.independent@2026-09-06T11:58:00Z\n"; print(json.dumps(f))')" && bad "a derived version with a trailing newline must be rejected (whole-string match)" || ok
+accepts "$(printf '%s' "$derived" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["source"]["version"]="1;review.independent@2026-09-06T11:58:00Z\tx"; print(json.dumps(f))')" && bad "a tab inside a derived version must be rejected (whitespace-safe grammar)" || ok
 accepts "$(printf '%s' "$derived" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["source"]["version"]="1"; print(json.dumps(f))')" && bad "a derived version that omits its inputs' versions must be rejected (R4)" || ok
 accepts "$(printf '%s' "$derived" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["source"]["version"]="1;checks.required@x"; print(json.dumps(f))')" && bad "a derived version naming a key that is not an input must be rejected (R4)" || ok
 accepts "$(mut 'f["invalidators"]=["head:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]')" && bad "a review whose head: invalidator names a different HEAD than its value must be rejected (R7)" || ok
@@ -511,6 +524,11 @@ sed 's/^identifier\tlogin\t[^\t]*\t/identifier\tlogin\t^login:[a-z]+$\t/' "$TSV"
 if printf '%s' "$base" | python3 "$VAL" "$mtsv" "$DOC" one >/dev/null 2>&1; then bad "the validator must read identifier grammars from the authority: a narrowed login grammar rejects github-actions[bot]"; else ok; fi
 accepts "$(mut 'f["source"]["version"]="latest"')" && bad "a github-api source version outside its grammar must be rejected (R14)" || ok
 accepts "$(mut 'f["source"]["version"]="9100"')" && bad "a numeric node id must not version a mutable github-api node (freshness)" || ok
+accepts "$(mut 'f["source"]["version"]="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"')" && bad "a commit version on a HEAD-bound fact that is not its own HEAD must be rejected (R14)" || ok
+accepts "$(mut 'f["provenance"]="https://github.com/acme/widgets/pull/42\t#issuecomment-9100"')" && bad "a tab inside provenance must be rejected (whitespace-safe grammar)" || ok
+accepts "$(mut 'f["provenance"]="https://github.com/acme/widgets/pull/42\n"')" && bad "a trailing newline in provenance must be rejected (whole-string match)" || ok
+accepts "$(mut 'f["value"]["head"]="0123456789abcdef0123456789abcdef01234567\n"')" && bad "a trailing newline on a commit must be rejected (whole-string match)" || ok
+accepts "$(mut 'f["source"]["version"]="2026-09-06T11:58:00Z\n"')" && bad "a trailing newline on a source version must be rejected (whole-string match)" || ok
 accepts "$(mut 'f["observed_at"]=["2026-09-06T12:00:05Z"]')" && bad "observed_at as a list must be rejected: the field record says string (R14)" || ok
 accepts "$(mut 'f["invalidators"]="head:0123456789abcdef0123456789abcdef01234567"')" && bad "invalidators as a string must be rejected: the field record says list (R14)" || ok
 accepts "$(mut 'f["provenance"]=["https://github.com/acme/widgets/pull/42"]')" && bad "provenance as a list must be rejected: the field record says string (R14)" || ok
@@ -518,6 +536,7 @@ accepts "$(mut 'f["provenance"]=["https://github.com/acme/widgets/pull/42"]')" &
 accepts "$(mut 'f["value"]["conclusion"]="looks fine"')" && bad "an extra key in a review value must be rejected (R14)" || ok
 wu='{"schema_version":"1","key":"work_unit.identity","class":"work_unit","status":"ESTABLISHED","value":{"kind":"pull_request","id":"github.com/acme/widgets#42"},"source":{"type":"github-api","identity":"github.com/acme/widgets#42","version":"2026-09-06T12:00:00Z"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["pull_request:github.com/acme/widgets#42"],"provenance":"https://github.com/acme/widgets/pull/42"}'
 accepts "$wu" && ok || bad "control: a canonical work_unit fact is accepted"
+accepts "$(printf '%s' "$wu" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["source"]["version"]="0123456789abcdef0123456789abcdef01234567"; print(json.dumps(f))')" && bad "a commit cannot version a mutable work_unit node (R14)" || ok
 accepts "$(printf '%s' "$wu" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["value"]["body"]="the PR description"; print(json.dumps(f))')" && bad "work_unit.value.body must be rejected (R2/R14)" || ok
 acc='{"schema_version":"1","key":"acceptance.contract","class":"acceptance","status":"ESTABLISHED","value":{"contract":"github.com/acme/widgets#41","head":"0123456789abcdef0123456789abcdef01234567","items":[{"id":"a1","state":"MET"}]},"source":{"type":"github-api","identity":"github.com/acme/widgets#41","version":"2026-09-05T18:00:00Z"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["issue:github.com/acme/widgets#41","head:0123456789abcdef0123456789abcdef01234567"],"provenance":"https://github.com/acme/widgets/issues/41"}'
 accepts "$acc" && ok || bad "control: a canonical acceptance fact is accepted"
@@ -545,6 +564,8 @@ accepts "$rf" && ok || bad "control: a repository-file source with a path identi
 rmut() { printf '%s' "$rf" | python3 -c "import json,sys; f=json.load(sys.stdin); exec(sys.argv[1]); print(json.dumps(f))" "$1"; }
 accepts "$(rmut 'f["source"]["version"]="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"')" && bad "a repository-file read pinned to commit A claiming version B must be rejected (R14)" || ok
 accepts "$(rmut 'f["source"]["identity"]="github.com/acme/widgets@0123456789abcdef0123456789abcdef01234567:docs/with space.md"')" && bad "a repository-file path with whitespace is outside the grammar" || ok
+accepts "$(rmut 'f["source"]["identity"]="github.com/acme/widgets@0123456789abcdef0123456789abcdef01234567:docs/with\ttab.md"')" && bad "a repository-file path with a tab is outside the grammar" || ok
+accepts "$(rmut 'f["source"]["identity"]="github.com/acme/widgets@0123456789abcdef0123456789abcdef01234567:docs/acceptance/41.md\n"')" && bad "a repository-file identity with a trailing newline must be rejected (whole-string match)" || ok
 accepts "$(rmut 'f["source"]={"type":"git","identity":"github.com/acme/widgets@0123456789abcdef0123456789abcdef01234567","version":"0123456789abcdef0123456789abcdef01234567"}')" && ok || bad "control: a git source pinned to a commit with the same version is accepted"
 accepts "$(rmut 'f["source"]={"type":"git","identity":"github.com/acme/widgets@0123456789abcdef0123456789abcdef01234567","version":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}')" && bad "a git identity at commit A claiming version B must be rejected (R14)" || ok
 accepts "$(rmut 'f["source"]={"type":"git","identity":"github.com/acme/widgets@ref/master","version":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}')" && ok || bad "control: a git ref identity records the commit it pointed at as its version"
@@ -571,7 +592,10 @@ accepts "$(gmut 'f["value"]["parent"]["state"]="done"')" && bad "a relationship 
 accepts "$(gmut 'f["value"]["blocked_by"].append({"id":"github.com/acme/widgets#39","state":"open"})')" && bad "one blocker listed as both closed and open must be rejected (R14)" || ok
 accepts "$(gmut 'f["value"]["children"]=[{"id":"github.com/acme/widgets#42","state":"open"},{"id":"github.com/acme/widgets#42","state":"open"}]')" && bad "a child listed twice must be rejected (R14)" || ok
 # snapshot-level controls (R11): the page's complete snapshot minus one required class must be rejected as a snapshot
-sets() { printf '%s' "$1" | python3 "$VAL" "$TSV" "$DOC" set >/dev/null 2>&1; }
+sets() {
+  case "$1" in *'"facts": }'*|*'"facts": '|'') bad "snapshot control produced no facts — the mutation itself failed"; return 1 ;; esac
+  printf '%s' "$1" | python3 "$VAL" "$TSV" "$DOC" set >/dev/null 2>&1
+}
 full="$(python3 - "$DOC" <<'PY'
 import json, re, sys
 t = open(sys.argv[1]).read()

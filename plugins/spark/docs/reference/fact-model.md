@@ -158,7 +158,7 @@ of the source type; a role name, a label, a summary, or a word such as
 
 | Source type | Canonical `source.identity` | `source.version` grammar |
 |---|---|---|
-| `github-api` | a repository, work-unit, comment or milestone locator — the node that was read | the node's `updated_at` (ISO-8601 `Z`), the 40-hex head it is keyed by, or its etag — never a numeric node id, which does not change when the node does |
+| `github-api` | a repository, work-unit, comment or milestone locator — the node that was read | the node's `updated_at` (ISO-8601 `Z`) or its etag; the 40-hex head only on a HEAD-bound class, where it is that fact's own HEAD — never a numeric node id, which does not change when the node does |
 | `git` | `<repository>@<commit>` or `<repository>@ref/<ref>` | the 40-hex commit id observed (a ref target is recorded as the commit it pointed at) |
 | `repository-file` | `<repository>@<commit>:<path>` | the 40-hex commit id the file was read at |
 | `human-decision` | the decision record itself: a comment locator or `<repository>@<commit>` | the numeric comment id or the 40-hex commit id that records the decision |
@@ -215,7 +215,11 @@ behavioral suite checks the two never drift.
   appears at most once per graph list. Every envelope field has the type its
   field record declares. Where a source identity embeds the version observed —
   the commit in <repository>@<commit>, <repository>@<commit>:<path>, or the id
-  in a comment locator — source.version equals it.
+  in a comment locator — source.version equals it. A github-api version that is
+  a commit is allowed only on a HEAD-bound class and is that fact's HEAD; a
+  derived identity's schema version equals the fact's schema_version and its
+  derived-version prefix. Every grammar is matched against the whole string, and
+  whitespace of any kind is outside every locator.
 - **R15** next_action is derived, never asserted, and every fact its derivation
   consulted is in its inputs (so R4 re-versions it when any of them changes):
   merge only when the review is PASS on the current HEAD, every required check
