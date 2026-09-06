@@ -2221,6 +2221,10 @@ xr_stop_check() {
 # comment from anyone else is a bystander's opinion, however well formatted —
 # otherwise a stranger could post a valid-looking grant and have it cited.
 XM_AUTHORIZING_ASSOCIATIONS=(OWNER MEMBER COLLABORATOR)
+# Permission levels in the PULL REQUEST's repository that can govern a merge
+# there. Consulted when the grant arrives from another repository's comment
+# endpoint, where `author_association` describes authority somewhere else.
+XM_GOVERNING_PERMISSIONS=(admin maintain write)
 # Check conclusions that do not block. A check that has not finished is not one.
 XM_OK_CONCLUSIONS=(success skipped neutral)
 # The producer whose review verdict counts. A verdict from anyone else is a
@@ -2360,6 +2364,10 @@ xm_rule_checks() { xm_api_all "$1" "rules/branches/$2" \
 xm_rule_flows()  { xm_api_all "$1" "rules/branches/$2" \
                      '.[] | select(.type == "workflows") | .parameters.workflows[] | .path'; }
 xm_parent_url()  { xm_api "$1" "issues/$2" '.parent_issue_url // empty'; }
+# The commenter's permission in a NAMED repository. `author_association` is
+# relative to whichever repository served the comment, so it answers "can they
+# govern there", not "can they govern the merge".
+xm_permission()  { xm_api "$1" "collaborators/$2/permission" '.permission // empty'; }
 # One comment per line: association, login, then the body with newlines escaped.
 # The marker grammars are single-line, so nothing that matters is lost.
 xm_comments()    { xm_api_all "$1" "issues/$2/comments?per_page=100" \
@@ -2392,6 +2400,18 @@ xm_body_lines() {
 xm_is_authorizing() {
   local a
   for a in "${XM_AUTHORIZING_ASSOCIATIONS[@]}"; do [ "$1" = "$a" ] && return 0; done
+  return 1
+}
+
+# xm_governs <slug> <login> — does this login hold merge-governing permission in
+# THIS repository? Fails closed: an unreadable or absent permission is not
+# authority, because the whole point is that authority elsewhere is not authority
+# here.
+xm_governs() {
+  local p q
+  p="$(xm_permission "$1" "$2")" || return 1
+  [ -n "$p" ] || return 1
+  for q in "${XM_GOVERNING_PERMISSIONS[@]}"; do [ "$p" = "$q" ] && return 0; done
   return 1
 }
 
@@ -2525,9 +2545,18 @@ EOF
   local m_child="" m_acc=""
   while IFS= read -r line; do
     [ -n "$line" ] || continue
-    assoc="${line%%	*}"; body="${line#*	}"; body="${body#*	}"
+    assoc="${line%%	*}"; rest="${line#*	}"
+    local glogin="${rest%%	*}"; body="${rest#*	}"
     case "$body" in *"$XM_MARKER_PREFIX "*) ;; *) continue ;; esac
     xm_is_authorizing "$assoc" || continue
+    # `author_association` is relative to the repository that SERVED the comment.
+    # Under a cross-repository parent that is the parent's repository, so an
+    # OWNER there would otherwise be treated as able to grant merge authority
+    # here. Authority over this merge must be established in the pull request's
+    # own repository, and an unreadable permission is not authority.
+    if [ -n "$cross" ]; then
+      xm_governs "$slug" "$glogin" || continue
+    fi
     # Machinery reporting to machinery never authorizes a merge, even when the
     # report happens to carry a well-formed grant line.
     local cm skip=""
@@ -2640,15 +2669,24 @@ REVIEW
           xm_marker_other "$mline" "$prnum" "$sha" && continue
           acc_bad=$((acc_bad + 1)); continue
         fi
-        [ "$a_pr" = "$prnum" ] || continue
-        xm_issue_ref "$a_child" || continue
-        if xm_ambiguous_child "$a_child" "$child_num" "$cross"; then
+        # Identity must be ESTABLISHED before a record may be set aside. A
+        # missing or non-canonical pr/head does not prove the record concerns
+        # another candidate — it proves nothing, and beside a valid MET that is
+        # ambiguous evidence about this commit.
+        if ! xm_num "$a_pr" || ! xm_sha "$a_head"; then
           acc_bad=$((acc_bad + 1)); continue
         fi
-        xm_same_issue "$a_child" "$child_id" "$slug" || continue
-        xm_sha "$a_head" || continue
-        [ "$a_head" = "$sha" ] || continue
-        [ "$a_contract" = "$m_acc" ] || continue
+        # ONLY a unique, canonical identity naming another candidate is set aside.
+        [ "$a_pr" = "$prnum" ] && [ "$a_head" = "$sha" ] || continue
+        # From here the record concerns THIS pull request at THIS commit, so
+        # every remaining field must agree. Nothing is stepped over: a record
+        # about this commit that disagrees is contradictory evidence.
+        if ! xm_issue_ref "$a_child" \
+           || xm_ambiguous_child "$a_child" "$child_num" "$cross" \
+           || ! xm_same_issue "$a_child" "$child_id" "$slug" \
+           || [ "$a_contract" != "$m_acc" ]; then
+          acc_bad=$((acc_bad + 1)); continue
+        fi
         # A closed vocabulary that fails toward the non-affirming value, as the
         # reviewer lane does: only MET affirms. A NOT-MET for the SAME identity
         # and commit is not something to skip past — it is contradictory

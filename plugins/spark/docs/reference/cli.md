@@ -626,7 +626,7 @@ invocation returns `4`, and `--help` is the single explicit success path.
 | exact HEAD, state, draft, base, head branch | the pull request |
 | the bounded work unit | the issue the PR **closes** — governance already makes a linked PR plus a closing keyword the authoritative linkage |
 | the owning issue | the work unit's **native parent** (sub-issue relationship) |
-| the authorization | a durable grant comment on that parent |
+| the authorization | a durable grant comment on that parent, from an author whose authority holds **in the pull request's repository** |
 | the acceptance identity | whatever that grant binds |
 | acceptance is *true* | a durable attestation bound to this exact commit |
 | independent review | the exact-HEAD `spark-openai-review … verdict=PASS` marker from `github-actions[bot]` |
@@ -692,6 +692,23 @@ its slug would let a bare `#124` written there stand for *this* repository's
 `#124` — a different issue that happens to share a number. Where the parent is
 cross-repository, a bare reference in a grant or an attestation is therefore
 ambiguous and declines; name the work unit in full (`owner/repo#124`).
+
+**Authority is established where the merge happens.** `author_association`
+describes the commenter's standing in whichever repository *served* the comment.
+For a same-repository parent that is the right question; under a
+cross-repository parent it is not, because an `OWNER` of the parent's repository
+may hold nothing at all here. There, the commenter's permission in the **pull
+request's** repository is read and must be `admin`, `maintain` or `write` — an
+unreadable or absent permission is not authority. The read happens only for the
+cross-repository case, since a same-repository association already answers it.
+
+**An acceptance record is set aside only on established identity.** A missing or
+non-canonical `pr`/`head` does not prove a record concerns some other candidate —
+it proves nothing, and beside a valid `MET` that is ambiguous evidence about this
+commit. Only a *unique, canonical* identity naming another pull request or
+commit is skipped; once a record is about this pull request at this commit,
+every remaining field must agree, and a disagreement is contradictory evidence
+rather than an ignorable sibling.
 
 Grants are counted the same way: a **candidate** authorization line is any line
 opening with the marker, valid or not, and a malformed same-unit line beside a

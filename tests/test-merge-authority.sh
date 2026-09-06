@@ -62,6 +62,7 @@ case "$jq" in
   *required_status_checks.checks*)
                          [ "${GH_FAIL:-}" = prot ] && exit 1; printf '%s' "${GH_PROT:-}" ;;
   ".protected"*)         [ "${GH_FAIL:-}" = protected ] && exit 1; printf '%s' "${GH_PROTECTED:-}" ;;
+  ".permission"*)        [ "${GH_FAIL:-}" = perm ] && exit 1; printf '%s' "${GH_PERM:-}" ;;
   *workflow_runs*)       [ "${GH_FAIL:-}" = runs ] && exit 1; printf '%s' "${GH_RUNS:-}" ;;
   ".statuses[]"*)        [ "${GH_FAIL:-}" = statuses ] && exit 1; printf '%s' "${GH_STATUSES:-}" ;;
   ".default_branch")     [ "${GH_FAIL:-}" = defbranch ] && exit 1; printf '%s' "${GH_DEFBRANCH:-}" ;;
@@ -83,7 +84,7 @@ EOS
 chmod +x "$STUB/bin/gh"
 export PATH="$STUB/bin:$PATH"
 GH_LOG="$STUB/calls"
-export GH_LOG GH_STATUSES GH_PROT GH_PROTECTED GH_RULECHECKS GH_RULEFLOWS GH_RUNS
+export GH_LOG GH_STATUSES GH_PROT GH_PROTECTED GH_RULECHECKS GH_RULEFLOWS GH_RUNS GH_PERM
 export GH_SLUG GH_CLOSING GH_DEFBRANCH GH_HEAD GH_PR GH_FILES GH_CHECKS \
        GH_PARENT GH_PARENT_NUM GH_PARENT_COMMENTS GH_PR_COMMENTS GH_FAIL
 
@@ -119,6 +120,7 @@ tests/test-hot-path-memo.sh"
 doctor${TAB}
 gate${TAB}15368"
   GH_PROTECTED="true"
+  GH_PERM="admin"
   GH_RULECHECKS=""
   GH_RULEFLOWS=""
   GH_RUNS=""
@@ -222,6 +224,51 @@ GH_PR_COMMENTS="$REV
 OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->
 OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
 verdict "NOT ELIGIBLE" 4 "two acceptance proofs are ambiguous and decline" "${ELIGIBLE[@]}"
+
+# --- an acceptance record is set aside only on ESTABLISHED identity --------
+# A missing or non-canonical pr/head does not prove a record concerns another
+# candidate. It proves nothing — and beside a valid MET, nothing is ambiguous
+# evidence about this commit, not an ignorable sibling.
+GOOD="OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
+for broken in "child=#724 head=$SHA contract=$ACC verdict=MET" \
+              "pr= child=#724 head=$SHA contract=$ACC verdict=MET" \
+              "pr=0727 child=#724 head=$SHA contract=$ACC verdict=MET" \
+              "pr=727 child=#724 contract=$ACC verdict=MET" \
+              "pr=727 child=#724 head=deadbeef contract=$ACC verdict=MET" \
+              "pr=727 child=#724 head=${SHA}00 contract=$ACC verdict=MET" \
+              "pr=727 child=#724 head=0123456789ABCDEF0123456789abcdef01234567 contract=$ACC verdict=MET"; do
+  GH_PR_COMMENTS="$REV
+$GOOD
+OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance $broken -->"
+  verdict "NOT ELIGIBLE" 4 "an acceptance record with unestablished identity ('$broken') declines beside a valid MET" "${ELIGIBLE[@]}"
+done
+# Once a record IS about this pull request at this commit, every remaining
+# field must agree — an invalid or absent child is not something to step over.
+for broken in "pr=727 head=$SHA contract=$ACC verdict=MET" \
+              "pr=727 child= head=$SHA contract=$ACC verdict=MET" \
+              "pr=727 child=nonsense head=$SHA contract=$ACC verdict=MET" \
+              "pr=727 child=#0724 head=$SHA contract=$ACC verdict=MET" \
+              "pr=727 child=724 head=$SHA contract=$ACC verdict=MET" \
+              "pr=727 child=#724 head=$SHA verdict=MET" \
+              "pr=727 child=#724 head=$SHA contract= verdict=MET" \
+              "pr=727 child=#724 head=$SHA contract=$ACC"; do
+  GH_PR_COMMENTS="$REV
+$GOOD
+OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance $broken -->"
+  verdict "NOT ELIGIBLE" 4 "an acceptance record about this commit that disagrees ('$broken') declines" "${ELIGIBLE[@]}"
+done
+# A record with a UNIQUE, CANONICAL identity naming another candidate is the one
+# thing that may be set aside — otherwise every unrelated attestation on a busy
+# pull request would block this one.
+GH_PR_COMMENTS="$REV
+$GOOD
+OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=999 child=#724 head=$SHA contract=$ACC verdict=MET -->"
+verdict "ROUTINE MERGE" 0 "an acceptance record for another pull request is set aside" "${ELIGIBLE[@]}"
+GH_PR_COMMENTS="$REV
+$GOOD
+OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA2 contract=$ACC verdict=NOT-MET -->"
+verdict "ROUTINE MERGE" 0 "an acceptance record for another commit is set aside" "${ELIGIBLE[@]}"
+reset_world
 
 for assoc in NONE CONTRIBUTOR FIRST_TIME_CONTRIBUTOR MANNEQUIN; do
   GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->
@@ -570,6 +617,30 @@ verdict "NOT ELIGIBLE" 4 "a bare acceptance child under a cross-repository paren
 GH_PR_COMMENTS="$REV
 OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=jwogrady/spark#724 head=$SHA contract=$ACC verdict=MET -->"
 verdict "ROUTINE MERGE" 0 "explicit full identities authorize across a cross-repository parent" "${ELIGIBLE[@]}"
+# `author_association` is relative to the repository that SERVED the comment.
+# An OWNER of the parent's repository is not thereby able to grant merge
+# authority in THIS one, so authority is established against the PR repository
+# and an unreadable permission is not authority.
+for perm in read triage none ""; do
+  GH_PERM="$perm"
+  verdict "NOT ELIGIBLE" 4 "a commenter with '${perm:-<unreadable>}' permission here does not grant merge authority" "${ELIGIBLE[@]}"
+done
+GH_PERM="admin"
+GH_FAIL=perm
+verdict "NOT ELIGIBLE" 4 "an unreadable permission read declines a cross-repository grant" "${ELIGIBLE[@]}"
+GH_FAIL=""
+for perm in admin maintain write; do
+  GH_PERM="$perm"
+  verdict "ROUTINE MERGE" 0 "'$perm' permission in the PR repository governs the merge" "${ELIGIBLE[@]}"
+done
+reset_world
+# The permission read is a cross-repository question only: a same-repository
+# parent already answers it through author_association, and adding a needless
+# dependency would be its own defect.
+GH_FAIL=perm
+verdict "ROUTINE MERGE" 0 "the permission read is not consulted when the parent is in the same repository" "${ELIGIBLE[@]}"
+GH_FAIL=""
+reset_world
 GH_PR_COMMENTS="$REV
 OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=other/org-repo#724 head=$SHA contract=$ACC verdict=MET -->"
 verdict "NOT ELIGIBLE" 4 "an acceptance naming the parent's repository does not prove the PR's issue" "${ELIGIBLE[@]}"

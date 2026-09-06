@@ -75,7 +75,9 @@ required anywhere, nothing was proven, so there is still no merge.
 The bounded work unit's identity comes from the **pull request's** repository.
 The owning issue may live in another one, so where it does, name the work unit
 in full (`owner/repo#124`) in the grant and the attestation: a bare `#124`
-written on a parent elsewhere is ambiguous and declines.
+written on a parent elsewhere is ambiguous and declines. The grant's author must
+also hold authority **where the merge happens** — under a cross-repository
+parent, being an owner of the parent's repository is not authority here.
 
 Everything unproven declines: missing, malformed, duplicate, unreadable, stale,
 wrong-repository, wrong-child, wrong-acceptance or wrong-HEAD records; a PASS
