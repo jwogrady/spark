@@ -95,12 +95,12 @@ way it would be at the top level.
 ## Canonical identifiers
 
 One representation per identity. Everything else — a bare issue number, a
-seven-char SHA, a display title — is a projection and is never used to compare
-or bind.
+seven-char SHA, a display title, a differently-cased owner or repository name —
+is a projection and is never used to compare or bind.
 
 | Kind | Canonical form | Example |
 |---|---|---|
-| repository | <host>/<owner>/<name>, lower-case host, no scheme, no .git | `github.com/acme/widgets` |
+| repository | <host>/<owner>/<name>, all lower-case (GitHub compares owner and name case-insensitively, so one spelling is the identity), no scheme, no .git | `github.com/acme/widgets` |
 | work-unit | <repository>#<number>; a bare #<number> is a projection, never an identity | `github.com/acme/widgets#42` |
 | comment | <work-unit>/comment/<comment id> | `github.com/acme/widgets#42/comment/9001` |
 | milestone | <repository>/milestone/<number> | `github.com/acme/widgets/milestone/7` |
@@ -243,6 +243,13 @@ behavioral suite checks the two never drift.
 - **R16** Every invalidator is a token in one of the invalidator grammars and
   appears once per fact; provenance is a pointer in the provenance grammar.
   Neither carries prose, so freshness and drill-down are machine-normalized.
+- **R17** A fact's source identity is the node its value describes: work_unit
+  and repository name their own id; review names its record and lists it as a
+  comment: invalidator; acceptance read from GitHub names its contract;
+  placement and graph name the work-unit node they were read from and list it as
+  an issue: or pull_request: invalidator; head read from GitHub names a work
+  unit and checks name a repository — within one set, the work unit's own node
+  and the repository's. inputs and because list each key once.
 
 ## Versioning
 
