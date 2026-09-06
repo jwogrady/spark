@@ -259,3 +259,17 @@ mutant_runtime() {
   # in a subshell and MUTANT_CHANGED would never reach the caller.
   MUTANT_PATH="$dest/bin/spark"
 }
+
+# gh_stub_prelude — the lines a `gh` stub begins with, printed for a suite to
+# embed after its shebang. It parses the caller's --jq into GH_JQ and defines
+# answer_json <json>, which applies that jq exactly as gh would (or prints the
+# JSON verbatim when none was passed). A stub built on it answers with the JSON
+# GitHub returns, so the production jq program is exercised on every call; a
+# stub that prints pre-shaped rows agrees with any jq, including a broken one.
+gh_stub_prelude() {
+  cat <<'PRELUDE'
+GH_JQ=""; __prev=""
+for __a in "$@"; do [ "$__prev" = "--jq" ] && GH_JQ="$__a"; __prev="$__a"; done
+answer_json() { if [ -n "$GH_JQ" ]; then printf '%s' "$1" | jq -r "$GH_JQ"; else printf '%s\n' "$1"; fi; }
+PRELUDE
+}

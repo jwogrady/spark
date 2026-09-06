@@ -157,22 +157,64 @@ comparable figure and it did not move outside noise.
 
 ---
 
-## Remaining scope (later packets, in order)
+## Packet 2 — wrong-layer `gh` stubs (contract: "mocks that assume production transport/parser output")
 
-2. **Wrong-layer mocks** (contract: "mocks that assume production transport/parser output").
-   Candidates found so far: stubs that answer `gh api … --jq` with rows already shaped the
-   way *one* caller's jq shapes them, so the production jq is never exercised —
-   `tests/test-plan-verify-coverage.sh` (`api` branch: sub_issues, blocked_by, milestones)
-   and `tests/test-canonical-primitives.sh` (its recording stub). The pattern to adopt
-   exists in the same corpus: `gh_issue_json` in the plan-verify suite applies the
-   caller's `--jq` to a JSON fixture. Three stubs of this kind were already corrected by
-   #739 (course-derivation, member-identity, release-gate-role).
-3. **Repeated `gh` stub scaffolding** (baseline B3/B4): 24+ suites each invent a shim
-   directory, write a stub, `chmod +x`, prepend `PATH`. A `shim_init`/`stub_gh` pair in
-   `lib.sh` would remove the scaffolding while leaving each stub's *answers* in the suite
-   that owns them. Discrimination is unaffected by construction; the risk is in PATH
-   ordering, so it is its own packet with its own per-suite proof.
-4. **Same-invariant candidates** (baseline C1–C7). The baseline's own verdicts stand:
+**What was wrong.** Two suites answered `gh api … --jq <program>` with rows already shaped
+the way *one* caller's jq shapes them (`printf '100\topen\tacme/widgets'`), so the
+production jq programs — the milestone list, the sub-issue list, the shared blocked-by
+reader, the identity read — were never executed by those suites: a stub that prints
+pre-shaped rows agrees with any jq, including a broken one. #739 had already corrected
+three such stubs that answered with a pre-shaped count `0`.
+
+**What changed.** `tests/lib.sh` gains `gh_stub_prelude`, the lines a `gh` stub begins with:
+it parses the caller's `--jq` and defines `answer_json <json>`, which applies that jq
+exactly as gh would. `tests/test-plan-verify-coverage.sh`'s `api` branch and the recording
+stub in `tests/test-canonical-primitives.sh` now answer with the JSON GitHub returns
+(milestones with `title`/`description`, sub-issues as `{number}` objects, blockers as
+`{number, state, repository.full_name}`, the identity as `{nameWithOwner}`, the open-issue
+list with `milestone`, `labels` and `issue_dependencies_summary`), shaped by the binary's
+own jq. The canonical-primitives suite builds its fixtures through four small helpers
+(`bl`, `si`, `nwo`, `iss`) so each scenario states what GitHub said, not what a reader
+would print. Two scenarios that no jq program can produce — a row with too few or too
+many columns, a transport fault — are still fed raw, and the stub says so (`.raw`).
+
+| Existing test/case | Invariant proved | Surviving test/case | Same/stronger discrimination? | Validation |
+|---|---|---|---|---|
+| plan-verify `api` stub rows (milestones, sub-issues, blocked-by, identity), 9 scenarios | verify's milestone, hierarchy, dependency and order checks over each scenario | the same 9 scenarios answered as JSON through the binary's jq | **Stronger** — the production jq programs (`.[] \| "\(.title)\t\(.description // "")"`, `.[].number`, the blocked-by row jq, `.nameWithOwner`) now execute on every call; a jq regression would fail here | suite 82/0 unchanged; per-suite counts identical |
+| canonical-primitives recording stub, 26 scenarios | the three primitives' contracts and the consumers' filters | the same scenarios as JSON fixtures via `bl`/`si`/`nwo`/`iss`; two transport-fault rows kept raw and labelled | **Stronger** for every JSON scenario (the reader's jq and the `// ""` defaults are exercised; malformed values arrive as GitHub's JSON would carry them); **same** for the two raw rows | suite 100/0 unchanged; per-suite counts identical |
+
+**Before / after (this packet).**
+
+| | BEFORE (branch base `89d0e33`) | AFTER |
+|---|---|---|
+| stubs answering `gh api --jq` with pre-shaped rows | 2 suites (plan-verify-coverage, canonical-primitives) | 0 — plus 2 labelled raw transport-fault rows in canonical-primitives |
+| production jq programs exercised by those suites | 0 | 5 (milestones, sub-issues, blocked-by reader, identity, open-issue list) |
+| shared stub scaffolding in `lib.sh` | none | `gh_stub_prelude` (used by 2 suites; packet 3 adopts it elsewhere) |
+| assertions, full run | 3,908 / 0 | 3,908 / 0 |
+| per-suite pass/fail lines | 92 | 92, **all identical** |
+| full-suite wall clock | 161 s | 161 s |
+| files changed | — | 3 (`tests/lib.sh`, the two suites) |
+
+**Still pre-shaped, deferred to packet 3.** `tests/test-codify-prereqs.sh` carries ten
+inline `gh` stubs answering `api repos/{owner}/{repo} --jq .full_name`, the blocked-by
+endpoint (`12\thttps://api.github.com/repos/o/self`, the skill script's own jq shape) and
+GraphQL closing-reference queries; converting them is the scaffolding packet's job, since
+it means adopting `gh_stub_prelude` across ten stubs in one suite.
+
+---
+
+## Remaining scope (later packets, in order; packets 1 and 2 above are done)
+
+1. **Repeated `gh` stub scaffolding** (baseline B3/B4): 24+ suites each invent a shim
+   directory, write a stub, `chmod +x`, prepend `PATH`; `test-codify-prereqs.sh` alone
+   carries ten inline stubs with pre-shaped answers (`api repos/{owner}/{repo} --jq
+   .full_name`, the blocked-by endpoint in the skill script's own jq shape, GraphQL
+   closing-reference queries). `gh_stub_prelude` (packet 2) is the first shared piece; a
+   `shim_init`/`stub_gh` pair would remove the rest of the scaffolding while leaving each
+   stub's *answers* in the suite that owns them, and converting the codify-prereqs stubs
+   rides the same change. Discrimination is unaffected by construction; the risk is in
+   PATH ordering, so it is its own packet with its own per-suite proof.
+2. **Same-invariant candidates** (baseline C1–C7). The baseline's own verdicts stand:
    most groups are layered, not duplicated. The two worth a line-level read are
    `test-context-budget.sh` vs `test-footprint-budget.sh` (C4: same fixture marketplace,
    hard-error vs warn — but different functions under test) and the three
