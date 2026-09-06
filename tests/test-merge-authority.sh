@@ -62,7 +62,21 @@ case "$jq" in
   *required_status_checks.checks*)
                          [ "${GH_FAIL:-}" = prot ] && exit 1; printf '%s' "${GH_PROT:-}" ;;
   ".protected"*)         [ "${GH_FAIL:-}" = protected ] && exit 1; printf '%s' "${GH_PROTECTED:-}" ;;
-  ".permission"*)        [ "${GH_FAIL:-}" = perm ] && exit 1; printf '%s' "${GH_PERM:-}" ;;
+  ".permission"*)
+      [ "${GH_FAIL:-}" = perm ] && exit 1
+      # Permission is answered PER LOGIN, so the grant author and the attesting
+      # author can be given different authority and each path proved separately.
+      who="${path#*/collaborators/}"; who="${who%%/*}"
+      found=""
+      while IFS= read -r maprow; do
+        [ -n "$maprow" ] || continue
+        case "$maprow" in
+          "$who	"*) found="${maprow#*	}" ;;
+        esac
+      done <<MAP
+${GH_PERM_MAP:-}
+MAP
+      if [ -n "$found" ]; then printf '%s' "$found"; else printf '%s' "${GH_PERM:-}"; fi ;;
   *workflow_runs*)       [ "${GH_FAIL:-}" = runs ] && exit 1; printf '%s' "${GH_RUNS:-}" ;;
   ".statuses[]"*)        [ "${GH_FAIL:-}" = statuses ] && exit 1; printf '%s' "${GH_STATUSES:-}" ;;
   ".default_branch")     [ "${GH_FAIL:-}" = defbranch ] && exit 1; printf '%s' "${GH_DEFBRANCH:-}" ;;
@@ -92,7 +106,7 @@ EOS
 chmod +x "$STUB/bin/gh"
 export PATH="$STUB/bin:$PATH"
 GH_LOG="$STUB/calls"
-export GH_LOG GH_STATUSES GH_PROT GH_PROTECTED GH_RULECHECKS GH_RULEFLOWS GH_RUNS GH_PERM
+export GH_LOG GH_STATUSES GH_PROT GH_PROTECTED GH_RULECHECKS GH_RULEFLOWS GH_RUNS GH_PERM GH_PERM_MAP
 export GH_SLUG GH_CLOSING GH_DEFBRANCH GH_HEAD GH_PR GH_FILES GH_CHECKS \
        GH_PARENT GH_PARENT_NUM GH_PARENT_COMMENTS GH_PR_COMMENTS GH_FAIL \
        GH_PARENT_JSON GH_PR_JSON
@@ -107,6 +121,13 @@ recover${TAB}completed${TAB}skipped${TAB}"
 SHA="0123456789abcdef0123456789abcdef01234567"
 SHA2="fedcba9876543210fedcba9876543210fedcba98"
 ACC="memo-transparency-v1"
+# The authorization is durable and given IN ADVANCE, so the grant's instants
+# precede the review's. T_LATE is after it, for the retroactive controls.
+T_GRANT="2026-09-01T10:00:00Z"
+T_REVIEW="2026-09-05T12:00:00Z"
+T_LATE="2026-09-06T09:00:00Z"
+TS="$T_GRANT${TAB}$T_GRANT"
+TS_REVIEW="$T_REVIEW${TAB}$T_REVIEW"
 
 reset_world() {
   GH_FAIL=""
@@ -130,6 +151,7 @@ doctor${TAB}
 gate${TAB}15368"
   GH_PROTECTED="true"
   GH_PERM="admin"
+  GH_PERM_MAP=""
   GH_PARENT_JSON=""
   GH_PR_JSON=""
   GH_RULECHECKS=""
@@ -138,9 +160,9 @@ gate${TAB}15368"
   GH_CHECKS="$BASE_CHECKS"
   GH_STATUSES=""
   : > "$GH_LOG"
-  GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}Approving the bounded unit.\\nspark-authorizes child=#724 acceptance=$ACC"
-  GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->
-OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
+  GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}${TS}${TAB}Approving the bounded unit.\\nspark-authorizes child=#724 acceptance=$ACC"
+  GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}${TS_REVIEW}${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->
+OWNER${TAB}jwogrady${TAB}${TS_REVIEW}${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
 }
 reset_world
 
@@ -189,58 +211,58 @@ for forged in review=pass checks=green stale-head=protected scope=routine-revers
 done
 
 # --- derived: the exact-HEAD reviewer verdict -------------------------------
-GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA2 verdict=PASS -->
-OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}${TS_REVIEW}${TAB}<!-- spark-openai-review pr=727 head=$SHA2 verdict=PASS -->
+OWNER${TAB}jwogrady${TAB}${TS_REVIEW}${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
 verdict "NOT ELIGIBLE" 4 "a PASS for an older HEAD does not apply to this one" "${ELIGIBLE[@]}"
-GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=CHANGES REQUIRED -->
-OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}${TS_REVIEW}${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=CHANGES REQUIRED -->
+OWNER${TAB}jwogrady${TAB}${TS_REVIEW}${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
 verdict "NOT ELIGIBLE" 4 "CHANGES REQUIRED on this HEAD does not merge" "${ELIGIBLE[@]}"
-GH_PR_COMMENTS="OWNER${TAB}jwogrady${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->
-OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
+GH_PR_COMMENTS="OWNER${TAB}jwogrady${TAB}${TS}${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->
+OWNER${TAB}jwogrady${TAB}${TS_REVIEW}${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
 verdict "NOT ELIGIBLE" 4 "a PASS written by a human is not the reviewer's verdict" "${ELIGIBLE[@]}"
-GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}LGTM, looks fine to me
-OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}${TS_REVIEW}${TAB}LGTM, looks fine to me
+OWNER${TAB}jwogrady${TAB}${TS_REVIEW}${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
 verdict "NOT ELIGIBLE" 4 "reviewer prose without the structured marker is not a verdict" "${ELIGIBLE[@]}"
 reset_world
 
 # --- derived: the bounded acceptance is TRUE at that exact commit -----------
-GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->"
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}${TS_REVIEW}${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->"
 verdict "NOT ELIGIBLE" 4 "an authorized acceptance that is never proven true does not merge" "${ELIGIBLE[@]}"
-GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->
-OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA2 contract=$ACC verdict=MET -->"
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}${TS_REVIEW}${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->
+OWNER${TAB}jwogrady${TAB}${TS_REVIEW}${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA2 contract=$ACC verdict=MET -->"
 verdict "NOT ELIGIBLE" 4 "acceptance proof bound to another HEAD does not merge" "${ELIGIBLE[@]}"
-GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->
-OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=other-v1 verdict=MET -->"
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}${TS_REVIEW}${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->
+OWNER${TAB}jwogrady${TAB}${TS_REVIEW}${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=other-v1 verdict=MET -->"
 verdict "NOT ELIGIBLE" 4 "acceptance proof for another contract does not merge" "${ELIGIBLE[@]}"
-GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->
-OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=NOT-MET -->"
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}${TS_REVIEW}${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->
+OWNER${TAB}jwogrady${TAB}${TS_REVIEW}${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=NOT-MET -->"
 verdict "NOT ELIGIBLE" 4 "an attestation that acceptance is NOT met does not merge" "${ELIGIBLE[@]}"
-REV="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->"
+REV="github-actions[bot]${TAB}github-actions[bot]${TAB}${TS_REVIEW}${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->"
 GH_PR_COMMENTS="$REV
-OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#725 head=$SHA contract=$ACC verdict=MET -->"
+OWNER${TAB}jwogrady${TAB}${TS_REVIEW}${TAB}<!-- spark-acceptance pr=727 child=#725 head=$SHA contract=$ACC verdict=MET -->"
 verdict "NOT ELIGIBLE" 4 "acceptance proof for the wrong child does not merge" "${ELIGIBLE[@]}"
 GH_PR_COMMENTS="$REV
-OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=other/repo#724 head=$SHA contract=$ACC verdict=MET -->"
+OWNER${TAB}jwogrady${TAB}${TS_REVIEW}${TAB}<!-- spark-acceptance pr=727 child=other/repo#724 head=$SHA contract=$ACC verdict=MET -->"
 verdict "NOT ELIGIBLE" 4 "acceptance proof from another repository does not merge" "${ELIGIBLE[@]}"
 GH_PR_COMMENTS="$REV
-OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=999 child=#724 head=$SHA contract=$ACC verdict=MET -->"
+OWNER${TAB}jwogrady${TAB}${TS_REVIEW}${TAB}<!-- spark-acceptance pr=999 child=#724 head=$SHA contract=$ACC verdict=MET -->"
 verdict "NOT ELIGIBLE" 4 "acceptance proof naming another PR does not merge" "${ELIGIBLE[@]}"
 GH_PR_COMMENTS="$REV
-OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET extra=1 -->"
+OWNER${TAB}jwogrady${TAB}${TS_REVIEW}${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET extra=1 -->"
 verdict "NOT ELIGIBLE" 4 "an acceptance proof with an unknown field is refused" "${ELIGIBLE[@]}"
 GH_PR_COMMENTS="$REV
-OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=met -->"
+OWNER${TAB}jwogrady${TAB}${TS_REVIEW}${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=met -->"
 verdict "NOT ELIGIBLE" 4 "a lowercase verdict does not affirm" "${ELIGIBLE[@]}"
 GH_PR_COMMENTS="$REV
-OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->
-OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
+OWNER${TAB}jwogrady${TAB}${TS_REVIEW}${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->
+OWNER${TAB}jwogrady${TAB}${TS_REVIEW}${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
 verdict "NOT ELIGIBLE" 4 "two acceptance proofs are ambiguous and decline" "${ELIGIBLE[@]}"
 
 # --- an acceptance record is set aside only on ESTABLISHED identity --------
 # A missing or non-canonical pr/head does not prove a record concerns another
 # candidate. It proves nothing — and beside a valid MET, nothing is ambiguous
 # evidence about this commit, not an ignorable sibling.
-GOOD="OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
+GOOD="OWNER${TAB}jwogrady${TAB}${TS_REVIEW}${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
 for broken in "child=#724 head=$SHA contract=$ACC verdict=MET" \
               "pr= child=#724 head=$SHA contract=$ACC verdict=MET" \
               "pr=0727 child=#724 head=$SHA contract=$ACC verdict=MET" \
@@ -250,7 +272,7 @@ for broken in "child=#724 head=$SHA contract=$ACC verdict=MET" \
               "pr=727 child=#724 head=0123456789ABCDEF0123456789abcdef01234567 contract=$ACC verdict=MET"; do
   GH_PR_COMMENTS="$REV
 $GOOD
-OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance $broken -->"
+OWNER${TAB}jwogrady${TAB}${TS_REVIEW}${TAB}<!-- spark-acceptance $broken -->"
   verdict "NOT ELIGIBLE" 4 "an acceptance record with unestablished identity ('$broken') declines beside a valid MET" "${ELIGIBLE[@]}"
 done
 # Once a record IS about this pull request at this commit, every remaining
@@ -265,7 +287,7 @@ for broken in "pr=727 head=$SHA contract=$ACC verdict=MET" \
               "pr=727 child=#724 head=$SHA contract=$ACC"; do
   GH_PR_COMMENTS="$REV
 $GOOD
-OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance $broken -->"
+OWNER${TAB}jwogrady${TAB}${TS_REVIEW}${TAB}<!-- spark-acceptance $broken -->"
   verdict "NOT ELIGIBLE" 4 "an acceptance record about this commit that disagrees ('$broken') declines" "${ELIGIBLE[@]}"
 done
 # A record with a UNIQUE, CANONICAL identity naming another candidate is the one
@@ -273,22 +295,22 @@ done
 # pull request would block this one.
 GH_PR_COMMENTS="$REV
 $GOOD
-OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=999 child=#724 head=$SHA contract=$ACC verdict=MET -->"
+OWNER${TAB}jwogrady${TAB}${TS_REVIEW}${TAB}<!-- spark-acceptance pr=999 child=#724 head=$SHA contract=$ACC verdict=MET -->"
 verdict "ROUTINE MERGE" 0 "an acceptance record for another pull request is set aside" "${ELIGIBLE[@]}"
 GH_PR_COMMENTS="$REV
 $GOOD
-OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA2 contract=$ACC verdict=NOT-MET -->"
+OWNER${TAB}jwogrady${TAB}${TS_REVIEW}${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA2 contract=$ACC verdict=NOT-MET -->"
 verdict "ROUTINE MERGE" 0 "an acceptance record for another commit is set aside" "${ELIGIBLE[@]}"
 reset_world
 
 for assoc in NONE CONTRIBUTOR FIRST_TIME_CONTRIBUTOR MANNEQUIN; do
-  GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->
-$assoc${TAB}drive-by${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
+  GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}${TS_REVIEW}${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->
+$assoc${TAB}drive-by${TAB}${TS_REVIEW}${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
   verdict "NOT ELIGIBLE" 4 "an acceptance attested by '$assoc' does not merge" "${ELIGIBLE[@]}"
 done
 for assoc in OWNER MEMBER COLLABORATOR; do
-  GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->
-$assoc${TAB}someone${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
+  GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}${TS_REVIEW}${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->
+$assoc${TAB}someone${TAB}${TS_REVIEW}${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
   verdict "ROUTINE MERGE" 0 "an acceptance attested by $assoc is accepted" "${ELIGIBLE[@]}"
 done
 reset_world
@@ -513,58 +535,58 @@ reset_world
 # --- conflicting evidence is not passing evidence ---------------------------
 # A later CHANGES REQUIRED for the same commit does not sit quietly beside an
 # earlier PASS; one commit cannot be both.
-GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->
-github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=CHANGES REQUIRED -->
-OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}${TS_REVIEW}${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->
+github-actions[bot]${TAB}github-actions[bot]${TAB}${TS_REVIEW}${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=CHANGES REQUIRED -->
+OWNER${TAB}jwogrady${TAB}${TS_REVIEW}${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
 verdict "NOT ELIGIBLE" 4 "a PASS beside a CHANGES REQUIRED for the same head declines" "${ELIGIBLE[@]}"
 # ...and in the other order, so this is not an artefact of which came first.
-GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=CHANGES REQUIRED -->
-github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->
-OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}${TS_REVIEW}${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=CHANGES REQUIRED -->
+github-actions[bot]${TAB}github-actions[bot]${TAB}${TS_REVIEW}${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->
+OWNER${TAB}jwogrady${TAB}${TS_REVIEW}${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
 verdict "NOT ELIGIBLE" 4 "the order of conflicting verdicts does not matter" "${ELIGIBLE[@]}"
 # A MET beside a NOT-MET for the same identity and commit proves nothing.
-GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->
-OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->
-OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=NOT-MET -->"
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}${TS_REVIEW}${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->
+OWNER${TAB}jwogrady${TAB}${TS_REVIEW}${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->
+OWNER${TAB}jwogrady${TAB}${TS_REVIEW}${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=NOT-MET -->"
 verdict "NOT ELIGIBLE" 4 "a MET beside a NOT-MET for the same commit declines" "${ELIGIBLE[@]}"
 # A malformed acceptance record is not something to step over.
-GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->
-OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->
-OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC bogus=1 -->"
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}${TS_REVIEW}${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->
+OWNER${TAB}jwogrady${TAB}${TS_REVIEW}${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->
+OWNER${TAB}jwogrady${TAB}${TS_REVIEW}${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC bogus=1 -->"
 verdict "NOT ELIGIBLE" 4 "a malformed acceptance record beside a good one declines" "${ELIGIBLE[@]}"
 reset_world
 
 # Two records for one commit, even agreeing, are not one canonical record.
-GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->
-github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->
-OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}${TS_REVIEW}${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->
+github-actions[bot]${TAB}github-actions[bot]${TAB}${TS_REVIEW}${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->
+OWNER${TAB}jwogrady${TAB}${TS_REVIEW}${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
 verdict "NOT ELIGIBLE" 4 "two reviewer records for one commit are ambiguous" "${ELIGIBLE[@]}"
-GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict= -->
-OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}${TS_REVIEW}${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict= -->
+OWNER${TAB}jwogrady${TAB}${TS_REVIEW}${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
 verdict "NOT ELIGIBLE" 4 "a reviewer marker with no readable verdict declines" "${ELIGIBLE[@]}"
-GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=NOT ASSESSED -->
-OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}${TS_REVIEW}${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=NOT ASSESSED -->
+OWNER${TAB}jwogrady${TAB}${TS_REVIEW}${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
 verdict "NOT ELIGIBLE" 4 "NOT ASSESSED is never a pass" "${ELIGIBLE[@]}"
 reset_world
 
 # --- every marker OCCURRENCE is read, not the first one per comment ---------
 # Parsing at most one marker per comment let a second record hide behind the
 # first: a contradicting sibling in the same body was never seen at all.
-ACCEPT_MET="OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
-GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS --> and then <!-- spark-openai-review pr=727 head=$SHA verdict=CHANGES REQUIRED -->
+ACCEPT_MET="OWNER${TAB}jwogrady${TAB}${TS_REVIEW}${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}${TS_REVIEW}${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS --> and then <!-- spark-openai-review pr=727 head=$SHA verdict=CHANGES REQUIRED -->
 $ACCEPT_MET"
 verdict "NOT ELIGIBLE" 4 "two conflicting reviewer markers inside ONE comment decline" "${ELIGIBLE[@]}"
-GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->\\n<!-- spark-openai-review pr=727 head=$SHA verdict=CHANGES REQUIRED -->
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}${TS_REVIEW}${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->\\n<!-- spark-openai-review pr=727 head=$SHA verdict=CHANGES REQUIRED -->
 $ACCEPT_MET"
 verdict "NOT ELIGIBLE" 4 "two conflicting reviewer markers on separate lines of one comment decline" "${ELIGIBLE[@]}"
-GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS --> <!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}${TS_REVIEW}${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS --> <!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->
 $ACCEPT_MET"
 verdict "NOT ELIGIBLE" 4 "two agreeing reviewer markers inside one comment are still two records" "${ELIGIBLE[@]}"
 GH_PR_COMMENTS="$REV
-OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET --> <!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=NOT-MET -->"
+OWNER${TAB}jwogrady${TAB}${TS_REVIEW}${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET --> <!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=NOT-MET -->"
 verdict "NOT ELIGIBLE" 4 "a MET and a NOT-MET inside ONE comment decline" "${ELIGIBLE[@]}"
 GH_PR_COMMENTS="$REV
-OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->\\n<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
+OWNER${TAB}jwogrady${TAB}${TS_REVIEW}${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->\\n<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
 verdict "NOT ELIGIBLE" 4 "two acceptance proofs inside one comment decline" "${ELIGIBLE[@]}"
 reset_world
 
@@ -577,21 +599,21 @@ for broken in "pr=727 head=$SHA verdict=LOOKS FINE" \
               "head=$SHA pr=727 verdict=PASS" \
               "pr=727 head=$SHA verdict=PASS extra=1" \
               "pr=727 head=$SHA verdict="; do
-  GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->\\n<!-- spark-openai-review $broken -->
+  GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}${TS_REVIEW}${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->\\n<!-- spark-openai-review $broken -->
 $ACCEPT_MET"
   verdict "NOT ELIGIBLE" 4 "a malformed reviewer marker ('$broken') beside a PASS declines" "${ELIGIBLE[@]}"
 done
 # An unterminated marker is ambiguity, not absence.
-GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->\\n<!-- spark-openai-review pr=727 head=$SHA verdict=PASS
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}${TS_REVIEW}${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->\\n<!-- spark-openai-review pr=727 head=$SHA verdict=PASS
 $ACCEPT_MET"
 verdict "NOT ELIGIBLE" 4 "an unterminated reviewer marker beside a PASS declines" "${ELIGIBLE[@]}"
 # NOT ASSESSED is in the vocabulary, so it parses — and never affirms.
-GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=NOT ASSESSED -->
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}${TS_REVIEW}${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=NOT ASSESSED -->
 $ACCEPT_MET"
 verdict "NOT ELIGIBLE" 4 "NOT ASSESSED is a readable verdict and still not a pass" "${ELIGIBLE[@]}"
 # A malformed record that legibly concerns ANOTHER commit is not this decision's
 # business; only ambiguity about THIS commit declines.
-GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->\\n<!-- spark-openai-review pr=727 head=$SHA2 verdict=WHATEVER -->
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}${TS_REVIEW}${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->\\n<!-- spark-openai-review pr=727 head=$SHA2 verdict=WHATEVER -->
 $ACCEPT_MET"
 verdict "ROUTINE MERGE" 0 "a malformed reviewer marker for a different commit does not decline this one" "${ELIGIBLE[@]}"
 reset_world
@@ -607,16 +629,16 @@ for broken in "pr=0727 head=$SHA verdict=CHANGES REQUIRED" \
               "pr=727 head=${SHA}00 verdict=CHANGES REQUIRED" \
               "pr=727 head=0123456789ABCDEF0123456789abcdef01234567 verdict=CHANGES REQUIRED" \
               "pr=727 head= verdict=CHANGES REQUIRED"; do
-  GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->\\n<!-- spark-openai-review $broken -->
+  GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}${TS_REVIEW}${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->\\n<!-- spark-openai-review $broken -->
 $ACCEPT_MET"
   verdict "NOT ELIGIBLE" 4 "a reviewer record with unestablished identity ('$broken') declines beside a PASS" "${ELIGIBLE[@]}"
 done
 # A UNIQUE, CANONICAL identity naming another candidate is still set aside, or
 # every stale verdict on a long-lived pull request would block it forever.
-GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->\\n<!-- spark-openai-review pr=999 head=$SHA verdict=CHANGES REQUIRED -->
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}${TS_REVIEW}${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->\\n<!-- spark-openai-review pr=999 head=$SHA verdict=CHANGES REQUIRED -->
 $ACCEPT_MET"
 verdict "ROUTINE MERGE" 0 "a reviewer verdict for another pull request is set aside" "${ELIGIBLE[@]}"
-GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->\\n<!-- spark-openai-review pr=727 head=$SHA2 verdict=CHANGES REQUIRED -->
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}${TS_REVIEW}${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->\\n<!-- spark-openai-review pr=727 head=$SHA2 verdict=CHANGES REQUIRED -->
 $ACCEPT_MET"
 verdict "ROUTINE MERGE" 0 "a reviewer verdict for an earlier commit is set aside" "${ELIGIBLE[@]}"
 reset_world
@@ -625,17 +647,17 @@ reset_world
 # Keeping only the first pr= or head= let a record carrying both pr=999 and
 # pr=727 — or a stale head beside the current one — be waved through as
 # concerning another commit on the strength of whichever came first.
-GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->\\n<!-- spark-openai-review pr=999 pr=727 head=$SHA verdict=PASS -->
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}${TS_REVIEW}${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->\\n<!-- spark-openai-review pr=999 pr=727 head=$SHA verdict=PASS -->
 $ACCEPT_MET"
 verdict "NOT ELIGIBLE" 4 "a malformed reviewer marker naming two pull requests declines" "${ELIGIBLE[@]}"
-GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->\\n<!-- spark-openai-review pr=727 head=$SHA2 head=$SHA verdict=PASS -->
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}${TS_REVIEW}${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->\\n<!-- spark-openai-review pr=727 head=$SHA2 head=$SHA verdict=PASS -->
 $ACCEPT_MET"
 verdict "NOT ELIGIBLE" 4 "a malformed reviewer marker naming two commits declines" "${ELIGIBLE[@]}"
 GH_PR_COMMENTS="$REV
-OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->\\n<!-- spark-acceptance pr=999 pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
+OWNER${TAB}jwogrady${TAB}${TS_REVIEW}${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->\\n<!-- spark-acceptance pr=999 pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
 verdict "NOT ELIGIBLE" 4 "a malformed acceptance record naming two pull requests declines" "${ELIGIBLE[@]}"
 GH_PR_COMMENTS="$REV
-OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->\\n<!-- spark-acceptance pr=727 child=#724 head=$SHA2 head=$SHA contract=$ACC verdict=MET -->"
+OWNER${TAB}jwogrady${TAB}${TS_REVIEW}${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->\\n<!-- spark-acceptance pr=727 child=#724 head=$SHA2 head=$SHA contract=$ACC verdict=MET -->"
 verdict "NOT ELIGIBLE" 4 "a malformed acceptance record naming two commits declines" "${ELIGIBLE[@]}"
 reset_world
 
@@ -663,7 +685,7 @@ for broken in "pr=0727 head=$SHA verdict=CHANGES REQUIRED extra=1" \
               "pr=727 head=0123456789ABCDEF0123456789abcdef01234567 verdict=PASS extra=1" \
               "pr= head=$SHA verdict=PASS extra=1" \
               "pr=727 head= verdict=PASS extra=1"; do
-  GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->\\n<!-- spark-openai-review $broken -->
+  GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}${TS_REVIEW}${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->\\n<!-- spark-openai-review $broken -->
 $ACCEPT_MET"
   verdict "NOT ELIGIBLE" 4 "a malformed reviewer marker with a noncanonical identity ('$broken') declines" "${ELIGIBLE[@]}"
 done
@@ -674,19 +696,88 @@ for broken in "pr=0727 child=#724 head=$SHA contract=$ACC verdict=NOT-MET extra=
               "pr=727 child=#724 head= contract=$ACC verdict=MET extra=1"; do
   GH_PR_COMMENTS="$REV
 $ACCEPT_MET
-OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance $broken -->"
+OWNER${TAB}jwogrady${TAB}${TS_REVIEW}${TAB}<!-- spark-acceptance $broken -->"
   verdict "NOT ELIGIBLE" 4 "a malformed acceptance marker with a noncanonical identity ('$broken') declines" "${ELIGIBLE[@]}"
 done
 # A malformed record whose identity IS canonical and names another candidate is
 # still set aside — otherwise unrelated noise on a busy pull request would block
 # every merge, which is the opposite defect.
-GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->\\n<!-- spark-openai-review pr=999 head=$SHA verdict=PASS extra=1 -->
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}${TS_REVIEW}${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->\\n<!-- spark-openai-review pr=999 head=$SHA verdict=PASS extra=1 -->
 $ACCEPT_MET"
 verdict "ROUTINE MERGE" 0 "a malformed reviewer marker canonically naming another pull request is set aside" "${ELIGIBLE[@]}"
 GH_PR_COMMENTS="$REV
 $ACCEPT_MET
-OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA2 contract=$ACC verdict=NOT-MET extra=1 -->"
+OWNER${TAB}jwogrady${TAB}${TS_REVIEW}${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA2 contract=$ACC verdict=NOT-MET extra=1 -->"
 verdict "ROUTINE MERGE" 0 "a malformed acceptance marker canonically naming another commit is set aside" "${ELIGIBLE[@]}"
+reset_world
+
+# --- an association is not a permission ------------------------------------
+# OWNER, MEMBER and COLLABORATOR say how someone RELATES to a repository, never
+# what they may do in it: an organization member or an outside collaborator may
+# hold read or triage only. Authority is therefore permission in the pull
+# request's own repository, for the grant and for the attestation alike.
+for perm in read triage none ""; do
+  GH_PERM="$perm"
+  verdict "NOT ELIGIBLE" 4 "an author holding only '${perm:-<unreadable>}' does not govern the merge" "${ELIGIBLE[@]}"
+done
+GH_PERM="admin"
+GH_FAIL=perm
+verdict "NOT ELIGIBLE" 4 "an unreadable permission is not authority" "${ELIGIBLE[@]}"
+GH_FAIL=""
+for perm in admin maintain write; do
+  GH_PERM="$perm"
+  verdict "ROUTINE MERGE" 0 "'$perm' permission in the PR repository governs the merge" "${ELIGIBLE[@]}"
+done
+reset_world
+# Each path is proved separately, so neither check can stand in for the other.
+# The grant author must be a DIFFERENT login from the attesting author, or the
+# acceptance check declines first and the grant control proves nothing — which
+# is exactly how this control passed under mutation on its first attempt.
+GH_PERM="admin"
+GH_PARENT_COMMENTS="OWNER${TAB}granter${TAB}$T_GRANT${TAB}$T_GRANT${TAB}spark-authorizes child=#724 acceptance=$ACC"
+GH_PERM_MAP="granter${TAB}read"
+verdict "NOT ELIGIBLE" 4 "a grant from an author with read-only permission is not a grant" "${ELIGIBLE[@]}"
+GH_PERM_MAP="granter${TAB}triage"
+verdict "NOT ELIGIBLE" 4 "a grant from an author with triage permission is not a grant" "${ELIGIBLE[@]}"
+GH_PERM_MAP="granter${TAB}write"
+verdict "ROUTINE MERGE" 0 "the same grant from an author who really holds write authorizes" "${ELIGIBLE[@]}"
+reset_world
+GH_PR_COMMENTS="$REV
+MEMBER${TAB}someone${TAB}${TS_REVIEW}${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
+GH_PERM_MAP="someone${TAB}read"
+verdict "NOT ELIGIBLE" 4 "an attestation from a MEMBER with read-only permission proves nothing" "${ELIGIBLE[@]}"
+GH_PERM_MAP="someone${TAB}triage"
+verdict "NOT ELIGIBLE" 4 "an attestation from a COLLABORATOR-level triage account proves nothing" "${ELIGIBLE[@]}"
+GH_PERM_MAP="someone${TAB}write"
+verdict "ROUTINE MERGE" 0 "an attestation from a MEMBER who really holds write counts" "${ELIGIBLE[@]}"
+reset_world
+
+# --- the authorization must precede the review of this commit --------------
+# The contract is that a broad issue authorizes bounded work IN ADVANCE.
+# Authority invented for work already certified is the thing this command must
+# never manufacture, so the durable instants are compared.
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}$T_LATE${TAB}$T_LATE${TAB}spark-authorizes child=#724 acceptance=$ACC"
+verdict "NOT ELIGIBLE" 4 "a grant posted after the review of this commit is not advance authorization" "${ELIGIBLE[@]}"
+# An old comment EDITED into a grant is the same defect wearing an early
+# creation date, so the last edit is what is compared.
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}$T_GRANT${TAB}$T_LATE${TAB}spark-authorizes child=#724 acceptance=$ACC"
+verdict "NOT ELIGIBLE" 4 "a grant edited after the review of this commit is not the text the review saw" "${ELIGIBLE[@]}"
+# Simultaneous is not "in advance" either: the comparison is strict.
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}$T_REVIEW${TAB}$T_REVIEW${TAB}spark-authorizes child=#724 acceptance=$ACC"
+verdict "NOT ELIGIBLE" 4 "a grant stamped at the same instant as the review is not in advance" "${ELIGIBLE[@]}"
+# An unreadable instant on either side fails closed rather than passing as early.
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}$T_GRANT${TAB}${TAB}spark-authorizes child=#724 acceptance=$ACC"
+verdict "NOT ELIGIBLE" 4 "a grant with an unreadable last-edit instant declines" "${ELIGIBLE[@]}"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}$T_GRANT${TAB}not-a-date${TAB}spark-authorizes child=#724 acceptance=$ACC"
+verdict "NOT ELIGIBLE" 4 "a grant with a malformed last-edit instant declines" "${ELIGIBLE[@]}"
+reset_world
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}${TAB}${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->
+$ACCEPT_MET"
+verdict "NOT ELIGIBLE" 4 "a review with an unreadable instant cannot anchor advance authorization" "${ELIGIBLE[@]}"
+reset_world
+# And the ordering that IS advance authorization still merges.
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}2026-08-01T00:00:00Z${TAB}2026-08-02T00:00:00Z${TAB}spark-authorizes child=#724 acceptance=$ACC"
+verdict "ROUTINE MERGE" 0 "a grant created and last edited before the review authorizes normally" "${ELIGIBLE[@]}"
 reset_world
 
 # --- the work unit lives in the PULL REQUEST's repository -------------------
@@ -696,12 +787,12 @@ reset_world
 # to share a number.
 GH_PARENT="https://api.github.com/repos/other/org-repo/issues/722"
 verdict "NOT ELIGIBLE" 4 "a bare grant under a cross-repository parent is ambiguous" "${ELIGIBLE[@]}"
-GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=other/org-repo#724 acceptance=$ACC"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}${TS}${TAB}spark-authorizes child=other/org-repo#724 acceptance=$ACC"
 verdict "NOT ELIGIBLE" 4 "a grant naming the parent's repository does not authorize the PR's issue" "${ELIGIBLE[@]}"
-GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=jwogrady/spark#724 acceptance=$ACC"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}${TS}${TAB}spark-authorizes child=jwogrady/spark#724 acceptance=$ACC"
 verdict "NOT ELIGIBLE" 4 "a bare acceptance child under a cross-repository parent is ambiguous" "${ELIGIBLE[@]}"
 GH_PR_COMMENTS="$REV
-OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=jwogrady/spark#724 head=$SHA contract=$ACC verdict=MET -->"
+OWNER${TAB}jwogrady${TAB}${TS_REVIEW}${TAB}<!-- spark-acceptance pr=727 child=jwogrady/spark#724 head=$SHA contract=$ACC verdict=MET -->"
 verdict "ROUTINE MERGE" 0 "explicit full identities authorize across a cross-repository parent" "${ELIGIBLE[@]}"
 # `author_association` is relative to the repository that SERVED the comment.
 # An OWNER of the parent's repository is not thereby able to grant merge
@@ -720,19 +811,20 @@ for perm in admin maintain write; do
   verdict "ROUTINE MERGE" 0 "'$perm' permission in the PR repository governs the merge" "${ELIGIBLE[@]}"
 done
 reset_world
-# The permission read is a cross-repository question only: a same-repository
-# parent already answers it through author_association, and adding a needless
-# dependency would be its own defect.
+# Round 12 scoped this read to cross-repository parents, on the reasoning that a
+# same-repository association already answered the question. It does not: an
+# association is not a permission in ANY repository, so the read is required on
+# every path and its failure declines here too.
 GH_FAIL=perm
-verdict "ROUTINE MERGE" 0 "the permission read is not consulted when the parent is in the same repository" "${ELIGIBLE[@]}"
+verdict "NOT ELIGIBLE" 4 "the permission read is required even when the parent is in the same repository" "${ELIGIBLE[@]}"
 GH_FAIL=""
 reset_world
 GH_PR_COMMENTS="$REV
-OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=other/org-repo#724 head=$SHA contract=$ACC verdict=MET -->"
+OWNER${TAB}jwogrady${TAB}${TS_REVIEW}${TAB}<!-- spark-acceptance pr=727 child=other/org-repo#724 head=$SHA contract=$ACC verdict=MET -->"
 verdict "NOT ELIGIBLE" 4 "an acceptance naming the parent's repository does not prove the PR's issue" "${ELIGIBLE[@]}"
 # A bare grant for a DIFFERENT number is unambiguous whichever repository it
 # means, so it is simply not this work unit.
-GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=#725 acceptance=$ACC"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}${TS}${TAB}spark-authorizes child=#725 acceptance=$ACC"
 verdict "NOT ELIGIBLE" 4 "a bare grant for another number under a cross-repository parent is not this unit" "${ELIGIBLE[@]}"
 reset_world
 
@@ -763,31 +855,31 @@ verdict "NOT ELIGIBLE" 4 "an unreadable native parent declines" "${ELIGIBLE[@]}"
 reset_world
 
 # --- the grant, read back from the parent -----------------------------------
-GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}Thanks, this looks reasonable to me."
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}${TS}${TAB}Thanks, this looks reasonable to me."
 verdict "NOT ELIGIBLE" 4 "an unrelated comment on the parent authorizes nothing" "${ELIGIBLE[@]}"
-GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}I authorize bounded unit #724 with acceptance $ACC."
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}${TS}${TAB}I authorize bounded unit #724 with acceptance $ACC."
 verdict "NOT ELIGIBLE" 4 "prose naming the child and acceptance is not a grant" "${ELIGIBLE[@]}"
 # A valid grant beside a MALFORMED same-unit authorization line is ambiguity
 # about authority itself. Silently skipping the malformed sibling left one
 # valid grant standing and let the good record carry a decision the pair does
 # not support.
-GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=#724 acceptance=$ACC\\nspark-authorizes child=#724 acceptance=$ACC scope=everything"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}${TS}${TAB}spark-authorizes child=#724 acceptance=$ACC\\nspark-authorizes child=#724 acceptance=$ACC scope=everything"
 verdict "NOT ELIGIBLE" 4 "a malformed same-unit grant line beside a valid one declines" "${ELIGIBLE[@]}"
-GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=#724 acceptance=$ACC
-OWNER${TAB}jwogrady${TAB}spark-authorizes child=#724 acceptance=$ACC extra=1"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}${TS}${TAB}spark-authorizes child=#724 acceptance=$ACC
+OWNER${TAB}jwogrady${TAB}${TS}${TAB}spark-authorizes child=#724 acceptance=$ACC extra=1"
 verdict "NOT ELIGIBLE" 4 "a malformed same-unit grant in another comment declines too" "${ELIGIBLE[@]}"
-GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=#724 acceptance=$ACC
-OWNER${TAB}jwogrady${TAB}spark-authorizes child=#724 acceptance=not a token"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}${TS}${TAB}spark-authorizes child=#724 acceptance=$ACC
+OWNER${TAB}jwogrady${TAB}${TS}${TAB}spark-authorizes child=#724 acceptance=not a token"
 verdict "NOT ELIGIBLE" 4 "a same-unit grant whose acceptance is not canonical declines" "${ELIGIBLE[@]}"
-GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=#724 acceptance=$ACC
-OWNER${TAB}jwogrady${TAB}spark-authorizes child=nonsense acceptance=$ACC"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}${TS}${TAB}spark-authorizes child=#724 acceptance=$ACC
+OWNER${TAB}jwogrady${TAB}${TS}${TAB}spark-authorizes child=nonsense acceptance=$ACC"
 verdict "NOT ELIGIBLE" 4 "a grant line naming an unreadable work unit declines" "${ELIGIBLE[@]}"
-GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=#724 acceptance=$ACC
-OWNER${TAB}jwogrady${TAB}spark-authorizes child=#724 child=#725 acceptance=$ACC"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}${TS}${TAB}spark-authorizes child=#724 acceptance=$ACC
+OWNER${TAB}jwogrady${TAB}${TS}${TAB}spark-authorizes child=#724 child=#725 acceptance=$ACC"
 verdict "NOT ELIGIBLE" 4 "a grant line naming two work units declines" "${ELIGIBLE[@]}"
 # A malformed grant for a DIFFERENT work unit authorizes something else.
-GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=#724 acceptance=$ACC
-OWNER${TAB}jwogrady${TAB}spark-authorizes child=#725 acceptance=$ACC extra=1"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}${TS}${TAB}spark-authorizes child=#724 acceptance=$ACC
+OWNER${TAB}jwogrady${TAB}${TS}${TAB}spark-authorizes child=#725 acceptance=$ACC extra=1"
 verdict "ROUTINE MERGE" 0 "a malformed grant for a different work unit does not decline this one" "${ELIGIBLE[@]}"
 reset_world
 
@@ -801,9 +893,10 @@ if command -v jq >/dev/null 2>&1; then
 spark-authorizes child=#724 acceptance='"$ACC"'
 A trailing backslash: \'
   GH_PARENT_JSON="$(jq -n --arg b "$RAW" \
-    '[{author_association:"OWNER",user:{login:"jwogrady"},body:$b}]')"
+    '[{author_association:"OWNER",user:{login:"jwogrady"},created_at:"2026-09-01T10:00:00Z",updated_at:"2026-09-01T10:00:00Z",body:$b}]')"
   ENC="$(xm_comments jwogrady/spark 722)"
   BODY="${ENC#*$TAB}"; BODY="${BODY#*$TAB}"
+  BODY="${BODY#*$TAB}"; BODY="${BODY#*$TAB}"
   DEC="$(xm_body_lines "$BODY")"
   if [ "$DEC" = "$RAW" ]; then ok
   else bad "the comment transport must round-trip exactly; got: $(printf '%s' "$DEC" | head -1)"; fi
@@ -815,7 +908,7 @@ A trailing backslash: \'
   # the marker that genuinely starts a line is the grant.
   verdict "ROUTINE MERGE" 0 "the real encoder keeps a quoted marker as prose beside a genuine grant" "${ELIGIBLE[@]}"
   GH_PARENT_JSON="$(jq -n --arg b 'Write it as:\nspark-authorizes child=#724 acceptance='"$ACC" \
-    '[{author_association:"OWNER",user:{login:"jwogrady"},body:$b}]')"
+    '[{author_association:"OWNER",user:{login:"jwogrady"},created_at:"2026-09-01T10:00:00Z",updated_at:"2026-09-01T10:00:00Z",body:$b}]')"
   verdict "NOT ELIGIBLE" 4 "the real encoder does not turn a quoted marker into a grant" "${ELIGIBLE[@]}"
   reset_world
 fi
@@ -839,64 +932,64 @@ esac
 # sentence became a marker at the start of a line — which is a canonical grant.
 # In the fixtures below the transport is what the stub emits, so a literal
 # backslash in the comment arrives already doubled.
-GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}Example:\\\\nspark-authorizes child=#724 acceptance=$ACC"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}${TS}${TAB}Example:\\\\nspark-authorizes child=#724 acceptance=$ACC"
 verdict "NOT ELIGIBLE" 4 "a marker behind a literal backslash-n in prose is not a grant" "${ELIGIBLE[@]}"
-GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}Write it as:\\\\nspark-authorizes child=#724 acceptance=$ACC\\nBut I have not approved it yet."
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}${TS}${TAB}Write it as:\\\\nspark-authorizes child=#724 acceptance=$ACC\\nBut I have not approved it yet."
 verdict "NOT ELIGIBLE" 4 "a quoted marker stays quoted even beside real lines" "${ELIGIBLE[@]}"
 # ...and a genuine backslash elsewhere in the body must not disturb a real grant.
-GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}Escape it with \\\\ when needed.\\nspark-authorizes child=#724 acceptance=$ACC"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}${TS}${TAB}Escape it with \\\\ when needed.\\nspark-authorizes child=#724 acceptance=$ACC"
 verdict "ROUTINE MERGE" 0 "a literal backslash elsewhere in the comment does not disturb a real grant" "${ELIGIBLE[@]}"
-GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=#724 acceptance=$ACC\\nA trailing backslash: \\\\"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}${TS}${TAB}spark-authorizes child=#724 acceptance=$ACC\\nA trailing backslash: \\\\"
 verdict "ROUTINE MERGE" 0 "a trailing literal backslash does not disturb a real grant" "${ELIGIBLE[@]}"
 reset_world
 
 # A real comment does not end exactly at the marker. Parsing the flattened tail
 # instead of the LINE rejected every grant with prose after it — fail-closed,
 # but it made the feature unusable.
-GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=#724 acceptance=$ACC\\nThanks for the quick turnaround."
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}${TS}${TAB}spark-authorizes child=#724 acceptance=$ACC\\nThanks for the quick turnaround."
 verdict "ROUTINE MERGE" 0 "a grant followed by ordinary prose still authorizes" "${ELIGIBLE[@]}"
-GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}Approving this.\\nspark-authorizes child=#724 acceptance=$ACC\\nSee the plan above."
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}${TS}${TAB}Approving this.\\nspark-authorizes child=#724 acceptance=$ACC\\nSee the plan above."
 verdict "ROUTINE MERGE" 0 "a grant surrounded by prose still authorizes" "${ELIGIBLE[@]}"
-GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=#724 acceptance=$ACC\\nspark-authorizes child=#724 acceptance=other-v1"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}${TS}${TAB}spark-authorizes child=#724 acceptance=$ACC\\nspark-authorizes child=#724 acceptance=other-v1"
 verdict "NOT ELIGIBLE" 4 "two grant lines in one comment are ambiguous" "${ELIGIBLE[@]}"
 # IDENTICAL lines too: a "take the last" implementation sails through a control
 # whose duplicates merely disagree.
-GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=#724 acceptance=$ACC\\nspark-authorizes child=#724 acceptance=$ACC"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}${TS}${TAB}spark-authorizes child=#724 acceptance=$ACC\\nspark-authorizes child=#724 acceptance=$ACC"
 verdict "NOT ELIGIBLE" 4 "two identical grant lines in one comment are ambiguous" "${ELIGIBLE[@]}"
 # The marker must START the line. Prose that merely mentions it is discussion,
 # not a grant — otherwise quoting the syntax in a sentence would authorize.
-GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}Write spark-authorizes child=#724 acceptance=$ACC to approve."
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}${TS}${TAB}Write spark-authorizes child=#724 acceptance=$ACC to approve."
 verdict "NOT ELIGIBLE" 4 "a marker quoted mid-sentence is discussion, not a grant" "${ELIGIBLE[@]}"
-GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}  spark-authorizes child=#724 acceptance=$ACC"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}${TS}${TAB}  spark-authorizes child=#724 acceptance=$ACC"
 verdict "NOT ELIGIBLE" 4 "an indented marker is not the canonical line form" "${ELIGIBLE[@]}"
-GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=#725 acceptance=$ACC"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}${TS}${TAB}spark-authorizes child=#725 acceptance=$ACC"
 verdict "NOT ELIGIBLE" 4 "a grant for the wrong child does not authorize this one" "${ELIGIBLE[@]}"
-GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=#7241 acceptance=$ACC"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}${TS}${TAB}spark-authorizes child=#7241 acceptance=$ACC"
 verdict "NOT ELIGIBLE" 4 "#7241 does not satisfy a grant to #724" "${ELIGIBLE[@]}"
-GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=other/repo#724 acceptance=$ACC"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}${TS}${TAB}spark-authorizes child=other/repo#724 acceptance=$ACC"
 verdict "NOT ELIGIBLE" 4 "the same number in another repository is a different work unit" "${ELIGIBLE[@]}"
-GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=#724 acceptance=$ACC
-OWNER${TAB}jwogrady${TAB}spark-authorizes child=#724 acceptance=other-v1"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}${TS}${TAB}spark-authorizes child=#724 acceptance=$ACC
+OWNER${TAB}jwogrady${TAB}${TS}${TAB}spark-authorizes child=#724 acceptance=other-v1"
 verdict "NOT ELIGIBLE" 4 "two grants for the same child are ambiguous and decline" "${ELIGIBLE[@]}"
 # Two IDENTICAL grants are still ambiguous: a "take the last" implementation
 # would sail through this, so the control must not rely on them differing.
-GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=#724 acceptance=$ACC
-OWNER${TAB}jwogrady${TAB}spark-authorizes child=#724 acceptance=$ACC"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}${TS}${TAB}spark-authorizes child=#724 acceptance=$ACC
+OWNER${TAB}jwogrady${TAB}${TS}${TAB}spark-authorizes child=#724 acceptance=$ACC"
 verdict "NOT ELIGIBLE" 4 "two identical grants are still ambiguous and decline" "${ELIGIBLE[@]}"
-GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=#0724 acceptance=$ACC"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}${TS}${TAB}spark-authorizes child=#0724 acceptance=$ACC"
 verdict "NOT ELIGIBLE" 4 "a zero-padded child in the grant is refused" "${ELIGIBLE[@]}"
-GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=#724 acceptance="
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}${TS}${TAB}spark-authorizes child=#724 acceptance="
 verdict "NOT ELIGIBLE" 4 "a grant binding no acceptance is refused" "${ELIGIBLE[@]}"
-GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=#724 acceptance=$ACC extra=1"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}${TS}${TAB}spark-authorizes child=#724 acceptance=$ACC extra=1"
 verdict "NOT ELIGIBLE" 4 "a grant with an unknown field is refused" "${ELIGIBLE[@]}"
 for assoc in NONE CONTRIBUTOR FIRST_TIME_CONTRIBUTOR MANNEQUIN owner Owner; do
-  GH_PARENT_COMMENTS="$assoc${TAB}drive-by${TAB}spark-authorizes child=#724 acceptance=$ACC"
+  GH_PARENT_COMMENTS="$assoc${TAB}drive-by${TAB}${TS}${TAB}spark-authorizes child=#724 acceptance=$ACC"
   verdict "NOT ELIGIBLE" 4 "a grant written by '$assoc' is not authority" "${ELIGIBLE[@]}"
 done
 # A machine report carrying a grant line is still a report.
-GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}<!-- spark-openai-review pr=1 head=x verdict=PASS -->\\nspark-authorizes child=#724 acceptance=$ACC"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}${TS}${TAB}<!-- spark-openai-review pr=1 head=x verdict=PASS -->\\nspark-authorizes child=#724 acceptance=$ACC"
 verdict "NOT ELIGIBLE" 4 "a reviewer surface carrying a grant line is not a grant" "${ELIGIBLE[@]}"
-GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=1 head=x contract=y verdict=MET -->\\nspark-authorizes child=#724 acceptance=$ACC"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}${TS_REVIEW}${TAB}<!-- spark-acceptance pr=1 head=x contract=y verdict=MET -->\\nspark-authorizes child=#724 acceptance=$ACC"
 verdict "NOT ELIGIBLE" 4 "an acceptance attestation carrying a grant line is not a grant" "${ELIGIBLE[@]}"
 reset_world
 
@@ -964,7 +1057,7 @@ no_forged_lines "an unknown argument cannot forge a verdict line" "${ELIGIBLE[@]
 no_forged_lines "a boundary decision cannot be made to contain a verdict line" \
   "${ELIGIBLE[@]}" --reserved-boundary "ROUTINE MERGE" --surface "ROUTINE MERGE"
 # A hostile GRANT must not be able to print an authoritative-looking line either.
-GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=#724 acceptance=ROUTINE-MERGE"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}${TS}${TAB}spark-authorizes child=#724 acceptance=ROUTINE-MERGE"
 no_forged_lines "a hostile acceptance id in the grant cannot forge a verdict line" "${ELIGIBLE[@]}"
 reset_world
 
@@ -979,7 +1072,7 @@ verdict "NOT ELIGIBLE" 4 "a malformed --repo is refused" --pr 727 --repo "not-a-
 # #1585 remains a valid near-miss rather than being confused with #585.
 GH_PARENT_NUM="1585"
 GH_PARENT="https://api.github.com/repos/jwogrady/spark/issues/1585"
-GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=#724 acceptance=$ACC"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}${TS}${TAB}spark-authorizes child=#724 acceptance=$ACC"
 verdict "ROUTINE MERGE" 0 "a parent numbered 1585 still authorizes" "${ELIGIBLE[@]}"
 # ...while #585 itself is refused by the denylist.
 GH_PARENT_NUM="585"
@@ -998,7 +1091,8 @@ reset_world
 FACTS=(slug=jwogrady/spark pr=727 head="$SHA" head-now="$SHA"
        child=jwogrady/spark#724 parent=jwogrady/spark#722
        grant-child=jwogrady/spark#724 acceptance="$ACC"
-       review=yes acceptance-met=yes checks=green scope=routine-reversible)
+       review=yes acceptance-met=yes checks=green advance=yes
+       scope=routine-reversible)
 dec() {
   local want="$1" desc="$2"; shift 2
   local out rc=0; out="$(xm_decide "$@" 2>&1)" || rc=$?

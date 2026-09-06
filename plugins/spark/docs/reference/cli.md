@@ -693,14 +693,25 @@ its slug would let a bare `#124` written there stand for *this* repository's
 cross-repository, a bare reference in a grant or an attestation is therefore
 ambiguous and declines; name the work unit in full (`owner/repo#124`).
 
-**Authority is established where the merge happens.** `author_association`
-describes the commenter's standing in whichever repository *served* the comment.
-For a same-repository parent that is the right question; under a
-cross-repository parent it is not, because an `OWNER` of the parent's repository
-may hold nothing at all here. There, the commenter's permission in the **pull
-request's** repository is read and must be `admin`, `maintain` or `write` — an
-unreadable or absent permission is not authority. The read happens only for the
-cross-repository case, since a same-repository association already answers it.
+**Authority is a permission, not an association.** `author_association` says
+how someone *relates* to a repository — and `OWNER`, `MEMBER` and `COLLABORATOR`
+establish no write access at all: an organization member or an outside
+collaborator may hold read or triage only. Under a cross-repository parent the
+association describes the wrong repository as well. So for **every** grant and
+**every** attestation, the author's permission in the *pull request's*
+repository is read and must be `admin`, `maintain` or `write`. An unreadable or
+absent permission is not authority.
+
+**The authorization must precede the review of this commit.** A broad issue
+authorizes bounded work *in advance*; authority invented for work already
+certified is precisely what this command must never manufacture. The anchor is
+the instant the independent review of this exact commit was produced — durable
+evidence the caller cannot move — and the grant comment's **last edit** must be
+strictly earlier. A grant posted afterwards was not advance authorization, and
+an old comment *edited* into a grant is not the text the review saw. An
+unreadable instant on either side declines rather than passing as early
+enough. One consequence is worth stating: editing the grant comment after the
+review, even to fix a typo, invalidates it and requires a fresh review.
 
 **A record is set aside only on established identity** — acceptance and review
 alike. A missing or non-canonical `pr`/`head` does not prove a record concerns
@@ -729,8 +740,9 @@ standing and let it carry a decision the pair does not support.
 
 ### The two durable records
 
-The parent carries the **grant** — what was authorized — written by an `OWNER`,
-`MEMBER` or `COLLABORATOR`:
+The parent carries the **grant** — what was authorized — written by someone
+holding `write`, `maintain` or `admin` permission in the pull request's
+repository:
 
 ```
 spark-authorizes child=#124 acceptance=<canonical-acceptance-id>

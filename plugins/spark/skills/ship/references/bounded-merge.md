@@ -37,8 +37,9 @@ argument. If the answer is `NOT ELIGIBLE`, the fix is to make the missing fact
 
 ## What must already exist
 
-**On the owning issue — the grant**, written by an `OWNER`, `MEMBER` or
-`COLLABORATOR`, saying what was authorized:
+**On the owning issue — the grant**, written by someone holding `write`,
+`maintain` or `admin` permission in the pull request's repository, saying what
+was authorized:
 
 ```
 spark-authorizes child=#124 acceptance=<canonical-acceptance-id>
@@ -76,8 +77,15 @@ The bounded work unit's identity comes from the **pull request's** repository.
 The owning issue may live in another one, so where it does, name the work unit
 in full (`owner/repo#124`) in the grant and the attestation: a bare `#124`
 written on a parent elsewhere is ambiguous and declines. The grant's author must
-also hold authority **where the merge happens** — under a cross-repository
-parent, being an owner of the parent's repository is not authority here.
+also hold authority **where the merge happens**: an association is not a
+permission, so every grant and every attestation is checked against the
+author's `admin`/`maintain`/`write` permission in the pull request's own
+repository.
+
+The grant must also be **older than the review** of the commit being merged.
+Authorization is given in advance, so a grant posted — or edited — after the
+independent review is not advance authorization, and declines. Editing the
+grant comment after the review requires a fresh review.
 
 Everything unproven declines: missing, malformed, duplicate, unreadable, stale,
 wrong-repository, wrong-child, wrong-acceptance or wrong-HEAD records; a PASS

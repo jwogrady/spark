@@ -2378,7 +2378,7 @@ xm_permission()  { xm_api "$1" "collaborators/$2/permission" '.permission // emp
 # which is a canonical grant. Doubling first makes the encoding injective, so
 # `\n` (a real newline) and `\\n` (the literal characters) stay distinguishable.
 xm_comments()    { xm_api_all "$1" "issues/$2/comments?per_page=100" \
-                     '.[] | .author_association + "\t" + .user.login + "\t" + (.body | gsub("\\\\"; "\\\\") | gsub("\r?\n"; "\\n"))'; }
+                     '.[] | .author_association + "\t" + .user.login + "\t" + .created_at + "\t" + .updated_at + "\t" + (.body | gsub("\\\\"; "\\\\") | gsub("\r?\n"; "\\n"))'; }
 # The bounded work unit is whatever the PR CLOSES. Governance already makes that
 # the authoritative linkage ("a linked PR plus a closing keyword"), so it is
 # read rather than asserted.
@@ -2427,6 +2427,17 @@ xm_is_authorizing() {
 # THIS repository? Fails closed: an unreadable or absent permission is not
 # authority, because the whole point is that authority elsewhere is not authority
 # here.
+# xm_stamp <iso-8601> — the instant as comparable digits, or non-zero. GitHub
+# emits UTC "YYYY-MM-DDTHH:MM:SSZ", so removing the separators leaves an integer
+# whose numeric order is chronological. An unparseable instant fails closed
+# rather than being treated as "early enough".
+xm_stamp() {
+  local d="${1:-}"
+  d="${d//[!0-9]/}"
+  [ "${#d}" = 14 ] || return 1
+  printf '%s' "$d"
+}
+
 xm_governs() {
   local p q
   p="$(xm_permission "$1" "$2")" || return 1
@@ -2572,21 +2583,22 @@ EOF
 
   # The durable grant, on the parent, from someone who can govern the repo.
   local assoc body rest field gchild gacc grants=0 gbad=0
-  local m_child="" m_acc=""
+  local m_child="" m_acc="" m_created="" m_updated=""
   while IFS= read -r line; do
     [ -n "$line" ] || continue
     assoc="${line%%	*}"; rest="${line#*	}"
-    local glogin="${rest%%	*}"; body="${rest#*	}"
+    local glogin="${rest%%	*}"; rest="${rest#*	}"
+    local gcreated="${rest%%	*}"; rest="${rest#*	}"
+    local gupdated="${rest%%	*}"; body="${rest#*	}"
     case "$body" in *"$XM_MARKER_PREFIX "*) ;; *) continue ;; esac
     xm_is_authorizing "$assoc" || continue
-    # `author_association` is relative to the repository that SERVED the comment.
-    # Under a cross-repository parent that is the parent's repository, so an
-    # OWNER there would otherwise be treated as able to grant merge authority
-    # here. Authority over this merge must be established in the pull request's
-    # own repository, and an unreadable permission is not authority.
-    if [ -n "$cross" ]; then
-      xm_governs "$slug" "$glogin" || continue
-    fi
+    # `author_association` says how someone RELATES to a repository, never what
+    # they may do in it: a MEMBER or COLLABORATOR may hold read or triage only,
+    # and under a cross-repository parent the association describes the parent's
+    # repository anyway. Authority over this merge is therefore established as
+    # permission in the pull request's own repository, for every grant, and an
+    # unreadable permission is not authority.
+    xm_governs "$slug" "$glogin" || continue
     # Machinery reporting to machinery never authorizes a merge, even when the
     # report happens to carry a well-formed grant line.
     local cm skip=""
@@ -2632,6 +2644,7 @@ EOF
       xm_same_issue "$gchild" "$child_id" "$slug" || continue
       grants=$((grants + 1))
       m_child="$gchild"; m_acc="$gacc"
+      m_created="$gcreated"; m_updated="$gupdated"
     done <<LINES
 $(xm_body_lines "$body")
 LINES
@@ -2645,11 +2658,13 @@ EOF
 
   # Review and acceptance, both bound to THIS commit, read from the PR.
   local rev=no acc=no acc_seen=0 rev_seen=0 rev_verdict="" rev_conflict="" \
-        acc_bad=0 rev_bad=0 mline
+        acc_bad=0 rev_bad=0 mline rev_at=""
   while IFS= read -r line; do
     [ -n "$line" ] || continue
     assoc="${line%%	*}"; rest="${line#*	}"
-    local login="${rest%%	*}"; body="${rest#*	}"
+    local login="${rest%%	*}"; rest="${rest#*	}"
+    local created="${rest%%	*}"; rest="${rest#*	}"
+    local updated="${rest%%	*}"; body="${rest#*	}"
     # EVERY reviewer marker occurrence in the comment, not the first one the
     # body happens to contain. A second record hiding behind the first is
     # exactly the evidence a merge decision must not miss.
@@ -2672,6 +2687,10 @@ EOF
           # PASS: two different verdicts for one commit are a conflict, and a
           # conflict is not a pass.
           rev_seen=$((rev_seen + 1))
+          # The instant the review was PRODUCED anchors advance authorization.
+          # created_at is used rather than updated_at because it is the earlier
+          # of the two, and the earlier anchor is the stricter one.
+          rev_at="$created"
           if [ -z "$rev_verdict" ]; then rev_verdict="$r_v"
           elif [ "$rev_verdict" != "$r_v" ]; then rev_conflict=1
           fi
@@ -2686,7 +2705,9 @@ EOF
 $(xm_markers "$body" "$XM_REVIEW_TAG")
 REVIEW
     fi
-    if xm_is_authorizing "$assoc"; then
+    # The same rule as the grant: an association is not a permission, so an
+    # attestation only counts from someone who may govern this repository.
+    if xm_is_authorizing "$assoc" && xm_governs "$slug" "$login"; then
       while IFS= read -r mline; do
         [ -n "$mline" ] || continue
         local a_pr="" a_child="" a_head="" a_contract="" a_verdict="" a_bad="" afield
@@ -2761,6 +2782,25 @@ EOF
     PASS) rev=yes ;;
     "")   [ "$rev_seen" -eq 0 ] || { echo "pull request #$prnum carries a reviewer marker for $sha with no readable verdict"; return 1; } ;;
   esac
+
+  # ADVANCE AUTHORIZATION. The contract is that a broad issue durably authorizes
+  # bounded work IN ADVANCE; authority invented for work already certified is the
+  # thing this command must never manufacture. The anchor is the instant the
+  # independent review of THIS commit was produced, because that is durable
+  # evidence the caller cannot move. A grant created after it was not advance
+  # authorization, and a grant EDITED after it is not the text the review saw.
+  local advance=no g_at r_at
+  if [ "$rev" != yes ]; then
+    advance=no-review
+  elif ! g_at="$(xm_stamp "$m_updated")"; then
+    advance=grant-instant-unknown
+  elif ! r_at="$(xm_stamp "$rev_at")"; then
+    advance=review-instant-unknown
+  elif [ "$g_at" -lt "$r_at" ]; then
+    advance=yes
+  else
+    advance="after-review:$m_updated"
+  fi
 
   # Checks, on that exact commit. What matters is not "some runs went green" but
   # "every REQUIRED check went green" — a single unrelated success would
@@ -2909,6 +2949,7 @@ EOF
   printf 'review=%s\n'      "$rev"
   printf 'acceptance-met=%s\n' "$acc"
   printf 'checks=%s\n'      "$checks"
+  printf 'advance=%s\n'     "$advance"
   printf 'scope=%s\n'       "$scope"
   return 0
 }
@@ -2921,7 +2962,8 @@ EOF
 # how a broad outcome gets silently closed by a small child.
 xm_decide() {
   local slug="" pr="" head="" head_now="" child="" parent="" grant_child="" \
-        acceptance="" review="" acc_met="" checks="" scope="" boundary="" surface="" \
+        acceptance="" review="" acc_met="" checks="" scope="" advance="" \
+        boundary="" surface="" \
         arg key val
   for arg in "$@"; do
     key="${arg%%=*}"; val="${arg#*=}"
@@ -2930,7 +2972,7 @@ xm_decide() {
       head-now) head_now="$val" ;; child) child="$val" ;; parent) parent="$val" ;;
       grant-child) grant_child="$val" ;; acceptance) acceptance="$val" ;;
       review) review="$val" ;; acceptance-met) acc_met="$val" ;;
-      checks) checks="$val" ;; scope) scope="$val" ;;
+      checks) checks="$val" ;; scope) scope="$val" ;; advance) advance="$val" ;;
       reserved-boundary) boundary="$val" ;; surface) surface="$val" ;;
       *) echo "NOT ELIGIBLE"; echo "reason: unrecognised derived fact '$key'"; return 4 ;;
     esac
@@ -2977,6 +3019,8 @@ xm_decide() {
   - acceptance-met: no durable '<!-- $XM_ACCEPT_TAG pr=$pr child=$child head=$head contract=$acceptance verdict=MET -->' from someone who can govern this repository. The grant says what was authorized; this is the separate evidence that it is TRUE at this commit."
   [ "$checks" = green ] || why="${why}
   - checks: the checks on $head are '${checks:-unknown}'. Only terminal, passing checks count; pending, failed and absent are not green."
+  [ "$advance" = yes ] || why="${why}
+  - advance: the authorization was not established BEFORE the independent review of this commit ('${advance:-unknown}'). A grant posted or edited afterwards is authority invented for work already done, which is exactly what a durable advance authorization is meant to exclude."
   [ "$scope" = routine-reversible ] || why="${why}
   - scope: this is not the routine repository merge operation ('${scope:-unknown}'). Release PRs, CI or enforcement-settings changes, drafts, non-trunk bases and unreadable state are outside bounded merge authority."
 
