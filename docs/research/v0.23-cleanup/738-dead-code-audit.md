@@ -14,6 +14,7 @@ and every per-candidate evidence block below. Surfaces scanned — every functio
 |---|---|---:|
 | runtime | `plugins/spark/bin/spark`, `plugins/spark/lib/*.sh`, `plugins/spark/hooks/*.sh`, `plugins/spark/scripts/hooks/*` | 250 → 245 |
 | ci support | `.github/scripts/**/*.sh` (the code the workflows execute) | 64 → 64 |
+| shipped skill scripts | `plugins/spark/skills/*/scripts/*`, `plugins/spark-*/skills/*/scripts/*` (support scripts the skills run downstream) | 42 → 42 |
 | test harness | `tests/lib.sh` (the shared helpers; a suite's own local functions are the suite's business, owned by the test-consolidation child) | 20 → 20 |
 
 For every function the scan counts whole-word references (`grep -w`) outside the function's own definition
@@ -45,11 +46,13 @@ function on 2026-08-30 and the module extraction that moved it the same day. No 
 No zero-reference candidate. No obsolete-compatibility marker in this surface. No script unreferenced.
 Nothing to remove; nothing needs review.
 
+**Shipped skill scripts.** 42 functions across the core and companion skill scripts, all referenced from their
+own script, a sibling script, a `SKILL.md` or a test. No zero-reference candidate; no compatibility marker; every
+script file is itself referenced.
+
 **Test harness (`tests/lib.sh`).** 20 helpers, all referenced by at least one suite or by the runner. No
 candidate. (Whether several suites re-implement helpers the harness already offers is the test-consolidation
 child's question, not dead code.)
-
-**Shipped scripts.** Every `plugins/spark/skills/*/scripts/*` and `plugins/spark/scripts/*` file is referenced.
 
 ## Candidates and classification
 
@@ -73,13 +76,17 @@ function was unreachable in every revision.
 ## Verification
 
 - `bash -n` on the changed module; a repository-wide `grep -w` for the five names finds nothing; the
-  after-scan finds zero candidates in all three surfaces.
+  after-scan finds zero candidates in all four surfaces.
 - Focused suites (`tests/run.sh --only …`): `budget` (3 suites), `ci-handoff`, `capability-routing`,
   `runtime-modules`, `e2e-bounded-run` — all green.
-- `spark doctor`: 0 errors. Warnings are unchanged by this diff: 2 locally (the shipped-footprint budget and
-  the shipped-doc issue references, both pre-existing) and 4 in the exact-HEAD CI run — the same two plus two
-  that exist only on the runner (remote governance NOT ASSESSED because the runner has no authenticated `gh`;
-  Spark git hooks not installed on the runner).
+- `spark doctor`: 0 errors on every HEAD of this change. Its *warning* count depends on the environment it
+  runs in, so a bare number is not evidence; the verified outputs are: locally (authenticated `gh`, hooks
+  installed) `Healthy — 0 errors, 2 warning(s)` — the shipped-footprint budget and the shipped-doc issue
+  references, both pre-existing; the `doctor` required-check job for `bd7d00b` logged
+  `Healthy — 0 errors, 4 warning(s)` — those two plus `remote governance NOT ASSESSED — labels live on GitHub
+  and need an authenticated gh` and `Spark git hooks not installed here`; the independent reviewer's own run
+  reported three. None of the warnings names a file or behavior this change touches. The `doctor` and `tests`
+  required checks on the PR's exact HEAD are the authority for that HEAD.
 - Required final behavioral validation: one full `tests/run.sh --json` run after the removal — 91 suites,
   3,799 assertions passed, 0 failed, 156 s (baseline before: 91 / 3,799 / 0 / 161 s).
 
@@ -87,7 +94,7 @@ function was unreachable in every revision.
 
 | Measure | Before (frozen baseline) | After this packet |
 |---|---:|---:|
-| Functions scanned (runtime + ci support + test harness) | 334 | 329 |
+| Functions scanned (runtime + ci support + skill scripts + test harness) | 376 | 371 |
 | Runtime functions | 250 | 245 |
 | Zero-reference candidates | 5 | 0 |
 | `plugins/spark/lib/execution.sh` lines / bytes | 2,195 / 99,985 | 2,182 / 99,562 |
@@ -96,6 +103,7 @@ function was unreachable in every revision.
 | Full-suite assertions | 3,799 | 3,799 |
 
 The Needs-review item is left in place and recorded here so the parent's final validation can decide it with
-evidence rather than by this packet's judgment. With the three scanned surfaces clean and the one
-behavior-bearing compatibility path deliberately kept, the audit part of the issue is complete for the
-runtime, ci-support and test-harness surfaces.
+evidence rather than by this packet's judgment. With the four scanned surfaces clean and the one
+behavior-bearing compatibility path deliberately kept, the audit covers every runtime and support-code surface
+the repository ships or executes: the dispatcher and modules, the hooks, the CI scripts, the skill scripts and
+the shared test harness.

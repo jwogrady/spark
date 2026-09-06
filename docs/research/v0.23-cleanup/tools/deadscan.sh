@@ -4,6 +4,7 @@
 # Surfaces scanned (functions defined with `name() {`):
 #   runtime  plugins/spark/bin/spark, plugins/spark/lib/*.sh, plugins/spark/hooks/*.sh, plugins/spark/scripts/hooks/*
 #   ci       .github/scripts/**/*.sh (support code the workflows execute)
+#   skills   plugins/spark/skills/*/scripts/*, plugins/spark-*/skills/*/scripts/* (shipped support scripts the skills run)
 #   tests    tests/lib.sh (the shared test harness; suite-local functions are the suite's own business)
 # For every function: whole-word reference counts outside its own definition line, in (a) its own surface,
 # (b) tests/, (c) everything else tracked. Zero references in (a)+(b)+(c) → candidate.
@@ -19,6 +20,7 @@ cd "${1:-.}" || exit 1
 OUT="${2:-$(mktemp -d)}"; mkdir -p "$OUT"
 RUNTIME="$(git ls-files plugins/spark/bin/spark 'plugins/spark/lib/*.sh' 'plugins/spark/hooks/*.sh' 'plugins/spark/scripts/hooks/*' | tr '\n' ' ')"
 CI="$(git ls-files '.github/scripts/*.sh' '.github/scripts/*/*.sh' | tr '\n' ' ')"
+SKILLS="$(git ls-files 'plugins/spark/skills/*/scripts/*' 'plugins/spark-*/skills/*/scripts/*' | tr '\n' ' ')"
 TESTLIB="tests/lib.sh"
 ALL_TRACKED="$(git ls-files | grep -vE '\.(png|svg)$' | tr '\n' ' ')"
 cnt() { { "$@" 2>/dev/null || true; } | wc -l | tr -d ' '; }
@@ -37,12 +39,15 @@ done; done
 for f in $CI; do defs "$f" | while IFS=$'\t' read -r ln name; do
   printf 'ci\t%s\t%s:%s\t%s\t%s\t%s\n' "$name" "$f" "$ln" "$(refs_in "$name" $CI .github/workflows/*.yml)" "$(cnt grep -rlw -- "$name" tests)" "$(cnt grep -rlw -- "$name" plugins docs)"
 done; done
+for f in $SKILLS; do defs "$f" | while IFS=$'\t' read -r ln name; do
+  printf 'skills\t%s\t%s:%s\t%s\t%s\t%s\n' "$name" "$f" "$ln" "$(refs_in "$name" $SKILLS)" "$(cnt grep -rlw -- "$name" tests)" "$(cnt grep -rlw -- "$name" plugins/spark/skills/*/SKILL.md plugins/spark/skills/*/references plugins/spark-*/skills plugins/spark/docs docs .github plugins/spark/bin plugins/spark/lib)"
+done; done
 defs "$TESTLIB" | while IFS=$'\t' read -r ln name; do
   printf 'tests\t%s\t%s:%s\t%s\t%s\t%s\n' "$name" "$TESTLIB" "$ln" "$(refs_in "$name" $TESTLIB)" "$(cnt grep -rlw -- "$name" tests/test-*.sh tests/run.sh tests/bench.sh tests/bench-memo.sh tests/structure.sh)" "$(cnt grep -rlw -- "$name" plugins docs .github)"
 done
 } > "$OUT/functions.tsv"
 total=$(($(wc -l < "$OUT/functions.tsv") - 1))
-echo "functions scanned: $total (runtime $(awk -F'\t' 'NR>1&&$1=="runtime"' "$OUT/functions.tsv" | wc -l | tr -d ' '), ci $(awk -F'\t' 'NR>1&&$1=="ci"' "$OUT/functions.tsv" | wc -l | tr -d ' '), tests/lib.sh $(awk -F'\t' 'NR>1&&$1=="tests"' "$OUT/functions.tsv" | wc -l | tr -d ' '))"
+echo "functions scanned: $total (runtime $(awk -F'\t' 'NR>1&&$1=="runtime"' "$OUT/functions.tsv" | wc -l | tr -d ' '), ci $(awk -F'\t' 'NR>1&&$1=="ci"' "$OUT/functions.tsv" | wc -l | tr -d ' '), skills $(awk -F'\t' 'NR>1&&$1=="skills"' "$OUT/functions.tsv" | wc -l | tr -d ' '), tests/lib.sh $(awk -F'\t' 'NR>1&&$1=="tests"' "$OUT/functions.tsv" | wc -l | tr -d ' '))"
 echo "== zero-reference candidates (surface, function, defined_in) =="
 awk -F'\t' 'NR>1 && $4==0 && $5==0 && $6==0 {print $1"\t"$2"\t"$3}' "$OUT/functions.tsv" | tee "$OUT/zero.tsv"
 echo "== per-candidate evidence → $OUT/candidates.txt =="
@@ -62,7 +67,7 @@ while IFS=$'\t' read -r surface name where; do
 done < "$OUT/zero.tsv"
 cat "$OUT/candidates.txt"
 echo "== obsolete-compatibility markers (runtime + ci) =="
-{ grep -nEi 'legacy|deprecated|backward|compat(ibility)? (path|shim|fallback)|for compatibility|no longer (used|needed|read|written)|kept for|retained for|old (format|schema|name)|removed in v|since v0\.[0-9]+' $RUNTIME $CI || true; } | cut -c1-200
+{ grep -nEi 'legacy|deprecated|backward|compat(ibility)? (path|shim|fallback)|for compatibility|no longer (used|needed|read|written)|kept for|retained for|old (format|schema|name)|removed in v|since v0\.[0-9]+' $RUNTIME $CI $SKILLS || true; } | cut -c1-200
 echo "== shipped and ci scripts referenced nowhere =="
 for s in $(git ls-files 'plugins/spark/skills/*/scripts/*' plugins/spark/scripts '.github/scripts/*.sh' '.github/scripts/*/*.sh'); do
   b="$(basename "$s")"
