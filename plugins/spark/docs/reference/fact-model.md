@@ -108,15 +108,16 @@ or bind.
 
 ## Sources: identity grammar and version identity
 
-`source.identity` is validated against the grammar of its type; a role name, a
-label or a summary can never stand as the identity of a source.
+`source.identity` and `source.version` are each validated against the grammar
+of the source type; a role name, a label, a summary, or a word such as
+`latest` can never stand as the identity or the version of a source.
 
-| Source type | Canonical `source.identity` | Version identity a fact must record |
+| Source type | Canonical `source.identity` | `source.version` grammar |
 |---|---|---|
-| `github-api` | a repository, work-unit, comment or milestone locator — the node that was read | the node's `updated_at`, its etag, or the head/id the record is keyed by |
-| `git` | `<repository>@<commit>` or `<repository>@ref/<ref>` | the commit id or ref target observed |
-| `repository-file` | `<repository>@<commit>:<path>` | the commit id the file was read at |
-| `human-decision` | the decision record itself: a comment locator or `<repository>@<commit>` | the comment id or commit id that records the decision |
+| `github-api` | a repository, work-unit, comment or milestone locator — the node that was read | the node's `updated_at` (ISO-8601 `Z`), the 40-hex head it is keyed by, its numeric id, or its etag |
+| `git` | `<repository>@<commit>` or `<repository>@ref/<ref>` | the 40-hex commit id observed (a ref target is recorded as the commit it pointed at) |
+| `repository-file` | `<repository>@<commit>:<path>` | the 40-hex commit id the file was read at |
+| `human-decision` | the decision record itself: a comment locator or `<repository>@<commit>` | the numeric comment id or the 40-hex commit id that records the decision |
 | `derived` | `fact-model/<schema version>` | a `derived-version`: the schema version, then `<input key>@<that input's source.version>` for every input, sorted by key — so the version changes whenever any input's version does |
 
 ## Rules
@@ -157,8 +158,18 @@ label or a summary can never stand as the identity of a source.
   source-backed, targeted records; explanatory wording is provenance, never a
   value a consumer must interpret.
 - **R14** Every value has an exact shape: only the declared keys, recursively;
-  `source.identity` matches the grammar of its source type; a grant names the
-  repository or work unit it applies to.
+  `source.identity` and `source.version` each match the grammar of their source
+  type; a grant names the repository or work unit it applies to.
+- **R15** `next_action` is derived, never asserted. `merge` only when the review
+  is PASS on the current HEAD, every required check is `success` on it, every
+  acceptance item is MET on it, the HEAD is current, and a grant with scope
+  `merge:routine` targets the repository or work unit; `repair` only on
+  CHANGES REQUIRED for the current HEAD; `wait-review` only when no verdict
+  binds the current HEAD or a required check is pending, missing or UNKNOWN;
+  `stop-decision-required` only when an input is CONFLICT, the verdict is
+  DECISION REQUIRED, or the reason names the authority fact's reserved
+  boundaries. The behavioral suite checks these conditions against every
+  example.
 
 ## Versioning
 
@@ -282,11 +293,11 @@ observed on. Nothing here can be reused for another HEAD.
 
 ### Example 3 — a stale HEAD invalidates only HEAD-bound facts (fragment)
 
-A new push moved the HEAD. The head fact records `current: false` against the
-old HEAD; the review that judged the old HEAD is still a true statement about
-that HEAD — it is simply no longer the review of the work unit's current
-change, so the next action is to wait for a fresh one. Repository, placement
-and graph facts carry no HEAD invalidator and remain established.
+A new push moved the HEAD. The head fact records the new HEAD as current; the
+review still names the old HEAD it judged, so it is a true statement about that
+HEAD but no longer a review of the work unit's current change, and the derived
+action is to wait for a fresh one. Repository, placement and graph facts carry
+no HEAD invalidator and remain established.
 
 ```json
 [

@@ -23,6 +23,7 @@
 #   identifier  <kind>        <regex>                            <canonical form>
 #   source      <type>        <version-identity>                 <description>
 #   source-identity <type>    <regex>                            <canonical identity form for that source type>
+#   source-version  <type>    <regex>                            <version-identity grammar for that source type>
 #   rule        <id>          <statement>
 #
 #   required       required | optional | derived
@@ -115,6 +116,13 @@ source-identity	repository-file	^[a-z0-9.-]+/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-
 source-identity	human-decision	^([a-z0-9.-]+/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#[1-9][0-9]*/comment/[1-9][0-9]*|[a-z0-9.-]+/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40})$	The <decision-record> itself
 source-identity	derived	^fact-model/[1-9][0-9]*$	fact-model/<schema version>
 
+# --- Source version grammar: source.version is validated per source type ------
+source-version	github-api	^([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z|[0-9a-f]{40}|[1-9][0-9]*|W/"[^"]+"|"[^"]+")$	The node's updated_at (ISO-8601 Z), the head it is keyed by (40-hex), its numeric id, or its etag
+source-version	git	^[0-9a-f]{40}$	The commit id observed (a ref target is recorded as the commit it pointed at)
+source-version	repository-file	^[0-9a-f]{40}$	The commit id the file was read at
+source-version	human-decision	^([1-9][0-9]*|[0-9a-f]{40})$	The comment id or commit id that records the decision
+source-version	derived	^[1-9][0-9]*(;[a-z_]+\.[a-z_]+@[^; ]+)+$	The derived-version (schema version, then <input key>@<input source.version> for every input, sorted)
+
 # --- Rules the shape enforces ------------------------------------------------
 rule	R1	Canonical identifiers have one representation; labels, abbreviations and pretty names are projections.
 rule	R2	Raw issue or comment bodies, timelines and explanatory prose are not fact values; a fact points at them through provenance.
@@ -129,4 +137,5 @@ rule	R10	Nothing here is written to .spark/state.json; mutable GitHub execution 
 rule	R11	A snapshot carries every required class exactly once; a smaller set is a fragment and is never consumed as a snapshot.
 rule	R12	A checks fact carries exactly one result per required check name, each in the closed check-state vocabulary; merge is derivable only when every result is success.
 rule	R13	Authority scopes and human boundaries are closed tokens carried in source-backed, targeted records; explanatory wording is provenance, never a value a consumer must interpret.
-rule	R14	Every value has an exact shape: only the declared keys, recursively; source.identity matches the grammar of its source type; a grant names the repository or work unit it applies to.
+rule	R14	Every value has an exact shape: only the declared keys, recursively; source.identity and source.version each match the grammar of their source type; a grant names the repository or work unit it applies to.
+rule	R15	next_action is derived, never asserted: merge only when the review is PASS on the current HEAD, every required check is success on it, every acceptance item is MET on it, the HEAD is current, and a grant with scope merge:routine targets the repository or work unit; repair only on CHANGES REQUIRED for the current HEAD; wait-review only when no verdict binds the current HEAD or a required check is pending, missing or UNKNOWN; stop-decision-required only when an input is CONFLICT, the verdict is DECISION REQUIRED, or the reason names the authority fact's reserved boundaries.

@@ -34,7 +34,8 @@ assert_eq "ESTABLISHED is the only status that may carry a value" "ESTABLISHED" 
 assert_eq "twelve envelope fields" "12" "$(rec field | wc -l | tr -d ' ')"
 assert_eq "value is optional in the envelope (present only when ESTABLISHED)" "optional" "$(rec field | awk -F'\t' '$2=="value"{print $3}')"
 assert_eq "five source types" "5" "$(rec source | wc -l | tr -d ' ')"
-assert_eq "fourteen rules" "14" "$(rec rule | wc -l | tr -d ' ')"
+assert_eq "fifteen rules" "15" "$(rec rule | wc -l | tr -d ' ')"
+assert_eq "one source-version grammar per source type" "$(rec source | cut -f2 | sort | tr '\n' ' ')" "$(rec source-version | cut -f2 | sort | tr '\n' ' ')"
 assert_eq "seventeen identifier kinds" "17" "$(rec identifier | wc -l | tr -d ' ')"
 for k in issue-state check-state scope boundary decision-record derived-version; do rec identifier | cut -f2 | grep -qx "$k" && ok || bad "closed vocabulary $k declared"; done
 assert_eq "one source-identity grammar per source type" "$(rec source | cut -f2 | sort | tr '\n' ' ')" "$(rec source-identity | cut -f2 | sort | tr '\n' ' ')"
@@ -87,6 +88,7 @@ fields = {r[1]: r[2] for r in rows if r[0] == "field"}
 ids = {r[1]: re.compile(r[2]) for r in rows if r[0] == "identifier"}
 sources = {r[1] for r in rows if r[0] == "source"}
 sid = {r[1]: re.compile(r[2]) for r in rows if r[0] == "source-identity"}
+sver = {r[1]: re.compile(r[2]) for r in rows if r[0] == "source-version"}
 # exact value shapes (R14): the declared keys and nothing else, recursively
 SHAPES = {"work_unit": {"kind", "id"}, "repository": {"id", "default_branch"}, "placement": {"milestone", "release", "gate"},
           "graph": {"parent", "children", "blocked_by"}, "authority": {"grants", "human_boundaries"}, "acceptance": {"contract", "head", "items"},
@@ -139,6 +141,7 @@ def check_fact(f):
     if src["type"] not in sources: fail(f"unknown source type {src['type']}")
     if not sid[src["type"]].match(str(src["identity"])): fail(f"source.identity {src['identity']!r} is not in the {src['type']} grammar (R14)")
     if not src["version"]: fail("source.version empty")
+    if not sver[src["type"]].match(str(src["version"])): fail(f"source.version {src['version']!r} is not in the {src['type']} version grammar (R14)")
     if src["type"] == "derived":
         if not f.get("inputs"): fail("derived fact without inputs")
         if not ids["derived-version"].match(src["version"]): fail("derived source.version is not a derived-version (R4)")
@@ -215,6 +218,33 @@ def check_set(facts, complete):
     for f in facts:
         for i in f.get("inputs", []) or []:
             if i not in keys: fail(f"derived input {i} is not present in the same set")
+    # R15: next_action is derived from the inputs present, never asserted
+    def one(cls):
+        c = [f for f in facts if f["class"] == cls]
+        return c[0] if c else None
+    for f in facts:
+        if f["class"] != "next_action" or f["status"] != "ESTABLISHED": continue
+        act = f["value"]["action"]; head = one("head"); rev = one("review"); chk = one("checks"); acc = one("acceptance"); auth = one("authority"); repo = one("repository"); wu = one("work_unit")
+        cur = head["value"]["head"] if head and head["status"] == "ESTABLISHED" else None
+        est = lambda x: x is not None and x["status"] == "ESTABLISHED"
+        if act == "merge":
+            if not (est(rev) and rev["value"]["verdict"] == "PASS" and cur and rev["value"]["head"] == cur): fail("merge requires a PASS review on the current HEAD (R15)")
+            if not (est(chk) and chk["value"]["head"] == cur and all(r["state"] == "success" for r in chk["value"]["results"])): fail("merge requires every required check success on the current HEAD (R15)")
+            if not (est(acc) and acc["value"]["head"] == cur and all(i["state"] == "MET" for i in acc["value"]["items"])): fail("merge requires every acceptance item MET on the current HEAD (R15)")
+            if not head["value"]["current"]: fail("merge requires the HEAD to be current (R15)")
+            targets = {x["value"]["id"] for x in (repo, wu) if est(x)}
+            if not (est(auth) and any("merge:routine" in g["scopes"] and g["target"] in targets for g in auth["value"]["grants"])): fail("merge requires a merge:routine grant targeting the repository or work unit (R15)")
+        elif act == "repair":
+            if not (est(rev) and rev["value"]["verdict"] == "CHANGES REQUIRED" and cur and rev["value"]["head"] == cur): fail("repair requires CHANGES REQUIRED on the current HEAD (R15)")
+        elif act == "wait-review":
+            no_verdict = not est(rev) or (cur is not None and rev["value"]["head"] != cur)
+            pending = (chk is not None and chk["status"] == "UNKNOWN") or (est(chk) and any(r["state"] in ("pending", "missing") for r in chk["value"]["results"]))
+            if not (no_verdict or pending): fail("wait-review requires no verdict on the current HEAD or a pending/missing/UNKNOWN required check (R15)")
+        elif act == "stop-decision-required":
+            conflict = any(keys[k]["status"] == "CONFLICT" for k in f["inputs"])
+            decision = est(rev) and rev["value"]["verdict"] == "DECISION REQUIRED"
+            boundary = est(auth) and auth["key"] in f["value"]["because"] and auth["value"]["human_boundaries"]
+            if not (conflict or decision or boundary): fail("stop-decision-required requires a CONFLICT input, a DECISION REQUIRED verdict, or a reserved boundary named as the reason (R15)")
         if f["source"]["type"] == "derived":
             for part in f["source"]["version"].split(";")[1:]:
                 k, ver = part.split("@", 1)
@@ -277,6 +307,8 @@ accepts "$(printf '%s' "$derived" | python3 -c 'import json,sys; f=json.load(sys
 accepts "$(printf '%s' "$derived" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["source"]["version"]="1"; print(json.dumps(f))')" && bad "a derived version that omits its inputs' versions must be rejected (R4)" || ok
 accepts "$(printf '%s' "$derived" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["source"]["version"]="1;checks.required@x"; print(json.dumps(f))')" && bad "a derived version naming a key that is not an input must be rejected (R4)" || ok
 accepts "$(mut 'f["invalidators"]=["head:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]')" && bad "a review whose head: invalidator names a different HEAD than its value must be rejected (R7)" || ok
+accepts "$(mut 'f["source"]["version"]="latest"')" && bad "a github-api source version outside its grammar must be rejected (R14)" || ok
+accepts "$(amut 'f["source"]["version"]="banana"')" && bad "a human-decision source version outside its grammar must be rejected (R14)" || ok
 # exact value shapes, recursively (R14): prose keys nested inside values
 accepts "$(mut 'f["value"]["conclusion"]="looks fine"')" && bad "an extra key in a review value must be rejected (R14)" || ok
 wu='{"schema_version":"1","key":"work_unit.identity","class":"work_unit","status":"ESTABLISHED","value":{"kind":"pull_request","id":"github.com/acme/widgets#42"},"source":{"type":"github-api","identity":"github.com/acme/widgets#42","version":"2026-09-06T12:00:00Z"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["pull_request:github.com/acme/widgets#42"],"provenance":"https://github.com/acme/widgets/pull/42"}'
@@ -307,7 +339,7 @@ accepts "$(cmut 'f["value"]["results"]=f["value"]["results"][:1]')" && bad "a re
 accepts "$(cmut 'f["value"]["results"][1]["state"]="green"')" && bad "a check state outside the vocabulary must be rejected (R12)" || ok
 accepts "$(cmut 'f["value"]["results"][1]["conclusion"]="success"')" && bad "checks.results[].conclusion (an undeclared nested key) must be rejected (R14)" || ok
 accepts "$(cmut 'f["value"]["results"].append({"name":"tests","state":"failure"})')" && bad "a duplicate check result must be rejected (R12)" || ok
-gr='{"schema_version":"1","key":"graph.native","class":"graph","status":"ESTABLISHED","value":{"parent":{"id":"github.com/acme/widgets#40","state":"open"},"children":[],"blocked_by":[{"id":"github.com/acme/widgets#39","state":"closed"}]},"source":{"type":"github-api","identity":"github.com/acme/widgets#41","version":"x"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["issue:github.com/acme/widgets#41"],"provenance":"https://github.com/acme/widgets/issues/41"}'
+gr='{"schema_version":"1","key":"graph.native","class":"graph","status":"ESTABLISHED","value":{"parent":{"id":"github.com/acme/widgets#40","state":"open"},"children":[],"blocked_by":[{"id":"github.com/acme/widgets#39","state":"closed"}]},"source":{"type":"github-api","identity":"github.com/acme/widgets#41","version":"2026-09-06T11:00:00Z"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["issue:github.com/acme/widgets#41"],"provenance":"https://github.com/acme/widgets/issues/41"}'
 gmut() { printf '%s' "$gr" | python3 -c "import json,sys; f=json.load(sys.stdin); exec(sys.argv[1]); print(json.dumps(f))" "$1"; }
 accepts "$gr" && ok || bad "control: a graph fact with relationship states is accepted"
 accepts "$(gmut 'f["value"]["blocked_by"]=["github.com/acme/widgets#39"]')" && bad "a relationship without state must be rejected" || ok
@@ -322,6 +354,14 @@ print(json.dumps(json.loads(m.group(1))))
 PY
 )"
 sets "$(printf '{"complete": true, "facts": %s}' "$full")" && ok || bad "control: the page's complete snapshot is accepted as a snapshot"
+# R15 controls: the complete snapshot derives merge; break one condition at a time and the derivation must be rejected
+smut() { printf '%s' "$full" | python3 -c "import json,sys; s=json.load(sys.stdin); exec(sys.argv[1]); print(json.dumps(s))" "$1"; }
+sets "$(printf '{"complete": true, "facts": %s}' "$(smut 'nx=[f for f in s if f["class"]=="checks"][0]; nx["value"]["results"][1]["state"]="failure"')")" && bad "merge with a failed required check must be rejected (R15)" || ok
+sets "$(printf '{"complete": true, "facts": %s}' "$(smut 'nx=[f for f in s if f["class"]=="review"][0]; nx["value"]["verdict"]="CHANGES REQUIRED"')")" && bad "merge with a CHANGES REQUIRED review must be rejected (R15)" || ok
+sets "$(printf '{"complete": true, "facts": %s}' "$(smut 'nx=[f for f in s if f["class"]=="acceptance"][0]; nx["value"]["items"][0]["state"]="NOT_MET"')")" && bad "merge with an unmet acceptance item must be rejected (R15)" || ok
+sets "$(printf '{"complete": true, "facts": %s}' "$(smut 'nx=[f for f in s if f["class"]=="head"][0]; nx["value"]["current"]=False')")" && bad "merge on a HEAD that is not current must be rejected (R15)" || ok
+sets "$(printf '{"complete": true, "facts": %s}' "$(smut 'nx=[f for f in s if f["class"]=="authority"][0]; nx["value"]["grants"][0]["scopes"]=["close:issue"]')")" && bad "merge without a merge:routine grant must be rejected (R15)" || ok
+sets "$(printf '{"complete": true, "facts": %s}' "$(smut 'nx=[f for f in s if f["class"]=="authority"][0]; nx["value"]["grants"][0]["target"]="github.com/acme/program"')")" && bad "merge with a grant targeting another repository must be rejected (R15)" || ok
 sets "$(printf '{"complete": true, "facts": %s}' "$(printf '%s' "$full" | python3 -c 'import json,sys; s=json.load(sys.stdin); print(json.dumps([f for f in s if f["class"]!="authority"]))')")" && bad "a snapshot lacking a required class must be rejected (R11)" || ok
 sets "$(printf '{"complete": false, "facts": %s}' "$(printf '%s' "$full" | python3 -c 'import json,sys; s=json.load(sys.stdin); print(json.dumps(s+[s[0]]))')")" && bad "a set repeating a class must be rejected (R11)" || ok
 sets "$(printf '{"complete": false, "facts": %s}' "$(printf '%s' "$full" | python3 -c 'import json,sys; s=json.load(sys.stdin); print(json.dumps([f for f in s if f["class"] not in ("authority","next_action")]))')")" && ok || bad "control: a subset with no dangling derived inputs is a valid fragment when not claimed complete"
