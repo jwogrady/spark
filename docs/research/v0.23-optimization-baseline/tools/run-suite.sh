@@ -16,7 +16,11 @@ bash tests/run.sh --json > "$out/run-full.out" 2> "$out/run-full.err" || rc=$?
 s1=$(date +%s)
 end="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 printf 'rc=%s\nwall_seconds=%s\nend_utc=%s\n' "$rc" "$((s1 - s0))" "$end" >> "$out/run-full.meta"
+# Deterministic projections of the single run (these are the committed evidence; run-full.out/.err are the full
+# streams and are not committed): the runner's one JSON summary line, and the per-suite header + finish lines.
+grep -E '^\{"kind":"full"' "$out/run-full.out" > "$out/run-full.json"
+grep -E '^== |passed, [0-9]+ failed' "$out/run-full.out" > "$out/run-full-suites.txt"
 cat "$out/run-full.meta"
-tail -c 2500 "$out/run-full.out"
+cat "$out/run-full.json"
 # The wrapper's own status is the suite's status: a failed run must not look like a successful measurement.
 exit "$rc"

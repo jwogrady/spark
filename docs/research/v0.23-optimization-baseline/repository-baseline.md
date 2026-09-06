@@ -169,8 +169,8 @@ skills.
 
 Candidates (audit only — no deletion target is set here):
 
-- 109 remote branches already ancestors of `master` (`raw/branches.tsv`), plus squash-merged branches that
-  ancestry cannot classify (#744 scope).
+- 109 locally observed remote-tracking refs (`refs/remotes/origin/*` at the pre-freeze fetch, `raw/branches.tsv`)
+  that are already ancestors of `921c982`, plus squash-merged branches that ancestry cannot classify (#744 scope).
 - The 10 concrete code duplicate pairs in the §4 source report, led by the four disagreeing required-check sets
   and the wholesale duplicated `gate-runner.sh` / `release-notes-runner.sh` pipeline.
 - 7 partially-superseded and 4 retired-machinery ADRs still listed inline in the current ADR index.
@@ -200,16 +200,26 @@ Surfaces that look historical or orphaned but evidence says must **not** be remo
 
 ## 9. Reproduction
 
-All commands run from the **repository root**; `BASE` is this directory.
+All commands run from the **repository root**; `BASE` is this directory. The four wrappers under `tools/` are the
+exact tools that produced the committed evidence; each takes the frozen worktree and the output directory as
+arguments and writes the committed artifact names directly.
 
 ```
 BASE=docs/research/v0.23-optimization-baseline
-git worktree add --detach /tmp/spark-921c982 921c9820b92e99ef3620f4f46a0a8a6d7bb0c8b5
-bash $BASE/tools/footprint.sh /tmp/spark-921c982            # raw/footprint.txt
-(cd /tmp/spark-921c982 && bash tests/run.sh --json)          # raw/run-full.json — run once, project many
-(cd /tmp/spark-921c982 && bash tests/bench.sh --json && bash tests/structure.sh --json)
-bash $BASE/tools/branches.sh [--fetch]                       # raw/branches.tsv: remote-tracking refs; --fetch refreshes and records the fetch
+FZ=/tmp/spark-921c982
+git worktree add --detach "$FZ" 921c9820b92e99ef3620f4f46a0a8a6d7bb0c8b5
+bash "$BASE/tools/footprint.sh" "$FZ" > "$BASE/raw/footprint.txt"
+bash "$BASE/tools/run-suite.sh" "$FZ" "$BASE/raw"           # one tests/run.sh --json execution → raw/run-full.meta, raw/run-full.json
+                                                            #   (the runner's one JSON line), raw/run-full-suites.txt (per-suite header +
+                                                            #   finish lines); run-full.out/.err are the full streams and are not committed
+bash "$BASE/tools/run-structure-bench.sh" "$FZ" "$BASE/raw" # tests/structure.sh --json / text → raw/structure.{json,txt};
+                                                            #   tests/bench.sh --json / text → raw/bench.{json,txt}; *.err not committed
+bash "$BASE/tools/branches.sh" > "$BASE/raw/branches.tsv"    # remote-tracking refs at the local observation state, with a provenance
+                                                            #   header; add --fetch to refresh from origin first and record the fetch
 ```
+
+`tests/run.sh` is executed exactly once by `run-suite.sh`; every number quoted from it is a projection of that one
+run.
 
 All four wrappers fail closed: setup and metadata collection run under `set -euo pipefail`, every required
 number is captured into a variable before it is printed (so a failing `git`, `cat`, `wc`, `find` or `awk` aborts
@@ -218,10 +228,9 @@ wrapper's exit status. The only statuses treated as measurements rather than fai
 match → a zero count) and `git merge-base --is-ancestor` status 1 (not an ancestor → not merged); any higher
 status propagates.
 The committed `raw/footprint.txt` was re-produced byte-identically by the fail-closed `footprint.sh` against the
-frozen worktree; `raw/branches.tsv` carries a provenance header naming the fetch state it was observed from.
-
-`tools/run-suite.sh` and `tools/run-structure-bench.sh` are the exact wrappers used (they carry the worktree
-path they ran against).
+frozen worktree; `raw/branches.tsv` carries a provenance header naming the fetch state it was observed from; the
+`run-suite.sh` projection reproduces the committed `raw/run-full.json` and `raw/run-full-suites.txt` byte-for-byte
+from the captured stream.
 
 ## 10. Acceptance evaluation for #737 (from current GitHub truth)
 
