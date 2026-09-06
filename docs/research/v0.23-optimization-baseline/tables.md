@@ -13,7 +13,7 @@
 | reviewer body chars | 32,454 | 48,689 | GitHub REST, derived.json |
 | formal PR reviews (human) | 2 | 0 | GitHub REST, derived.json |
 | marker echoes by untrusted login (not verdicts) | 0 | 3 | GitHub REST, derived.json |
-| verdict outcome | 16× CHANGES REQUIRED, no PASS (open) | 31× CHANGES REQUIRED → PASS, merged | derived.json verdict_counts |
+| verdict outcome | 16× CHANGES REQUIRED, no PASS (open at cutoff) | 31× CHANGES REQUIRED → PASS, merged at cutoff | derived verdict_counts; state as of the observation cutoff |
 | wall clock first commit → last verdict (s) | 61,843 | 18,289 | commit author date → verdict comment created_at |
 | of which idle gaps >30 min (s) | 51,023 | 0 | inter-verdict intervals > 1800s |
 | active wall clock (s) | 10,820 | 18,289 | wall minus idle gaps |

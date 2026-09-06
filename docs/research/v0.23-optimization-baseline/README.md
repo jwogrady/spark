@@ -237,5 +237,8 @@ identified: yes (§2.3) — the suspected problem is established for the writer 
 lane's record. Durable and pointable from #728/#729/#480: via the #730 comment and this committed evidence. No
 correctness/evidence/authority surface skipped: none touched.
 
-Durability caveat: the evidence becomes permanent when the three PRs are merged under the standing governance,
-which is a separate decision.
+Durability: the finding-text bundle (PR #748) merged as `ed9d6146bfbb40666b609e69eb7bf043cd36032f` on
+2026-09-06 after an exact-HEAD PASS with required checks green; the remaining two bundles become permanent when
+merged under the standing governance. `master` therefore advances past `921c982` only by evidence-only commits
+under `docs/research/`; the measured system is still exactly `921c982` (the tree of any later master minus this
+directory), which is why every measurement here is pinned to that SHA rather than to "master".

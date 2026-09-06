@@ -39,7 +39,7 @@ for k, label in (("commits", "commits"), ("additions", "lines added"), ("deletio
                  ("author_comments", "writer top-level PR comments"), ("author_comment_chars", "writer comment chars"), ("reviewer_body_chars", "reviewer body chars"),
                  ("formal_reviews", "formal PR reviews (human)"), ("echo_markers_untrusted_login", "marker echoes by untrusted login (not verdicts)")):
     rows.append((label, d["A"][k], d["B"][k], "GitHub REST, derived.json"))
-rows.append(("verdict outcome", "16× CHANGES REQUIRED, no PASS (open)", "31× CHANGES REQUIRED → PASS, merged", "derived.json verdict_counts"))
+rows.append(("verdict outcome", f"16× CHANGES REQUIRED, no PASS ({d['A'].get('state_at_cutoff', d['A'].get('state'))} at cutoff)", f"31× CHANGES REQUIRED → PASS, {d['B'].get('state_at_cutoff', d['B'].get('state'))} at cutoff", "derived verdict_counts; state as of the observation cutoff"))
 aA, gA = active_seconds(d["A"]); aB, gB = active_seconds(d["B"])
 rows.append(("wall clock first commit → last verdict (s)", d["A"]["wall_first_commit_to_last_verdict_s"], d["B"]["wall_first_commit_to_last_verdict_s"], "commit author date → verdict comment created_at"))
 rows.append(("of which idle gaps >30 min (s)", gA, gB, "inter-verdict intervals > 1800s"))

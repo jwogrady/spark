@@ -41,6 +41,15 @@ if cutoff:
     commits = [c for c in commits if c["commit"]["author"]["date"] <= cutoff]
     if isinstance(runs, dict): runs = {**runs, "workflow_runs": [r for r in runs["workflow_runs"] if r["created_at"] <= cutoff]}
     else: runs = [r for r in runs if r["created_at"] <= cutoff]
+    # check runs can be re-run on an unchanged HEAD: keep only those started at or before the cutoff
+    checks = {**checks, "check_runs": [c for c in checks.get("check_runs", []) if (c.get("started_at") or "") <= cutoff]}
+# PR state is mutable (a later close/merge would change it): derive the state AS OF the cutoff from immutable
+# timestamps instead of reading the live field.
+def state_at(ts):
+    if prj.get("merged_at") and (not ts or prj["merged_at"] <= ts): return "merged"
+    if prj.get("closed_at") and (not ts or prj["closed_at"] <= ts): return "closed"
+    return "open"
+merged_at_pinned = prj.get("merged_at") if (prj.get("merged_at") and (not cutoff or prj["merged_at"] <= cutoff)) else None
 
 MARK = re.compile(r"<!-- spark-openai-review pr=(\d+) head=([0-9a-f]{40}) verdict=(PASS|CHANGES REQUIRED|DECISION REQUIRED|NOT ASSESSED) -->")
 FILE = re.compile(r"`([\w./-]+\.(?:sh|md|json|tsv|yml|yaml))(?::[\d,-]+)?`")
@@ -121,7 +130,7 @@ wf = {k: {"runs": v["runs"], "seconds": int(v["seconds"]), "distinct_heads": len
 touched = collections.Counter(f for c in cl for f in c["files"])
 first = cl[0]["date"]; last_verdict = rounds[-1]["at"] if rounds else None
 out = {
-  "pr": pr, "frozen_head_expected": expect_head, "observation_cutoff": cutoff, "state": prj["state"], "merged_at": prj.get("merged_at"), "head": prj["head"]["sha"], "base": prj["base"]["ref"],
+  "pr": pr, "frozen_head_expected": expect_head, "observation_cutoff": cutoff, "state_at_cutoff": state_at(cutoff), "merged_at": merged_at_pinned, "head": prj["head"]["sha"], "base": prj["base"]["ref"],
   "created_at": prj["created_at"], "first_commit": first, "last_verdict": last_verdict,
   "wall_first_commit_to_last_verdict_s": int((T(last_verdict) - T(first)).total_seconds()) if last_verdict else None,
   "commits": len(cl), "commit_types": dict(collections.Counter(c["type"] for c in cl)),
@@ -146,7 +155,7 @@ compact["rounds"] = [{k: v for k, v in r.items() if k != "finding_text"} for r i
 compact.pop("commit_list", None); compact.pop("push_to_verdict_s", None)  # per-round rows carry both
 json.dump(compact, open(os.path.join(raw, "derived.compact.json"), "w"), indent=0, default=list)
 
-print(f"# PR #{pr}  state={out['state']} merged_at={out['merged_at']}  head={out['head'][:7]}")
+print(f"# PR #{pr}  state_at_cutoff={out['state_at_cutoff']} merged_at={out['merged_at']}  head={out['head'][:7]}")
 print(f"commits={out['commits']} types={out['commit_types']} +{out['additions']}/-{out['deletions']} distinct_files={out['distinct_files_touched']}")
 print(f"reviewer verdicts={out['reviewer_verdicts']} {out['verdict_counts']} echo(untrusted)={echo} formal_reviews={len(reviews)}")
 print(f"findings_total={out['findings_total']}  author_comments={out['author_comments']} ({out['author_comment_chars']} chars)  reviewer chars={out['reviewer_body_chars']}")
