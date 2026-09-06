@@ -237,6 +237,14 @@ plan_body_matches() {
 # milestone, a parent/child hierarchy, a blocked-by edge and an explicit delivery
 # order, have every one of them absent from GitHub, and still be certified as
 # matching the artifact — because nothing looked (#517).
+# plan_sub_issues <parent> — the parent's sub-issue numbers in GitHub's own
+# order, paginated so a large family is never read as its first page. The one
+# reader for both the hierarchy and the order check below; fails (non-zero) when
+# the list could not be read, and the caller reports `?`, never "not wired".
+plan_sub_issues() {
+  gh api --paginate "repos/{owner}/{repo}/issues/$1/sub_issues" --jq '.[].number' 2>/dev/null
+}
+
 plan_relation_rows() {
   local artifact="$1" state="$2"
   local key title desc a b c live num pnum cnum found kids reason
@@ -274,8 +282,7 @@ plan_relation_rows() {
         printf 'hierarchy\t?\t%s/%s\tone side is not a known issue number, so the link cannot be checked\n' "$a" "$b"
         continue
       fi
-      if ! kids="$(gh api "repos/{owner}/{repo}/issues/$pnum/sub_issues" --paginate \
-                     --jq '.[].number' 2>/dev/null)"; then
+      if ! kids="$(plan_sub_issues "$pnum")"; then
         printf 'hierarchy\t?\t#%s\tsub-issues could not be read — never assumed wired\n' "$pnum"
         continue
       fi
@@ -295,12 +302,13 @@ plan_relation_rows() {
         printf 'dependency\t?\t%s/%s\tone side is not a known issue number, so the edge cannot be checked\n' "$a" "$b"
         continue
       fi
-      if ! found="$(gh api "repos/{owner}/{repo}/issues/$num/dependencies/blocked_by" --paginate \
-                      --jq '.[].number' 2>/dev/null)"; then
+      # The artifact declares an edge between two LOCAL issues, so the check is
+      # membership by number in the native graph, whatever the blocker's state.
+      if ! found="$(gh_blocked_by "$num")"; then
         printf 'dependency\t?\t#%s\tblocked-by could not be read — never assumed wired\n' "$num"
         continue
       fi
-      if printf '%s\n' "$found" | grep -Fxq "$cnum"; then
+      if printf '%s\n' "$found" | awk -F'\t' 'NF { print $1 }' | grep -Fxq "$cnum"; then
         printf 'dependency\t=\t#%s\tis blocked by #%s, as the artifact asks\n' "$num" "$cnum"
       else
         printf 'dependency\t~\t#%s\tis NOT blocked by #%s\n' "$num" "$cnum"
@@ -325,8 +333,7 @@ plan_relation_rows() {
       printf 'order\t?\t%s\tthe parent is not a known issue number, so order cannot be checked\n' "$a"
       continue
     fi
-    if ! kids="$(gh api "repos/{owner}/{repo}/issues/$pnum/sub_issues" --paginate \
-                   --jq '.[].number' 2>/dev/null)"; then
+    if ! kids="$(plan_sub_issues "$pnum")"; then
       printf 'order\t?\t#%s\tsub-issue order could not be read — never assumed correct\n' "$pnum"
       continue
     fi

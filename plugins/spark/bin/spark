@@ -3141,7 +3141,7 @@ EOF_MEMBERS
     # carrying the label is invisible to `gh issue list`, yet `gh label delete`
     # strips it from those PRs too, so the gate must see them.
     local in_use="?" repo_nwo=""
-    repo_nwo="$(gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null || true)"
+    repo_nwo="$(di_repo_nwo)" || repo_nwo=""
     if [ -n "$repo_nwo" ]; then
       in_use="$(gh api -X GET search/issues \
         -f q="repo:$repo_nwo label:enhancement" --jq '.total_count' 2>/dev/null || echo '?')"
@@ -3401,10 +3401,28 @@ di_grade() {
   return 0
 }
 
-# di_repo_nwo — owner/name for this repo. gh expands {owner}/{repo} for REST
-# paths only; a GraphQL document receives them verbatim, so they have to be
-# resolved before the query rather than interpolated into it.
+# di_repo_nwo — owner/name for this repo, and the runtime's ONE read of it. gh
+# expands {owner}/{repo} for REST paths only; a GraphQL document receives them
+# verbatim, so they have to be resolved before the query rather than
+# interpolated into it. Fails (non-zero, empty) when gh cannot answer; every
+# caller decides for itself whether that is fatal or "not assessed" — the read
+# never substitutes a guess.
 di_repo_nwo() { gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null; }
+
+# gh_blocked_by <issue> — every blocker GitHub's native dependency graph records
+# for <issue>, one row per blocker: "<number>\t<state>\t<owner/name>". This is the
+# runtime's ONE reader of that graph; the verbs that consume it (governance
+# validate, next, plan verify) each asked GitHub separately before, and only one
+# of them paginated and only one filtered cross-repository blockers, so a long
+# list or a foreign blocker yielded three different answers. The row carries
+# state and owning repository so each consumer applies its own filter to the
+# same evidence rather than asking a different question. Paginated, so a list
+# longer than one page is never silently truncated. Fails (non-zero, no rows)
+# when the graph could not be read: a failed probe is never "no prerequisite".
+gh_blocked_by() {
+  gh api --paginate "repos/{owner}/{repo}/issues/$1/dependencies/blocked_by" \
+    --jq '.[] | "\(.number)\t\(.state // "")\t\(.repository.full_name // "")"' 2>/dev/null
+}
 
 # di_split_linked <rows> <kind> — the numbers of one kind from di_linked_prs's
 # classified output. Both callers use it, so "which PRs are implementation
@@ -4519,27 +4537,29 @@ EOF_GUNREAD
   # that would let validate PASS on a repository containing a cycle, which is
   # the one thing this surface exists to catch.
   if [ -n "$issues" ]; then
-    local blk probe_failed=0 nwo=""
+    local blk probe_failed=0 nwo="" probe_list
     nwo="$(di_repo_nwo)" || nwo=""
-    while IFS=$'\t' read -r kind n ms blk_n; do
-      # Only issue records carry a blocked-by count; label records are the other
-      # half of the same stream.
-      [ "$kind" = "issue" ] || continue
+    # Only issue records carry a blocked-by count (label records are the other
+    # half of the same stream), and only a non-zero count is probed. Projected
+    # with awk rather than `read`: tab is IFS whitespace, so `read` collapses the
+    # empty milestone field of an unmilestoned issue and its count lands in the
+    # milestone variable — such an issue was never probed, and a cycle through
+    # it was invisible.
+    probe_list="$(printf '%s\n' "$issues" \
+      | awk -F'\t' '$1 == "issue" && $2 != "" && $4 != "" && $4 != "0" { print $2 }')"
+    while IFS= read -r n; do
       [ -n "$n" ] || continue
-      case "$blk_n" in ''|0) continue ;; esac
       # Blockers may live in ANOTHER repository, and a bare number cannot tell
       # the two apart — an external #5 would fuse with a local #5 and fabricate
-      # a cycle that does not exist. Keep only same-repo edges.
-      # `gh api --jq` takes exactly one argument and no --arg, so the repo
-      # filter is applied here rather than inside the jq program.
-      if ! blk="$(gh api "repos/{owner}/{repo}/issues/$n/dependencies/blocked_by" \
-          --jq '.[] | select(.state == "open")
-                | "\(.number)\t\(.repository.full_name // "")"' 2>/dev/null)"; then
+      # a cycle that does not exist. Keep only OPEN, same-repo edges; a blocker
+      # whose repository is unknown, or an unknown own identity, keeps the edge
+      # rather than dropping evidence.
+      if ! blk="$(gh_blocked_by "$n")"; then
         probe_failed=1
         continue
       fi
       blk="$(printf '%s\n' "$blk" | awk -F'\t' -v me="$nwo" \
-        'NF && ($2 == "" || me == "" || $2 == me) { print $1 }')"
+        'NF && $2 == "open" && ($3 == "" || me == "" || $3 == me) { print $1 }')"
       while IFS= read -r b; do
         [ -n "$b" ] || continue
         edges="${edges}${n}	${b}
@@ -4548,7 +4568,7 @@ EOF_GUNREAD
 $blk
 EOF_BLK
     done <<EOF_ISS
-$issues
+$probe_list
 EOF_ISS
     if [ "$probe_failed" -eq 1 ]; then
       printf 'dependency\t?\tall\tnot assessed: at least one prerequisite probe failed — a failed probe is never "no prerequisite"\n'
@@ -5395,7 +5415,7 @@ cmd_reconcile() {
 # would become a release recommendation.
 milestone_snapshot() {
   local nwo owner repo
-  nwo="$(gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null)" || return 1
+  nwo="$(di_repo_nwo)" || return 1
   [ -n "$nwo" ] || return 1
   owner="${nwo%%/*}"; repo="${nwo##*/}"
   gh api graphql -F owner="$owner" -F name="$repo" -f query='
@@ -8690,9 +8710,10 @@ $rows
 LABELEOF
     order="$(printf '%s\n' "$order_list" | grep -nx -- "$n" 2>/dev/null | cut -d: -f1)" || order=""
     if [ -n "$order" ]; then order=$((order - 1)); else order="-"; fi
-    if blockers="$(gh api "repos/{owner}/{repo}/issues/$n/dependencies/blocked_by" \
-        --jq '[.[] | select(.state == "open")] | length' 2>/dev/null)"; then
-      [ -n "$blockers" ] || blockers=0
+    # Every OPEN blocker counts, whichever repository it lives in: selection
+    # asks "is anything still in the way", not "is a local cycle possible".
+    if blk_rows="$(gh_blocked_by "$n")"; then
+      blockers="$(printf '%s\n' "$blk_rows" | awk -F'\t' 'NF && $2 == "open"' | wc -l | tr -d ' ')"
     else
       blockers='?'
     fi
