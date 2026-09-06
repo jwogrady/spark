@@ -1,0 +1,108 @@
+sha=921c9820b92e99ef3620f4f46a0a8a6d7bb0c8b5
+tracked_files=389
+tracked_bytes=3384375
+tracked_loc=65186
+
+bucket	files	bytes	loc
+runtime.dispatcher	1	419187	8881
+runtime.lib	3	148207	3217
+runtime.scripts	2	7792	149
+runtime.hooks	2	18952	460
+runtime.settings	3	2284	90
+runtime.manifests	5	3514	84
+skills.core.SKILL	9	44069	766
+skills.core.references	13	43869	1015
+skills.core.agents	3	11489	194
+skills.core.scripts	5	97874	2055
+preferences	14	30278	600
+shipped.docs.spark	32	310651	5908
+companions.audit	7	36693	765
+companions.connect	5	10820	299
+companions.docs	9	27070	499
+tests.suites	91	974880	19246
+tests.harness	6	62280	1334
+tests.other	0	0	0
+devdocs.adr	32	184590	3106
+devdocs.ops	18	225751	4286
+devdocs.architecture	1	14276	243
+devdocs.releases	13	103829	1849
+devdocs.governance	3	30623	506
+devdocs.research	2	7056	101
+devdocs.alpha	6	34971	697
+devdocs.root	3	25901	397
+root.contract	2	15433	292
+root.readme_roadmap	2	50637	997
+root.changelog	1	97029	879
+github.workflows	6	50596	979
+github.scripts	12	112073	2260
+github.templates	8	16035	567
+release.config	2	1995	89
+dot.other	1	845	29
+root.community	4	16502	375
+project.state	2	1298	9
+editor.config	2	995	47
+assets.logo	16	64346	310
+evaluations.harness	6	22570	465
+evaluations.fixtures	17	21621	423
+evaluations.runs_evidence	15	7846	150
+evaluations.prose	5	27648	568
+
+=== bucket coverage check: tracked files in no bucket ===
+=== bucket coverage check: tracked files in more than one bucket ===
+bucket_file_sum=389
+
+=== by extension (tracked) ===
+    179 md
+    122 sh
+     30 tsv
+     21 json
+     14 yml
+     10 png
+      5 svg
+      5 (noext)
+      1 txt
+      1 gitignore
+      1 diff
+
+=== dispatcher ===
+dispatcher_lines=8881  dispatcher_bytes=419187
+dispatcher_functions=151
+dispatcher_verbs_in_VERBS_table=30
+dispatcher_cmd_functions=22
+lib_cmd_functions=8
+lib_modules:
+  plugins/spark/lib/execution.sh	lines=2195	functions=66
+  plugins/spark/lib/planning.sh	lines=801	functions=15
+  plugins/spark/lib/repository.sh	lines=221	functions=10
+
+=== counts ===
+adr_files=32
+adr_superseded_or_deprecated=8
+release_records=13
+skills_core=9
+skills_companion=3
+test_suites=91
+workflows=6
+preferences_rows=63
+cli_verbs_documented=31
+cli_stability_rows=31
+governance_models=1
+test_lib_helpers=20
+
+=== runtime dependency surface (external binaries referenced by runtime, textual) ===
+    286 awk
+    201 git
+    128 gh
+     83 jq
+     67 grep
+     66 tr
+     45 sort
+     41 sed
+     36 wc
+     35 python3
+     24 date
+     19 find
+     19 cut
+      9 mktemp
+      2 stat
+      1 xargs
