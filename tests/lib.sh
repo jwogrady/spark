@@ -273,3 +273,12 @@ for __a in "$@"; do [ "$__prev" = "--jq" ] && GH_JQ="$__a"; __prev="$__a"; done
 answer_json() { if [ -n "$GH_JQ" ]; then printf '%s' "$1" | jq -r "$GH_JQ"; else printf '%s\n' "$1"; fi; }
 PRELUDE
 }
+
+# stub_gh <path> — write a `gh` stub from stdin: the shebang, the prelude above,
+# then the suite's own case-body, made executable in one step. The suite keeps
+# every ANSWER (what GitHub said, as JSON, through the caller's jq); the shim
+# directory, shebang, prelude and chmod are no longer restated per stub.
+stub_gh() {
+  { echo '#!/usr/bin/env bash'; gh_stub_prelude; cat; } > "$1"
+  chmod +x "$1"
+}

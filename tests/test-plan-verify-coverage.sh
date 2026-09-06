@@ -63,7 +63,7 @@ stub="$work/stub"; mkdir -p "$stub"
 # exercised rather than assumed; pre-shaped rows would agree with any jq. Each
 # answer exits with jq's own status, as gh does: a rejected program is a failed
 # call, never a silent success.
-{ echo '#!/usr/bin/env bash'; gh_stub_prelude; cat <<'STUB'; } > "$stub/gh"
+stub_gh "$stub/gh" <<'STUB'
 sc="${SC:-ok}"
 args="$*"
 case "$1 $2" in
@@ -139,7 +139,6 @@ if [ "$1" = "api" ]; then
 fi
 exit 1
 STUB
-chmod +x "$stub/gh"
 
 V() { # <SC> -> V_RC / V_OUT (tsv)
   V_RC=0
@@ -252,7 +251,6 @@ fi
 [ "$1" = "api" ] && exit 0
 exit 1
 STUB3
-chmod +x "$stub/gh"
 
 n_rc=0
 n_out="$(cd "$work" && env PATH="$stub:$PATH" BODY_U="$work/nom.md" \
@@ -314,7 +312,6 @@ fi
 [ "$1" = "api" ] && exit 0
 exit 1
 STUB4
-chmod +x "$stub/gh"
 n_rc=0
 n_out="$(cd "$work" && env PATH="$stub:$PATH" BODY_U="$work/nom.md" \
   "$SPARK" plan verify "$art2" --state "$st2" --tsv 2>&1)" || n_rc=$?
@@ -370,7 +367,6 @@ if [ "$1" = "api" ]; then
 fi
 exit 1
 STUB2
-chmod +x "$stub/gh"
 r=0
 o="$(cd "$work" && env PATH="$stub:$PATH" "$SPARK" plan verify "$art" --state "$st" 2>&1)" || r=$?
 case "$o" in

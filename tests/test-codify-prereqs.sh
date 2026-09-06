@@ -123,18 +123,16 @@ SIDE_SHA="$(cd "$adv" && git rev-parse HEAD)"
 fakebin="$WORK/fakegh"; mkdir -p "$fakebin"
 mk_gh() { # mk_gh <merged-oid-or-NONE> — graphql answers for blocker 12
   local oid="$1"
-  cat > "$fakebin/gh" <<EOF
-#!/usr/bin/env bash
+  stub_gh "$fakebin/gh" <<EOF
 case "\$*" in
-  *"api repos/{owner}/{repo} --jq .full_name"*) printf 'o/self\n' ;;
-  *"dependencies/blocked_by"*) printf '12\thttps://api.github.com/repos/o/self\n' ;;
-  *"issue view 7 --json body"*) printf 'Implements the thing.\n' ;;
-  *"issue view 12 --json state"*) printf 'CLOSED\n' ;;
-  *graphql*"num=12"*) [ "$oid" = "NONE" ] || printf '%s\n' "$oid" ;;
+  *"api repos/{owner}/{repo} --jq .full_name"*) answer_json '{"full_name":"o/self"}' ;;
+  *"dependencies/blocked_by"*) answer_json '[{"number":12,"repository_url":"https://api.github.com/repos/o/self"}]' ;;
+  *"issue view 7 --json body"*) answer_json '{"body":"Implements the thing."}' ;;
+  *"issue view 12 --json state"*) answer_json '{"state":"CLOSED"}' ;;
+  *graphql*"num=12"*) if [ "$oid" = "NONE" ]; then answer_json "{\"data\":{\"repository\":{\"issue\":{\"closedByPullRequestsReferences\":{\"nodes\":[]}}}}}"; else answer_json "{\"data\":{\"repository\":{\"issue\":{\"closedByPullRequestsReferences\":{\"nodes\":[{\"merged\":true,\"mergeCommit\":{\"oid\":\"$oid\"}}]}}}}}"; fi ;;
   *) exit 1 ;;
 esac
 EOF
-  chmod +x "$fakebin/gh"
 }
 
 fresh() { # fresh <name> — a clone with HEAD exactly at origin/master
@@ -178,37 +176,30 @@ assert_contains "names behind" "behind origin/master" "$out"
 # ATTACK: multiple merged closing PRs where only the SECOND is integrated —
 # the resolver must find the integrated one, not stop at the first.
 repo="$(fresh e2e-multi)"
-cat > "$fakebin/gh" <<EOF
-#!/usr/bin/env bash
+stub_gh "$fakebin/gh" <<EOF
 case "\$*" in
-  *"api repos/{owner}/{repo} --jq .full_name"*) printf 'o/self\n' ;;
-  *"dependencies/blocked_by"*) printf '12\thttps://api.github.com/repos/o/self\n' ;;
-  *"issue view 7 --json body"*) printf 'Implements the thing.\n' ;;
-  *"issue view 12 --json state"*) printf 'CLOSED\n' ;;
-  *graphql*"num=12"*) printf '%s\n%s\n' "$SIDE_SHA" "$PREREQ_SHA" ;;
+  *"api repos/{owner}/{repo} --jq .full_name"*) answer_json '{"full_name":"o/self"}' ;;
+  *"dependencies/blocked_by"*) answer_json '[{"number":12,"repository_url":"https://api.github.com/repos/o/self"}]' ;;
+  *"issue view 7 --json body"*) answer_json '{"body":"Implements the thing."}' ;;
+  *"issue view 12 --json state"*) answer_json '{"state":"CLOSED"}' ;;
+  *graphql*"num=12"*) answer_json "{\"data\":{\"repository\":{\"issue\":{\"closedByPullRequestsReferences\":{\"nodes\":[{\"merged\":true,\"mergeCommit\":{\"oid\":\"$SIDE_SHA\"}},{\"merged\":true,\"mergeCommit\":{\"oid\":\"$PREREQ_SHA\"}}]}}}}}" ;;
   *) exit 1 ;;
 esac
 EOF
-chmod +x "$fakebin/gh"
 rc=0; out="$(cd "$repo" && env PATH="$fakebin:$PATH" bash "$script" 7 2>&1)" || rc=$?
 assert_rc "any one integrated merged result proves the prerequisite" 0 "$rc"
 
 # ATTACK: a blocker declared in BOTH the native list and the body is
 # evaluated once (dedup), and the verdict still needs its proof.
 repo="$(fresh e2e-dedup)"
-cat > "$fakebin/gh" <<'EOF'
-#!/usr/bin/env bash
+stub_gh "$fakebin/gh" <<'EOF'
 log="${GH_DEDUP_LOG:-/dev/null}"; printf '%s
 ' "$*" >> "$log"
 case "$*" in
-  *"api repos/{owner}/{repo} --jq .full_name"*) printf 'o/self
-' ;;
-  *"dependencies/blocked_by"*) printf '12\thttps://api.github.com/repos/o/self
-' ;;
-  *"issue view 7 --json body"*) printf 'Blocked by #12
-' ;;
-  *"issue view 12 --json state"*) printf 'OPEN
-' ;;
+  *"api repos/{owner}/{repo} --jq .full_name"*) answer_json '{"full_name":"o/self"}' ;;
+  *"dependencies/blocked_by"*) answer_json '[{"number":12,"repository_url":"https://api.github.com/repos/o/self"}]' ;;
+  *"issue view 7 --json body"*) answer_json '{"body":"Blocked by #12"}' ;;
+  *"issue view 12 --json state"*) answer_json '{"state":"OPEN"}' ;;
   *) exit 1 ;;
 esac
 EOF
@@ -222,29 +213,26 @@ unset GH_DEDUP_LOG
 # GitHub relationship unavailable (graphql fails for the closed blocker)
 # -> NOT ASSESSED.
 repo="$(fresh e2e-noproof)"
-cat > "$fakebin/gh" <<'EOF'
-#!/usr/bin/env bash
+stub_gh "$fakebin/gh" <<'EOF'
 case "$*" in
-  *"api repos/{owner}/{repo} --jq .full_name"*) printf 'o/self\n' ;;
-  *"dependencies/blocked_by"*) printf '12\thttps://api.github.com/repos/o/self\n' ;;
-  *"issue view 7 --json body"*) printf 'No body deps.\n' ;;
-  *"issue view 12 --json state"*) printf 'CLOSED\n' ;;
+  *"api repos/{owner}/{repo} --jq .full_name"*) answer_json '{"full_name":"o/self"}' ;;
+  *"dependencies/blocked_by"*) answer_json '[{"number":12,"repository_url":"https://api.github.com/repos/o/self"}]' ;;
+  *"issue view 7 --json body"*) answer_json '{"body":"No body deps."}' ;;
+  *"issue view 12 --json state"*) answer_json '{"state":"CLOSED"}' ;;
   *graphql*) exit 1 ;;
   *) exit 1 ;;
 esac
 EOF
-chmod +x "$fakebin/gh"
 rc=0; out="$(cd "$repo" && env PATH="$fakebin:$PATH" bash "$script" 7 2>&1)" || rc=$?
 assert_rc "unavailable relationship proof is not assessed" 3 "$rc"
 assert_contains "instructs manual verification" "verify" "$out"
 
 # blocked-by endpoint failure -> NOT ASSESSED (never 'no blockers').
-cat > "$fakebin/gh" <<'EOF'
-#!/usr/bin/env bash
+stub_gh "$fakebin/gh" <<'EOF'
 case "$*" in
-  *"api repos/{owner}/{repo} --jq .full_name"*) printf 'o/self\n' ;;
+  *"api repos/{owner}/{repo} --jq .full_name"*) answer_json '{"full_name":"o/self"}' ;;
   *"dependencies/blocked_by"*) exit 1 ;;
-  *"issue view 7 --json body"*) printf 'No body deps.\n' ;;
+  *"issue view 7 --json body"*) answer_json '{"body":"No body deps."}' ;;
   *) exit 1 ;;
 esac
 EOF
@@ -256,12 +244,11 @@ assert_contains "instructs manual verification on endpoint failure" "verify prer
 # origination contract: a branch created per the ready state starts at the
 # resolved fresh trunk, not an arbitrary HEAD.
 repo="$(fresh e2e-nodeps)"
-cat > "$fakebin/gh" <<'EOF'
-#!/usr/bin/env bash
+stub_gh "$fakebin/gh" <<'EOF'
 case "$*" in
-  *"api repos/{owner}/{repo} --jq .full_name"*) printf 'o/self\n' ;;
-  *"dependencies/blocked_by"*) : ;;
-  *"issue view 7 --json body"*) printf 'No deps here.\n' ;;
+  *"api repos/{owner}/{repo} --jq .full_name"*) answer_json '{"full_name":"o/self"}' ;;
+  *"dependencies/blocked_by"*) answer_json '[]' ;;
+  *"issue view 7 --json body"*) answer_json '{"body":"No deps here."}' ;;
   *) exit 1 ;;
 esac
 EOF
@@ -278,17 +265,15 @@ assert_rc "no prerequisites at fresh trunk is ready" 0 "$rc"
 # drift, and the drift must never be resolved against GitHub as if it were an
 # edge (no state lookup for #99 at all).
 repo="$(fresh e2e-stale-prose)"
-cat > "$fakebin/gh" <<'EOF'
-#!/usr/bin/env bash
+stub_gh "$fakebin/gh" <<'EOF'
 log="${GH_PROSE_LOG:-/dev/null}"; printf '%s\n' "$*" >> "$log"
 case "$*" in
-  *"api repos/{owner}/{repo} --jq .full_name"*) printf 'o/self\n' ;;
-  *"dependencies/blocked_by"*) : ;;
-  *"issue view 7 --json body"*) printf 'Blocked by #99 (left over from an earlier plan).\n' ;;
+  *"api repos/{owner}/{repo} --jq .full_name"*) answer_json '{"full_name":"o/self"}' ;;
+  *"dependencies/blocked_by"*) answer_json '[]' ;;
+  *"issue view 7 --json body"*) answer_json '{"body":"Blocked by #99 (left over from an earlier plan)."}' ;;
   *) exit 1 ;;
 esac
 EOF
-chmod +x "$fakebin/gh"
 export GH_PROSE_LOG="$WORK/prose-calls.log"
 rc=0; out="$(cd "$repo" && env PATH="$fakebin:$PATH" bash "$script" 7 2>&1)" || rc=$?
 assert_rc "stale body prose does not block when the native graph is empty" 0 "$rc"
@@ -302,18 +287,16 @@ unset GH_PROSE_LOG
 # edge is executable; the extra body reference is drift, never a second edge.
 # The open native blocker still blocks, so drift never softens a real verdict.
 repo="$(fresh e2e-extra-prose)"
-cat > "$fakebin/gh" <<'EOF'
-#!/usr/bin/env bash
+stub_gh "$fakebin/gh" <<'EOF'
 log="${GH_EXTRA_LOG:-/dev/null}"; printf '%s\n' "$*" >> "$log"
 case "$*" in
-  *"api repos/{owner}/{repo} --jq .full_name"*) printf 'o/self\n' ;;
-  *"dependencies/blocked_by"*) printf '12\thttps://api.github.com/repos/o/self\n' ;;
-  *"issue view 7 --json body"*) printf 'Blocked by #12 and Blocked by #98\n' ;;
-  *"issue view 12 --json state"*) printf 'OPEN\n' ;;
+  *"api repos/{owner}/{repo} --jq .full_name"*) answer_json '{"full_name":"o/self"}' ;;
+  *"dependencies/blocked_by"*) answer_json '[{"number":12,"repository_url":"https://api.github.com/repos/o/self"}]' ;;
+  *"issue view 7 --json body"*) answer_json '{"body":"Blocked by #12 and Blocked by #98"}' ;;
+  *"issue view 12 --json state"*) answer_json '{"state":"OPEN"}' ;;
   *) exit 1 ;;
 esac
 EOF
-chmod +x "$fakebin/gh"
 export GH_EXTRA_LOG="$WORK/extra-calls.log"
 rc=0; out="$(cd "$repo" && env PATH="$fakebin:$PATH" bash "$script" 7 2>&1)" || rc=$?
 assert_rc "a contradictory body reference adds no executable edge" 1 "$rc"
@@ -350,20 +333,18 @@ assert_contains "names the failed refresh" "could not be refreshed" "$out"
 # merged result. The unrelated local issue must never satisfy the dependency:
 # not READY, no local graphql resolution, the owning repo named.
 repo="$(fresh e2e-xrepo)"
-cat > "$fakebin/gh" <<'EOF'
-#!/usr/bin/env bash
+stub_gh "$fakebin/gh" <<'EOF'
 log="${GH_XREPO_LOG:-/dev/null}"; printf '%s\n' "$*" >> "$log"
 case "$*" in
-  *"api repos/{owner}/{repo} --jq .full_name"*) printf 'o/self\n' ;;
-  *"dependencies/blocked_by"*) printf '12\thttps://api.github.com/repos/other/elsewhere\n' ;;
-  *"issue view 7 --json body"*) printf 'Implements the thing.\n' ;;
-  *"issue view 12 -R other/elsewhere"*) printf 'CLOSED\n' ;;
-  *"issue view 12 --json state"*) printf 'CLOSED\n' ;;
+  *"api repos/{owner}/{repo} --jq .full_name"*) answer_json '{"full_name":"o/self"}' ;;
+  *"dependencies/blocked_by"*) answer_json '[{"number":12,"repository_url":"https://api.github.com/repos/other/elsewhere"}]' ;;
+  *"issue view 7 --json body"*) answer_json '{"body":"Implements the thing."}' ;;
+  *"issue view 12 -R other/elsewhere"*) answer_json '{"state":"CLOSED"}' ;;
+  *"issue view 12 --json state"*) answer_json '{"state":"CLOSED"}' ;;
   *graphql*"num=12"*) printf 'SHOULD-NEVER-BE-CALLED\n' ;;
   *) exit 1 ;;
 esac
 EOF
-chmod +x "$fakebin/gh"
 export GH_XREPO_LOG="$WORK/xrepo-calls.log"
 rc=0; out="$(cd "$repo" && env PATH="$fakebin:$PATH" bash "$script" 7 2>&1)" || rc=$?
 assert_rc "same-number cross-repo blocker is not assessed" 3 "$rc"
@@ -376,13 +357,12 @@ esac
 unset GH_XREPO_LOG
 
 # cross-repo blocker OPEN in its owning repo -> BLOCKED, named.
-cat > "$fakebin/gh" <<'EOF'
-#!/usr/bin/env bash
+stub_gh "$fakebin/gh" <<'EOF'
 case "$*" in
-  *"api repos/{owner}/{repo} --jq .full_name"*) printf 'o/self\n' ;;
-  *"dependencies/blocked_by"*) printf '12\thttps://api.github.com/repos/other/elsewhere\n' ;;
-  *"issue view 7 --json body"*) printf 'Implements the thing.\n' ;;
-  *"issue view 12 -R other/elsewhere"*) printf 'OPEN\n' ;;
+  *"api repos/{owner}/{repo} --jq .full_name"*) answer_json '{"full_name":"o/self"}' ;;
+  *"dependencies/blocked_by"*) answer_json '[{"number":12,"repository_url":"https://api.github.com/repos/other/elsewhere"}]' ;;
+  *"issue view 7 --json body"*) answer_json '{"body":"Implements the thing."}' ;;
+  *"issue view 12 -R other/elsewhere"*) answer_json '{"state":"OPEN"}' ;;
   *) exit 1 ;;
 esac
 EOF
@@ -391,12 +371,11 @@ assert_rc "cross-repo open blocker blocks end-to-end" 1 "$rc"
 assert_contains "names owning repo and number" "other/elsewhere#12" "$out"
 
 # a native edge with no identifiable owning repository -> NOT ASSESSED.
-cat > "$fakebin/gh" <<'EOF'
-#!/usr/bin/env bash
+stub_gh "$fakebin/gh" <<'EOF'
 case "$*" in
-  *"api repos/{owner}/{repo} --jq .full_name"*) printf 'o/self\n' ;;
-  *"dependencies/blocked_by"*) printf '12\t\n' ;;
-  *"issue view 7 --json body"*) printf 'Implements the thing.\n' ;;
+  *"api repos/{owner}/{repo} --jq .full_name"*) answer_json '{"full_name":"o/self"}' ;;
+  *"dependencies/blocked_by"*) answer_json '[{"number":12}]' ;;
+  *"issue view 7 --json body"*) answer_json '{"body":"Implements the thing."}' ;;
   *) exit 1 ;;
 esac
 EOF

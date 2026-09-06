@@ -29,7 +29,7 @@ lacks() { case "$3" in *"$2"*) bad "$1 — output contains '$2'" ;; *) ok ;; esa
 # CALLER passed — so a test states exactly what GitHub "said" and nothing else.
 STUB="$WORK/stub"; mkdir -p "$STUB"
 CALLS="$WORK/gh-calls"; SC="$WORK/scenario"; mkdir -p "$SC"
-{ echo '#!/usr/bin/env bash'; gh_stub_prelude; cat <<'GH'; } > "$STUB/gh"
+stub_gh "$STUB/gh" <<'GH'
 printf '%s\n' "$*" >> "$CALLS"
 # answer <name>: <name>.raw is fed verbatim (a transport fault no jq produces);
 # <name>.partial.json is answered through the caller's jq and then FAILS — a
@@ -52,7 +52,6 @@ case "$*" in
   *) exit 1 ;;
 esac
 GH
-chmod +x "$STUB/gh"
 export CALLS SC
 PATH="$STUB:$PATH"
 reset() { rm -rf "$SC"; mkdir -p "$SC"; : > "$CALLS"; }

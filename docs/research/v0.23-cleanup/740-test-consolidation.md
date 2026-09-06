@@ -203,17 +203,64 @@ it means adopting `gh_stub_prelude` across ten stubs in one suite.
 
 ---
 
-## Remaining scope (later packets, in order; packets 1 and 2 above are done)
+---
 
-1. **Repeated `gh` stub scaffolding** (baseline B3/B4): 24+ suites each invent a shim
-   directory, write a stub, `chmod +x`, prepend `PATH`; `test-codify-prereqs.sh` alone
-   carries ten inline stubs with pre-shaped answers (`api repos/{owner}/{repo} --jq
-   .full_name`, the blocked-by endpoint in the skill script's own jq shape, GraphQL
-   closing-reference queries). `gh_stub_prelude` (packet 2) is the first shared piece; a
-   `shim_init`/`stub_gh` pair would remove the rest of the scaffolding while leaving each
-   stub's *answers* in the suite that owns them, and converting the codify-prereqs stubs
-   rides the same change. Discrimination is unaffected by construction; the risk is in
-   PATH ordering, so it is its own packet with its own per-suite proof.
+## Packet 3 — the `gh` stub scaffolding and the codify-prereqs stubs (baseline B3/B4)
+
+**What was wrong.** Every suite that fakes `gh` restated the same scaffolding — write a
+file, start it with a shebang, `chmod +x`, prepend a shim directory to `PATH` — and
+`tests/test-codify-prereqs.sh` carried ten such stubs whose answers were pre-shaped the way
+the codify preflight's own jq shapes them (`o/self` for `--jq .full_name`,
+`12\thttps://api.github.com/repos/o/self` for the blocked-by row jq, bare `CLOSED` for
+`--jq .state`, bare merge-commit ids for the GraphQL closing-reference jq), so none of the
+skill script's jq programs ran under test.
+
+**What changed.** `tests/lib.sh` gains `stub_gh <path>`: shebang, `gh_stub_prelude`, the
+suite's case-body from stdin, `chmod +x`, in one call. The two packet-2 suites adopt it.
+All ten codify-prereqs stubs are written through it and every pre-shaped answer becomes
+the JSON GitHub returns, shaped by the preflight's own jq: the repository node
+(`{"full_name": …}`), blocker rows (`{"number", "repository_url"}`, an unknown owner as an
+absent field, "no blockers" as `[]`), issue bodies and states as `{"body"}`/`{"state"}`,
+and the GraphQL closing-reference payload with `merged` and `mergeCommit.oid` nodes — the
+multi-PR scenario now carries two merged nodes, the "no merged PR" scenario an empty node
+list. The one remaining `printf` is a sentinel that must never be reached. No scenario,
+assertion or expected exit code changes.
+
+**Defect found and fixed while doing this.** The first cut of this packet wrote two heredoc
+openers with literal backslashes (`<<\'STUB\'`), so those suites never terminated their
+heredoc, ran zero assertions and exited 0 — and `tests/run.sh` counted them as passed:
+the full run reported 3,726 assertions with every suite "green". The runner now fails any
+suite that prints no `N passed, M failed` line (silence is not evidence), the heredocs are
+terminated, and the per-suite proof below is the strict one: the chain refuses to ship on
+any difference.
+
+| Existing test/case | Invariant proved | Surviving test/case | Same/stronger discrimination? | Validation |
+|---|---|---|---|---|
+| ten inline codify-prereqs stubs with pre-shaped answers | the preflight's READY / BLOCKED / NOT ASSESSED verdicts across 15 end-to-end scenarios | the same ten stubs written with `stub_gh`, answering GitHub's JSON through the skill script's own jq | **Stronger** — `.full_name`, the blocked-by row jq (`.number`, `.repository_url // ""`), `.body`, `.state` and the closing-reference jq (`select(.merged) \| .mergeCommit.oid // empty`) now execute on every scenario; a jq regression in the preflight fails here | suite assertions unchanged; per-suite counts identical |
+| scaffolding in the two packet-2 suites | — | `stub_gh` | **Same** by construction | per-suite counts identical |
+
+**Before / after (this packet).**
+
+| | BEFORE (branch base `dcda139`) | AFTER |
+|---|---|---|
+| suites with pre-shaped `gh` answers assuming a caller's jq | 1 (`test-codify-prereqs.sh`, 10 stubs) | 0 |
+| production jq programs newly exercised | — | 5 (`.full_name`, blocked-by row, `.body`, `.state`, closing references) |
+| stubs written through `stub_gh` | 0 | 12 (ten in codify-prereqs, one each in the packet-2 suites) |
+| `chmod +x`/shebang restatements removed | — | 12 |
+| suites the runner would pass while printing no summary line | any (a silent suite counted as passed) | 0 — `tests/run.sh` now fails a suite with no `N passed, M failed` line |
+| assertions, full run | 3908 passed, 0 failed | 3908 passed, 0 failed |
+| per-suite pass/fail lines | 92 | 92, **all identical** |
+| full-suite wall clock | 160s | 166s |
+
+The remaining ~24 suites with their own shim scaffolding (baseline B3) keep it for now: their
+stub *bodies* are not pre-shaped in the same way, so adopting `stub_gh` there is a mechanical
+sweep with no discrimination change — packet 4 below, so its per-suite proof stands alone.
+
+## Remaining scope (later packets, in order; packets 1–3 above are done)
+
+1. **Adopt `stub_gh` across the remaining suites** (baseline B3): ~24 suites still restate
+   the shim scaffolding; their stub bodies are not pre-shaped in the packet-3 sense, so the
+   sweep is mechanical, with its own per-suite proof.
 2. **Same-invariant candidates** (baseline C1–C7). The baseline's own verdicts stand:
    most groups are layered, not duplicated. The two worth a line-level read are
    `test-context-budget.sh` vs `test-footprint-budget.sh` (C4: same fixture marketplace,
