@@ -630,30 +630,60 @@ invocation returns `4`, and `--help` is the single explicit success path.
 | the acceptance identity | whatever that grant binds |
 | acceptance is *true* | a durable attestation bound to this exact commit |
 | independent review | the exact-HEAD `spark-openai-review … verdict=PASS` marker from `github-actions[bot]` |
-| required checks | the repository's **required contexts** for the base branch, each verified on that exact commit — as a check run or a commit status |
+| required checks | the **whole applicable requirement model** for the base branch — branch protection's app-bound `checks[]` (`contexts[]` for the legacy shape) plus every check and workflow required by an applicable repository or organization **ruleset** — each verified on that exact commit |
 | routine/reversible scope | PR state, base branch, head branch and changed paths |
 | stale-head protection | the head re-read **after** everything above |
 
 Exactly one issue must be closed and exactly one grant must exist: two of either
 is ambiguous about what was authorized, and ambiguity declines.
 
-**Required, not merely observed.** Green means every *required* context passed,
+**Required, not merely observed.** Green means every *required* check passed,
 not that some run reported success — an unrelated success can otherwise stand in
 for a required check that never ran. A required check must conclude `success`:
-`skipped` and `neutral` mean it did not do its job. A required set that cannot
-be read is not an empty one, and declines.
+`skipped` and `neutral` mean it did not do its job.
 
-**Read to exhaustion.** Comments, review and acceptance records, check runs and
-the required set are all paginated. "Exactly one" concluded from a truncated
-page is not exactly one, and a conflicting grant or a failing check on a later
-page would otherwise be invisible.
+**The whole requirement model, not one endpoint's view of it.** No single
+endpoint answers "what must pass before this merges", and an understated
+requirement model is a permissive one. Three sources are read and their union
+verified: branch protection's `checks[]`, which carries the **app binding** that
+makes a context unforgeable — a same-named check from a different app is a
+different check; the checks required by applicable **rulesets**, repository and
+organization alike, which branch protection never mentions; and the **workflows**
+a ruleset requires, stated as paths and therefore verified against the workflow
+runs for that exact commit rather than against check-run names. Requirement
+state that cannot be read is not absent requirement state, and declines — a
+failed protection read is a fact only when the branch is provably unprotected.
+Where nothing is required anywhere, nothing was proven, so there is no green to
+stand on and the answer is still `NOT ELIGIBLE`.
 
-**Conflicting evidence is not passing evidence.** One canonical terminal
-reviewer record is required for the evaluated commit: a `PASS` beside a
-`CHANGES REQUIRED`, two records, or a marker with no readable verdict all
-decline. The same holds for acceptance — a `MET` beside a `NOT-MET`, a
-malformed same-contract record, or two proofs decline. Nothing wins by mere
-existence.
+**Every observation counts.** A required check is satisfied only when *all* of
+its observations on that commit passed. Accepting the first success let a failing
+or still-running re-run sit quietly behind it, and a commit status contradicting
+a passing check run of the same context is the same conflict from the other
+surface.
+
+**Read to exhaustion.** Comments, review and acceptance records, check runs,
+commit statuses, workflow runs and every requirement source are paginated.
+"Exactly one" concluded from a truncated page is not exactly one, and a
+conflicting grant or a failing check on a later page would otherwise be
+invisible.
+
+**Conflicting evidence is not passing evidence.** *Every* marker occurrence is
+read — not the first one a comment happens to contain, because a contradicting
+sibling in the same body is exactly the evidence a merge decision must not miss.
+One canonical terminal reviewer record is required for the evaluated commit: a
+`PASS` beside a `CHANGES REQUIRED`, two records, an unterminated marker, or one
+that cannot be read as `pr`/`head`/`verdict` all decline. The reviewer grammar is
+positional and its verdict vocabulary closed, so a reordered field, an extra
+field or a verdict outside the lane's four values leaves the record's meaning
+unestablished. The same holds for acceptance — a `MET` beside a `NOT-MET`, a
+malformed same-contract record, or two proofs decline. Only a record that
+legibly concerns a *different* pull request or commit is set aside.
+
+Grants are counted the same way: a **candidate** authorization line is any line
+opening with the marker, valid or not, and a malformed same-unit line beside a
+valid grant declines. Skipping the malformed sibling would leave one good record
+standing and let it carry a decision the pair does not support.
 
 ### The two durable records
 

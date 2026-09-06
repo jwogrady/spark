@@ -2321,14 +2321,42 @@ xm_pr_facts()    { xm_api "$1" "pulls/$2" '.head.sha, .state, (.draft|tostring),
 xm_pr_head()     { xm_api "$1" "pulls/$2" '.head.sha'; }
 xm_pr_files()    { xm_api "$1" "pulls/$2/files?per_page=100" '.[].filename'; }
 # Check runs and commit statuses both carry required contexts, so both are read.
+# The app identity travels with each observation, because a requirement bound to
+# an app is not satisfied by a same-named check from a different one.
 xm_checks()      { xm_api_all "$1" "commits/$2/check-runs?per_page=100" \
-                     '.check_runs[] | .name + "\t" + .status + "\t" + (.conclusion // "none")'; }
+                     '.check_runs[] | .name + "\t" + .status + "\t" + (.conclusion // "none") + "\t" + ((.app.id // "") | tostring)'; }
+# A commit status carries no app binding, so it is emitted with an empty one and
+# can only ever satisfy an unbound requirement.
 xm_statuses()    { xm_api_all "$1" "commits/$2/status?per_page=100" \
-                     '.statuses[] | .context + "\t" + "completed" + "\t" + .state'; }
-# The REQUIRED set, from branch protection. Without it there is no way to know a
-# required check is missing rather than merely unmentioned, so an unreadable
-# required set is not an empty one.
-xm_required()    { xm_api_all "$1" "branches/$2/protection/required_status_checks" '.contexts[]'; }
+                     '.statuses[] | .context + "\t" + "completed" + "\t" + .state + "\t"'; }
+# Workflow runs FOR THIS EXACT COMMIT, keyed by workflow path — the only surface
+# that answers a ruleset requirement stated as a path.
+xm_runs()        { xm_api_all "$1" "actions/runs?head_sha=$2&per_page=100" \
+                     '.workflow_runs[] | .path + "\t" + .status + "\t" + (.conclusion // "none")'; }
+
+# --- the applicable requirement model --------------------------------------
+# There is no single endpoint for "what must pass before this merges", and
+# reading only branch protection's legacy `.contexts[]` understates it in two
+# ways: `.checks[]` carries the app binding that makes a context unforgeable,
+# and repository/organization RULESETS require checks and whole workflows that
+# branch protection never mentions. An understated requirement model is a
+# permissive one, so every applicable source is read and their union verified.
+
+# Branch protection, in one read so that "protection exists but requires no
+# checks" is distinguishable from "protection could not be read". `.checks[]`
+# is preferred; `.contexts[]` is the fallback for the legacy shape.
+xm_prot()        { xm_api_all "$1" "branches/$2/protection" \
+                     'if ((.required_status_checks.checks // []) | length) > 0 then (.required_status_checks.checks[] | .context + "\t" + ((.app_id // "") | tostring)) else ((.required_status_checks.contexts // [])[] | . + "\t") end'; }
+# Whether the branch is protected at all. Consulted only when the protection
+# read fails: `false` makes an absent required set a FACT, while `true` or an
+# unreadable answer leaves the requirement model unknown.
+xm_protected()   { xm_api "$1" "branches/$2" '.protected | tostring'; }
+# Rulesets applicable to the branch — repository AND organization, which this
+# endpoint resolves together.
+xm_rule_checks() { xm_api_all "$1" "rules/branches/$2" \
+                     '.[] | select(.type == "required_status_checks") | .parameters.required_status_checks[] | .context + "\t" + ((.integration_id // "") | tostring)'; }
+xm_rule_flows()  { xm_api_all "$1" "rules/branches/$2" \
+                     '.[] | select(.type == "workflows") | .parameters.workflows[] | .path'; }
 xm_parent_url()  { xm_api "$1" "issues/$2" '.parent_issue_url // empty'; }
 # One comment per line: association, login, then the body with newlines escaped.
 # The marker grammars are single-line, so nothing that matters is lost.
@@ -2362,6 +2390,72 @@ xm_body_lines() {
 xm_is_authorizing() {
   local a
   for a in "${XM_AUTHORIZING_ASSOCIATIONS[@]}"; do [ "$1" = "$a" ] && return 0; done
+  return 1
+}
+
+# xm_markers <flattened-body> <tag> — EVERY "<!-- <tag> … -->" occurrence in the
+# comment, one per line, as the text between the tag and the terminator.
+# Parsing at most one marker per comment let a second record hide behind the
+# first: a malformed or contradicting sibling in the same comment was simply
+# never seen. An occurrence with no terminator is emitted as a token that
+# cannot parse as fields, so an unterminated marker is ambiguity, not absence.
+xm_markers() {
+  local body="${1:-}" tag="$2" line rest occ
+  while IFS= read -r line; do
+    rest="$line"
+    while :; do
+      case "$rest" in *"<!-- $tag "*) ;; *) break ;; esac
+      rest="${rest#*<!-- $tag }"
+      case "$rest" in
+        *'-->'*) occ="${rest%%-->*}"; rest="${rest#*-->}" ;;
+        *)       occ="unterminated"; rest="" ;;
+      esac
+      printf '%s\n' "$occ"
+    done
+  done <<LINES
+$(xm_body_lines "$body")
+LINES
+}
+
+# xm_review_fields <occurrence> — "<pr>\t<head>\t<verdict>" for a well-formed
+# reviewer marker, or non-zero. The grammar is closed and POSITIONAL because
+# the verdict is the only multi-word value, so it must be the tail: anything
+# else in the record — a reordering, an extra field, a verdict outside the
+# lane's vocabulary — makes the record's meaning unestablished.
+xm_review_fields() {
+  local occ="${1:-}" t1 t2 rest v
+  while :; do
+    case "$occ" in ' '*) occ="${occ# }" ;; *' ') occ="${occ% }" ;; *) break ;; esac
+  done
+  case "$occ" in *' '*) ;; *) return 1 ;; esac
+  t1="${occ%% *}"; rest="${occ#* }"
+  case "$rest" in *' '*) ;; *) return 1 ;; esac
+  t2="${rest%% *}"; rest="${rest#* }"
+  case "$t1" in pr=*) ;; *) return 1 ;; esac
+  case "$t2" in head=*) ;; *) return 1 ;; esac
+  case "$rest" in verdict=*) ;; *) return 1 ;; esac
+  v="${rest#verdict=}"
+  case "$v" in
+    PASS|"CHANGES REQUIRED"|"DECISION REQUIRED"|"NOT ASSESSED") ;;
+    *) return 1 ;;
+  esac
+  printf '%s\t%s\t%s\n' "${t1#pr=}" "${t2#head=}" "$v"
+}
+
+# xm_marker_other <occurrence> <pr> <head> — true only when an occurrence that
+# could NOT be parsed still legibly names a different pull request or commit.
+# Used to keep a malformed marker about some other commit from declining this
+# one, without ever letting a malformed marker about THIS one be stepped over.
+xm_marker_other() {
+  local occ="${1:-}" want_pr="$2" want_head="$3" f p="" h=""
+  for f in $occ; do
+    case "$f" in
+      pr=*)   [ -n "$p" ] || p="${f#pr=}" ;;
+      head=*) [ -n "$h" ] || h="${f#head=}" ;;
+    esac
+  done
+  if [ -n "$p" ] && [ "$p" != "$want_pr" ]; then return 0; fi
+  if [ -n "$h" ] && [ "$h" != "$want_head" ]; then return 0; fi
   return 1
 }
 
@@ -2404,7 +2498,7 @@ EOF
   xm_repo_id "$parent_slug" || parent_slug="$slug"
 
   # The durable grant, on the parent, from someone who can govern the repo.
-  local assoc body rest field gchild gacc grants=0 auth_cid=""
+  local assoc body rest field gchild gacc grants=0 gbad=0
   local m_child="" m_acc=""
   while IFS= read -r line; do
     [ -n "$line" ] || continue
@@ -2418,18 +2512,18 @@ EOF
       case "$body" in *"$cm"*) skip=1 ;; esac
     done
     [ -z "$skip" ] || continue
-    gchild=""; gacc=""
-    local badfield="" gline lines_seen=0
+    # EVERY candidate authorization line is counted, valid or not. Skipping a
+    # malformed sibling and leaving one valid grant standing let the good record
+    # carry a decision the pair does not support: two lines disagreeing about
+    # what was authorized is ambiguity about authority itself.
+    local badfield gline
     while IFS= read -r gline; do
       case "$gline" in "$XM_MARKER_PREFIX "*) ;; *) continue ;; esac
-      lines_seen=$((lines_seen + 1))
-      # Two grant lines in one comment are ambiguous about what was granted.
-      [ "$lines_seen" -le 1 ] || { badfield=1; break; }
-      gchild=""; gacc=""
+      gchild=""; gacc=""; badfield=""
       for field in ${gline#"$XM_MARKER_PREFIX" }; do
         case "$field" in
-          child=*)      [ -z "$gchild" ] || badfield=1; gchild="${field#child=}" ;;
-          acceptance=*) [ -z "$gacc" ]   || badfield=1; gacc="${field#acceptance=}" ;;
+          child=*)      if [ -z "$gchild" ]; then gchild="${field#child=}"; else badfield=1; fi ;;
+          acceptance=*) if [ -z "$gacc" ];   then gacc="${field#acceptance=}"; else badfield=1; fi ;;
           # An unrecognised field INVALIDATES the record rather than ending the
           # scan: a grant carrying something this cannot interpret is a grant
           # whose meaning is not established.
@@ -2437,64 +2531,85 @@ EOF
         esac
         [ -z "$badfield" ] || break
       done
-      [ -z "$badfield" ] || break
+      if [ -n "$badfield" ] || ! xm_issue_ref "$gchild" || ! xm_token "$gacc"; then
+        # A malformed candidate whose child is still legible and names a
+        # DIFFERENT work unit authorizes something else; anything else is
+        # ambiguous about THIS one.
+        if xm_issue_ref "$gchild" && ! xm_same_issue "$gchild" "#$child_num" "$parent_slug"; then
+          continue
+        fi
+        gbad=$((gbad + 1)); continue
+      fi
+      xm_same_issue "$gchild" "#$child_num" "$parent_slug" || continue
+      grants=$((grants + 1))
+      m_child="$gchild"; m_acc="$gacc"
     done <<LINES
 $(xm_body_lines "$body")
 LINES
-    [ -z "$badfield" ] || continue
-    [ "$lines_seen" -eq 1 ] || continue
-    xm_issue_ref "$gchild" || continue
-    xm_token "$gacc" || continue
-    xm_same_issue "$gchild" "#$child_num" "$parent_slug" || continue
-    grants=$((grants + 1))
-    m_child="$gchild"; m_acc="$gacc"
   done <<EOF
 $(xm_comments "$parent_slug" "$parent_num")
 EOF
-  if [ "$grants" -ne 1 ]; then
-    echo "issue #$parent_num carries $grants durable '$XM_MARKER_PREFIX child=#$child_num acceptance=<id>' grants from someone who can govern this repository; exactly one is required, and prose or an unauthorized author is not a grant"
+  if [ "$grants" -ne 1 ] || [ "$gbad" -gt 0 ]; then
+    echo "issue #$parent_num carries $grants durable '$XM_MARKER_PREFIX child=#$child_num acceptance=<id>' grant(s) and $gbad malformed or ambiguous same-unit authorization line(s) from someone who can govern this repository; exactly one unambiguous grant is required, and prose, an unauthorized author or a contradicting sibling line is not a grant"
     return 1
   fi
 
   # Review and acceptance, both bound to THIS commit, read from the PR.
-  local rev=no acc=no acc_seen=0 rev_seen=0 rev_verdict="" rev_conflict="" acc_bad=0
+  local rev=no acc=no acc_seen=0 rev_seen=0 rev_verdict="" rev_conflict="" \
+        acc_bad=0 rev_bad=0 mline
   while IFS= read -r line; do
     [ -n "$line" ] || continue
     assoc="${line%%	*}"; rest="${line#*	}"
     local login="${rest%%	*}"; body="${rest#*	}"
-    case "$body" in
-      *"<!-- $XM_REVIEW_TAG pr=$prnum head=$sha verdict="*)
-        # Every terminal verdict for THIS head is collected. A later
-        # CHANGES REQUIRED does not sit quietly beside an earlier PASS: two
-        # different verdicts for one commit are a conflict, and a conflict is
-        # not a pass.
-        [ "$login" = "$XM_REVIEW_PRODUCER" ] || continue
-        local vtail="${body#*<!-- $XM_REVIEW_TAG pr=$prnum head=$sha verdict=}"
-        vtail="${vtail%%-->*}"
-        vtail="${vtail% }"
-        rev_seen=$((rev_seen + 1))
-        if [ -z "$rev_verdict" ]; then rev_verdict="$vtail"
-        elif [ "$rev_verdict" != "$vtail" ]; then rev_conflict=1
-        fi ;;
-    esac
-    case "$body" in
-      *"<!-- $XM_ACCEPT_TAG "*)
-        xm_is_authorizing "$assoc" || continue
-        local atail="${body#*<!-- $XM_ACCEPT_TAG }"
-        atail="${atail%%-->*}"
+    # EVERY reviewer marker occurrence in the comment, not the first one the
+    # body happens to contain. A second record hiding behind the first is
+    # exactly the evidence a merge decision must not miss.
+    if [ "$login" = "$XM_REVIEW_PRODUCER" ]; then
+      while IFS= read -r mline; do
+        [ -n "$mline" ] || continue
+        local rf rtail r_pr r_head r_v
+        if rf="$(xm_review_fields "$mline")"; then
+          r_pr="${rf%%	*}"; rtail="${rf#*	}"
+          r_head="${rtail%%	*}"; r_v="${rtail#*	}"
+          [ "$r_pr" = "$prnum" ] || continue
+          [ "$r_head" = "$sha" ] || continue
+          # A later CHANGES REQUIRED does not sit quietly beside an earlier
+          # PASS: two different verdicts for one commit are a conflict, and a
+          # conflict is not a pass.
+          rev_seen=$((rev_seen + 1))
+          if [ -z "$rev_verdict" ]; then rev_verdict="$r_v"
+          elif [ "$rev_verdict" != "$r_v" ]; then rev_conflict=1
+          fi
+        else
+          # Unparseable. Only a record that legibly concerns a different pull
+          # request or commit is none of this decision's business; anything
+          # else is ambiguous evidence about THIS commit.
+          xm_marker_other "$mline" "$prnum" "$sha" && continue
+          rev_bad=$((rev_bad + 1))
+        fi
+      done <<REVIEW
+$(xm_markers "$body" "$XM_REVIEW_TAG")
+REVIEW
+    fi
+    if xm_is_authorizing "$assoc"; then
+      while IFS= read -r mline; do
+        [ -n "$mline" ] || continue
         local a_pr="" a_child="" a_head="" a_contract="" a_verdict="" a_bad="" afield
-        for afield in $atail; do
+        for afield in $mline; do
           case "$afield" in
-            pr=*)       [ -z "$a_pr" ]       || a_bad=1; a_pr="${afield#pr=}" ;;
-            child=*)    [ -z "$a_child" ]    || a_bad=1; a_child="${afield#child=}" ;;
-            head=*)     [ -z "$a_head" ]     || a_bad=1; a_head="${afield#head=}" ;;
-            contract=*) [ -z "$a_contract" ] || a_bad=1; a_contract="${afield#contract=}" ;;
-            verdict=*)  [ -z "$a_verdict" ]  || a_bad=1; a_verdict="${afield#verdict=}" ;;
+            pr=*)       if [ -z "$a_pr" ];       then a_pr="${afield#pr=}"; else a_bad=1; fi ;;
+            child=*)    if [ -z "$a_child" ];    then a_child="${afield#child=}"; else a_bad=1; fi ;;
+            head=*)     if [ -z "$a_head" ];     then a_head="${afield#head=}"; else a_bad=1; fi ;;
+            contract=*) if [ -z "$a_contract" ]; then a_contract="${afield#contract=}"; else a_bad=1; fi ;;
+            verdict=*)  if [ -z "$a_verdict" ];  then a_verdict="${afield#verdict=}"; else a_bad=1; fi ;;
             *) a_bad=1 ;;
           esac
           [ -z "$a_bad" ] || break
         done
-        if [ -n "$a_bad" ]; then acc_bad=$((acc_bad + 1)); continue; fi
+        if [ -n "$a_bad" ]; then
+          xm_marker_other "$mline" "$prnum" "$sha" && continue
+          acc_bad=$((acc_bad + 1)); continue
+        fi
         [ "$a_pr" = "$prnum" ] || continue
         xm_issue_ref "$a_child" || continue
         xm_same_issue "$a_child" "#$child_num" "$parent_slug" || continue
@@ -2507,8 +2622,11 @@ EOF
         # evidence, and contradictory evidence is not proof.
         acc_seen=$((acc_seen + 1))
         [ "$a_verdict" = MET ] || { acc_bad=$((acc_bad + 1)); continue; }
-        acc=yes ;;
-    esac
+        acc=yes
+      done <<ACCEPT
+$(xm_markers "$body" "$XM_ACCEPT_TAG")
+ACCEPT
+    fi
   done <<EOF
 $(xm_comments "$slug" "$prnum")
 EOF
@@ -2519,6 +2637,10 @@ EOF
   fi
   if [ -n "$rev_conflict" ]; then
     echo "pull request #$prnum carries conflicting reviewer verdicts for $sha; one commit cannot be both, and a conflict is not a pass"
+    return 1
+  fi
+  if [ "$rev_bad" -gt 0 ]; then
+    echo "pull request #$prnum carries $rev_bad reviewer marker(s) from $XM_REVIEW_PRODUCER that cannot be read as pr/head/verdict for this commit; an uninterpretable record beside a PASS leaves the review verdict unestablished"
     return 1
   fi
   # ONE canonical terminal record. The lane upserts its marker in place, so more
@@ -2537,39 +2659,99 @@ EOF
   # "every REQUIRED check went green" — a single unrelated success would
   # otherwise mask a required check that never ran at all. A required check is
   # held to `success`: skipped or neutral means it did not do its job.
-  local runs statuses required checks=green want got rname rstat rconcl found
-  required="$(xm_required "$slug" "$base")" || required=""
+  local runs statuses checks=green want got wname wapp otail oname ostat oconcl oapp
+  local prot="" prot_rc=0 rchk="" rchk_rc=0 rflow="" rflow_rc=0 reqbad="" protected=""
+  prot="$(xm_prot "$slug" "$base")" || prot_rc=$?
+  rchk="$(xm_rule_checks "$slug" "$base")" || rchk_rc=$?
+  rflow="$(xm_rule_flows "$slug" "$base")" || rflow_rc=$?
+  if [ "$prot_rc" -ne 0 ]; then
+    # A failed protection read is only a fact when the branch is provably
+    # unprotected. "true", or an unreadable answer, leaves the requirement
+    # model unknown — and an unknown requirement model is not an empty one.
+    protected="$(xm_protected "$slug" "$base")" || protected=""
+    [ "$protected" = false ] || reqbad=branch-protection
+  fi
+  if [ "$rchk_rc" -ne 0 ] || [ "$rflow_rc" -ne 0 ]; then reqbad=rulesets; fi
+  # The union of every applicable source. A duplicate requirement is harmless
+  # (it is verified twice, identically); a missing one would not be.
+  local required=""
+  [ -z "$prot" ] || required="$prot"
+  [ -z "$rchk" ] || required="${required:+$required
+}$rchk"
+  local wfruns="" wf_rc=0
+  if [ -n "$rflow" ]; then
+    wfruns="$(xm_runs "$slug" "$sha")" || wf_rc=$?
+    [ "$wf_rc" -eq 0 ] || reqbad=workflow-runs
+  fi
   runs="$(xm_checks "$slug" "$sha")" || runs=""
   statuses="$(xm_statuses "$slug" "$sha")" || statuses=""
   local observed
   observed="$(printf '%s\n%s\n' "$runs" "$statuses")"
-  if [ -z "$required" ]; then
-    # No required set could be read. That is not the same as "nothing is
-    # required", and guessing in the permissive direction is exactly the
-    # mistake this whole command exists to avoid.
-    checks=required-set-unknown
+  if [ -n "$reqbad" ]; then
+    # Some part of the requirement model could not be read. That is not the
+    # same as "nothing is required", and guessing in the permissive direction
+    # is exactly the mistake this whole command exists to avoid.
+    checks="required-set-unknown:$reqbad"
+  elif [ -z "$required" ] && [ -z "$rflow" ]; then
+    # Nothing is required anywhere, so nothing was proven. "Green" cannot be
+    # affirmed from the absence of a requirement.
+    checks=no-required-checks
   else
+    local nobs obs_state
     while IFS= read -r want; do
       [ -n "$want" ] || continue
-      found=""
+      wname="${want%%	*}"; wapp="${want#*	}"
+      [ "$wname" != "$want" ] || wapp=""
+      [ -n "$wname" ] || continue
+      nobs=0; obs_state=ok
       while IFS= read -r got; do
         [ -n "$got" ] || continue
-        rname="${got%%	*}"; rstat="${got#*	}"; rconcl="${rstat#*	}"; rstat="${rstat%%	*}"
-        [ "$rname" = "$want" ] || continue
-        if [ "$rstat" != completed ]; then found="pending:$want"; break; fi
-        if [ "$rconcl" != success ]; then found="failed:$want:$rconcl"; break; fi
-        found=ok; break
+        oname="${got%%	*}"; otail="${got#*	}"
+        ostat="${otail%%	*}"; otail="${otail#*	}"
+        oconcl="${otail%%	*}"; oapp="${otail#*	}"
+        [ "$oconcl" != "$otail" ] || oapp=""
+        [ "$oname" = "$wname" ] || continue
+        # A requirement bound to an app is satisfied only by that app's
+        # observation; a same-named check from anywhere else is a different
+        # check that happens to share a name.
+        if [ -n "$wapp" ] && [ "$oapp" != "$wapp" ]; then continue; fi
+        # EVERY observation counts. Accepting the first success let a failing
+        # or still-running re-run of the same required check sit behind it.
+        nobs=$((nobs + 1))
+        if [ "$ostat" != completed ]; then obs_state="pending:$wname"; break; fi
+        if [ "$oconcl" != success ]; then obs_state="failed:$wname:$oconcl"; break; fi
       done <<INNER
 $observed
 INNER
-      case "$found" in
-        ok) ;;
-        "") checks="missing-required:$want"; break ;;
-        *)  checks="$found"; break ;;
-      esac
+      if [ "$nobs" -eq 0 ]; then checks="missing-required:$wname${wapp:+@app=$wapp}"; break; fi
+      [ "$obs_state" = ok ] || { checks="$obs_state"; break; }
     done <<OUTER
 $required
 OUTER
+    # Ruleset-required WORKFLOWS are stated as paths, so they are verified
+    # against the workflow runs for this exact commit rather than against
+    # check-run names, which no rule mentions.
+    if [ "$checks" = green ]; then
+      while IFS= read -r want; do
+        [ -n "$want" ] || continue
+        nobs=0; obs_state=ok
+        while IFS= read -r got; do
+          [ -n "$got" ] || continue
+          oname="${got%%	*}"; otail="${got#*	}"
+          ostat="${otail%%	*}"; oconcl="${otail#*	}"
+          [ "$oname" = "$want" ] || continue
+          nobs=$((nobs + 1))
+          if [ "$ostat" != completed ]; then obs_state="pending-workflow:$want"; break; fi
+          if [ "$oconcl" != success ]; then obs_state="failed-workflow:$want:$oconcl"; break; fi
+        done <<INNERW
+$wfruns
+INNERW
+        if [ "$nobs" -eq 0 ]; then checks="missing-required-workflow:$want"; break; fi
+        [ "$obs_state" = ok ] || { checks="$obs_state"; break; }
+      done <<OUTERW
+$rflow
+OUTERW
+    fi
   fi
 
   # Is this the routine repository merge operation at all?

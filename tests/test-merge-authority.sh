@@ -57,7 +57,12 @@ case "$sub" in
 esac
 printf '%s\n' "$jq${PAGED:+ }${PAGED:-}" >> "${GH_LOG:-/dev/null}"
 case "$jq" in
-  ".contexts[]")         [ "${GH_FAIL:-}" = required ] && exit 1; printf '%s' "${GH_REQUIRED:-}" ;;
+  *integration_id*)      [ "${GH_FAIL:-}" = rules ] && exit 1; printf '%s' "${GH_RULECHECKS:-}" ;;
+  *parameters.workflows*) [ "${GH_FAIL:-}" = rules ] && exit 1; printf '%s' "${GH_RULEFLOWS:-}" ;;
+  *required_status_checks.checks*)
+                         [ "${GH_FAIL:-}" = prot ] && exit 1; printf '%s' "${GH_PROT:-}" ;;
+  ".protected"*)         [ "${GH_FAIL:-}" = protected ] && exit 1; printf '%s' "${GH_PROTECTED:-}" ;;
+  *workflow_runs*)       [ "${GH_FAIL:-}" = runs ] && exit 1; printf '%s' "${GH_RUNS:-}" ;;
   ".statuses[]"*)        [ "${GH_FAIL:-}" = statuses ] && exit 1; printf '%s' "${GH_STATUSES:-}" ;;
   ".default_branch")     [ "${GH_FAIL:-}" = defbranch ] && exit 1; printf '%s' "${GH_DEFBRANCH:-}" ;;
   ".head.sha")           [ "${GH_FAIL:-}" = head ] && exit 1; printf '%s' "${GH_HEAD:-}" ;;
@@ -78,14 +83,20 @@ EOS
 chmod +x "$STUB/bin/gh"
 export PATH="$STUB/bin:$PATH"
 GH_LOG="$STUB/calls"
-export GH_LOG GH_REQUIRED GH_STATUSES
+export GH_LOG GH_STATUSES GH_PROT GH_PROTECTED GH_RULECHECKS GH_RULEFLOWS GH_RUNS
 export GH_SLUG GH_CLOSING GH_DEFBRANCH GH_HEAD GH_PR GH_FILES GH_CHECKS \
        GH_PARENT GH_PARENT_NUM GH_PARENT_COMMENTS GH_PR_COMMENTS GH_FAIL
 
+TAB="$(printf '\t')"
+# Observations carry four fields, the last being the app identity: name,
+# status, conclusion, app. A commit status has no app, so its field is empty.
+BASE_CHECKS="tests${TAB}completed${TAB}success${TAB}
+doctor${TAB}completed${TAB}success${TAB}
+gate${TAB}completed${TAB}success${TAB}15368
+recover${TAB}completed${TAB}skipped${TAB}"
 SHA="0123456789abcdef0123456789abcdef01234567"
 SHA2="fedcba9876543210fedcba9876543210fedcba98"
 ACC="memo-transparency-v1"
-TAB="$(printf '\t')"
 
 reset_world() {
   GH_FAIL=""
@@ -102,13 +113,16 @@ feat/724-memo"
   GH_HEAD="$SHA"
   GH_FILES="plugins/spark/bin/spark
 tests/test-hot-path-memo.sh"
-  GH_REQUIRED="tests
-doctor
-gate"
-  GH_CHECKS="tests${TAB}completed${TAB}success
-doctor${TAB}completed${TAB}success
-gate${TAB}completed${TAB}success
-recover${TAB}completed${TAB}skipped"
+  # The applicable requirement model. "gate" is bound to an app, because an
+  # app-bound requirement is the one a same-named check cannot forge.
+  GH_PROT="tests${TAB}
+doctor${TAB}
+gate${TAB}15368"
+  GH_PROTECTED="true"
+  GH_RULECHECKS=""
+  GH_RULEFLOWS=""
+  GH_RUNS=""
+  GH_CHECKS="$BASE_CHECKS"
   GH_STATUSES=""
   : > "$GH_LOG"
   GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}Approving the bounded unit.\\nspark-authorizes child=#724 acceptance=$ACC"
@@ -132,7 +146,7 @@ ELIGIBLE=(--pr 727)
 # passes for the wrong reason.
 verdict "ROUTINE MERGE" 0 "the derived base world is eligible before any control changes it" "${ELIGIBLE[@]}"
 # Every stubbed read must really be performed, or its controls are vacuous.
-for ep in slug closing defbranch head pr files checks parent comments; do
+for ep in slug closing defbranch head pr files checks parent comments prot rules; do
   GH_FAIL="$ep"
   verdict "NOT ELIGIBLE" 4 "the '$ep' read is really performed" "${ELIGIBLE[@]}"
   GH_FAIL=""
@@ -222,17 +236,17 @@ done
 reset_world
 
 # --- derived: checks for that exact HEAD ------------------------------------
-GH_CHECKS="tests${TAB}completed${TAB}success
-doctor${TAB}completed${TAB}success
-gate${TAB}completed${TAB}failure"
+OK2="tests${TAB}completed${TAB}success${TAB}
+doctor${TAB}completed${TAB}success${TAB}"
+GH_CHECKS="$OK2
+gate${TAB}completed${TAB}failure${TAB}15368"
 verdict "NOT ELIGIBLE" 4 "a required check that failed is not green" "${ELIGIBLE[@]}"
-GH_CHECKS="tests${TAB}completed${TAB}success
-doctor${TAB}completed${TAB}success
-gate${TAB}in_progress${TAB}none"
+GH_CHECKS="$OK2
+gate${TAB}in_progress${TAB}none${TAB}15368"
 verdict "NOT ELIGIBLE" 4 "a required check still pending is not green" "${ELIGIBLE[@]}"
-GH_CHECKS="tests${TAB}queued${TAB}none"
+GH_CHECKS="tests${TAB}queued${TAB}none${TAB}"
 verdict "NOT ELIGIBLE" 4 "a queued required check is not green" "${ELIGIBLE[@]}"
-GH_CHECKS="tests${TAB}completed${TAB}cancelled"
+GH_CHECKS="tests${TAB}completed${TAB}cancelled${TAB}"
 verdict "NOT ELIGIBLE" 4 "a cancelled required check is not green" "${ELIGIBLE[@]}"
 GH_CHECKS=""
 verdict "NOT ELIGIBLE" 4 "absent check evidence is not green evidence" "${ELIGIBLE[@]}"
@@ -240,41 +254,160 @@ verdict "NOT ELIGIBLE" 4 "absent check evidence is not green evidence" "${ELIGIB
 # --- required checks: presence, not merely cheerful noise -------------------
 # A single unrelated success must never stand in for a required check that
 # never ran. This is the shape that made "green" meaningless.
-GH_CHECKS="something-unrelated${TAB}completed${TAB}success"
+GH_CHECKS="something-unrelated${TAB}completed${TAB}success${TAB}"
 verdict "NOT ELIGIBLE" 4 "an unrelated success does not satisfy a missing required check" "${ELIGIBLE[@]}"
-GH_CHECKS="tests${TAB}completed${TAB}success
-doctor${TAB}completed${TAB}success"
+GH_CHECKS="$OK2"
 verdict "NOT ELIGIBLE" 4 "a required check absent from the run list declines" "${ELIGIBLE[@]}"
 # A REQUIRED check that skipped did not do its job.
-GH_CHECKS="tests${TAB}completed${TAB}success
-doctor${TAB}completed${TAB}success
-gate${TAB}completed${TAB}skipped"
+GH_CHECKS="$OK2
+gate${TAB}completed${TAB}skipped${TAB}15368"
 verdict "NOT ELIGIBLE" 4 "a required check that skipped is not green" "${ELIGIBLE[@]}"
-GH_CHECKS="tests${TAB}completed${TAB}success
-doctor${TAB}completed${TAB}success
-gate${TAB}completed${TAB}neutral"
+GH_CHECKS="$OK2
+gate${TAB}completed${TAB}neutral${TAB}15368"
 verdict "NOT ELIGIBLE" 4 "a required check concluding neutral is not green" "${ELIGIBLE[@]}"
-# An unreadable required set is not an empty one.
-GH_REQUIRED=""
-verdict "NOT ELIGIBLE" 4 "an unreadable required-check set declines" "${ELIGIBLE[@]}"
 reset_world
-GH_FAIL=required
-verdict "NOT ELIGIBLE" 4 "a failed required-set read declines" "${ELIGIBLE[@]}"
-GH_FAIL=""
-# A required context may arrive as a commit status rather than a check run.
-GH_CHECKS="tests${TAB}completed${TAB}success
-doctor${TAB}completed${TAB}success"
-GH_STATUSES="gate${TAB}completed${TAB}success"
+
+# --- an app-bound requirement is not satisfied by a same-named check --------
+# Branch protection's `.checks[]` binds a context to an app. Reading only the
+# legacy `.contexts[]` threw that binding away, so any producer that could
+# report a same-named check satisfied a requirement that was never theirs.
+GH_CHECKS="$OK2
+gate${TAB}completed${TAB}success${TAB}99999"
+verdict "NOT ELIGIBLE" 4 "another app's check of the same name does not satisfy an app-bound requirement" "${ELIGIBLE[@]}"
+GH_CHECKS="$OK2
+gate${TAB}completed${TAB}success${TAB}"
+verdict "NOT ELIGIBLE" 4 "an unbound observation does not satisfy an app-bound requirement" "${ELIGIBLE[@]}"
+# A commit status carries no app identity at all, so it can never satisfy one.
+GH_CHECKS="$OK2"
+GH_STATUSES="gate${TAB}completed${TAB}success${TAB}"
+verdict "NOT ELIGIBLE" 4 "a commit status cannot satisfy an app-bound requirement" "${ELIGIBLE[@]}"
+reset_world
+
+# --- a required context may arrive as a commit status ----------------------
+GH_PROT="tests${TAB}
+doctor${TAB}
+gate${TAB}"
+GH_CHECKS="$OK2"
+GH_STATUSES="gate${TAB}completed${TAB}success${TAB}"
 verdict "ROUTINE MERGE" 0 "a required context satisfied by a commit status counts" "${ELIGIBLE[@]}"
-GH_STATUSES="gate${TAB}completed${TAB}failure"
+GH_STATUSES="gate${TAB}completed${TAB}failure${TAB}"
 verdict "NOT ELIGIBLE" 4 "a failing commit status for a required context declines" "${ELIGIBLE[@]}"
+reset_world
+
+# --- EVERY observation of a required check counts --------------------------
+# Accepting the first success let a failing or still-running re-run of the same
+# required check sit quietly behind it.
+GH_CHECKS="tests${TAB}completed${TAB}success${TAB}
+tests${TAB}completed${TAB}failure${TAB}
+doctor${TAB}completed${TAB}success${TAB}
+gate${TAB}completed${TAB}success${TAB}15368"
+verdict "NOT ELIGIBLE" 4 "a failing second observation of a required check declines" "${ELIGIBLE[@]}"
+GH_CHECKS="tests${TAB}completed${TAB}failure${TAB}
+tests${TAB}completed${TAB}success${TAB}
+doctor${TAB}completed${TAB}success${TAB}
+gate${TAB}completed${TAB}success${TAB}15368"
+verdict "NOT ELIGIBLE" 4 "the order of conflicting observations does not matter" "${ELIGIBLE[@]}"
+GH_CHECKS="tests${TAB}completed${TAB}success${TAB}
+tests${TAB}in_progress${TAB}none${TAB}
+doctor${TAB}completed${TAB}success${TAB}
+gate${TAB}completed${TAB}success${TAB}15368"
+verdict "NOT ELIGIBLE" 4 "a re-run still in progress behind a success declines" "${ELIGIBLE[@]}"
+# A commit status contradicting a passing check run of the same context is the
+# same conflict from the other surface.
+GH_CHECKS="$BASE_CHECKS"
+GH_STATUSES="tests${TAB}completed${TAB}failure${TAB}"
+verdict "NOT ELIGIBLE" 4 "a failing commit status contradicting a passing check run declines" "${ELIGIBLE[@]}"
+# Two identical successful observations are a re-run, not a conflict.
+GH_STATUSES=""
+GH_CHECKS="tests${TAB}completed${TAB}success${TAB}
+tests${TAB}completed${TAB}success${TAB}
+doctor${TAB}completed${TAB}success${TAB}
+gate${TAB}completed${TAB}success${TAB}15368"
+verdict "ROUTINE MERGE" 0 "two successful observations of one required check are not a conflict" "${ELIGIBLE[@]}"
+reset_world
+
+# --- rulesets require checks branch protection never mentions --------------
+# Branch protection is not the whole requirement model. A repository or
+# organization ruleset can require a context of its own, and a requirement
+# model that omits it is a permissive one.
+GH_RULECHECKS="ruleset-gate${TAB}"
+verdict "NOT ELIGIBLE" 4 "a ruleset-required check with no observation declines" "${ELIGIBLE[@]}"
+GH_CHECKS="$BASE_CHECKS
+ruleset-gate${TAB}completed${TAB}failure${TAB}"
+verdict "NOT ELIGIBLE" 4 "a failing ruleset-required check declines" "${ELIGIBLE[@]}"
+GH_CHECKS="$BASE_CHECKS
+ruleset-gate${TAB}completed${TAB}success${TAB}"
+verdict "ROUTINE MERGE" 0 "a satisfied ruleset-required check counts" "${ELIGIBLE[@]}"
+# A ruleset requirement can be bound to an integration, exactly as branch
+# protection binds to an app.
+GH_RULECHECKS="ruleset-gate${TAB}424242"
+verdict "NOT ELIGIBLE" 4 "a ruleset requirement bound to an integration needs that integration's check" "${ELIGIBLE[@]}"
+GH_CHECKS="$BASE_CHECKS
+ruleset-gate${TAB}completed${TAB}success${TAB}424242"
+verdict "ROUTINE MERGE" 0 "the bound integration's check satisfies a ruleset requirement" "${ELIGIBLE[@]}"
+reset_world
+GH_FAIL=rules
+verdict "NOT ELIGIBLE" 4 "an unreadable ruleset requirement model declines" "${ELIGIBLE[@]}"
+GH_FAIL=""
+
+# --- rulesets can require a whole WORKFLOW, stated as a path ---------------
+# No check-run name mentions a workflow path, so a required workflow is
+# verified against the workflow runs for this exact commit.
+GH_RULEFLOWS=".github/workflows/openai-review.yml"
+verdict "NOT ELIGIBLE" 4 "a ruleset-required workflow with no run on this commit declines" "${ELIGIBLE[@]}"
+GH_RUNS=".github/workflows/openai-review.yml${TAB}in_progress${TAB}none"
+verdict "NOT ELIGIBLE" 4 "a ruleset-required workflow still running declines" "${ELIGIBLE[@]}"
+GH_RUNS=".github/workflows/openai-review.yml${TAB}completed${TAB}failure"
+verdict "NOT ELIGIBLE" 4 "a failing ruleset-required workflow declines" "${ELIGIBLE[@]}"
+GH_RUNS=".github/workflows/other.yml${TAB}completed${TAB}success"
+verdict "NOT ELIGIBLE" 4 "a different workflow's success does not satisfy the required one" "${ELIGIBLE[@]}"
+GH_RUNS=".github/workflows/openai-review.yml${TAB}completed${TAB}success"
+verdict "ROUTINE MERGE" 0 "a passing ruleset-required workflow counts" "${ELIGIBLE[@]}"
+GH_RUNS=".github/workflows/openai-review.yml${TAB}completed${TAB}success
+.github/workflows/openai-review.yml${TAB}completed${TAB}failure"
+verdict "NOT ELIGIBLE" 4 "a failing re-run of a required workflow behind a success declines" "${ELIGIBLE[@]}"
+GH_RUNS=".github/workflows/openai-review.yml${TAB}completed${TAB}success"
+GH_FAIL=runs
+verdict "NOT ELIGIBLE" 4 "an unreadable workflow-run list declines while a workflow is required" "${ELIGIBLE[@]}"
+GH_FAIL=""
+: > "$GH_LOG"
+xr_merge_check "${ELIGIBLE[@]}" >/dev/null 2>&1 || true
+if grep -q "workflow_runs.*paginate" "$GH_LOG"; then ok
+else bad "the workflow-run read must be paginated, or a later page is invisible"; fi
+reset_world
+
+# --- an unreadable requirement model is not an empty one -------------------
+GH_FAIL=prot
+verdict "NOT ELIGIBLE" 4 "an unreadable protection read on a protected branch declines" "${ELIGIBLE[@]}"
+GH_PROTECTED=""
+verdict "NOT ELIGIBLE" 4 "an unreadable protected flag leaves the requirement model unknown" "${ELIGIBLE[@]}"
+# Provably unprotected is a FACT, not a doubt — but then nothing is required,
+# and nothing required is nothing proven.
+GH_PROTECTED="false"
+verdict "NOT ELIGIBLE" 4 "an unprotected branch with no ruleset has no green to stand on" "${ELIGIBLE[@]}"
+GH_RULECHECKS="ruleset-gate${TAB}"
+GH_CHECKS="$BASE_CHECKS
+ruleset-gate${TAB}completed${TAB}success${TAB}"
+verdict "ROUTINE MERGE" 0 "a branch governed only by a ruleset is verified from the ruleset" "${ELIGIBLE[@]}"
+# The load-bearing form of the two controls above: a ruleset requirement that IS
+# satisfied must not stand in for a protection requirement that could not be
+# read. Without this they pass for the wrong reason — their fallthrough is
+# "nothing is required", which declines anyway — and an unreadable protection
+# read on a protected branch would merge on the ruleset alone.
+GH_PROTECTED="true"
+verdict "NOT ELIGIBLE" 4 "a satisfied ruleset does not stand in for an unreadable protection requirement" "${ELIGIBLE[@]}"
+reset_world
+# The same rule with protection readable but requiring nothing.
+GH_PROT=""
+verdict "NOT ELIGIBLE" 4 "a branch that requires no checks anywhere has no green to stand on" "${ELIGIBLE[@]}"
 reset_world
 
 # --- every trusted list read must be paginated ------------------------------
 # "Exactly one" concluded from a truncated page is not exactly one, and a
 # failing check on page two is invisible.
 xr_merge_check "${ELIGIBLE[@]}" >/dev/null 2>&1 || true
-for expect in "author_association" "check_runs" "contexts"; do
+for expect in "author_association" "check_runs" "required_status_checks.checks" \
+              "integration_id" "parameters.workflows"; do
   if grep -q "$expect.*paginate" "$GH_LOG"; then ok
   else bad "the '$expect' read must be paginated, or a later page is invisible"; fi
 done
@@ -317,6 +450,55 @@ OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contr
 verdict "NOT ELIGIBLE" 4 "NOT ASSESSED is never a pass" "${ELIGIBLE[@]}"
 reset_world
 
+# --- every marker OCCURRENCE is read, not the first one per comment ---------
+# Parsing at most one marker per comment let a second record hide behind the
+# first: a contradicting sibling in the same body was never seen at all.
+ACCEPT_MET="OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS --> and then <!-- spark-openai-review pr=727 head=$SHA verdict=CHANGES REQUIRED -->
+$ACCEPT_MET"
+verdict "NOT ELIGIBLE" 4 "two conflicting reviewer markers inside ONE comment decline" "${ELIGIBLE[@]}"
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->\\n<!-- spark-openai-review pr=727 head=$SHA verdict=CHANGES REQUIRED -->
+$ACCEPT_MET"
+verdict "NOT ELIGIBLE" 4 "two conflicting reviewer markers on separate lines of one comment decline" "${ELIGIBLE[@]}"
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS --> <!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->
+$ACCEPT_MET"
+verdict "NOT ELIGIBLE" 4 "two agreeing reviewer markers inside one comment are still two records" "${ELIGIBLE[@]}"
+GH_PR_COMMENTS="$REV
+OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET --> <!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=NOT-MET -->"
+verdict "NOT ELIGIBLE" 4 "a MET and a NOT-MET inside ONE comment decline" "${ELIGIBLE[@]}"
+GH_PR_COMMENTS="$REV
+OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->\\n<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
+verdict "NOT ELIGIBLE" 4 "two acceptance proofs inside one comment decline" "${ELIGIBLE[@]}"
+reset_world
+
+# --- an uninterpretable reviewer record is not an ignorable one -------------
+# A malformed same-HEAD marker beside a PASS leaves the verdict unestablished:
+# the closed grammar is positional because the verdict is the only multi-word
+# value, so a reordering or an extra field means the record is not readable.
+for broken in "pr=727 head=$SHA verdict=LOOKS FINE" \
+              "pr=727 head=$SHA" \
+              "head=$SHA pr=727 verdict=PASS" \
+              "pr=727 head=$SHA verdict=PASS extra=1" \
+              "pr=727 head=$SHA verdict="; do
+  GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->\\n<!-- spark-openai-review $broken -->
+$ACCEPT_MET"
+  verdict "NOT ELIGIBLE" 4 "a malformed reviewer marker ('$broken') beside a PASS declines" "${ELIGIBLE[@]}"
+done
+# An unterminated marker is ambiguity, not absence.
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->\\n<!-- spark-openai-review pr=727 head=$SHA verdict=PASS
+$ACCEPT_MET"
+verdict "NOT ELIGIBLE" 4 "an unterminated reviewer marker beside a PASS declines" "${ELIGIBLE[@]}"
+# NOT ASSESSED is in the vocabulary, so it parses — and never affirms.
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=NOT ASSESSED -->
+$ACCEPT_MET"
+verdict "NOT ELIGIBLE" 4 "NOT ASSESSED is a readable verdict and still not a pass" "${ELIGIBLE[@]}"
+# A malformed record that legibly concerns ANOTHER commit is not this decision's
+# business; only ambiguity about THIS commit declines.
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->\\n<!-- spark-openai-review pr=727 head=$SHA2 verdict=WHATEVER -->
+$ACCEPT_MET"
+verdict "ROUTINE MERGE" 0 "a malformed reviewer marker for a different commit does not decline this one" "${ELIGIBLE[@]}"
+reset_world
+
 # --- derived: stale-head protection by construction -------------------------
 GH_HEAD="$SHA2"
 verdict "NOT ELIGIBLE" 4 "HEAD moving between derivation and verdict declines" "${ELIGIBLE[@]}"
@@ -348,6 +530,30 @@ GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}Thanks, this looks reasonable to me
 verdict "NOT ELIGIBLE" 4 "an unrelated comment on the parent authorizes nothing" "${ELIGIBLE[@]}"
 GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}I authorize bounded unit #724 with acceptance $ACC."
 verdict "NOT ELIGIBLE" 4 "prose naming the child and acceptance is not a grant" "${ELIGIBLE[@]}"
+# A valid grant beside a MALFORMED same-unit authorization line is ambiguity
+# about authority itself. Silently skipping the malformed sibling left one
+# valid grant standing and let the good record carry a decision the pair does
+# not support.
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=#724 acceptance=$ACC\\nspark-authorizes child=#724 acceptance=$ACC scope=everything"
+verdict "NOT ELIGIBLE" 4 "a malformed same-unit grant line beside a valid one declines" "${ELIGIBLE[@]}"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=#724 acceptance=$ACC
+OWNER${TAB}jwogrady${TAB}spark-authorizes child=#724 acceptance=$ACC extra=1"
+verdict "NOT ELIGIBLE" 4 "a malformed same-unit grant in another comment declines too" "${ELIGIBLE[@]}"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=#724 acceptance=$ACC
+OWNER${TAB}jwogrady${TAB}spark-authorizes child=#724 acceptance=not a token"
+verdict "NOT ELIGIBLE" 4 "a same-unit grant whose acceptance is not canonical declines" "${ELIGIBLE[@]}"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=#724 acceptance=$ACC
+OWNER${TAB}jwogrady${TAB}spark-authorizes child=nonsense acceptance=$ACC"
+verdict "NOT ELIGIBLE" 4 "a grant line naming an unreadable work unit declines" "${ELIGIBLE[@]}"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=#724 acceptance=$ACC
+OWNER${TAB}jwogrady${TAB}spark-authorizes child=#724 child=#725 acceptance=$ACC"
+verdict "NOT ELIGIBLE" 4 "a grant line naming two work units declines" "${ELIGIBLE[@]}"
+# A malformed grant for a DIFFERENT work unit authorizes something else.
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=#724 acceptance=$ACC
+OWNER${TAB}jwogrady${TAB}spark-authorizes child=#725 acceptance=$ACC extra=1"
+verdict "ROUTINE MERGE" 0 "a malformed grant for a different work unit does not decline this one" "${ELIGIBLE[@]}"
+reset_world
+
 # A real comment does not end exactly at the marker. Parsing the flattened tail
 # instead of the LINE rejected every grant with prose after it — fail-closed,
 # but it made the feature unusable.
@@ -525,7 +731,7 @@ dec "DECISION REQUIRED" "the core routes a named+cited boundary" \
 rc=0; out="$(cmd_merge_authority "${ELIGIBLE[@]}" 2>&1)" || rc=$?
 [ "$rc" = 0 ] && ok || bad "cmd_merge_authority must exit 0 on a routine merge (got $rc)"
 case "$out" in "ROUTINE MERGE"*) ok ;; *) bad "cmd_merge_authority must echo the verdict" ;; esac
-GH_CHECKS="completed failure"
+GH_CHECKS="gate${TAB}completed${TAB}failure${TAB}15368"
 rc=0; cmd_merge_authority "${ELIGIBLE[@]}" >/dev/null 2>&1 || rc=$?
 [ "$rc" = 4 ] && ok || bad "cmd_merge_authority must exit 4 when not eligible (got $rc)"
 reset_world

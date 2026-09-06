@@ -59,15 +59,26 @@ parent**, which is how the owning issue is identified. Two of either is
 ambiguous, and ambiguity declines.
 
 The grant must be its own line, and prose around it is fine — a comment does not
-have to end at the marker. Two grant lines, or two granting comments, are
+have to end at the marker. Two grant lines, two granting comments, or a
+malformed authorization line for the same work unit beside a valid grant are all
 ambiguous and decline.
+
+"Green" means the **whole applicable requirement model** passed on that exact
+commit: branch protection's app-bound checks, plus every check and workflow an
+applicable repository or organization ruleset requires. A same-named check from
+a different app is a different check. Every observation counts, so a failing or
+still-running re-run behind a success declines. Requirement state that cannot be
+read is not absent requirement state — and where nothing is required anywhere,
+nothing was proven, so there is still no merge.
 
 Everything unproven declines: missing, malformed, duplicate, unreadable, stale,
 wrong-repository, wrong-child, wrong-acceptance or wrong-HEAD records; a PASS
 for a different commit; a check that has not finished; a required check that
-never ran or that skipped; conflicting evidence of any kind. When the HEAD moves,
-every fact gathered describes a commit that is no longer the candidate, so the
-answer becomes `NOT ELIGIBLE` and the evaluation must be redone.
+never ran or that skipped; conflicting evidence of any kind. Every marker
+occurrence is read, so a contradicting record later in the same comment counts
+exactly as much as the first. When the HEAD moves, every fact gathered describes
+a commit that is no longer the candidate, so the answer becomes `NOT ELIGIBLE`
+and the evaluation must be redone.
 
 ## What this never does
 
