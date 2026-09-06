@@ -158,7 +158,7 @@ of the source type; a role name, a label, a summary, or a word such as
 
 | Source type | Canonical `source.identity` | `source.version` grammar |
 |---|---|---|
-| `github-api` | a repository, work-unit, comment or milestone locator — the node that was read | the node's `updated_at` (ISO-8601 `Z`), the 40-hex head it is keyed by, its numeric id, or its etag |
+| `github-api` | a repository, work-unit, comment or milestone locator — the node that was read | the node's `updated_at` (ISO-8601 `Z`), the 40-hex head it is keyed by, or its etag — never a numeric node id, which does not change when the node does |
 | `git` | `<repository>@<commit>` or `<repository>@ref/<ref>` | the 40-hex commit id observed (a ref target is recorded as the commit it pointed at) |
 | `repository-file` | `<repository>@<commit>:<path>` | the 40-hex commit id the file was read at |
 | `human-decision` | the decision record itself: a comment locator or `<repository>@<commit>` | the numeric comment id or the 40-hex commit id that records the decision |
@@ -212,16 +212,20 @@ behavioral suite checks the two never drift.
   type; a grant names the repository or work unit it applies to. detail has the
   exact shape {reason, candidates} with canonical locators as candidates;
   acceptance item ids are scalar item-ids, unique within the fact; a work unit
-  appears at most once per graph list.
+  appears at most once per graph list. Every envelope field has the type its
+  field record declares.
 - **R15** next_action is derived, never asserted, and every fact its derivation
   consulted is in its inputs (so R4 re-versions it when any of them changes):
   merge only when the review is PASS on the current HEAD, every required check
-  is success on it, every acceptance item is MET on it, the HEAD is current, and
-  a grant with scope merge:routine targets the repository or work unit (review,
-  checks, acceptance, head, authority, repository and work_unit are consulted);
-  repair only on CHANGES REQUIRED for the current HEAD (review, head);
-  wait-review only when no verdict binds the current HEAD or a required check is
-  pending, missing or UNKNOWN (head, review, checks as present);
+  is success on it, every acceptance item is MET on it, the HEAD is current, a
+  grant with scope merge:routine targets the repository or work unit, and no
+  reserved boundary targeting the repository or work unit applies — for every
+  boundary-evidence record the fact it names is consulted, must be ESTABLISHED,
+  and must not satisfy the condition (review, checks, acceptance, head,
+  authority, repository, work_unit and every boundary-evidence fact are
+  consulted); repair only on CHANGES REQUIRED for the current HEAD (review,
+  head); wait-review only when no verdict binds the current HEAD or a required
+  check is pending, missing or UNKNOWN (head, review, checks as present);
   stop-decision-required only when an input is CONFLICT, the verdict is DECISION
   REQUIRED, or boundary names a reserved boundary that applies here: the
   authority fact is in because and carries that boundary token with a target
@@ -312,10 +316,10 @@ action follows mechanically from named inputs.
    "provenance": "https://github.com/acme/widgets/commit/0123456789abcdef0123456789abcdef01234567/checks"},
   {"schema_version": "1", "key": "next_action.governed", "class": "next_action", "status": "ESTABLISHED",
    "value": {"action": "merge", "because": ["review.independent", "checks.required", "head.exact", "authority.standing", "acceptance.contract"], "boundary": "none"},
-   "source": {"type": "derived", "identity": "fact-model/1", "version": "1;acceptance.contract@2026-09-05T18:00:00Z;authority.standing@9001;checks.required@0123456789abcdef0123456789abcdef01234567;head.exact@0123456789abcdef0123456789abcdef01234567;repository.identity@2026-09-01T08:00:00Z;review.independent@2026-09-06T11:58:00Z;work_unit.identity@2026-09-06T12:00:00Z"},
+   "source": {"type": "derived", "identity": "fact-model/1", "version": "1;acceptance.contract@2026-09-05T18:00:00Z;authority.standing@9001;checks.required@0123456789abcdef0123456789abcdef01234567;head.exact@0123456789abcdef0123456789abcdef01234567;placement.current@2026-09-05T18:00:00Z;repository.identity@2026-09-01T08:00:00Z;review.independent@2026-09-06T11:58:00Z;work_unit.identity@2026-09-06T12:00:00Z"},
    "observed_at": "2026-09-06T12:00:05Z", "invalidators": ["head:0123456789abcdef0123456789abcdef01234567"],
    "provenance": "preferences/fact-model.tsv",
-   "inputs": ["review.independent", "checks.required", "head.exact", "authority.standing", "acceptance.contract", "repository.identity", "work_unit.identity"]}
+   "inputs": ["review.independent", "checks.required", "head.exact", "authority.standing", "acceptance.contract", "repository.identity", "work_unit.identity", "placement.current"]}
 ]
 ```
 

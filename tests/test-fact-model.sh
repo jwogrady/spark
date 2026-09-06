@@ -145,6 +145,8 @@ rows = [l.rstrip("\n").split("\t") for l in open(tsv) if l.strip() and not l.sta
 classes = {r[1]: r[2] for r in rows if r[0] == "class"}
 statuses = {r[1]: r[2] for r in rows if r[0] == "status"}
 fields = {r[1]: r[2] for r in rows if r[0] == "field"}
+ftypes = {r[1]: r[3] for r in rows if r[0] == "field"}          # envelope field types, READ from the authority
+PY_TYPES = {"string": str, "list": list, "object": dict, "boolean": bool}
 ids = {r[1]: re.compile(r[2]) for r in rows if r[0] == "identifier"}
 sources = {r[1] for r in rows if r[0] == "source"}
 sid = {r[1]: re.compile(r[2]) for r in rows if r[0] == "source-identity"}
@@ -244,6 +246,8 @@ def check_fact(f):
         if req == "required" and name not in f: fail(f"missing required field {name}")
     for k in f:
         if k not in fields: fail(f"unknown field {k}")
+        t = ftypes[k]
+        if t != "any" and not (isinstance(f[k], PY_TYPES[t]) and not (t != "boolean" and isinstance(f[k], bool))): fail(f"field {k} must be a {t} (R14)")
     if f["schema_version"] != version: fail("schema_version mismatch")
     if not ids["fact-key"].match(f["key"]): fail(f"key not canonical: {f['key']}")
     if f["class"] not in classes: fail(f"unknown class {f['class']}")
@@ -349,6 +353,13 @@ def check_set(facts, complete):
             if not head["value"]["current"]: fail("merge requires the HEAD to be current (R15)")
             targets = {x["value"]["id"] for x in (repo, wu) if est(x)}
             if not (est(auth) and any("merge:routine" in g["scopes"] and g["target"] in targets for g in auth["value"]["grants"])): fail("merge requires a merge:routine grant targeting the repository or work unit (R15)")
+            # no reserved boundary that targets us may apply; every boundary-evidence fact is consulted (so it is an
+            # input) and an evidence fact that is not ESTABLISHED cannot show the boundary does NOT apply
+            for ekey, field, cond in evidence.values():
+                ev = get(ekey.split(".")[0])
+                targeted = [hb["boundary"] for hb in auth["value"]["human_boundaries"] if hb["target"] in targets and hb["boundary"] in evidence and evidence[hb["boundary"]][0] == ekey]
+                if targeted and not est(ev): fail(f"merge cannot be derived: boundary {targeted[0]} targets this work and its evidence fact {ekey} is not ESTABLISHED (R15)")
+                if targeted and cond == "not-none" and ev["value"][field] != "none": fail(f"merge is blocked by reserved boundary {targeted[0]}, which applies here (R15)")
         elif act == "repair":
             rev = get("review")
             if not (est(rev) and rev["value"]["verdict"] == "CHANGES REQUIRED" and cur and rev["value"]["head"] == cur): fail("repair requires CHANGES REQUIRED on the current HEAD (R15)")
@@ -450,6 +461,7 @@ accepts "$(mut 'f["value"]=None')" && bad "value: null must not stand in for abs
 derived='{"schema_version":"1","key":"next_action.governed","class":"next_action","status":"ESTABLISHED","value":{"action":"merge","because":["review.independent"],"boundary":"none"},"source":{"type":"derived","identity":"fact-model/1","version":"1;review.independent@2026-09-06T11:58:00Z"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["head:0123456789abcdef0123456789abcdef01234567"],"provenance":"preferences/fact-model.tsv","inputs":["review.independent"]}'
 accepts "$derived" && ok || bad "control: a derived fact with inputs is accepted"
 accepts "$(printf '%s' "$derived" | python3 -c 'import json,sys; f=json.load(sys.stdin); del f["inputs"]; print(json.dumps(f))')" && bad "a derived fact without inputs must be rejected (R4)" || ok
+accepts "$(printf '%s' "$derived" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["inputs"]="review.independent"; print(json.dumps(f))')" && bad "inputs as a string must be rejected: the field record says list (R14)" || ok
 accepts "$(printf '%s' "$derived" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["source"]["identity"]="fact-model"; print(json.dumps(f))')" && bad "a derived source identity outside its grammar must be rejected (R14)" || ok
 accepts "$(printf '%s' "$derived" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["source"]["version"]="1"; print(json.dumps(f))')" && bad "a derived version that omits its inputs' versions must be rejected (R4)" || ok
 accepts "$(printf '%s' "$derived" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["source"]["version"]="1;checks.required@x"; print(json.dumps(f))')" && bad "a derived version naming a key that is not an input must be rejected (R4)" || ok
@@ -473,9 +485,16 @@ grep -q 'rationale: <text>' "$mtsv" && ok || bad "control: the mutant authority 
 if printf '%s' "$base" | python3 "$VAL" "$mtsv" "$DOC" one >/dev/null 2>&1; then bad "the validator must read value shapes from the authority: a shape with an extra key rejects the old fact" ; else ok; fi
 sed 's/^class\treview\trequired\t{verdict: <verdict>, head: <commit>, reviewer: <login>, record: <comment>}/class\treview\trequired\t{verdict: <verdict>, head: <commit>, reviewer: <text>, record: <comment>}/' "$TSV" > "$mtsv"
 if printf '%s' "$base" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["value"]["reviewer"]="whoever ran the lane"; print(json.dumps(f))' | python3 "$VAL" "$mtsv" "$DOC" one >/dev/null 2>&1; then ok; else bad "control: loosening the authority's shape to <text> is honoured by the validator (it reads the TSV)"; fi
+sed 's/^field\tobserved_at\trequired\tstring\t/field\tobserved_at\trequired\tlist\t/' "$TSV" > "$mtsv"
+grep -q '^field.observed_at.required.list' "$mtsv" && ok || bad "control: the mutant authority retypes observed_at"
+if printf '%s' "$base" | python3 "$VAL" "$mtsv" "$DOC" one >/dev/null 2>&1; then bad "the validator must read envelope field types from the authority: retyping observed_at to list rejects the old fact"; else ok; fi
 sed 's/^identifier\tlogin\t[^\t]*\t/identifier\tlogin\t^login:[a-z]+$\t/' "$TSV" > "$mtsv"
 if printf '%s' "$base" | python3 "$VAL" "$mtsv" "$DOC" one >/dev/null 2>&1; then bad "the validator must read identifier grammars from the authority: a narrowed login grammar rejects github-actions[bot]"; else ok; fi
 accepts "$(mut 'f["source"]["version"]="latest"')" && bad "a github-api source version outside its grammar must be rejected (R14)" || ok
+accepts "$(mut 'f["source"]["version"]="9100"')" && bad "a numeric node id must not version a mutable github-api node (freshness)" || ok
+accepts "$(mut 'f["observed_at"]=["2026-09-06T12:00:05Z"]')" && bad "observed_at as a list must be rejected: the field record says string (R14)" || ok
+accepts "$(mut 'f["invalidators"]="head:0123456789abcdef0123456789abcdef01234567"')" && bad "invalidators as a string must be rejected: the field record says list (R14)" || ok
+accepts "$(mut 'f["provenance"]=["https://github.com/acme/widgets/pull/42"]')" && bad "provenance as a list must be rejected: the field record says string (R14)" || ok
 # exact value shapes, recursively (R14): prose keys nested inside values
 accepts "$(mut 'f["value"]["conclusion"]="looks fine"')" && bad "an extra key in a review value must be rejected (R14)" || ok
 wu='{"schema_version":"1","key":"work_unit.identity","class":"work_unit","status":"ESTABLISHED","value":{"kind":"pull_request","id":"github.com/acme/widgets#42"},"source":{"type":"github-api","identity":"github.com/acme/widgets#42","version":"2026-09-06T12:00:00Z"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["pull_request:github.com/acme/widgets#42"],"provenance":"https://github.com/acme/widgets/pull/42"}'
@@ -540,6 +559,12 @@ sets "$(printf '{"complete": true, "facts": %s}' "$(smut 'nx=[f for f in s if f[
 sets "$(printf '{"complete": true, "facts": %s}' "$(smut 'nx=[f for f in s if f["class"]=="head"][0]; nx["value"]["current"]=False')")" && bad "merge on a HEAD that is not current must be rejected (R15)" || ok
 sets "$(printf '{"complete": true, "facts": %s}' "$(smut 'nx=[f for f in s if f["class"]=="authority"][0]; nx["value"]["grants"][0]["scopes"]=["close:issue"]')")" && bad "merge without a merge:routine grant must be rejected (R15)" || ok
 sets "$(printf '{"complete": true, "facts": %s}' "$(smut 'nx=[f for f in s if f["class"]=="authority"][0]; nx["value"]["grants"][0]["target"]="github.com/acme/program"')")" && bad "merge with a grant targeting another repository must be rejected (R15)" || ok
+# a reserved boundary that applies here blocks merge: add placement:release for this repository and place the work in a release
+smerge_boundary='a=[f for f in s if f["class"]=="authority"][0]; a["value"]["human_boundaries"].append({"decision": a["source"]["identity"], "target": "github.com/acme/widgets", "boundary": "placement:release"}); p=[f for f in s if f["class"]=="placement"][0]; p["value"]["release"]="v1.2.0"'
+sets "$(printf '{"complete": true, "facts": %s}' "$(smut "$smerge_boundary")")" && bad "merge while a targeted placement:release boundary applies (the work is in a release) must be rejected (R15)" || ok
+sets "$(printf '{"complete": true, "facts": %s}' "$(smut 'a=[f for f in s if f["class"]=="authority"][0]; a["value"]["human_boundaries"].append({"decision": a["source"]["identity"], "target": "github.com/acme/widgets", "boundary": "placement:release"})')")" && ok || bad "control: the same boundary with no release placement does not block merge (its evidence does not hold)"
+sets "$(printf '{"complete": true, "facts": %s}' "$(smut 'a=[f for f in s if f["class"]=="authority"][0]; a["value"]["human_boundaries"].append({"decision": a["source"]["identity"], "target": "github.com/acme/widgets", "boundary": "placement:release"}); p=[f for f in s if f["class"]=="placement"][0]; p["status"]="UNKNOWN"; del p["value"]; p["detail"]={"reason":"403","candidates":[]}')")" && bad "merge while the targeted boundary's evidence fact is UNKNOWN must be rejected — it cannot be shown not to apply (R15)" || ok
+sets "$(printf '{"complete": true, "facts": %s}' "$(smut 'nx=[f for f in s if f["class"]=="next_action"][0]; nx["inputs"]=[i for i in nx["inputs"] if i!="placement.current"]; nx["source"]["version"]=";".join(p for p in nx["source"]["version"].split(";") if not p.startswith("placement.current@"))')")" && bad "a merge derivation that omits the consulted boundary-evidence fact (placement) from its inputs must be rejected (R4/R15)" || ok
 sets "$(printf '{"complete": true, "facts": %s}' "$(smut 'nx=[f for f in s if f["class"]=="next_action"][0]; nx["inputs"]=[i for i in nx["inputs"] if i!="repository.identity"]; nx["source"]["version"]=";".join(p for p in nx["source"]["version"].split(";") if not p.startswith("repository.identity@"))')")" && bad "a merge derivation that omits a consulted fact (repository) from its inputs must be rejected (R4/R15)" || ok
 accepts "$(printf '%s' "$derived" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["value"]["action"]="close"; print(json.dumps(f))')" && bad "an action outside the v1 vocabulary (close) must be rejected" || ok
 accepts "$(printf '%s' "$derived" | python3 -c 'import json,sys; f=json.load(sys.stdin); del f["value"]["boundary"]; print(json.dumps(f))')" && bad "a next_action without the boundary field must be rejected (R14)" || ok
