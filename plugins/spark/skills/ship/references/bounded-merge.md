@@ -67,9 +67,15 @@ ambiguous and decline.
 commit: branch protection's app-bound checks, plus every check and workflow an
 applicable repository or organization ruleset requires. A same-named check from
 a different app is a different check. Every observation counts, so a failing or
-still-running re-run behind a success declines. Requirement state that cannot be
-read is not absent requirement state — and where nothing is required anywhere,
-nothing was proven, so there is still no merge.
+still-running re-run behind a success declines, and **both** observation
+surfaces — check runs and commit statuses — must be readable. Requirement state
+that cannot be read is not absent requirement state — and where nothing is
+required anywhere, nothing was proven, so there is still no merge.
+
+The bounded work unit's identity comes from the **pull request's** repository.
+The owning issue may live in another one, so where it does, name the work unit
+in full (`owner/repo#124`) in the grant and the attestation: a bare `#124`
+written on a parent elsewhere is ambiguous and declines.
 
 Everything unproven declines: missing, malformed, duplicate, unreadable, stale,
 wrong-repository, wrong-child, wrong-acceptance or wrong-HEAD records; a PASS

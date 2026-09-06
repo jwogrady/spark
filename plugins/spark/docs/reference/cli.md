@@ -660,13 +660,16 @@ stand on and the answer is still `NOT ELIGIBLE`.
 its observations on that commit passed. Accepting the first success let a failing
 or still-running re-run sit quietly behind it, and a commit status contradicting
 a passing check run of the same context is the same conflict from the other
-surface.
+surface. **Both** observation surfaces must be readable: a check-run list that
+cannot be read is not an empty one, and the surface that could not be read is
+exactly where the contradicting failure would be.
 
 **Read to exhaustion.** Comments, review and acceptance records, check runs,
-commit statuses, workflow runs and every requirement source are paginated.
-"Exactly one" concluded from a truncated page is not exactly one, and a
-conflicting grant or a failing check on a later page would otherwise be
-invisible.
+commit statuses, workflow runs, **changed files** and every requirement source
+are paginated. "Exactly one" concluded from a truncated page is not exactly one;
+a conflicting grant or a failing check on a later page would otherwise be
+invisible; and scope depends on the whole file list, so a `.github/workflows/`
+change past a page boundary would otherwise be classified routine.
 
 **Conflicting evidence is not passing evidence.** *Every* marker occurrence is
 read — not the first one a comment happens to contain, because a contradicting
@@ -678,7 +681,17 @@ positional and its verdict vocabulary closed, so a reordered field, an extra
 field or a verdict outside the lane's four values leaves the record's meaning
 unestablished. The same holds for acceptance — a `MET` beside a `NOT-MET`, a
 malformed same-contract record, or two proofs decline. Only a record that
-legibly concerns a *different* pull request or commit is set aside.
+legibly concerns a *different* pull request or commit is set aside, and a
+**repeated** identity field is ambiguity rather than legible difference: a
+record carrying both `pr=999` and `pr=727`, or a stale head beside the current
+one, declines instead of being waved through on whichever value came first.
+
+**The work unit's identity comes from the pull request's repository**, never the
+owning issue's. The native parent may live in another repository, and borrowing
+its slug would let a bare `#124` written there stand for *this* repository's
+`#124` — a different issue that happens to share a number. Where the parent is
+cross-repository, a bare reference in a grant or an attestation is therefore
+ambiguous and declines; name the work unit in full (`owner/repo#124`).
 
 Grants are counted the same way: a **candidate** authorization line is any line
 opening with the marker, valid or not, and a malformed same-unit line beside a

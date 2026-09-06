@@ -146,7 +146,7 @@ ELIGIBLE=(--pr 727)
 # passes for the wrong reason.
 verdict "ROUTINE MERGE" 0 "the derived base world is eligible before any control changes it" "${ELIGIBLE[@]}"
 # Every stubbed read must really be performed, or its controls are vacuous.
-for ep in slug closing defbranch head pr files checks parent comments prot rules; do
+for ep in slug closing defbranch head pr files checks statuses parent comments prot rules; do
   GH_FAIL="$ep"
   verdict "NOT ELIGIBLE" 4 "the '$ep' read is really performed" "${ELIGIBLE[@]}"
   GH_FAIL=""
@@ -402,12 +402,51 @@ GH_PROT=""
 verdict "NOT ELIGIBLE" 4 "a branch that requires no checks anywhere has no green to stand on" "${ELIGIBLE[@]}"
 reset_world
 
+# --- BOTH observation surfaces must be readable ----------------------------
+# Converting a failed read into an empty one let the other surface's successes
+# stand alone, while the surface that could not be read might hold the
+# conflicting failure or the pending re-run that decides the question.
+GH_PROT="tests${TAB}
+doctor${TAB}
+gate${TAB}"
+GH_CHECKS=""
+GH_STATUSES="tests${TAB}completed${TAB}success${TAB}
+doctor${TAB}completed${TAB}success${TAB}
+gate${TAB}completed${TAB}success${TAB}"
+verdict "ROUTINE MERGE" 0 "commit statuses alone satisfy an unbound requirement set" "${ELIGIBLE[@]}"
+GH_FAIL=checks
+verdict "NOT ELIGIBLE" 4 "an unreadable check-run list declines even when statuses satisfy every requirement" "${ELIGIBLE[@]}"
+GH_FAIL=""
+reset_world
+GH_FAIL=statuses
+verdict "NOT ELIGIBLE" 4 "an unreadable commit-status list declines even when check runs satisfy every requirement" "${ELIGIBLE[@]}"
+GH_FAIL=""
+reset_world
+
+# --- scope depends on the WHOLE changed-file list ---------------------------
+# A non-routine path past a page boundary was invisible, and the pull request
+# was classified routine on the strength of the first page alone.
+PAGE1=""
+i=1
+while [ "$i" -le 120 ]; do
+  PAGE1="${PAGE1}plugins/spark/docs/reference/page-$i.md
+"
+  i=$((i + 1))
+done
+GH_FILES="${PAGE1}.github/workflows/ci.yml"
+verdict "NOT ELIGIBLE" 4 "a non-routine path after a page boundary is still seen" "${ELIGIBLE[@]}"
+GH_FILES="${PAGE1}plugins/spark/settings/permissions.json"
+verdict "NOT ELIGIBLE" 4 "an enforcement-settings path after a page boundary is still seen" "${ELIGIBLE[@]}"
+GH_FILES="${PAGE1}plugins/spark/lib/execution.sh"
+verdict "ROUTINE MERGE" 0 "a long but wholly routine file list still merges" "${ELIGIBLE[@]}"
+reset_world
+
 # --- every trusted list read must be paginated ------------------------------
 # "Exactly one" concluded from a truncated page is not exactly one, and a
 # failing check on page two is invisible.
 xr_merge_check "${ELIGIBLE[@]}" >/dev/null 2>&1 || true
-for expect in "author_association" "check_runs" "required_status_checks.checks" \
-              "integration_id" "parameters.workflows"; do
+for expect in "author_association" "check_runs" "statuses" "filename" \
+              "required_status_checks.checks" "integration_id" "parameters.workflows"; do
   if grep -q "$expect.*paginate" "$GH_LOG"; then ok
   else bad "the '$expect' read must be paginated, or a later page is invisible"; fi
 done
@@ -497,6 +536,47 @@ verdict "NOT ELIGIBLE" 4 "NOT ASSESSED is a readable verdict and still not a pas
 GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->\\n<!-- spark-openai-review pr=727 head=$SHA2 verdict=WHATEVER -->
 $ACCEPT_MET"
 verdict "ROUTINE MERGE" 0 "a malformed reviewer marker for a different commit does not decline this one" "${ELIGIBLE[@]}"
+reset_world
+
+# --- a repeated identity field is ambiguity, not "about something else" -----
+# Keeping only the first pr= or head= let a record carrying both pr=999 and
+# pr=727 — or a stale head beside the current one — be waved through as
+# concerning another commit on the strength of whichever came first.
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->\\n<!-- spark-openai-review pr=999 pr=727 head=$SHA verdict=PASS -->
+$ACCEPT_MET"
+verdict "NOT ELIGIBLE" 4 "a malformed reviewer marker naming two pull requests declines" "${ELIGIBLE[@]}"
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->\\n<!-- spark-openai-review pr=727 head=$SHA2 head=$SHA verdict=PASS -->
+$ACCEPT_MET"
+verdict "NOT ELIGIBLE" 4 "a malformed reviewer marker naming two commits declines" "${ELIGIBLE[@]}"
+GH_PR_COMMENTS="$REV
+OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->\\n<!-- spark-acceptance pr=999 pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
+verdict "NOT ELIGIBLE" 4 "a malformed acceptance record naming two pull requests declines" "${ELIGIBLE[@]}"
+GH_PR_COMMENTS="$REV
+OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->\\n<!-- spark-acceptance pr=727 child=#724 head=$SHA2 head=$SHA contract=$ACC verdict=MET -->"
+verdict "NOT ELIGIBLE" 4 "a malformed acceptance record naming two commits declines" "${ELIGIBLE[@]}"
+reset_world
+
+# --- the work unit lives in the PULL REQUEST's repository -------------------
+# The owning issue may live elsewhere. Borrowing the parent's repository for
+# the child's identity would let a bare "#724" written on a parent in another
+# repository stand for THIS repository's #724 — a different issue that happens
+# to share a number.
+GH_PARENT="https://api.github.com/repos/other/org-repo/issues/722"
+verdict "NOT ELIGIBLE" 4 "a bare grant under a cross-repository parent is ambiguous" "${ELIGIBLE[@]}"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=other/org-repo#724 acceptance=$ACC"
+verdict "NOT ELIGIBLE" 4 "a grant naming the parent's repository does not authorize the PR's issue" "${ELIGIBLE[@]}"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=jwogrady/spark#724 acceptance=$ACC"
+verdict "NOT ELIGIBLE" 4 "a bare acceptance child under a cross-repository parent is ambiguous" "${ELIGIBLE[@]}"
+GH_PR_COMMENTS="$REV
+OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=jwogrady/spark#724 head=$SHA contract=$ACC verdict=MET -->"
+verdict "ROUTINE MERGE" 0 "explicit full identities authorize across a cross-repository parent" "${ELIGIBLE[@]}"
+GH_PR_COMMENTS="$REV
+OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=other/org-repo#724 head=$SHA contract=$ACC verdict=MET -->"
+verdict "NOT ELIGIBLE" 4 "an acceptance naming the parent's repository does not prove the PR's issue" "${ELIGIBLE[@]}"
+# A bare grant for a DIFFERENT number is unambiguous whichever repository it
+# means, so it is simply not this work unit.
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=#725 acceptance=$ACC"
+verdict "NOT ELIGIBLE" 4 "a bare grant for another number under a cross-repository parent is not this unit" "${ELIGIBLE[@]}"
 reset_world
 
 # --- derived: stale-head protection by construction -------------------------

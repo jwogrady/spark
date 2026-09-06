@@ -2319,7 +2319,9 @@ xm_slug()        { command -v gh >/dev/null 2>&1 || return 1
 xm_default_branch() { xm_api "$1" "" '.default_branch'; }
 xm_pr_facts()    { xm_api "$1" "pulls/$2" '.head.sha, .state, (.draft|tostring), .base.ref, .head.ref'; }
 xm_pr_head()     { xm_api "$1" "pulls/$2" '.head.sha'; }
-xm_pr_files()    { xm_api "$1" "pulls/$2/files?per_page=100" '.[].filename'; }
+# Every changed path, to exhaustion: scope depends on the WHOLE file list, so a
+# non-routine path on a later page would otherwise be classified routine.
+xm_pr_files()    { xm_api_all "$1" "pulls/$2/files?per_page=100" '.[].filename'; }
 # Check runs and commit statuses both carry required contexts, so both are read.
 # The app identity travels with each observation, because a requirement bound to
 # an app is not satisfied by a same-named check from a different one.
@@ -2447,16 +2449,32 @@ xm_review_fields() {
 # Used to keep a malformed marker about some other commit from declining this
 # one, without ever letting a malformed marker about THIS one be stepped over.
 xm_marker_other() {
-  local occ="${1:-}" want_pr="$2" want_head="$3" f p="" h=""
+  local occ="${1:-}" want_pr="$2" want_head="$3" f p="" h="" pseen="" hseen="" dup=""
   for f in $occ; do
     case "$f" in
-      pr=*)   [ -n "$p" ] || p="${f#pr=}" ;;
-      head=*) [ -n "$h" ] || h="${f#head=}" ;;
+      pr=*)   if [ -z "$pseen" ]; then pseen=1; p="${f#pr=}"; else dup=1; break; fi ;;
+      head=*) if [ -z "$hseen" ]; then hseen=1; h="${f#head=}"; else dup=1; break; fi ;;
     esac
   done
+  # A REPEATED identity field is ambiguous, not legibly unrelated. Keeping only
+  # the first value would let a record carrying both pr=999 and pr=727 — or a
+  # stale head beside the current one — be waved through as "about something
+  # else" on the strength of whichever came first.
+  [ -z "$dup" ] || return 1
   if [ -n "$p" ] && [ "$p" != "$want_pr" ]; then return 0; fi
   if [ -n "$h" ] && [ "$h" != "$want_head" ]; then return 0; fi
   return 1
+}
+
+# xm_ambiguous_child <ref> <child-number> <cross-repository> — true when a BARE
+# reference could name the bounded work unit but does not say which repository
+# it lives in. That only arises once the owning issue lives elsewhere: a bare
+# "#724" written on a parent in another repository reads naturally as that
+# repository's #724, and the work unit is the pull request repository's.
+xm_ambiguous_child() {
+  [ -n "${3:-}" ] || return 1
+  [ -z "$(xm_issue_repo "$1")" ] || return 1
+  [ "$(xm_issue_num "$1")" = "$2" ]
 }
 
 # xm_derive <pr> [slug] — resolve every fact from authoritative state. On
@@ -2496,6 +2514,11 @@ EOF
   # repos/<owner>/<repo>/issues/<n> -> owner/repo
   parent_slug="${parent_url#*/repos/}"; parent_slug="${parent_slug%%/issues/*}"
   xm_repo_id "$parent_slug" || parent_slug="$slug"
+  # The bounded work unit lives in the PULL REQUEST's repository. Borrowing the
+  # parent's would let a "#724" on a parent in another repository stand for
+  # this repository's #724 — a different issue with the same number.
+  local child_id="$slug#$child_num" cross=""
+  [ "$parent_slug" = "$slug" ] || cross=1
 
   # The durable grant, on the parent, from someone who can govern the repo.
   local assoc body rest field gchild gacc grants=0 gbad=0
@@ -2535,12 +2558,19 @@ EOF
         # A malformed candidate whose child is still legible and names a
         # DIFFERENT work unit authorizes something else; anything else is
         # ambiguous about THIS one.
-        if xm_issue_ref "$gchild" && ! xm_same_issue "$gchild" "#$child_num" "$parent_slug"; then
+        if xm_issue_ref "$gchild" \
+           && ! xm_ambiguous_child "$gchild" "$child_num" "$cross" \
+           && ! xm_same_issue "$gchild" "$child_id" "$slug"; then
           continue
         fi
         gbad=$((gbad + 1)); continue
       fi
-      xm_same_issue "$gchild" "#$child_num" "$parent_slug" || continue
+      # A bare reference under a cross-repository parent does not say which
+      # repository's issue was authorized.
+      if xm_ambiguous_child "$gchild" "$child_num" "$cross"; then
+        gbad=$((gbad + 1)); continue
+      fi
+      xm_same_issue "$gchild" "$child_id" "$slug" || continue
       grants=$((grants + 1))
       m_child="$gchild"; m_acc="$gacc"
     done <<LINES
@@ -2612,7 +2642,10 @@ REVIEW
         fi
         [ "$a_pr" = "$prnum" ] || continue
         xm_issue_ref "$a_child" || continue
-        xm_same_issue "$a_child" "#$child_num" "$parent_slug" || continue
+        if xm_ambiguous_child "$a_child" "$child_num" "$cross"; then
+          acc_bad=$((acc_bad + 1)); continue
+        fi
+        xm_same_issue "$a_child" "$child_id" "$slug" || continue
         xm_sha "$a_head" || continue
         [ "$a_head" = "$sha" ] || continue
         [ "$a_contract" = "$m_acc" ] || continue
@@ -2683,11 +2716,20 @@ EOF
     wfruns="$(xm_runs "$slug" "$sha")" || wf_rc=$?
     [ "$wf_rc" -eq 0 ] || reqbad=workflow-runs
   fi
-  runs="$(xm_checks "$slug" "$sha")" || runs=""
-  statuses="$(xm_statuses "$slug" "$sha")" || statuses=""
+  # BOTH observation surfaces must be readable. Converting a failed read into an
+  # empty one let the other surface's successes stand alone, while the surface
+  # that could not be read might hold the conflicting failure or the pending
+  # re-run that decides the question.
+  local obsbad="" runs_rc=0 statuses_rc=0
+  runs="$(xm_checks "$slug" "$sha")" || runs_rc=$?
+  statuses="$(xm_statuses "$slug" "$sha")" || statuses_rc=$?
+  [ "$runs_rc" -eq 0 ] || obsbad=check-runs
+  [ "$statuses_rc" -eq 0 ] || obsbad="${obsbad:+$obsbad,}commit-statuses"
   local observed
   observed="$(printf '%s\n%s\n' "$runs" "$statuses")"
-  if [ -n "$reqbad" ]; then
+  if [ -n "$obsbad" ]; then
+    checks="observations-unknown:$obsbad"
+  elif [ -n "$reqbad" ]; then
     # Some part of the requirement model could not be read. That is not the
     # same as "nothing is required", and guessing in the permissive direction
     # is exactly the mistake this whole command exists to avoid.
@@ -2786,7 +2828,7 @@ EOF
   printf 'pr=%s\n'          "$prnum"
   printf 'head=%s\n'        "$sha"
   printf 'head-now=%s\n'    "$now"
-  printf 'child=%s\n'       "$parent_slug#$child_num"
+  printf 'child=%s\n'       "$child_id"
   printf 'parent=%s\n'      "$parent_slug#$parent_num"
   printf 'grant-child=%s\n' "$m_child"
   printf 'acceptance=%s\n'  "$m_acc"
