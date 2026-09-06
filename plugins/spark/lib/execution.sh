@@ -2177,6 +2177,1030 @@ xr_stop_check() {
   return 0
 }
 
+# ---------------------------------------------------------------------------
+# Bounded-increment merge authority (#726)
+#
+# A broad outcome issue (#722, "prove the performance gate with equal-workload
+# benchmarks") can durably authorize a bounded work unit (#724, one memoization
+# optimization) whose own acceptance is complete long before the parent's is.
+# The standing #677 contract had no route for that: it required the OWNING
+# issue's acceptance to be true and the merge to make the OWNING issue true, so
+# every routine increment beneath a deliberately-incomplete parent hit a human
+# stop. That is ceremony, not governance.
+#
+# THE CALLER SUPPLIES IDENTITY, NOT TRUTH. That is the whole architecture, and
+# it was learned the expensive way: successive revisions accepted `review=pass`,
+# `checks=green`, `stale-head=protected` and `scope=routine-reversible` as
+# tokens, so anyone holding one valid grant could self-assert every remaining
+# gate. `--pr <N>` is now the entire input. Everything else is read from GitHub.
+#
+# Two layers, deliberately separable:
+#
+#   xm_derive   reads authoritative state and emits normalized facts. Anything
+#               missing, ambiguous, unreadable or stale makes it fail, and the
+#               failure names what could not be established. UNKNOWN is never
+#               quietly promoted to PASS.
+#   xm_decide   a pure fail-closed core over those normalized facts. It is
+#               unit-testable without a network, and it can only ever be as
+#               generous as the facts it is handed.
+#
+# The classifier is the mirror image of xr_stop_check above, and the difference
+# is deliberate. That one fails toward CONTINUE because its defect (#688) was a
+# FALSE STOP. This one fails toward NOT ELIGIBLE because its defect is the
+# opposite and far more expensive: MANUFACTURED MERGE AUTHORITY.
+#
+# UNTRUSTED INPUT MUST NEVER IMPERSONATE TRUSTED OUTPUT. Values reach the
+# verdict text, so a newline in one forged a "parent outcome: CLOSED and fully
+# satisfied" line above the real disclaimer, at exit 0, in this function's own
+# voice. Control-bearing input is refused before a byte is emitted.
+#
+# A ROUTINE MERGE never closes, satisfies or implies the parent outcome, and
+# final release approval stays human-owned.
+
+# Associations GitHub reports for someone who can govern the repository. A
+# comment from anyone else is a bystander's opinion, however well formatted —
+# otherwise a stranger could post a valid-looking grant and have it cited.
+XM_AUTHORIZING_ASSOCIATIONS=(OWNER MEMBER COLLABORATOR)
+# Permission levels in the PULL REQUEST's repository that can govern a merge
+# there. Consulted when the grant arrives from another repository's comment
+# endpoint, where `author_association` describes authority somewhere else.
+XM_GOVERNING_PERMISSIONS=(admin maintain write)
+# Check conclusions that do not block. A check that has not finished is not one.
+XM_OK_CONCLUSIONS=(success skipped neutral)
+# The producer whose review verdict counts. A verdict from anyone else is a
+# comment about a review, not a review.
+XM_REVIEW_PRODUCER="github-actions[bot]"
+# Surfaces that never create merge authority however confidently cited. An ARRAY
+# so a sourced caller who reassigned IFS cannot collapse it to one token.
+XM_NON_AUTHORIZING=(585 relay orchestrator coordination reviewer consensus)
+# Paths whose mutation is not routine: CI and the enforcement settings are
+# human-gated by AGENTS.md, and #677 excludes ruleset/secrets/admin entirely.
+XM_NON_ROUTINE_PATHS=(".github/workflows/" "plugins/spark/settings/")
+# Release ARTIFACTS. A branch name is a convention, not durable metadata: a
+# release pull request cut from any other branch would otherwise read as routine.
+# Touching what a release touches is the durable signal, whatever it is called.
+XM_RELEASE_FILES=("CHANGELOG.md" ".release-please-manifest.json" "release-please-config.json" ".claude-plugin/plugin.json")
+# Release-Please stamps its pull requests; any autorelease label is decisive.
+XM_RELEASE_LABELS=(autorelease release)
+
+# The durable grant a parent comment must carry, and the durable attestation
+# that the bounded acceptance is TRUE at an exact commit. Both imitate the
+# reviewer lane's existing marker grammar rather than inventing a new shape,
+# and `contract`/`head` are the invalidator names `spark evidence` (#576)
+# already uses — a capture bound to a HEAD stops being fresh when it moves.
+XM_MARKER_PREFIX="spark-authorizes"
+XM_ACCEPT_TAG="spark-acceptance"
+XM_REVIEW_TAG="spark-openai-review"
+# Machine surfaces that are REPORTS, never grants. A comment carrying one of
+# these cannot also be read as a human authorization, so a reviewer verdict or
+# an acceptance attestation can never be mistaken for the grant itself.
+XM_COORDINATION_MARKERS=(spark-openai-review spark-openai-review-reservation spark-openai-review-invoked spark-acceptance)
+
+xm_num() { case "${1:-}" in ''|*[!0-9]*) return 1 ;; 0*) return 1 ;; esac; return 0; }
+xm_token() { case "${1:-}" in ''|*[!A-Za-z0-9._-]*) return 1 ;; esac; return 0; }
+xm_sha() { case "${1:-}" in ''|*[!0-9a-f]*) return 1 ;; esac; [ "${#1}" = 40 ]; }
+
+xm_repo_id() {
+  local s="${1:-}" owner repo
+  case "$s" in */*) ;; *) return 1 ;; esac
+  owner="${s%%/*}"; repo="${s#*/}"
+  case "$repo" in */*) return 1 ;; esac
+  [ -n "$owner" ] && [ -n "$repo" ] || return 1
+  case "$owner" in *[!A-Za-z0-9._-]*) return 1 ;; esac
+  case "$repo"  in *[!A-Za-z0-9._-]*) return 1 ;; esac
+  return 0
+}
+
+# xm_issue_ref <s> — "#123" or "owner/repo#123", exactly one '#'.
+xm_issue_ref() {
+  local s="${1:-}" before after
+  case "$s" in *'#'*) ;; *) return 1 ;; esac
+  before="${s%%#*}"; after="${s#*#}"
+  case "$after" in *'#'*) return 1 ;; esac
+  xm_num "$after" || return 1
+  [ -z "$before" ] || xm_repo_id "$before" || return 1
+  return 0
+}
+xm_issue_num()  { case "${1:-}" in '#'*) printf '%s' "${1#\#}" ;; *) printf '%s' "${1##*\#}" ;; esac; }
+xm_issue_repo() { case "${1:-}" in '#'*) printf '' ;; *) printf '%s' "${1%%#*}" ;; esac; }
+
+# xm_same_issue <a> <b> <default-repo> — FULL identity comparison. A bare "#724"
+# means "this repository", so it is resolved before comparing; otherwise a
+# marker for other/repo#724 would satisfy jwogrady/spark#724.
+xm_same_issue() {
+  local a="${1:-}" b="${2:-}" def="${3:-}" ra rb
+  [ "$(xm_issue_num "$a")" = "$(xm_issue_num "$b")" ] || return 1
+  ra="$(xm_issue_repo "$a")"; [ -n "$ra" ] || ra="$def"
+  rb="$(xm_issue_repo "$b")"; [ -n "$rb" ] || rb="$def"
+  [ "$ra" = "$rb" ]
+}
+
+xm_denied() {
+  local field tok lowered
+  for field in "$@"; do
+    [ -n "$field" ] || continue
+    lowered="$(printf '%s' "$field" | tr '[:upper:]' '[:lower:]')"
+    for tok in "${XM_NON_AUTHORIZING[@]}"; do
+      case " $lowered " in
+        *[!a-z0-9]"$tok"[!a-z0-9]*) XM_DENIED_TOKEN="$tok"; return 0 ;;
+      esac
+    done
+  done
+  return 1
+}
+
+# --- the trusted derivation layer ------------------------------------------
+# Every helper returns non-zero on any doubt. Unreadable evidence fails closed.
+
+xm_api() { # <slug> <path> <jq>
+  command -v gh >/dev/null 2>&1 || return 1
+  gh api "repos/$1/$2" --jq "$3" 2>/dev/null
+}
+# xm_api_all — the same read, but across EVERY page. A conflicting grant, a
+# second acceptance record, a superseding review verdict or a failing check on
+# page two is invisible to a single-page read, and "exactly one" concluded from
+# a truncated list is not exactly one.
+xm_api_all() { # <slug> <path> <jq>
+  command -v gh >/dev/null 2>&1 || return 1
+  gh api --paginate "repos/$1/$2" --jq "$3" 2>/dev/null
+}
+xm_slug()        { command -v gh >/dev/null 2>&1 || return 1
+                   gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null; }
+xm_default_branch() { xm_api "$1" "" '.default_branch'; }
+xm_pr_facts()    { xm_api "$1" "pulls/$2" '.head.sha, .state, (.draft|tostring), .base.ref, .head.ref'; }
+xm_pr_head()     { xm_api "$1" "pulls/$2" '.head.sha'; }
+# Every changed path, to exhaustion: scope depends on the WHOLE file list, so a
+# non-routine path on a later page would otherwise be classified routine.
+xm_pr_files()    { xm_api_all "$1" "pulls/$2/files?per_page=100" '.[].filename'; }
+# Labels are durable pull-request metadata, unlike a branch name.
+xm_pr_labels()   { xm_api_all "$1" "issues/$2/labels?per_page=100" '.[].name'; }
+# Check runs and commit statuses both carry required contexts, so both are read.
+# The app identity travels with each observation, because a requirement bound to
+# an app is not satisfied by a same-named check from a different one.
+xm_checks()      { xm_api_all "$1" "commits/$2/check-runs?per_page=100" \
+                     '.check_runs[] | .name + "\t" + .status + "\t" + (.conclusion // "none") + "\t" + ((.app.id // "") | tostring)'; }
+# A commit status carries no app binding, so it is emitted with an empty one and
+# can only ever satisfy an unbound requirement.
+xm_statuses()    { xm_api_all "$1" "commits/$2/status?per_page=100" \
+                     '.statuses[] | .context + "\t" + "completed" + "\t" + .state + "\t"'; }
+# Workflow runs FOR THIS EXACT COMMIT, keyed by workflow path — the only surface
+# that answers a ruleset requirement stated as a path.
+xm_runs()        { xm_api_all "$1" "actions/runs?head_sha=$2&per_page=100" \
+                     '.workflow_runs[] | .path + "\t" + .status + "\t" + (.conclusion // "none")'; }
+
+# --- the applicable requirement model --------------------------------------
+# There is no single endpoint for "what must pass before this merges", and
+# reading only branch protection's legacy `.contexts[]` understates it in two
+# ways: `.checks[]` carries the app binding that makes a context unforgeable,
+# and repository/organization RULESETS require checks and whole workflows that
+# branch protection never mentions. An understated requirement model is a
+# permissive one, so every applicable source is read and their union verified.
+
+# Branch protection, in one read so that "protection exists but requires no
+# checks" is distinguishable from "protection could not be read". `.checks[]`
+# is preferred; `.contexts[]` is the fallback for the legacy shape.
+xm_prot()        { xm_api_all "$1" "branches/$2/protection" \
+                     'if ((.required_status_checks.checks // []) | length) > 0 then (.required_status_checks.checks[] | .context + "\t" + ((.app_id // "") | tostring)) else ((.required_status_checks.contexts // [])[] | . + "\t") end'; }
+# Whether the branch is protected at all. Consulted only when the protection
+# read fails: `false` makes an absent required set a FACT, while `true` or an
+# unreadable answer leaves the requirement model unknown.
+xm_protected()   { xm_api "$1" "branches/$2" '.protected | tostring'; }
+# Rulesets applicable to the branch — repository AND organization, which this
+# endpoint resolves together.
+xm_rule_checks() { xm_api_all "$1" "rules/branches/$2" \
+                     '.[] | select(.type == "required_status_checks") | .parameters.required_status_checks[] | .context + "\t" + ((.integration_id // "") | tostring)'; }
+xm_rule_flows()  { xm_api_all "$1" "rules/branches/$2" \
+                     '.[] | select(.type == "workflows") | .parameters.workflows[] | .path'; }
+xm_parent_url()  { xm_api "$1" "issues/$2" '.parent_issue_url // empty'; }
+# The commenter's permission in a NAMED repository. `author_association` is
+# relative to whichever repository served the comment, so it answers "can they
+# govern there", not "can they govern the merge".
+xm_permission()  { xm_api "$1" "collaborators/$2/permission" '.permission // empty'; }
+# One comment per line: association, login, then the body with newlines escaped.
+# The marker grammars are single-line, so nothing that matters is lost.
+#
+# BACKSLASHES ARE DOUBLED FIRST, and that is the whole point. Escaping only
+# newlines made the transport ambiguous: a comment whose text contains the two
+# characters `\n` — "Example:\nspark-authorizes child=#124 …" — decoded into two
+# lines, and a marker quoted inside prose became a marker at the start of a line,
+# which is a canonical grant. Doubling first makes the encoding injective, so
+# `\n` (a real newline) and `\\n` (the literal characters) stay distinguishable.
+xm_comments()    { xm_api_all "$1" "issues/$2/comments?per_page=100" \
+                     '.[] | .author_association + "\t" + .user.login + "\t" + .created_at + "\t" + .updated_at + "\t" + (.body | gsub("\\\\"; "\\\\") | gsub("\r?\n"; "\\n"))'; }
+# The bounded work unit is whatever the PR CLOSES. Governance already makes that
+# the authoritative linkage ("a linked PR plus a closing keyword"), so it is
+# read rather than asserted.
+xm_closing()     { command -v gh >/dev/null 2>&1 || return 1
+                   gh pr view "$2" --repo "$1" --json closingIssuesReferences \
+                     --jq '.closingIssuesReferences[].number' 2>/dev/null; }
+
+# xm_body_lines <flattened-body> — recover the comment's lines. Bodies arrive
+# with newlines escaped so one comment is one record; the marker grammars are
+# single-line, so they must be matched against LINES, not against the flattened
+# tail. Parsing the tail meant a grant followed by any ordinary prose was
+# rejected — fail-closed, but it made the feature unusable, because nobody
+# writes a comment that ends exactly at the marker.
+# The decoder is the exact inverse of that encoding: `\n` becomes a line break,
+# `\\` becomes one literal backslash, and a trailing lone backslash stays
+# literal. It advances backslash to backslash rather than character to
+# character, so a long comment costs one iteration per backslash.
+xm_body_lines() {
+  local rest="${1:-}" out="" pre c
+  while :; do
+    case "$rest" in
+      *'\'*) ;;
+      *) out="$out$rest"; break ;;
+    esac
+    pre="${rest%%\\*}"
+    rest="${rest#*\\}"
+    out="$out$pre"
+    c="${rest%"${rest#?}"}"
+    case "$c" in
+      n)    out="$out
+"; rest="${rest#?}" ;;
+      '\')  out="$out\\"; rest="${rest#?}" ;;
+      *)    out="$out\\" ;;
+    esac
+  done
+  printf '%s\n' "$out"
+}
+
+xm_is_authorizing() {
+  local a
+  for a in "${XM_AUTHORIZING_ASSOCIATIONS[@]}"; do [ "$1" = "$a" ] && return 0; done
+  return 1
+}
+
+# xm_governs <slug> <login> — does this login hold merge-governing permission in
+# THIS repository? Fails closed: an unreadable or absent permission is not
+# authority, because the whole point is that authority elsewhere is not authority
+# here.
+# xm_stamp <iso-8601> — the instant as comparable digits, or non-zero. GitHub
+# emits UTC "YYYY-MM-DDTHH:MM:SSZ", so removing the separators leaves an integer
+# whose numeric order is chronological. An unparseable instant fails closed
+# rather than being treated as "early enough".
+xm_stamp() {
+  local d="${1:-}"
+  d="${d//[!0-9]/}"
+  [ "${#d}" = 14 ] || return 1
+  printf '%s' "$d"
+}
+
+xm_governs() {
+  local p q
+  p="$(xm_permission "$1" "$2")" || return 1
+  [ -n "$p" ] || return 1
+  for q in "${XM_GOVERNING_PERMISSIONS[@]}"; do [ "$p" = "$q" ] && return 0; done
+  return 1
+}
+
+# xm_markers <flattened-body> <tag> — EVERY "<!-- <tag> … -->" occurrence in the
+# comment, one per line, as the text between the tag and the terminator.
+# Parsing at most one marker per comment let a second record hide behind the
+# first: a malformed or contradicting sibling in the same comment was simply
+# never seen. An occurrence with no terminator is emitted as a token that
+# cannot parse as fields, so an unterminated marker is ambiguity, not absence.
+xm_markers() {
+  local body="${1:-}" tag="$2" line rest occ
+  while IFS= read -r line; do
+    rest="$line"
+    while :; do
+      case "$rest" in *"<!-- $tag "*) ;; *) break ;; esac
+      rest="${rest#*<!-- $tag }"
+      case "$rest" in
+        *'-->'*) occ="${rest%%-->*}"; rest="${rest#*-->}" ;;
+        *)       occ="unterminated"; rest="" ;;
+      esac
+      printf '%s\n' "$occ"
+    done
+  done <<LINES
+$(xm_body_lines "$body")
+LINES
+}
+
+# xm_review_fields <occurrence> — "<pr>\t<head>\t<verdict>" for a well-formed
+# reviewer marker, or non-zero. The grammar is closed and POSITIONAL because
+# the verdict is the only multi-word value, so it must be the tail: anything
+# else in the record — a reordering, an extra field, a verdict outside the
+# lane's vocabulary — makes the record's meaning unestablished.
+xm_review_fields() {
+  local occ="${1:-}" t1 t2 rest v
+  while :; do
+    case "$occ" in ' '*) occ="${occ# }" ;; *' ') occ="${occ% }" ;; *) break ;; esac
+  done
+  case "$occ" in *' '*) ;; *) return 1 ;; esac
+  t1="${occ%% *}"; rest="${occ#* }"
+  case "$rest" in *' '*) ;; *) return 1 ;; esac
+  t2="${rest%% *}"; rest="${rest#* }"
+  case "$t1" in pr=*) ;; *) return 1 ;; esac
+  case "$t2" in head=*) ;; *) return 1 ;; esac
+  case "$rest" in verdict=*) ;; *) return 1 ;; esac
+  v="${rest#verdict=}"
+  case "$v" in
+    PASS|"CHANGES REQUIRED"|"DECISION REQUIRED"|"NOT ASSESSED") ;;
+    *) return 1 ;;
+  esac
+  printf '%s\t%s\t%s\n' "${t1#pr=}" "${t2#head=}" "$v"
+}
+
+# xm_marker_other <occurrence> <pr> <head> — true only when an occurrence that
+# could NOT be parsed still legibly names a different pull request or commit.
+# Used to keep a malformed marker about some other commit from declining this
+# one, without ever letting a malformed marker about THIS one be stepped over.
+xm_marker_other() {
+  local occ="${1:-}" want_pr="$2" want_head="$3" f p="" h="" pseen="" hseen="" dup=""
+  for f in $occ; do
+    case "$f" in
+      pr=*)   if [ -z "$pseen" ]; then pseen=1; p="${f#pr=}"; else dup=1; break; fi ;;
+      head=*) if [ -z "$hseen" ]; then hseen=1; h="${f#head=}"; else dup=1; break; fi ;;
+    esac
+  done
+  # A REPEATED identity field is ambiguous, not legibly unrelated. Keeping only
+  # the first value would let a record carrying both pr=999 and pr=727 — or a
+  # stale head beside the current one — be waved through as "about something
+  # else" on the strength of whichever came first.
+  [ -z "$dup" ] || return 1
+  # A NONCANONICAL identity establishes nothing. `pr=0727` is not "another pull
+  # request" and `head=deadbeef` is not "another commit" — they are unreadable
+  # ones, so they may not dismiss a record whose grammar already failed. Without
+  # this, an extra field made parsing fail and then `0727 != 727` waved the
+  # record away, leaving a valid PASS or MET standing alone.
+  if [ -n "$pseen" ] && ! xm_num "$p"; then return 1; fi
+  if [ -n "$hseen" ] && ! xm_sha "$h"; then return 1; fi
+  if [ -n "$p" ] && [ "$p" != "$want_pr" ]; then return 0; fi
+  if [ -n "$h" ] && [ "$h" != "$want_head" ]; then return 0; fi
+  return 1
+}
+
+# xm_ambiguous_child <ref> <child-number> <cross-repository> — true when a BARE
+# reference could name the bounded work unit but does not say which repository
+# it lives in. That only arises once the owning issue lives elsewhere: a bare
+# "#724" written on a parent in another repository reads naturally as that
+# repository's #724, and the work unit is the pull request repository's.
+xm_ambiguous_child() {
+  [ -n "${3:-}" ] || return 1
+  [ -z "$(xm_issue_repo "$1")" ] || return 1
+  [ "$(xm_issue_num "$1")" = "$2" ]
+}
+
+# xm_derive <pr> [slug] — resolve every fact from authoritative state. On
+# success prints normalized "key=value" lines for the pure core. On failure
+# prints one line naming what could not be established, and returns 1.
+xm_derive() {
+  local prnum="$1" slug="${2:-}" line
+  if [ -z "$slug" ]; then
+    slug="$(xm_slug)" || { echo "the repository identity could not be resolved"; return 1; }
+  fi
+  xm_repo_id "$slug" || { echo "the resolved repository identity '$slug' is not owner/repo"; return 1; }
+
+  local pf sha state draft base headref
+  pf="$(xm_pr_facts "$slug" "$prnum")" || pf=""
+  [ -n "$pf" ] || { echo "pull request #$prnum could not be read; no fact below can be established without it"; return 1; }
+  sha="$(printf '%s\n' "$pf" | sed -n 1p)"
+  state="$(printf '%s\n' "$pf" | sed -n 2p)"
+  draft="$(printf '%s\n' "$pf" | sed -n 3p)"
+  base="$(printf '%s\n' "$pf" | sed -n 4p)"
+  headref="$(printf '%s\n' "$pf" | sed -n 5p)"
+  xm_sha "$sha" || { echo "pull request #$prnum reported no usable head commit"; return 1; }
+
+  # The bounded work unit, and its owning issue through the NATIVE hierarchy.
+  local closing count=0 child_num parent_url parent_num parent_slug
+  closing="$(xm_closing "$slug" "$prnum")" || closing=""
+  while IFS= read -r line; do [ -n "$line" ] && count=$((count + 1)) && child_num="$line"; done <<EOF
+$closing
+EOF
+  if [ "$count" -ne 1 ]; then
+    echo "pull request #$prnum closes $count issues; a bounded increment must close exactly one, so its work unit is otherwise ambiguous"
+    return 1
+  fi
+  parent_url="$(xm_parent_url "$slug" "$child_num")" || parent_url=""
+  [ -n "$parent_url" ] || { echo "issue #$child_num has no native parent, so no broader issue durably owns it"; return 1; }
+  parent_num="${parent_url##*/}"
+  xm_num "$parent_num" || { echo "the native parent of #$child_num could not be read as an issue number"; return 1; }
+  # repos/<owner>/<repo>/issues/<n> -> owner/repo
+  parent_slug="${parent_url#*/repos/}"; parent_slug="${parent_slug%%/issues/*}"
+  # A malformed parent identity FAILS CLOSED. Rewriting it to the pull request's
+  # repository redirected an unreadable cross-repository parent to a local issue
+  # that merely shares its number, and then consumed that issue's grants.
+  xm_repo_id "$parent_slug" || { echo "the native parent of #$child_num reported the unusable repository identity '$parent_slug', so which repository owns the authorization is not established"; return 1; }
+  # The bounded work unit lives in the PULL REQUEST's repository. Borrowing the
+  # parent's would let a "#724" on a parent in another repository stand for
+  # this repository's #724 — a different issue with the same number.
+  local child_id="$slug#$child_num" cross=""
+  [ "$parent_slug" = "$slug" ] || cross=1
+
+  # The durable grant, on the parent, from someone who can govern the repo.
+  local assoc body rest field gchild gacc grants=0 gbad=0
+  local m_child="" m_acc="" m_created="" m_updated=""
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    assoc="${line%%	*}"; rest="${line#*	}"
+    local glogin="${rest%%	*}"; rest="${rest#*	}"
+    local gcreated="${rest%%	*}"; rest="${rest#*	}"
+    local gupdated="${rest%%	*}"; body="${rest#*	}"
+    case "$body" in *"$XM_MARKER_PREFIX "*) ;; *) continue ;; esac
+    xm_is_authorizing "$assoc" || continue
+    # `author_association` says how someone RELATES to a repository, never what
+    # they may do in it: a MEMBER or COLLABORATOR may hold read or triage only,
+    # and under a cross-repository parent the association describes the parent's
+    # repository anyway. Authority over this merge is therefore established as
+    # permission in the pull request's own repository, for every grant, and an
+    # unreadable permission is not authority.
+    xm_governs "$slug" "$glogin" || continue
+    # Machinery reporting to machinery never authorizes a merge, even when the
+    # report happens to carry a well-formed grant line.
+    local cm skip=""
+    for cm in "${XM_COORDINATION_MARKERS[@]}"; do
+      case "$body" in *"$cm"*) skip=1 ;; esac
+    done
+    [ -z "$skip" ] || continue
+    # EVERY candidate authorization line is counted, valid or not. Skipping a
+    # malformed sibling and leaving one valid grant standing let the good record
+    # carry a decision the pair does not support: two lines disagreeing about
+    # what was authorized is ambiguity about authority itself.
+    local badfield gline
+    while IFS= read -r gline; do
+      case "$gline" in "$XM_MARKER_PREFIX "*) ;; *) continue ;; esac
+      gchild=""; gacc=""; badfield=""
+      for field in ${gline#"$XM_MARKER_PREFIX" }; do
+        case "$field" in
+          child=*)      if [ -z "$gchild" ]; then gchild="${field#child=}"; else badfield=1; fi ;;
+          acceptance=*) if [ -z "$gacc" ];   then gacc="${field#acceptance=}"; else badfield=1; fi ;;
+          # An unrecognised field INVALIDATES the record rather than ending the
+          # scan: a grant carrying something this cannot interpret is a grant
+          # whose meaning is not established.
+          *) badfield=1 ;;
+        esac
+        [ -z "$badfield" ] || break
+      done
+      if [ -n "$badfield" ] || ! xm_issue_ref "$gchild" || ! xm_token "$gacc"; then
+        # A malformed candidate whose child is still legible and names a
+        # DIFFERENT work unit authorizes something else; anything else is
+        # ambiguous about THIS one.
+        if xm_issue_ref "$gchild" \
+           && ! xm_ambiguous_child "$gchild" "$child_num" "$cross" \
+           && ! xm_same_issue "$gchild" "$child_id" "$slug"; then
+          continue
+        fi
+        gbad=$((gbad + 1)); continue
+      fi
+      # A bare reference under a cross-repository parent does not say which
+      # repository's issue was authorized.
+      if xm_ambiguous_child "$gchild" "$child_num" "$cross"; then
+        gbad=$((gbad + 1)); continue
+      fi
+      xm_same_issue "$gchild" "$child_id" "$slug" || continue
+      grants=$((grants + 1))
+      m_child="$gchild"; m_acc="$gacc"
+      m_created="$gcreated"; m_updated="$gupdated"
+    done <<LINES
+$(xm_body_lines "$body")
+LINES
+  done <<EOF
+$(xm_comments "$parent_slug" "$parent_num")
+EOF
+  if [ "$grants" -ne 1 ] || [ "$gbad" -gt 0 ]; then
+    echo "issue #$parent_num carries $grants durable '$XM_MARKER_PREFIX child=#$child_num acceptance=<id>' grant(s) and $gbad malformed or ambiguous same-unit authorization line(s) from someone who can govern this repository; exactly one unambiguous grant is required, and prose, an unauthorized author or a contradicting sibling line is not a grant"
+    return 1
+  fi
+
+  # Review and acceptance, both bound to THIS commit, read from the PR.
+  local rev=no acc=no acc_seen=0 rev_seen=0 rev_verdict="" rev_conflict="" \
+        acc_bad=0 rev_bad=0 mline rev_at=""
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    assoc="${line%%	*}"; rest="${line#*	}"
+    local login="${rest%%	*}"; rest="${rest#*	}"
+    local created="${rest%%	*}"; rest="${rest#*	}"
+    local updated="${rest%%	*}"; body="${rest#*	}"
+    # EVERY reviewer marker occurrence in the comment, not the first one the
+    # body happens to contain. A second record hiding behind the first is
+    # exactly the evidence a merge decision must not miss.
+    if [ "$login" = "$XM_REVIEW_PRODUCER" ]; then
+      while IFS= read -r mline; do
+        [ -n "$mline" ] || continue
+        local rf rtail r_pr r_head r_v
+        if rf="$(xm_review_fields "$mline")"; then
+          r_pr="${rf%%	*}"; rtail="${rf#*	}"
+          r_head="${rtail%%	*}"; r_v="${rtail#*	}"
+          # Identity must be ESTABLISHED before a record may be classified as
+          # unrelated. `pr=0727` and `head=deadbeef` parse as fields but name
+          # nothing canonical, so skipping them as "another candidate" left a
+          # contradicting verdict beside a valid PASS unaccounted for.
+          if ! xm_num "$r_pr" || ! xm_sha "$r_head"; then
+            rev_bad=$((rev_bad + 1)); continue
+          fi
+          [ "$r_pr" = "$prnum" ] && [ "$r_head" = "$sha" ] || continue
+          # A later CHANGES REQUIRED does not sit quietly beside an earlier
+          # PASS: two different verdicts for one commit are a conflict, and a
+          # conflict is not a pass.
+          rev_seen=$((rev_seen + 1))
+          # The instant the review was PRODUCED anchors advance authorization.
+          # created_at is used rather than updated_at because it is the earlier
+          # of the two, and the earlier anchor is the stricter one.
+          rev_at="$created"
+          if [ -z "$rev_verdict" ]; then rev_verdict="$r_v"
+          elif [ "$rev_verdict" != "$r_v" ]; then rev_conflict=1
+          fi
+        else
+          # Unparseable. Only a record that legibly concerns a different pull
+          # request or commit is none of this decision's business; anything
+          # else is ambiguous evidence about THIS commit.
+          xm_marker_other "$mline" "$prnum" "$sha" && continue
+          rev_bad=$((rev_bad + 1))
+        fi
+      done <<REVIEW
+$(xm_markers "$body" "$XM_REVIEW_TAG")
+REVIEW
+    fi
+    # The same rule as the grant: an association is not a permission, so an
+    # attestation only counts from someone who may govern this repository.
+    if xm_is_authorizing "$assoc" && xm_governs "$slug" "$login"; then
+      while IFS= read -r mline; do
+        [ -n "$mline" ] || continue
+        local a_pr="" a_child="" a_head="" a_contract="" a_verdict="" a_bad="" afield
+        for afield in $mline; do
+          case "$afield" in
+            pr=*)       if [ -z "$a_pr" ];       then a_pr="${afield#pr=}"; else a_bad=1; fi ;;
+            child=*)    if [ -z "$a_child" ];    then a_child="${afield#child=}"; else a_bad=1; fi ;;
+            head=*)     if [ -z "$a_head" ];     then a_head="${afield#head=}"; else a_bad=1; fi ;;
+            contract=*) if [ -z "$a_contract" ]; then a_contract="${afield#contract=}"; else a_bad=1; fi ;;
+            verdict=*)  if [ -z "$a_verdict" ];  then a_verdict="${afield#verdict=}"; else a_bad=1; fi ;;
+            *) a_bad=1 ;;
+          esac
+          [ -z "$a_bad" ] || break
+        done
+        if [ -n "$a_bad" ]; then
+          xm_marker_other "$mline" "$prnum" "$sha" && continue
+          acc_bad=$((acc_bad + 1)); continue
+        fi
+        # Identity must be ESTABLISHED before a record may be set aside. A
+        # missing or non-canonical pr/head does not prove the record concerns
+        # another candidate — it proves nothing, and beside a valid MET that is
+        # ambiguous evidence about this commit.
+        if ! xm_num "$a_pr" || ! xm_sha "$a_head"; then
+          acc_bad=$((acc_bad + 1)); continue
+        fi
+        # ONLY a unique, canonical identity naming another candidate is set aside.
+        [ "$a_pr" = "$prnum" ] && [ "$a_head" = "$sha" ] || continue
+        # From here the record concerns THIS pull request at THIS commit, so
+        # every remaining field must agree. Nothing is stepped over: a record
+        # about this commit that disagrees is contradictory evidence.
+        if ! xm_issue_ref "$a_child" \
+           || xm_ambiguous_child "$a_child" "$child_num" "$cross" \
+           || ! xm_same_issue "$a_child" "$child_id" "$slug" \
+           || [ "$a_contract" != "$m_acc" ]; then
+          acc_bad=$((acc_bad + 1)); continue
+        fi
+        # A closed vocabulary that fails toward the non-affirming value, as the
+        # reviewer lane does: only MET affirms. A NOT-MET for the SAME identity
+        # and commit is not something to skip past — it is contradictory
+        # evidence, and contradictory evidence is not proof.
+        acc_seen=$((acc_seen + 1))
+        [ "$a_verdict" = MET ] || { acc_bad=$((acc_bad + 1)); continue; }
+        acc=yes
+      done <<ACCEPT
+$(xm_markers "$body" "$XM_ACCEPT_TAG")
+ACCEPT
+    fi
+  done <<EOF
+$(xm_comments "$slug" "$prnum")
+EOF
+
+  if [ "$acc_seen" -gt 1 ] || [ "$acc_bad" -gt 0 ]; then
+    echo "pull request #$prnum carries $acc_seen acceptance record(s) and $acc_bad malformed or contradictory one(s) for this commit; exactly one unambiguous proof is required, and a MET beside a NOT-MET proves nothing"
+    return 1
+  fi
+  if [ -n "$rev_conflict" ]; then
+    echo "pull request #$prnum carries conflicting reviewer verdicts for $sha; one commit cannot be both, and a conflict is not a pass"
+    return 1
+  fi
+  if [ "$rev_bad" -gt 0 ]; then
+    echo "pull request #$prnum carries $rev_bad reviewer marker(s) from $XM_REVIEW_PRODUCER that cannot be read as pr/head/verdict for this commit; an uninterpretable record beside a PASS leaves the review verdict unestablished"
+    return 1
+  fi
+  # ONE canonical terminal record. The lane upserts its marker in place, so more
+  # than one for a single commit means something else wrote them, and which is
+  # authoritative is then a guess.
+  if [ "$rev_seen" -gt 1 ]; then
+    echo "pull request #$prnum carries $rev_seen reviewer verdict records for $sha; exactly one canonical terminal record is required"
+    return 1
+  fi
+  case "$rev_verdict" in
+    PASS) rev=yes ;;
+    "")   [ "$rev_seen" -eq 0 ] || { echo "pull request #$prnum carries a reviewer marker for $sha with no readable verdict"; return 1; } ;;
+  esac
+
+  # ADVANCE AUTHORIZATION. The contract is that a broad issue durably authorizes
+  # bounded work IN ADVANCE; authority invented for work already certified is the
+  # thing this command must never manufacture. The anchor is the instant the
+  # independent review of THIS commit was produced, because that is durable
+  # evidence the caller cannot move. A grant created after it was not advance
+  # authorization, and a grant EDITED after it is not the text the review saw.
+  local advance=no g_at r_at
+  if [ "$rev" != yes ]; then
+    advance=no-review
+  elif ! g_at="$(xm_stamp "$m_updated")"; then
+    advance=grant-instant-unknown
+  elif ! r_at="$(xm_stamp "$rev_at")"; then
+    advance=review-instant-unknown
+  elif [ "$g_at" -lt "$r_at" ]; then
+    advance=yes
+  else
+    advance="after-review:$m_updated"
+  fi
+
+  # Checks, on that exact commit. What matters is not "some runs went green" but
+  # "every REQUIRED check went green" — a single unrelated success would
+  # otherwise mask a required check that never ran at all. A required check is
+  # held to `success`: skipped or neutral means it did not do its job.
+  local runs statuses checks=green want got wname wapp otail oname ostat oconcl oapp
+  local prot="" prot_rc=0 rchk="" rchk_rc=0 rflow="" rflow_rc=0 reqbad="" protected=""
+  prot="$(xm_prot "$slug" "$base")" || prot_rc=$?
+  rchk="$(xm_rule_checks "$slug" "$base")" || rchk_rc=$?
+  rflow="$(xm_rule_flows "$slug" "$base")" || rflow_rc=$?
+  if [ "$prot_rc" -ne 0 ]; then
+    # A failed protection read is only a fact when the branch is provably
+    # unprotected. "true", or an unreadable answer, leaves the requirement
+    # model unknown — and an unknown requirement model is not an empty one.
+    protected="$(xm_protected "$slug" "$base")" || protected=""
+    [ "$protected" = false ] || reqbad=branch-protection
+  fi
+  if [ "$rchk_rc" -ne 0 ] || [ "$rflow_rc" -ne 0 ]; then reqbad=rulesets; fi
+  # The union of every applicable source. A duplicate requirement is harmless
+  # (it is verified twice, identically); a missing one would not be.
+  local required=""
+  [ -z "$prot" ] || required="$prot"
+  [ -z "$rchk" ] || required="${required:+$required
+}$rchk"
+  local wfruns="" wf_rc=0
+  if [ -n "$rflow" ]; then
+    wfruns="$(xm_runs "$slug" "$sha")" || wf_rc=$?
+    [ "$wf_rc" -eq 0 ] || reqbad=workflow-runs
+  fi
+  # BOTH observation surfaces must be readable. Converting a failed read into an
+  # empty one let the other surface's successes stand alone, while the surface
+  # that could not be read might hold the conflicting failure or the pending
+  # re-run that decides the question.
+  local obsbad="" runs_rc=0 statuses_rc=0
+  runs="$(xm_checks "$slug" "$sha")" || runs_rc=$?
+  statuses="$(xm_statuses "$slug" "$sha")" || statuses_rc=$?
+  [ "$runs_rc" -eq 0 ] || obsbad=check-runs
+  [ "$statuses_rc" -eq 0 ] || obsbad="${obsbad:+$obsbad,}commit-statuses"
+  local observed
+  observed="$(printf '%s\n%s\n' "$runs" "$statuses")"
+  if [ -n "$obsbad" ]; then
+    checks="observations-unknown:$obsbad"
+  elif [ -n "$reqbad" ]; then
+    # Some part of the requirement model could not be read. That is not the
+    # same as "nothing is required", and guessing in the permissive direction
+    # is exactly the mistake this whole command exists to avoid.
+    checks="required-set-unknown:$reqbad"
+  elif [ -z "$required" ] && [ -z "$rflow" ]; then
+    # Nothing is required anywhere, so nothing was proven. "Green" cannot be
+    # affirmed from the absence of a requirement.
+    checks=no-required-checks
+  else
+    local nobs obs_state
+    while IFS= read -r want; do
+      [ -n "$want" ] || continue
+      wname="${want%%	*}"; wapp="${want#*	}"
+      [ "$wname" != "$want" ] || wapp=""
+      [ -n "$wname" ] || continue
+      nobs=0; obs_state=ok
+      while IFS= read -r got; do
+        [ -n "$got" ] || continue
+        oname="${got%%	*}"; otail="${got#*	}"
+        ostat="${otail%%	*}"; otail="${otail#*	}"
+        oconcl="${otail%%	*}"; oapp="${otail#*	}"
+        [ "$oconcl" != "$otail" ] || oapp=""
+        [ "$oname" = "$wname" ] || continue
+        # A requirement bound to an app is satisfied only by that app's
+        # observation; a same-named check from anywhere else is a different
+        # check that happens to share a name.
+        if [ -n "$wapp" ] && [ "$oapp" != "$wapp" ]; then continue; fi
+        # EVERY observation counts. Accepting the first success let a failing
+        # or still-running re-run of the same required check sit behind it.
+        nobs=$((nobs + 1))
+        if [ "$ostat" != completed ]; then obs_state="pending:$wname"; break; fi
+        if [ "$oconcl" != success ]; then obs_state="failed:$wname:$oconcl"; break; fi
+      done <<INNER
+$observed
+INNER
+      if [ "$nobs" -eq 0 ]; then checks="missing-required:$wname${wapp:+@app=$wapp}"; break; fi
+      [ "$obs_state" = ok ] || { checks="$obs_state"; break; }
+    done <<OUTER
+$required
+OUTER
+    # Ruleset-required WORKFLOWS are stated as paths, so they are verified
+    # against the workflow runs for this exact commit rather than against
+    # check-run names, which no rule mentions.
+    if [ "$checks" = green ]; then
+      while IFS= read -r want; do
+        [ -n "$want" ] || continue
+        nobs=0; obs_state=ok
+        while IFS= read -r got; do
+          [ -n "$got" ] || continue
+          oname="${got%%	*}"; otail="${got#*	}"
+          ostat="${otail%%	*}"; oconcl="${otail#*	}"
+          [ "$oname" = "$want" ] || continue
+          nobs=$((nobs + 1))
+          if [ "$ostat" != completed ]; then obs_state="pending-workflow:$want"; break; fi
+          if [ "$oconcl" != success ]; then obs_state="failed-workflow:$want:$oconcl"; break; fi
+        done <<INNERW
+$wfruns
+INNERW
+        if [ "$nobs" -eq 0 ]; then checks="missing-required-workflow:$want"; break; fi
+        [ "$obs_state" = ok ] || { checks="$obs_state"; break; }
+      done <<OUTERW
+$rflow
+OUTERW
+    fi
+  fi
+
+  # Is this the routine repository merge operation at all?
+  local defbranch scope=routine-reversible f p
+  defbranch="$(xm_default_branch "$slug")" || defbranch=""
+  [ -n "$defbranch" ] || scope=unknown-base
+  [ "$state" = open ] || [ "$state" = OPEN ] || scope="not-open:$state"
+  [ "$draft" = false ] || scope=draft
+  [ -z "$defbranch" ] || [ "$base" = "$defbranch" ] || scope="not-trunk:$base"
+  case "$headref" in release-please--*|release/*) scope=release ;; esac
+  # Durable release identity, independent of what the branch is called.
+  local labels lb rl lab_rc=0
+  labels="$(xm_pr_labels "$slug" "$prnum")" || lab_rc=$?
+  # An unreadable label set is not an empty one: it is exactly where the
+  # autorelease stamp would be.
+  [ "$lab_rc" -eq 0 ] || scope=unknown-labels
+  while IFS= read -r lb; do
+    [ -n "$lb" ] || continue
+    for rl in "${XM_RELEASE_LABELS[@]}"; do
+      case "$lb" in "$rl"*) scope=release ;; esac
+    done
+  done <<EOF
+$labels
+EOF
+  local files
+  files="$(xm_pr_files "$slug" "$prnum")" || files=""
+  # An unreadable file list is not an empty one. Without this the loop below
+  # simply never ran and the optimistic default survived.
+  [ -n "$files" ] || scope=unknown-files
+  local rf
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    for p in "${XM_NON_ROUTINE_PATHS[@]}"; do
+      case "$f" in "$p"*) scope="non-routine-path:$p" ;; esac
+    done
+    # A release artifact makes this a release pull request wherever it lives and
+    # whatever the branch is called.
+    for rf in "${XM_RELEASE_FILES[@]}"; do
+      case "$f" in "$rf"|*"/$rf") scope=release ;; esac
+    done
+  done <<EOF
+$files
+EOF
+
+  # Stale-head protection BY CONSTRUCTION: re-read last, so every fact above is
+  # known to describe the commit that would actually merge.
+  local now
+  now="$(xm_pr_head "$slug" "$prnum")" || now=""
+  xm_sha "$now" || { echo "the current head of #$prnum could not be re-read, so stale-head protection cannot be established"; return 1; }
+
+  printf 'slug=%s\n'        "$slug"
+  printf 'pr=%s\n'          "$prnum"
+  printf 'head=%s\n'        "$sha"
+  printf 'head-now=%s\n'    "$now"
+  printf 'child=%s\n'       "$child_id"
+  printf 'parent=%s\n'      "$parent_slug#$parent_num"
+  printf 'grant-child=%s\n' "$m_child"
+  printf 'acceptance=%s\n'  "$m_acc"
+  printf 'review=%s\n'      "$rev"
+  printf 'acceptance-met=%s\n' "$acc"
+  printf 'checks=%s\n'      "$checks"
+  printf 'advance=%s\n'     "$advance"
+  printf 'scope=%s\n'       "$scope"
+  return 0
+}
+
+# xm_decide <fact=value>... — the PURE fail-closed core. It sees only normalized
+# facts from the derivation layer, never caller strings, and can be exercised
+# without a network. Every condition is affirmed positively with its exact
+# token: absence, an unrecognised value, UNKNOWN and NOT ASSESSED all decline,
+# because eligibility inferred from the absence of a disqualifier is exactly
+# how a broad outcome gets silently closed by a small child.
+xm_decide() {
+  local slug="" pr="" head="" head_now="" child="" parent="" grant_child="" \
+        acceptance="" review="" acc_met="" checks="" scope="" advance="" \
+        boundary="" surface="" \
+        arg key val
+  for arg in "$@"; do
+    key="${arg%%=*}"; val="${arg#*=}"
+    case "$key" in
+      slug) slug="$val" ;; pr) pr="$val" ;; head) head="$val" ;;
+      head-now) head_now="$val" ;; child) child="$val" ;; parent) parent="$val" ;;
+      grant-child) grant_child="$val" ;; acceptance) acceptance="$val" ;;
+      review) review="$val" ;; acceptance-met) acc_met="$val" ;;
+      checks) checks="$val" ;; scope) scope="$val" ;; advance) advance="$val" ;;
+      reserved-boundary) boundary="$val" ;; surface) surface="$val" ;;
+      *) echo "NOT ELIGIBLE"; echo "reason: unrecognised derived fact '$key'"; return 4 ;;
+    esac
+  done
+
+  local b_named=0 s_named=0
+  case "$boundary" in *[![:space:]]*) b_named=1 ;; esac
+  case "$surface"  in *[![:space:]]*) s_named=1 ;; esac
+  if [ "$b_named" = 1 ] && [ "$s_named" = 1 ]; then
+    echo "DECISION REQUIRED"
+    echo "claimed authority: $boundary — cited as reserved to the human by $surface; a bounded increment never merges past a reserved boundary, and merging would not close the parent outcome either"
+    return 3
+  fi
+  if [ "$b_named" = 1 ] || [ "$s_named" = 1 ]; then
+    echo "NOT ELIGIBLE"
+    echo "reason: a reserved boundary must be named AND its durable surface cited, or neither given. A half-stated boundary concern never falls through to a routine merge."
+    return 4
+  fi
+
+  local why=""
+  xm_sha "$head" || why="${why}
+  - head: no exact commit was established for the merge candidate."
+  [ "$head" = "$head_now" ] || why="${why}
+  - stale-head: #$pr moved from $head to ${head_now:-<unreadable>} while its evidence was gathered, so every fact describes a commit that is no longer the candidate."
+  xm_issue_ref "$child" || why="${why}
+  - child: the bounded work unit was not resolved to a canonical identity."
+  xm_issue_ref "$parent" || why="${why}
+  - parent: no owning issue was resolved through the native hierarchy."
+  # The grant identity is REQUIRED, not merely compared when present. Skipping
+  # the comparison because the fact is absent is the same fail-open shape as
+  # inferring success from the absence of a failure.
+  if ! xm_issue_ref "$grant_child"; then
+    why="${why}
+  - grant-child: no canonical authorized work unit was derived, so there is nothing to compare the merge candidate against."
+  elif ! xm_same_issue "$grant_child" "$child" "$slug"; then
+    why="${why}
+  - grant: the durable record authorizes '$grant_child', not '$child'. Repository identity is part of that comparison, so the same number elsewhere is a different work unit."
+  fi
+  xm_token "$acceptance" || why="${why}
+  - acceptance: the grant bound no canonical acceptance identifier."
+  [ "$review" = yes ] || why="${why}
+  - review: no durable PASS from $XM_REVIEW_PRODUCER for pr=$pr head=$head. A verdict on an earlier HEAD is stale; a verdict from anyone else is a comment about a review."
+  [ "$acc_met" = yes ] || why="${why}
+  - acceptance-met: no durable '<!-- $XM_ACCEPT_TAG pr=$pr child=$child head=$head contract=$acceptance verdict=MET -->' from someone who can govern this repository. The grant says what was authorized; this is the separate evidence that it is TRUE at this commit."
+  [ "$checks" = green ] || why="${why}
+  - checks: the checks on $head are '${checks:-unknown}'. Only terminal, passing checks count; pending, failed and absent are not green."
+  [ "$advance" = yes ] || why="${why}
+  - advance: the authorization was not established BEFORE the independent review of this commit ('${advance:-unknown}'). A grant posted or edited afterwards is authority invented for work already done, which is exactly what a durable advance authorization is meant to exclude."
+  [ "$scope" = routine-reversible ] || why="${why}
+  - scope: this is not the routine repository merge operation ('${scope:-unknown}'). Release PRs, CI or enforcement-settings changes, drafts, non-trunk bases and unreadable state are outside bounded merge authority."
+
+  if [ -n "$why" ]; then
+    echo "NOT ELIGIBLE"
+    echo "reason: routine merge authority is not established. Each fact must be derived and true:${why}"
+    return 4
+  fi
+
+  echo "ROUTINE MERGE"
+  echo "bounded unit: $child, acceptance $acceptance — granted on $parent through the native hierarchy, and verified on #$pr at $head: checks green, independent review passed for this exact commit, acceptance attested met at it, head unmoved"
+  echo "parent outcome: NOT closed and NOT satisfied by this merge — it advances the broader outcome only; the parent stays open until its own acceptance is independently true, and release approval remains human-owned"
+  return 0
+}
+
+# xr_merge_check --pr <n> [--repo owner/repo] [--reserved-boundary <a> --surface <s>]
+# Derives, then decides. The caller names WHICH pull request; nothing it says
+# can make an unestablished fact true.
+xr_merge_check() {
+  local prnum="" slug="" boundary="" surface="" arg ctrl="" seen="" dup="" unknown=""
+  while [ "$#" -gt 0 ]; do
+    arg="$1"
+    case "$arg" in
+      # Refused BEFORE anything is echoed: values reach the verdict text, so a
+      # newline could forge a whole verdict line and an ESC could hide the
+      # disclaimer while the exit stayed 0.
+      *[[:cntrl:]]*) ctrl="${ctrl} ${arg%%=*}"; shift; continue ;;
+    esac
+    case "$arg" in
+      --pr=*)                prnum="${arg#--pr=}";                arg=--pr ;;
+      --repo=*)              slug="${arg#--repo=}";               arg=--repo ;;
+      --reserved-boundary=*) boundary="${arg#--reserved-boundary=}"; arg=--reserved-boundary ;;
+      --surface=*)           surface="${arg#--surface=}";         arg=--surface ;;
+      --pr)                  prnum="${2-}"; shift ;;
+      --repo)                slug="${2-}"; shift ;;
+      --reserved-boundary)   boundary="${2-}"; shift ;;
+      --surface)             surface="${2-}"; shift ;;
+      *) unknown="${unknown} ${arg}"; shift; continue ;;
+    esac
+    case " $seen " in
+      *" $arg "*) dup="${dup} ${arg}" ;;
+      *)          seen="${seen} ${arg}" ;;
+    esac
+    shift
+  done
+
+  # Values consumed as "$2" bypass the per-argument scan above, so the captured
+  # values are re-checked here — a newline reaching the verdict text is exactly
+  # what forged a "parent outcome: CLOSED" line at exit 0.
+  local v
+  for v in "$prnum" "$slug" "$boundary" "$surface"; do
+    case "$v" in *[[:cntrl:]]*) ctrl="${ctrl} <value>" ;; esac
+  done
+  if [ -n "$ctrl" ]; then
+    echo "NOT ELIGIBLE"
+    echo "reason: control characters in argument(s) —${ctrl}. Values reach the verdict text, so a newline could forge an extra verdict line; every value must be one line of printable text."
+    return 4
+  fi
+  if [ -n "$unknown" ]; then
+    echo "NOT ELIGIBLE"
+    echo "reason: unrecognised argument(s) —${unknown}. The only inputs are --pr, --repo, and a --reserved-boundary/--surface pair. Review, checks, acceptance, scope and head freshness are DERIVED from GitHub; they are not things a caller may assert."
+    return 4
+  fi
+  if [ -n "$dup" ]; then
+    echo "NOT ELIGIBLE"
+    echo "reason: repeated argument(s) —${dup}; each may be given once, so a value can never be talked over by a later one."
+    return 4
+  fi
+  prnum="${prnum#\#}"
+  if ! xm_num "$prnum"; then
+    echo "NOT ELIGIBLE"
+    echo "reason: --pr must be a canonical pull request number (no zero, no leading zeros). It is the only identity this command needs; every fact is read from it."
+    return 4
+  fi
+  if [ -n "$slug" ] && ! xm_repo_id "$slug"; then
+    echo "NOT ELIGIBLE"
+    echo "reason: --repo must be owner/repo."
+    return 4
+  fi
+
+  # A named reserved boundary is settled before any network read: no amount of
+  # green evidence converts a human-owned decision into a routine merge.
+  local b_named=0 s_named=0
+  case "$boundary" in *[![:space:]]*) b_named=1 ;; esac
+  case "$surface"  in *[![:space:]]*) s_named=1 ;; esac
+  if [ "$b_named" = 1 ] || [ "$s_named" = 1 ]; then
+    xm_decide reserved-boundary="$boundary" surface="$surface"
+    return $?
+  fi
+
+  local facts
+  if ! facts="$(xm_derive "$prnum" "$slug")"; then
+    echo "NOT ELIGIBLE"
+    echo "reason: ${facts:-the authoritative state could not be read}. Missing, ambiguous, unreadable or stale state fails closed; it is never resolved in favour of merging."
+    return 4
+  fi
+
+  local -a f=()
+  local line
+  while IFS= read -r line; do [ -n "$line" ] && f+=("$line"); done <<EOF
+$facts
+EOF
+  if xm_denied "$(printf '%s\n' "${f[@]}" | sed -n 's/^parent=//p')" \
+               "$(printf '%s\n' "${f[@]}" | sed -n 's/^child=//p')"; then
+    echo "NOT ELIGIBLE"
+    echo "reason: the resolved identity names '$XM_DENIED_TOKEN', which grants no merge authority — #585 and relay/orchestrator coordination stop at governed close-out, and a reviewer PASS is evidence, not permission."
+    return 4
+  fi
+  local rc=0
+  xm_decide "${f[@]}" || rc=$?
+  return "$rc"
+}
+
+# cmd_merge_authority — expose xr_merge_check on the CLI. Exits 0 for a routine
+# merge, 3 at a reserved boundary, 4 when not established.
+cmd_merge_authority() {
+  # A bare invocation must NOT exit 0. Exit 0 is ROUTINE MERGE, so a caller that
+  # checks only the status would read "no evidence at all" as merge authority.
+  if [ "$#" -eq 0 ]; then
+    echo "NOT ELIGIBLE"
+    echo "reason: no pull request was named — nothing was established, so nothing is authorized. Run 'spark merge-authority --help'."
+    return 4
+  fi
+  if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    echo "usage: spark merge-authority --pr <number> [--repo owner/repo]"
+    echo "                             [--reserved-boundary <authority> --surface <surface>]"
+    echo "  may a bounded increment merge routinely beneath a broader owning issue?"
+    echo "  the caller names WHICH pull request; every fact is read from GitHub."
+    echo
+    echo "  DERIVED, never asserted: the repository, the PR's exact head, state and"
+    echo "  base, the bounded work unit (the issue the PR closes), its owning issue"
+    echo "  (the native parent), the durable authorization on that parent, the"
+    echo "  acceptance it binds, the exact-HEAD reviewer verdict, the check runs for"
+    echo "  that head, whether the acceptance is attested met at it, whether the"
+    echo "  operation is a routine reversible merge, and that the head has not moved."
+    echo
+    echo "  The parent must carry exactly one grant, from an author who really"
+    echo "  holds write, maintain or admin permission in this repository — an"
+    echo "  OWNER/MEMBER/COLLABORATOR association is not a permission — and it"
+    echo "  must predate the independent review of this commit:"
+    echo "    $XM_MARKER_PREFIX child=#124 acceptance=<id>"
+    echo "  and the acceptance must be attested on the PR, bound to the commit:"
+    echo "    <!-- $XM_ACCEPT_TAG pr=<n> child=#124 head=<40-hex> contract=<id> verdict=MET -->"
+    echo
+    echo "  verdicts: ROUTINE MERGE (0) | DECISION REQUIRED (3) | NOT ELIGIBLE (4)"
+    echo "  a ROUTINE MERGE never closes, satisfies or implies the parent outcome."
+    return 0
+  fi
+  local rc=0
+  xr_merge_check "$@" || rc=$?
+  return "$rc"
+}
 # cmd_crossroad <kind> [authority] [surface] — expose xr_stop_check on the CLI so
 # an agent can check itself before a human handoff. Exits 0 to continue, 3 at a
 # genuine Crossroad.

@@ -80,3 +80,4 @@ route	experimental	Introduced in v0.23; contract still under validation
 ci	experimental	Introduced in v0.23; machine-interface defects open (#649)
 repo	experimental	Introduced in v0.23; contract still under validation
 crossroad	experimental	Introduced in v0.23; stop-classification contract under validation
+merge-authority	experimental	Introduced in v0.24; bounded-increment merge authority contract under validation

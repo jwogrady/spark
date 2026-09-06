@@ -590,6 +590,223 @@ $ spark crossroad new-authority "a write-capable deploy key" "AGENTS.md guardrai
 DECISION REQUIRED                           # exit 3
 ```
 
+## `spark merge-authority --pr <number>`
+
+Classify whether a **bounded increment** may merge routinely beneath a **broader
+owning issue**. A broad outcome issue can durably authorize a small work unit
+whose own acceptance completes long before the parent's does; without a model
+for that, every routine increment beneath a deliberately-incomplete parent needs
+a human stop, which is ceremony rather than governance.
+
+**The caller supplies identity, not truth.** `--pr` names *which* pull request;
+every fact that decides the verdict is read from GitHub. This is the whole
+architecture, and it was learned the expensive way — earlier revisions accepted
+`review=pass`, `checks=green` and `stale-head=protected` as caller tokens, so
+anyone holding one valid grant could self-assert every remaining gate.
+
+```
+spark merge-authority --pr <number> [--repo owner/repo]
+                      [--reserved-boundary <authority> --surface <surface>]
+```
+
+| Verdict | Exit |
+| --- | --- |
+| `ROUTINE MERGE` | `0` |
+| `DECISION REQUIRED` | `3` |
+| `NOT ELIGIBLE` | `4` |
+
+Because `0` means `ROUTINE MERGE`, **no other path exits `0`**: a bare
+invocation returns `4`, and `--help` is the single explicit success path.
+
+### Derived, never asserted
+
+| Fact | Source |
+| --- | --- |
+| repository | the bound repository, or `--repo` |
+| exact HEAD, state, draft, base, head branch | the pull request |
+| the bounded work unit | the issue the PR **closes** — governance already makes a linked PR plus a closing keyword the authoritative linkage |
+| the owning issue | the work unit's **native parent** (sub-issue relationship) |
+| the authorization | a durable grant comment on that parent, from an author whose authority holds **in the pull request's repository** |
+| the acceptance identity | whatever that grant binds |
+| acceptance is *true* | a durable attestation bound to this exact commit |
+| independent review | the exact-HEAD `spark-openai-review … verdict=PASS` marker from `github-actions[bot]` |
+| required checks | the **whole applicable requirement model** for the base branch — branch protection's app-bound `checks[]` (`contexts[]` for the legacy shape) plus every check and workflow required by an applicable repository or organization **ruleset** — each verified on that exact commit |
+| routine/reversible scope | PR state, base branch, head branch, **labels** and changed paths |
+| stale-head protection | the head re-read **after** everything above |
+
+Exactly one issue must be closed and exactly one grant must exist: two of either
+is ambiguous about what was authorized, and ambiguity declines.
+
+**Required, not merely observed.** Green means every *required* check passed,
+not that some run reported success — an unrelated success can otherwise stand in
+for a required check that never ran. A required check must conclude `success`:
+`skipped` and `neutral` mean it did not do its job.
+
+**The whole requirement model, not one endpoint's view of it.** No single
+endpoint answers "what must pass before this merges", and an understated
+requirement model is a permissive one. Three sources are read and their union
+verified: branch protection's `checks[]`, which carries the **app binding** that
+makes a context unforgeable — a same-named check from a different app is a
+different check; the checks required by applicable **rulesets**, repository and
+organization alike, which branch protection never mentions; and the **workflows**
+a ruleset requires, stated as paths and therefore verified against the workflow
+runs for that exact commit rather than against check-run names. Requirement
+state that cannot be read is not absent requirement state, and declines — a
+failed protection read is a fact only when the branch is provably unprotected.
+Where nothing is required anywhere, nothing was proven, so there is no green to
+stand on and the answer is still `NOT ELIGIBLE`.
+
+**Every observation counts.** A required check is satisfied only when *all* of
+its observations on that commit passed. Accepting the first success let a failing
+or still-running re-run sit quietly behind it, and a commit status contradicting
+a passing check run of the same context is the same conflict from the other
+surface. **Both** observation surfaces must be readable: a check-run list that
+cannot be read is not an empty one, and the surface that could not be read is
+exactly where the contradicting failure would be.
+
+**Read to exhaustion.** Comments, review and acceptance records, check runs,
+commit statuses, workflow runs, **changed files** and every requirement source
+are paginated. "Exactly one" concluded from a truncated page is not exactly one;
+a conflicting grant or a failing check on a later page would otherwise be
+invisible; and scope depends on the whole file list, so a `.github/workflows/`
+change past a page boundary would otherwise be classified routine.
+
+**Conflicting evidence is not passing evidence.** *Every* marker occurrence is
+read — not the first one a comment happens to contain, because a contradicting
+sibling in the same body is exactly the evidence a merge decision must not miss.
+One canonical terminal reviewer record is required for the evaluated commit: a
+`PASS` beside a `CHANGES REQUIRED`, two records, an unterminated marker, or one
+that cannot be read as `pr`/`head`/`verdict` all decline. The reviewer grammar is
+positional and its verdict vocabulary closed, so a reordered field, an extra
+field or a verdict outside the lane's four values leaves the record's meaning
+unestablished. The same holds for acceptance — a `MET` beside a `NOT-MET`, a
+malformed same-contract record, or two proofs decline. Only a record that
+legibly concerns a *different* pull request or commit is set aside, and a
+**repeated** identity field is ambiguity rather than legible difference: a
+record carrying both `pr=999` and `pr=727`, or a stale head beside the current
+one, declines instead of being waved through on whichever value came first.
+
+**The work unit's identity comes from the pull request's repository**, never the
+owning issue's. The native parent may live in another repository, and borrowing
+its slug would let a bare `#124` written there stand for *this* repository's
+`#124` — a different issue that happens to share a number. Where the parent is
+cross-repository, a bare reference in a grant or an attestation is therefore
+ambiguous and declines; name the work unit in full (`owner/repo#124`).
+
+**Authority is a permission, not an association.** `author_association` says
+how someone *relates* to a repository — and `OWNER`, `MEMBER` and `COLLABORATOR`
+establish no write access at all: an organization member or an outside
+collaborator may hold read or triage only. Under a cross-repository parent the
+association describes the wrong repository as well. So for **every** grant and
+**every** attestation, the author's permission in the *pull request's*
+repository is read and must be `admin`, `maintain` or `write`. An unreadable or
+absent permission is not authority.
+
+**A release pull request is identified by what it is, not what it is called.**
+A branch name is a convention, so `release-please--*` and `release/*` are only
+one signal. A release is also any pull request carrying a `release`/`autorelease`
+label, or touching a release artifact — `CHANGELOG.md` at any depth, the
+Release-Please manifest or config, or a plugin manifest, which carries the
+version. An unreadable label set is not an empty one and declines: it is exactly
+where the autorelease stamp would be. The direction is deliberately conservative,
+so an ordinary change that happens to touch a plugin manifest declines rather
+than merging.
+
+**The authorization must precede the review of this commit.** A broad issue
+authorizes bounded work *in advance*; authority invented for work already
+certified is precisely what this command must never manufacture. The anchor is
+the instant the independent review of this exact commit was produced — durable
+evidence the caller cannot move — and the grant comment's **last edit** must be
+strictly earlier. A grant posted afterwards was not advance authorization, and
+an old comment *edited* into a grant is not the text the review saw. An
+unreadable instant on either side declines rather than passing as early
+enough. One consequence is worth stating: editing the grant comment after the
+review, even to fix a typo, invalidates it and requires a fresh review.
+
+**A record is set aside only on established identity** — acceptance and review
+alike. A missing or non-canonical `pr`/`head` does not prove a record concerns
+some other candidate: it proves nothing, and beside a valid `MET` or `PASS` that
+is ambiguous evidence about this commit. `pr=0727` and `head=deadbeef` parse as
+fields and name nothing canonical, so they decline rather than being skipped.
+Only a *unique, canonical* identity naming another pull request or commit is
+set aside; once a record is about this pull request at this commit, every
+remaining field must agree, and a disagreement is contradictory evidence rather
+than an ignorable sibling.
+
+**The comment transport is injective.** Comment bodies arrive one record per
+line with newlines encoded as the two characters `\n`, so backslashes are
+doubled first. Without that, a comment whose *prose* contains `\n` decoded into
+two lines and a marker quoted inside a sentence became a marker at the start of
+a line — which is a canonical grant. The owning issue's repository identity is
+also taken as read or not at all: a `parent_issue_url` that does not yield a
+usable `owner/repo` declines, rather than falling back to the pull request's
+repository and consuming the grants of a local issue that merely shares the
+parent's number.
+
+Grants are counted the same way: a **candidate** authorization line is any line
+opening with the marker, valid or not, and a malformed same-unit line beside a
+valid grant declines. Skipping the malformed sibling would leave one good record
+standing and let it carry a decision the pair does not support.
+
+### The two durable records
+
+The parent carries the **grant** — what was authorized — written by someone
+holding `write`, `maintain` or `admin` permission in the pull request's
+repository:
+
+```
+spark-authorizes child=#124 acceptance=<canonical-acceptance-id>
+```
+
+The PR carries the **proof** that the authorized acceptance is now true, bound
+to the exact commit, and likewise written by someone who can govern the
+repository:
+
+```
+<!-- spark-acceptance pr=<n> child=#124 head=<40-hex> contract=<id> verdict=MET -->
+```
+
+Both imitate the reviewer lane's marker grammar, and `head`/`contract` are the
+invalidator names [`spark evidence`](#spark-evidence-put-get-preflight-status-forget)
+already uses — evidence bound to a commit stops being fresh when it moves. Only
+`MET` affirms. The grant says what was authorized; the proof says it is
+satisfied. Neither substitutes for the other, and prose is neither.
+
+### Everything unproven declines
+
+Missing, malformed, duplicate, unreadable, stale, wrong-repository,
+wrong-child, wrong-acceptance and wrong-HEAD records all yield `NOT ELIGIBLE`.
+A PASS for one commit says nothing about another. A check that has not finished
+is not a passing check. `UNKNOWN` is never promoted to `PASS`.
+
+Identity comparison is by **full canonical identity**: `other/repo#724` never
+satisfies `jwogrady/spark#724`. Identifiers are canonical — no zero, no leading
+zeros — so `#0585` cannot alias past a refusal that `#585` triggers, while
+`#1585` remains a different issue that authorizes normally.
+
+Nothing a caller supplies may impersonate the verdict: control-bearing input is
+refused before a byte is emitted, because a newline once forged a
+`parent outcome: CLOSED and fully satisfied` line above the real disclaimer, at
+exit 0, in the classifier's own voice.
+
+### What it never does
+
+A `ROUTINE MERGE` **never closes, satisfies or implies the parent outcome** —
+every verdict says so. The parent stays open until its own acceptance is
+independently true, and release approval remains human-owned. Release PRs, CI
+and enforcement-settings changes, drafts, non-trunk bases and unreadable state
+are outside routine bounded merge authority, and a named **and** cited reserved
+boundary routes to `DECISION REQUIRED` before any state is read.
+
+```
+$ spark merge-authority --pr 727
+ROUTINE MERGE                               # exit 0
+$ spark merge-authority --pr 727            # PASS only for an older commit
+NOT ELIGIBLE                                # exit 4
+$ spark merge-authority --pr 727 --reserved-boundary "release approval" --surface "ADR-0026"
+DECISION REQUIRED                           # exit 3
+```
+
 ## `spark hub [--set <owner/repo|url|none>]`
 
 Reports the memory hub this project declares — the one repository designated

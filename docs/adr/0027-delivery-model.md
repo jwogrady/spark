@@ -103,6 +103,12 @@ the same motion as publishing an issue branch.
   (Release Please owns release mechanics); ADR-0023 (orchestration stays
   decided-but-gated; this ADR adds the one-writer invariant it assumed).
 - **Supersedes / Superseded by:** supersedes the delivery topology proposed
-  in issues #339/#353/#356/#358 (closed to this ADR); nothing else.
+  in issues #339/#353/#356/#358 (closed to this ADR). **Superseded in one
+  narrow respect by ADR-0032**, which moves the routine trunk-integration
+  approval point: a bounded work unit the owning issue durably authorized in
+  advance may be integrated without a further per-merge human approval. The
+  topology, the dependency-order invariant, the one-writer rule, and the
+  integration-branch exception are unchanged, and the human-owned **release**
+  act is unchanged.
 - **Status tracks evidence:** n/a — adopted from field evidence recorded in
   the issues above and the zd-dns v0.1.0 release record.

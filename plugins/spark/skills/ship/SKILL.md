@@ -30,8 +30,8 @@ identically.
 
    <body: why this change exists, not a restatement of the diff>
    ```
-   A large uncommitted tail means Codify/Validate skipped their commit steps —
-   commit it as the focused series it should have been, not one blob.
+   A large uncommitted tail means Codify/Validate skipped their commit steps — commit
+   it as the focused series it should have been, not one blob.
 4. **Push** the branch:
    ```bash
    git push -u origin <branch>
@@ -50,49 +50,49 @@ identically.
    the common case. A "yes" hands the evidence to
    [`knowledge`](../knowledge/SKILL.md), which classifies and promotes; ship
    never classifies or writes to a hub itself. (A milestone/release completing
-   is the other natural boundary —
-   [references/release-please.md](references/release-please.md).)
+   is the other natural boundary — [release-please.md](references/release-please.md).)
 8. **Carry the state forward.** Record the close-out with
    `spark state --set blockers="" next_action="<normally merging the PR>"`
    (writes `.spark/state.json`, [schema](../../docs/reference/state.md); `updated` is stamped for you).
 
 ## Releases: defer to Release Please
 
-**Ship owns the push and the PR; Release Please owns the release** —
-versioning, changelog, tag, and the GitHub Release (ADR-0006, ADR-0009). If the
-repo has a `release-please-config.json` (or a `release-please` workflow), never
-bump a version, roll the changelog, tag, or create a Release from this skill.
-The milestone is the version authority — its boundary is minted with
-`Release-As`, never computed from commit types — and merging the release PR
-Release Please maintains is the release act, a human decision. The
-milestone-completion motion, the first-release guard, and the stale-release-PR
-trap: [references/release-please.md](references/release-please.md).
+**Ship owns the push and the PR; Release Please owns the release** — versioning,
+changelog, tag, and the GitHub Release (ADR-0006, ADR-0009). If the repo has a
+`release-please-config.json` (or a `release-please` workflow), never bump a
+version, roll the changelog, tag, or create a Release from this skill. The
+milestone is the version authority — minted with `Release-As`, never computed
+from commit types — and merging the release PR Release Please maintains is the
+release act, a human decision. Milestone-completion motion, first-release guard,
+stale-release-PR trap: [references/release-please.md](references/release-please.md).
 
 **Fallback — repos without Release Please only,** and only with explicit user
-go-ahead (never cut a tag or Release unprompted): derive the bump from the commit
-types (a declared milestone's version wins), roll `[Unreleased]` into a dated `vX.Y.Z` section,
-bump the version file, tag, and `gh release create`. The full steps and the
-changelog-records-product-not-process rule are in
+go-ahead (never cut a tag or Release unprompted): derive the bump from commit
+types (a declared milestone's version wins), roll `[Unreleased]` into a dated
+`vX.Y.Z` section, bump the version file, tag, and `gh release create`. Full steps
+and the changelog-records-product-not-process rule:
 [references/release-fallback.md](references/release-fallback.md).
 
 ## Hard rules (the hook will reject violations)
 
-- **No AI attribution anywhere** — no `Co-Authored-By` for AI tools, no mention
-  of Claude/Anthropic/Copilot/ChatGPT in the commit message, PR title, or body.
-  Credit belongs to the author only; `Governed by Spark vX.Y.Z` is governance
-  provenance (the control plane's role), not an AI/worker credit, and belongs in the PR body.
+- **No AI attribution anywhere** — no `Co-Authored-By` for AI tools, no mention of
+  Claude/Anthropic/Copilot/ChatGPT in the commit message, PR title, or body. Credit
+  belongs to the author only; `Governed by Spark vX.Y.Z` is governance provenance
+  (the control plane's role), not an AI/worker credit, and belongs in the PR body.
 - Conventional type prefix required; subject ≤ 72 characters, no trailing period.
 
 ## Guardrails
 
 - **Never force-push** (`--force` / `-f`) to a shared branch. The PreToolUse hook
-  blocks it; don't work around it. Use `--force-with-lease` only with explicit
-  go-ahead.
+  blocks it; don't work around it. `--force-with-lease` only with explicit go-ahead.
 - **Never push directly to `master`/`main`.**
 - One concern per PR — if the branch grew two concerns, split it.
 - **Never cut a tag or GitHub Release without explicit user go-ahead.**
-- Do **not** merge, close, or comment on PRs/issues without explicit instruction.
-  Opening the PR is the end of `ship`; the human decides the rest.
+- Do **not** merge, close, or comment on PRs/issues without explicit instruction
+  — one encoded exception: a pre-authorized bounded increment may merge when
+  `spark merge-authority --pr <n>` returns `ROUTINE MERGE`. It derives every fact
+  from GitHub: name the PR, never assert the outcome. Fail closed; never close
+  the parent; never a release ([bounded-merge.md](references/bounded-merge.md)).
 
 ## Next
 
