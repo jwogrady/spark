@@ -1,0 +1,35 @@
+# PR #724: findings.txt validated against live comment bodies via `gh api repos/jwogrady/spark/issues/comments/<id> --jq .body`
+# normalization: `### <round>.<bullet>` envelope lines removed; writer's trailing newline removed; body CRLF→LF; nothing else
+r1 comment 5553496635: 3/3 finding blocks verbatim in body after envelope removal; 3 top-level bullets in body
+r2 comment 5553558226: 2/2 finding blocks verbatim in body after envelope removal; 2 top-level bullets in body
+r3 comment 5553615644: 2/2 finding blocks verbatim in body after envelope removal; 2 top-level bullets in body
+r4 comment 5553673147: 2/2 finding blocks verbatim in body after envelope removal; 2 top-level bullets in body
+r5 comment 5553725370: 2/2 finding blocks verbatim in body after envelope removal; 2 top-level bullets in body
+r6 comment 5553807625: 2/2 finding blocks verbatim in body after envelope removal; 2 top-level bullets in body
+r7 comment 5553862342: 3/3 finding blocks verbatim in body after envelope removal; 3 top-level bullets in body
+r8 comment 5553926676: 3/3 finding blocks verbatim in body after envelope removal; 3 top-level bullets in body
+r9 comment 5553978175: 3/3 finding blocks verbatim in body after envelope removal; 3 top-level bullets in body
+r10 comment 5554048081: 3/3 finding blocks verbatim in body after envelope removal; 3 top-level bullets in body
+r11 comment 5554101918: 2/2 finding blocks verbatim in body after envelope removal; 2 top-level bullets in body
+r12 comment 5554159385: 3/3 finding blocks verbatim in body after envelope removal; 3 top-level bullets in body
+r13 comment 5554208294: 3/3 finding blocks verbatim in body after envelope removal; 3 top-level bullets in body
+r14 comment 5554258645: 2/2 finding blocks verbatim in body after envelope removal; 2 top-level bullets in body
+r15 comment 5554313960: 2/2 finding blocks verbatim in body after envelope removal; 2 top-level bullets in body
+r16 comment 5554362906: 1/1 finding blocks verbatim in body after envelope removal; 1 top-level bullets in body
+r17 comment 5554407821: 2/2 finding blocks verbatim in body after envelope removal; 2 top-level bullets in body
+r18 comment 5554454153: 3/3 finding blocks verbatim in body after envelope removal; 3 top-level bullets in body
+r19 comment 5554505218: 1/1 finding blocks verbatim in body after envelope removal; 1 top-level bullets in body
+r20 comment 5554549808: 3/3 finding blocks verbatim in body after envelope removal; 3 top-level bullets in body
+r21 comment 5554606568: 2/2 finding blocks verbatim in body after envelope removal; 2 top-level bullets in body
+r22 comment 5554663030: 3/3 finding blocks verbatim in body after envelope removal; 3 top-level bullets in body
+r23 comment 5554718061: 2/2 finding blocks verbatim in body after envelope removal; 2 top-level bullets in body
+r24 comment 5554776906: 3/3 finding blocks verbatim in body after envelope removal; 3 top-level bullets in body
+r25 comment 5554833010: 3/3 finding blocks verbatim in body after envelope removal; 3 top-level bullets in body
+r26 comment 5554889955: 2/2 finding blocks verbatim in body after envelope removal; 2 top-level bullets in body
+r27 comment 5554937854: 3/3 finding blocks verbatim in body after envelope removal; 3 top-level bullets in body
+r28 comment 5554971569: 3/3 finding blocks verbatim in body after envelope removal; 3 top-level bullets in body
+r29 comment 5555018476: 3/3 finding blocks verbatim in body after envelope removal; 3 top-level bullets in body
+r30 comment 5555076732: 3/3 finding blocks verbatim in body after envelope removal; 3 top-level bullets in body
+r31 comment 5555149009: 2/2 finding blocks verbatim in body after envelope removal; 2 top-level bullets in body
+r32 comment 5555189660: 4/4 finding blocks verbatim in body after envelope removal; 4 top-level bullets in body
+RESULT: OK (0 problem(s))
