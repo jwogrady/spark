@@ -124,12 +124,14 @@ Relayed attempts (marker posted by `jwogrady`, inside the trusted-round windows 
 
 | category | meaning | A: #727 | B: #724 |
 |---|---|---:|---:|
+Percentages are rounded to the nearest whole percent; the README uses the same rule.
+
 | IMPL | genuinely new implementation defect | 15 (30%) | 9 (11%) |
 | REPR | representation / transport boundary defect | 17 (34%) | 6 (7%) |
 | DUP | duplicated-semantic drift (two surfaces disagree) | 7 (14%) | 19 (23%) |
 | STALE | stale / reconstructed-state defect | 3 (6%) | 0 (0%) |
 | TEST | test-harness / fixture / instrument defect | 2 (4%) | 39 (48%) |
-| GOV | governance / specification / evidence-contract ambiguity | 6 (12%) | 8 (9%) |
+| GOV | governance / specification / evidence-contract ambiguity | 6 (12%) | 8 (10%) |
 | **total classified** | | 50 | 81 |
 | of which repeats of an earlier finding (same lineage, unfixed or partially fixed) | | 8 | 15 |
 

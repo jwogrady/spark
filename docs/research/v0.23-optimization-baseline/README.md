@@ -4,14 +4,14 @@ Baseline measurement evidence for the two v0.23 optimization trees, #728 (compil
 #729 (reasoning-surface cleanup). Everything in this directory is **measurement and reporting only**: nothing
 changes Spark's behavior, and nothing was produced by changing the measured system.
 
-The evidence lands in three PRs so that each diff fits the independent reviewer's 200,000-byte cap and can be
-reviewed completely:
+The evidence is three bundles carried by four PRs, so that each PR's diff fits the independent reviewer's
+200,000-byte cap and can be reviewed completely:
 
 | Bundle | Files | Landed via |
 |---|---|---|
 | #730 analysis (this file, `tables.md`, `raw/pr*/derived.compact.json`, `raw/transcript-*`, `raw/findings-classification.tsv`, the transcript/table tools) | this PR | PR #747 |
-| #730 reviewer attempts and finding text of record (`raw/pr727/findings.txt`, `raw/pr724/findings.txt`, byte-for-byte, every marked attempt) **plus the finding-record toolchain** (`tools/fetch-pr.sh`, `fetch-commits.sh`, `findings_parser.py`, `analyze-pr.py`, `dump-findings.py`, `validate-findings.py`, `test-findings-parser.py`) | companion | PR #748 (merged `ed9d614`), completed by PR "chore/730-findings-completeness" after the #730 merge-audit finding |
-| #737 repository baseline (`repository-baseline.md`, `raw/footprint.txt`, `raw/run-full*`, `raw/bench*`, `raw/structure*`, `raw/branches.tsv`, `raw/agent-*.md`, `raw/transcript-aug.compact.json`, `tools/footprint.sh` …) | companion | PR "chore/737-repository-baseline" |
+| #730 reviewer attempts and finding text of record (`raw/pr727/findings.txt`, `raw/pr724/findings.txt`, byte-for-byte, every marked attempt) **plus the finding-record toolchain** (`tools/fetch-pr.sh`, `fetch-commits.sh`, `findings_parser.py`, `analyze-pr.py`, `dump-findings.py`, `validate-findings.py`, `test-findings-parser.py`) | companion | PR #748 (merged as `ed9d614`; the first, incomplete record) and [PR #750](https://github.com/jwogrady/spark/pull/750) (the complete record of all 35 PR #724 attempts and the toolchain, after the #730 merge-audit finding 5561113669) |
+| #737 repository baseline (`repository-baseline.md`, `raw/footprint.txt`, `raw/run-full*`, `raw/bench*`, `raw/structure*`, `raw/branches.tsv`, `raw/agent-*.md`, `raw/transcript-aug.compact.json`, `tools/footprint.sh` …) | companion | [PR #749](https://github.com/jwogrady/spark/pull/749) |
 
 `tables.md` is generated from `raw/` by `tools/render-tables.py`. Raw evidence and interpretation are kept
 apart: everything under `raw/` is a mechanical capture; this file is the interpretation.
@@ -151,7 +151,8 @@ Source of record: every marked reviewer comment listed in `tables.md` T7 (commen
 `raw/pr*/derived.compact.json`, trusted and relayed alike); their finding blocks are committed byte-for-byte as
 `raw/pr727/findings.txt` and `raw/pr724/findings.txt` in the companion bundle. One row per blocking finding in
 `raw/findings-classification.tsv` (finding id = attempt.item; relayed attempts carry ids like `26r.1`), classified
-by hand; the 4 evidentiary bullets of B's PASS comment are excluded:
+by hand; the 4 evidentiary bullets of B's PASS comment are excluded. Percentages are rounded to the nearest
+whole percent (the same rule `tools/render-tables.py` applies in `tables.md` T3):
 
 | category | A: #727 (50) | B: #724 (81 = 76 trusted + 5 relayed) |
 |---|---:|---:|
