@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
-# footprint.sh — physical repository footprint of the CURRENT worktree (run inside the frozen detached worktree).
+# footprint.sh [worktree] — physical repository footprint of a worktree (run against the frozen detached worktree).
 # Method: `git ls-files` (tracked files only), bytes via wc -c, LOC via wc -l (physical newlines, no blank/comment filtering).
-set -uo pipefail
-cd "${1:-/home/john/code/spark/.claude/worktrees/baseline-921c982}" || exit 1
+# Fail-closed: any failing git/wc/find/grep that produces a required number aborts the run with a non-zero status.
+# Probes that may legitimately match nothing (a grep -c count, the "not covered" listing) are guarded explicitly.
+set -euo pipefail
+cd "${1:-/home/john/code/spark/.claude/worktrees/baseline-921c982}"
+count() { grep -cE "$1" "${@:2}" || true; }   # grep -c exits 1 on zero matches; zero is a valid measurement here
 echo "sha=$(git rev-parse HEAD)"
 echo "tracked_files=$(git ls-files | wc -l)"
 echo "tracked_bytes=$(git ls-files -z | xargs -0 cat | wc -c)"
@@ -76,25 +79,25 @@ echo
 echo "=== dispatcher ==="
 f=plugins/spark/bin/spark
 echo "dispatcher_lines=$(wc -l < $f)  dispatcher_bytes=$(wc -c < $f)"
-echo "dispatcher_functions=$(grep -cE '^[A-Za-z_][A-Za-z0-9_]*\(\)\s*\{' $f)"
-echo "dispatcher_verbs_in_VERBS_table=$(awk '/^VERBS=/{f=1;next} f&&/^[A-Z]*"?$|^"$/{f=0} f' $f | grep -cE '^[a-z][a-z-]*\|')"
-echo "dispatcher_cmd_functions=$(grep -cE '^cmd_[a-z_]+\(\)' $f)"
-echo "lib_cmd_functions=$(cat plugins/spark/lib/*.sh | grep -cE '^cmd_[a-z_]+\(\)')"
-echo "lib_modules:"; for m in plugins/spark/lib/*.sh; do printf '  %s\tlines=%s\tfunctions=%s\n' "$m" "$(wc -l < "$m")" "$(grep -cE '^[A-Za-z_][A-Za-z0-9_]*\(\)\s*\{' "$m")"; done
+echo "dispatcher_functions=$(count '^[A-Za-z_][A-Za-z0-9_]*\(\)\s*\{' $f)"
+echo "dispatcher_verbs_in_VERBS_table=$(awk '/^VERBS=/{f=1;next} f&&/^[A-Z]*"?$|^"$/{f=0} f' $f | count '^[a-z][a-z-]*\|' -)"
+echo "dispatcher_cmd_functions=$(count '^cmd_[a-z_]+\(\)' $f)"
+echo "lib_cmd_functions=$(cat plugins/spark/lib/*.sh | count '^cmd_[a-z_]+\(\)' -)"
+echo "lib_modules:"; for m in plugins/spark/lib/*.sh; do printf '  %s\tlines=%s\tfunctions=%s\n' "$m" "$(wc -l < "$m")" "$(count '^[A-Za-z_][A-Za-z0-9_]*\(\)\s*\{' "$m")"; done
 echo
 echo "=== counts ==="
 echo "adr_files=$(git ls-files docs/adr | wc -l)"
-echo "adr_superseded_or_deprecated=$(grep -liE '^\*?\*?status\*?\*?:?.*(superseded|deprecated)' docs/adr/*.md | wc -l)"
+echo "adr_superseded_or_deprecated=$(grep -liE '^\*?\*?status\*?\*?:?.*(superseded|deprecated)' docs/adr/*.md | wc -l || true)"
 echo "release_records=$(git ls-files docs/releases | wc -l)"
 echo "skills_core=$(ls -d plugins/spark/skills/*/ | wc -l)"
-echo "skills_companion=$(ls -d plugins/spark-*/skills/*/ 2>/dev/null | wc -l)"
+echo "skills_companion=$(ls -d plugins/spark-*/skills/*/ | wc -l)"
 echo "test_suites=$(ls tests/test-*.sh | wc -l)"
 echo "workflows=$(git ls-files .github/workflows | wc -l)"
-echo "preferences_rows=$(cat plugins/spark/preferences/*.tsv 2>/dev/null | grep -vc '^#')"
-echo "cli_verbs_documented=$(grep -cE '^## `spark ' plugins/spark/docs/reference/cli.md)"
-echo "cli_stability_rows=$(grep -vcE '^#|^\s*$|^verb\b' plugins/spark/preferences/cli-stability.tsv)"
+echo "preferences_rows=$(cat plugins/spark/preferences/*.tsv | grep -vc '^#' || true)"
+echo "cli_verbs_documented=$(count '^## `spark ' plugins/spark/docs/reference/cli.md)"
+echo "cli_stability_rows=$(grep -vcE '^#|^\s*$|^verb\b' plugins/spark/preferences/cli-stability.tsv || true)"
 echo "governance_models=$(git ls-files plugins/spark/preferences/governance-models | wc -l)"
-echo "test_lib_helpers=$(grep -cE '^[a-z_]+\(\)' tests/lib.sh)"
+echo "test_lib_helpers=$(count '^[a-z_]+\(\)' tests/lib.sh)"
 echo
 echo "=== runtime dependency surface (external binaries referenced by runtime, textual) ==="
-cat plugins/spark/bin/spark plugins/spark/lib/*.sh plugins/spark/scripts/hooks/* plugins/spark/hooks/*.sh 2>/dev/null | grep -oE '\b(gh|jq|python3|awk|sed|grep|curl|git|date|mktemp|sort|tr|cut|wc|find|xargs|flock|stat|strace)\b' | sort | uniq -c | sort -rn
+cat plugins/spark/bin/spark plugins/spark/lib/*.sh plugins/spark/scripts/hooks/* plugins/spark/hooks/*.sh | { grep -oE '\b(gh|jq|python3|awk|sed|grep|curl|git|date|mktemp|sort|tr|cut|wc|find|xargs|flock|stat|strace)\b' || true; } | sort | uniq -c | sort -rn

@@ -1,3 +1,4 @@
+# provenance: local remote-tracking refs refs/remotes/origin/* after `git fetch --all --prune` on 2026-09-06 between 16:04 and 16:24 UTC (before the freeze comment and before any evidence branch existed); observed 2026-09-06 ~16:31 UTC; ancestry vs 921c9820b92e99ef3620f4f46a0a8a6d7bb0c8b5 via merge-base --is-ancestor (blind to squash merges)
 branch	last_commit_date	ahead_of_master	behind_master	merged_into_master
 origin/add-claude-github-actions-1787957880410	2026-08-28	2	211	no
 origin/chore/442-self-conformance-audit	2026-08-26	0	404	yes

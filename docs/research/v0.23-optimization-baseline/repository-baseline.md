@@ -69,7 +69,7 @@ Other physical counts:
 | ADRs / partially superseded / retired-machinery | 31 (+template) / 7 / 4 | status lines; no ADR is fully `Superseded` |
 | Release records / workflows / .github scripts | 13 / 6 / 12 | ls |
 | External binaries referenced by runtime (textual) | awk 286, git 201, gh 128, jq 83, grep 67, tr 66, sort 45, sed 41, wc 36, python3 35 | grep over runtime files; mentions, not invocations |
-| Remote branches (excluding master) | 134: 109 already ancestors of master, 25 not (several squash-merged, e.g. `perf/722-…` ahead 34) | `raw/branches.tsv`; ancestry, not GitHub merge state |
+| Remote-tracking refs `refs/remotes/origin/*` (excluding master) at the local observation state | 134: 109 already ancestors of 921c982, 25 not (several squash-merged, e.g. `perf/722-…` ahead 34) | `raw/branches.tsv`, `tools/branches.sh`; refs as fetched by `git fetch --all --prune` on 2026-09-06 between 16:04 and 16:24 UTC, before the freeze comment and before any evidence branch was pushed; ancestry via `merge-base --is-ancestor`, which cannot see squash merges; not GitHub's merge state |
 | Hot paths (offline, reproducible on this host) | brief --short 64 ms / 19 shimmed; footprint 667 ms / 257 shimmed; governance 104 ms / 42 shimmed | `tests/bench.sh --json`, 3 runs; `mode: offline` |
 | Hot paths (live, observational) | doctor 2,142 ms / 804 shimmed / 443 parsers / 2 gh; governance validate 4,997 ms / 10 gh; triage 7,225 ms / 16 gh | bench.sh; `mode: live` — network-dependent |
 
@@ -208,8 +208,13 @@ git worktree add --detach /tmp/spark-921c982 921c9820b92e99ef3620f4f46a0a8a6d7bb
 bash $BASE/tools/footprint.sh /tmp/spark-921c982            # raw/footprint.txt
 (cd /tmp/spark-921c982 && bash tests/run.sh --json)          # raw/run-full.json — run once, project many
 (cd /tmp/spark-921c982 && bash tests/bench.sh --json && bash tests/structure.sh --json)
-bash $BASE/tools/branches.sh                                 # raw/branches.tsv (from any worktree of this repo)
+bash $BASE/tools/branches.sh [--fetch]                       # raw/branches.tsv: remote-tracking refs; --fetch refreshes and records the fetch
 ```
+
+All four wrappers fail closed: a failing git, wc, find or measurement aborts the run with a non-zero status, and
+probes that may legitimately match nothing (`grep -c` counts, the "not covered" listing) are guarded explicitly.
+The committed `raw/footprint.txt` was re-produced byte-identically by the fail-closed `footprint.sh` against the
+frozen worktree; `raw/branches.tsv` carries a provenance header naming the fetch state it was observed from.
 
 `tools/run-suite.sh` and `tools/run-structure-bench.sh` are the exact wrappers used (they carry the worktree
 path they ran against).
