@@ -30,7 +30,7 @@ a **fragment**: useful to show one situation, never consumed as a snapshot
 
 | Class | Canonical key | Required | Value shape when ESTABLISHED | What it answers |
 |---|---|---|---|---|
-| `work_unit` | `work_unit.identity` | required | `{kind: issue\|pull_request, id: <work-unit>}` | Canonical identity of the task being executed |
+| `work_unit` | `work_unit.identity` | required | `{kind: issue\|pull_request, id: <work-unit>, implements: <work-unit>\|none}` | Canonical identity of the task being executed; implements is the issue a pull request closes (GitHub's closing reference), none for an issue, so facts read from that issue are bound to this work unit by a declared relationship |
 | `repository` | `repository.identity` | required | `{id: <repository>, default_branch: <ref>}` | Canonical identity of the repository the work unit belongs to |
 | `placement` | `placement.current` | required | `{milestone: <milestone>\|none, release: <release>\|none, gate: <work-unit>\|none}` | Release / milestone / gate placement |
 | `graph` | `graph.native` | required | `{parent: {id: <work-unit>, state: <issue-state>}\|none, children: [{id: <work-unit>, state: <issue-state>}], blocked_by: [{id: <work-unit>, state: <issue-state>}]}` | Native parent / child / dependency relationships, each with its current state (a blocker is satisfied when its state is closed); a work unit appears at most once in each list, so one relationship can never carry two states |
@@ -224,12 +224,13 @@ behavioral suite checks the two never drift.
   consulted is in its inputs (so R4 re-versions it when any of them changes):
   merge only when the review is PASS on the current HEAD, every required check
   is success on it, every acceptance item is MET on it, the HEAD is current, a
-  grant with scope merge:routine targets the repository or work unit, and no
-  reserved boundary targeting the repository or work unit applies — for every
-  boundary-evidence record the fact it names is consulted, must be ESTABLISHED,
-  and must not satisfy the condition (review, checks, acceptance, head,
-  authority, repository, work_unit and every boundary-evidence fact are
-  consulted); repair only on CHANGES REQUIRED for the current HEAD (review,
+  grant with scope merge:routine targets the repository or work unit, every
+  blocker in the native graph is closed (the graph fact must be ESTABLISHED),
+  and no reserved boundary targeting the repository or work unit applies — for
+  every boundary-evidence record the fact it names is consulted, must be
+  ESTABLISHED, and must not satisfy the condition (review, checks, acceptance,
+  head, authority, repository, work_unit, graph and every boundary-evidence fact
+  are consulted); repair only on CHANGES REQUIRED for the current HEAD (review,
   head); wait-review only when no verdict binds the current HEAD or a required
   check is pending, missing or UNKNOWN (head, review, checks as present);
   stop-decision-required only when an input is CONFLICT, the verdict is DECISION
@@ -246,10 +247,11 @@ behavioral suite checks the two never drift.
 - **R17** A fact's source identity is the node its value describes: work_unit
   and repository name their own id; review names its record and lists it as a
   comment: invalidator; acceptance read from GitHub names its contract;
-  placement and graph name the work-unit node they were read from and list it as
-  an issue: or pull_request: invalidator; head read from GitHub names a work
-  unit and checks name a repository — within one set, the work unit's own node
-  and the repository's. inputs and because list each key once.
+  placement and graph name the work-unit node they were read from — within one
+  set, the work unit itself or the issue it implements, never an unrelated node
+  — and list it as an issue: or pull_request: invalidator; head read from GitHub
+  names a work unit and checks name a repository — within one set, the work
+  unit's own node and the repository's. inputs and because list each key once.
 
 ## Versioning
 
@@ -276,13 +278,18 @@ invented; the situations are the ones a governed work unit actually meets.
 
 ### Example 1 — a normal pull request (complete snapshot)
 
+The pull request `github.com/acme/widgets#42` implements the issue
+`github.com/acme/widgets#41` (its closing reference), which is why the
+placement, graph and acceptance facts are read from that issue: the work unit
+declares the relationship in `implements`, and R17 binds those reads to it.
+
 The straightforward case: every required class is ESTABLISHED, and the next
 action follows mechanically from named inputs.
 
 ```json
 [
   {"schema_version": "1", "key": "work_unit.identity", "class": "work_unit", "status": "ESTABLISHED",
-   "value": {"kind": "pull_request", "id": "github.com/acme/widgets#42"},
+   "value": {"kind": "pull_request", "id": "github.com/acme/widgets#42", "implements": "github.com/acme/widgets#41"},
    "source": {"type": "github-api", "identity": "github.com/acme/widgets#42", "version": "2026-09-06T12:00:00Z"},
    "observed_at": "2026-09-06T12:00:05Z", "invalidators": ["pull_request:github.com/acme/widgets#42"],
    "provenance": "https://github.com/acme/widgets/pull/42"},
@@ -329,10 +336,10 @@ action follows mechanically from named inputs.
    "provenance": "https://github.com/acme/widgets/commit/0123456789abcdef0123456789abcdef01234567/checks"},
   {"schema_version": "1", "key": "next_action.governed", "class": "next_action", "status": "ESTABLISHED",
    "value": {"action": "merge", "because": ["review.independent", "checks.required", "head.exact", "authority.standing", "acceptance.contract"], "boundary": "none"},
-   "source": {"type": "derived", "identity": "fact-model/1", "version": "1;acceptance.contract@2026-09-05T18:00:00Z;authority.standing@9001;checks.required@0123456789abcdef0123456789abcdef01234567;head.exact@0123456789abcdef0123456789abcdef01234567;placement.current@2026-09-05T18:00:00Z;repository.identity@2026-09-01T08:00:00Z;review.independent@2026-09-06T11:58:00Z;work_unit.identity@2026-09-06T12:00:00Z"},
+   "source": {"type": "derived", "identity": "fact-model/1", "version": "1;acceptance.contract@2026-09-05T18:00:00Z;authority.standing@9001;checks.required@0123456789abcdef0123456789abcdef01234567;graph.native@2026-09-05T18:00:00Z;head.exact@0123456789abcdef0123456789abcdef01234567;placement.current@2026-09-05T18:00:00Z;repository.identity@2026-09-01T08:00:00Z;review.independent@2026-09-06T11:58:00Z;work_unit.identity@2026-09-06T12:00:00Z"},
    "observed_at": "2026-09-06T12:00:05Z", "invalidators": ["head:0123456789abcdef0123456789abcdef01234567"],
    "provenance": "preferences/fact-model.tsv",
-   "inputs": ["review.independent", "checks.required", "head.exact", "authority.standing", "acceptance.contract", "repository.identity", "work_unit.identity", "placement.current"]}
+   "inputs": ["review.independent", "checks.required", "head.exact", "authority.standing", "acceptance.contract", "repository.identity", "work_unit.identity", "placement.current", "graph.native"]}
 ]
 ```
 
@@ -437,7 +444,7 @@ its target and confer nothing here, without anyone reading the decision record.
 ```json
 [
   {"schema_version": "1", "key": "work_unit.identity", "class": "work_unit", "status": "ESTABLISHED",
-   "value": {"kind": "pull_request", "id": "github.com/acme/widgets#42"},
+   "value": {"kind": "pull_request", "id": "github.com/acme/widgets#42", "implements": "github.com/acme/widgets#41"},
    "source": {"type": "github-api", "identity": "github.com/acme/widgets#42", "version": "2026-09-06T16:00:00Z"},
    "observed_at": "2026-09-06T16:00:05Z", "invalidators": ["pull_request:github.com/acme/widgets#42"],
    "provenance": "https://github.com/acme/widgets/pull/42"},
@@ -471,7 +478,7 @@ derivation, and it re-versions if any of them changes.
 ```json
 [
   {"schema_version": "1", "key": "work_unit.identity", "class": "work_unit", "status": "ESTABLISHED",
-   "value": {"kind": "pull_request", "id": "github.com/acme/widgets#43"},
+   "value": {"kind": "pull_request", "id": "github.com/acme/widgets#43", "implements": "none"},
    "source": {"type": "github-api", "identity": "github.com/acme/widgets#43", "version": "2026-09-06T16:50:00Z"},
    "observed_at": "2026-09-06T17:00:00Z", "invalidators": ["pull_request:github.com/acme/widgets#43"],
    "provenance": "https://github.com/acme/widgets/pull/43"},
@@ -533,7 +540,7 @@ them applicable again) (R7).
 ```json
 [
   {"schema_version": "1", "key": "work_unit.identity", "class": "work_unit", "status": "ESTABLISHED",
-   "value": {"kind": "issue", "id": "github.com/acme/widgets#41"},
+   "value": {"kind": "issue", "id": "github.com/acme/widgets#41", "implements": "none"},
    "source": {"type": "github-api", "identity": "github.com/acme/widgets#41", "version": "2026-09-05T18:00:00Z"},
    "observed_at": "2026-09-06T12:00:05Z", "invalidators": ["issue:github.com/acme/widgets#41"],
    "provenance": "https://github.com/acme/widgets/issues/41"},

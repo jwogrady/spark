@@ -347,7 +347,10 @@ def check_fact(f):
         if v["boundary"] != "none" and v["action"] != "stop-decision-required": fail("only stop-decision-required rests on a reserved boundary (R15)")
     # the source identity is the node the value describes (R17)
     ident = f["source"]["identity"]
-    if c == "work_unit" and ident != v["id"]: fail(f"work_unit source {ident} is not the work unit it describes, {v['id']} (R17)")
+    if c == "work_unit":
+        if ident != v["id"]: fail(f"work_unit source {ident} is not the work unit it describes, {v['id']} (R17)")
+        if v["kind"] == "issue" and v["implements"] != "none": fail("an issue implements nothing; only a pull request closes an issue (R17)")
+        if v["implements"] == v["id"]: fail("a work unit cannot implement itself (R17)")
     if c == "repository" and ident != v["id"]: fail(f"repository source {ident} is not the repository it describes, {v['id']} (R17)")
     if c == "review":
         if ident != v["record"]: fail(f"review source {ident} is not the record it reports, {v['record']} (R17)")
@@ -377,6 +380,9 @@ def check_set(facts, complete):
     rp1 = [f for f in facts if f["class"] == "repository" and f["status"] == "ESTABLISHED"]
     for f in facts:
         if f["class"] == "head" and f["source"]["type"] == "github-api" and wu1 and f["source"]["identity"] != wu1[0]["value"]["id"]: fail(f"head is read from {f['source']['identity']} but the work unit is {wu1[0]['value']['id']} (R17)")
+        if f["class"] in ("placement", "graph") and wu1:
+            allowed = {wu1[0]["value"]["id"], wu1[0]["value"]["implements"]} - {"none"}
+            if f["source"]["identity"] not in allowed: fail(f"{f['class']} is read from {f['source']['identity']}, which is neither the work unit nor the issue it implements (R17)")
         if f["class"] == "checks" and rp1 and f["source"]["identity"] != rp1[0]["value"]["id"]: fail(f"checks are read from {f['source']['identity']} but the repository is {rp1[0]['value']['id']} (R17)")
     # R15: next_action is derived from the inputs present, never asserted; every fact the derivation
     # consults must be among its inputs (R4), so the conclusion re-versions when any of them changes
@@ -398,6 +404,9 @@ def check_set(facts, complete):
             if not (est(chk) and chk["value"]["head"] == cur and all(r["state"] == "success" for r in chk["value"]["results"])): fail("merge requires every required check success on the current HEAD (R15)")
             if not (est(acc) and acc["value"]["head"] == cur and all(i["state"] == "MET" for i in acc["value"]["items"])): fail("merge requires every acceptance item MET on the current HEAD (R15)")
             if not head["value"]["current"]: fail("merge requires the HEAD to be current (R15)")
+            gr = get("graph")
+            if not est(gr): fail("merge cannot be derived without the native dependency graph (R15)")
+            if any(b["state"] != "closed" for b in gr["value"]["blocked_by"]): fail("merge is blocked: a native blocker is still open (R15)")
             targets = {x["value"]["id"] for x in (repo, wu) if est(x)}
             if not (est(auth) and any("merge:routine" in g["scopes"] and g["target"] in targets for g in auth["value"]["grants"])): fail("merge requires a merge:routine grant targeting the repository or work unit (R15)")
             # no reserved boundary that targets us may apply; every boundary-evidence fact is consulted (so it is an
@@ -562,11 +571,14 @@ accepts "$(mut 'f["value"]["conclusion"]="looks fine"')" && bad "an extra key in
 accepts "$(mut 'f["value"]["record"]="github.com/acme/widgets#42/comment/9101"; f["invalidators"].append("comment:github.com/acme/widgets#42/comment/9101")')" && bad "a review whose record is not the comment its source names must be rejected (R17)" || ok
 accepts "$(mut 'f["invalidators"]=[i for i in f["invalidators"] if not i.startswith("comment:")]')" && bad "a review that does not list its record as a comment: invalidator must be rejected (R17)" || ok
 accepts "$(mut 'f["value"]["record"]="github.com/Acme/Widgets#42/comment/9100"; f["source"]["identity"]=f["value"]["record"]; f["invalidators"]=["head:0123456789abcdef0123456789abcdef01234567","comment:"+f["value"]["record"]]')" && bad "a mixed-case owner/name is a projection, never the identity (R1)" || ok
-wu='{"schema_version":"1","key":"work_unit.identity","class":"work_unit","status":"ESTABLISHED","value":{"kind":"pull_request","id":"github.com/acme/widgets#42"},"source":{"type":"github-api","identity":"github.com/acme/widgets#42","version":"2026-09-06T12:00:00Z"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["pull_request:github.com/acme/widgets#42"],"provenance":"https://github.com/acme/widgets/pull/42"}'
+wu='{"schema_version":"1","key":"work_unit.identity","class":"work_unit","status":"ESTABLISHED","value":{"kind":"pull_request","id":"github.com/acme/widgets#42","implements":"github.com/acme/widgets#41"},"source":{"type":"github-api","identity":"github.com/acme/widgets#42","version":"2026-09-06T12:00:00Z"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["pull_request:github.com/acme/widgets#42"],"provenance":"https://github.com/acme/widgets/pull/42"}'
 accepts "$wu" && ok || bad "control: a canonical work_unit fact is accepted"
 accepts "$(printf '%s' "$wu" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["source"]["version"]="0123456789abcdef0123456789abcdef01234567"; print(json.dumps(f))')" && bad "a commit cannot version a mutable work_unit node (R14)" || ok
 accepts "$(printf '%s' "$wu" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["value"]["body"]="the PR description"; print(json.dumps(f))')" && bad "work_unit.value.body must be rejected (R2/R14)" || ok
 accepts "$(printf '%s' "$wu" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["value"]["id"]="github.com/acme/widgets#43"; print(json.dumps(f))')" && bad "a work unit whose value names a different node than its source must be rejected (R17)" || ok
+accepts "$(printf '%s' "$wu" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["value"]["kind"]="issue"; f["invalidators"]=["issue:github.com/acme/widgets#42"]; print(json.dumps(f))')" && bad "an issue that claims to implement another issue must be rejected (R17)" || ok
+accepts "$(printf '%s' "$wu" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["value"]["implements"]="none"; print(json.dumps(f))')" && ok || bad "control: a pull request that implements no issue is a valid work unit"
+accepts "$(printf '%s' "$wu" | python3 -c 'import json,sys; f=json.load(sys.stdin); del f["value"]["implements"]; print(json.dumps(f))')" && bad "a work unit without the implements field must be rejected (R14)" || ok
 accepts "$(printf '%s' "$wu" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["value"]["id"]="github.com/Acme/widgets#42"; f["source"]["identity"]=f["value"]["id"]; f["invalidators"]=["pull_request:"+f["value"]["id"]]; print(json.dumps(f))')" && bad "a mixed-case owner in a work-unit id must be rejected (R1)" || ok
 acc='{"schema_version":"1","key":"acceptance.contract","class":"acceptance","status":"ESTABLISHED","value":{"contract":"github.com/acme/widgets#41","head":"0123456789abcdef0123456789abcdef01234567","items":[{"id":"a1","state":"MET"}]},"source":{"type":"github-api","identity":"github.com/acme/widgets#41","version":"2026-09-05T18:00:00Z"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["issue:github.com/acme/widgets#41","head:0123456789abcdef0123456789abcdef01234567"],"provenance":"https://github.com/acme/widgets/issues/41"}'
 accepts "$acc" && ok || bad "control: a canonical acceptance fact is accepted"
@@ -647,6 +659,13 @@ sets "$(printf '{"complete": true, "facts": %s}' "$(smut 'nx=[f for f in s if f[
 sets "$(printf '{"complete": true, "facts": %s}' "$(smut 'h=[f for f in s if f["class"]=="head"][0]; h["source"]["identity"]="github.com/acme/widgets#43"')")" && bad "a head read from a different node than the set's work unit must be rejected (R17)" || ok
 sets "$(printf '{"complete": true, "facts": %s}' "$(smut 'c=[f for f in s if f["class"]=="checks"][0]; c["source"]["identity"]="github.com/acme/program"; c["invalidators"]=[i for i in c["invalidators"] if not i.startswith("ruleset:")]+["ruleset:github.com/acme/program"]')")" && bad "checks read from a different repository than the set's must be rejected (R17)" || ok
 sets "$(printf '{"complete": true, "facts": %s}' "$(smut 'p=[f for f in s if f["class"]=="placement"][0]; p["invalidators"]=[i for i in p["invalidators"] if not i.startswith("issue:")]')")" && bad "a placement that does not list the node it was read from must be rejected (R17)" || ok
+sets "$(printf '{"complete": true, "facts": %s}' "$(smut 'p=[f for f in s if f["class"]=="placement"][0]; p["source"]["identity"]="github.com/acme/widgets#40"; p["invalidators"]=["issue:github.com/acme/widgets#40"]+[i for i in p["invalidators"] if not i.startswith("issue:")]')")" && bad "a placement read from a node that is neither the work unit nor the issue it implements must be rejected (R17)" || ok
+sets "$(printf '{"complete": true, "facts": %s}' "$(smut 'g=[f for f in s if f["class"]=="graph"][0]; g["source"]["identity"]="github.com/acme/widgets#40"; g["invalidators"]=["issue:github.com/acme/widgets#40"]+[i for i in g["invalidators"] if i!="issue:github.com/acme/widgets#41"]')")" && bad "a graph spliced in from an unrelated node must be rejected (R17)" || ok
+sets "$(printf '{"complete": true, "facts": %s}' "$(smut 'w=[f for f in s if f["class"]=="work_unit"][0]; w["value"]["implements"]="none"')")" && bad "with no declared implements, placement and graph read from another issue must be rejected (R17)" || ok
+# merge consults the native graph: an open blocker, an unreadable graph, or a derivation that omits it is rejected
+sets "$(printf '{"complete": true, "facts": %s}' "$(smut 'g=[f for f in s if f["class"]=="graph"][0]; g["value"]["blocked_by"][0]["state"]="open"')")" && bad "merge while a native blocker is open must be rejected (R15)" || ok
+sets "$(printf '{"complete": true, "facts": %s}' "$(smut 'g=[f for f in s if f["class"]=="graph"][0]; g["status"]="UNKNOWN"; del g["value"]; g["detail"]={"reason":"403","candidates":[]}')")" && bad "merge while the dependency graph is UNKNOWN must be rejected (R15)" || ok
+sets "$(printf '{"complete": true, "facts": %s}' "$(smut 'nx=[f for f in s if f["class"]=="next_action"][0]; nx["inputs"]=[i for i in nx["inputs"] if i!="graph.native"]; nx["source"]["version"]=";".join(p for p in nx["source"]["version"].split(";") if not p.startswith("graph.native@"))')")" && bad "a merge derivation that omits the consulted graph from its inputs must be rejected (R4/R15)" || ok
 # repair needs a CURRENT head: the page's Example 2 derives repair; make its HEAD stale and it must be rejected
 ex2="$(python3 - "$DOC" <<'PY'
 import json, re, sys
