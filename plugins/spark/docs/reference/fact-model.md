@@ -97,7 +97,7 @@ or bind.
 | release | the tag as published | `v0.22.0` |
 | login | `login:<name>` | `login:github-actions[bot]` — naming an actor never confers authority |
 | verdict | the reviewer's closed vocabulary | `PASS`, `CHANGES REQUIRED`, `DECISION REQUIRED`, `NOT ASSESSED` |
-| action | the closed next-action vocabulary | `wait-review`, `repair`, `merge`, `close`, `stop-decision-required`, `stop-crossroad`, `none` |
+| action | the closed next-action vocabulary — only actions this version can derive (R15); a new action is a new version | `wait-review`, `repair`, `merge`, `stop-decision-required` |
 | fact-key | `<class>.<name>` | `review.independent` |
 | issue-state | current state of a related work unit | `open`, `closed` |
 | check-state | normalized state of one required check | `success`, `failure`, `pending`, `missing` (required but no run observed) |
@@ -160,16 +160,20 @@ of the source type; a role name, a label, a summary, or a word such as
 - **R14** Every value has an exact shape: only the declared keys, recursively;
   `source.identity` and `source.version` each match the grammar of their source
   type; a grant names the repository or work unit it applies to.
-- **R15** `next_action` is derived, never asserted. `merge` only when the review
-  is PASS on the current HEAD, every required check is `success` on it, every
-  acceptance item is MET on it, the HEAD is current, and a grant with scope
-  `merge:routine` targets the repository or work unit; `repair` only on
-  CHANGES REQUIRED for the current HEAD; `wait-review` only when no verdict
-  binds the current HEAD or a required check is pending, missing or UNKNOWN;
-  `stop-decision-required` only when an input is CONFLICT, the verdict is
-  DECISION REQUIRED, or the reason names the authority fact's reserved
-  boundaries. The behavioral suite checks these conditions against every
-  example.
+- **R15** `next_action` is derived, never asserted, and every fact its
+  derivation consulted is in its `inputs`, so R4 re-versions it when any of
+  them changes. `merge` only when the review is PASS on the current HEAD, every
+  required check is `success` on it, every acceptance item is MET on it, the
+  HEAD is current, and a grant with scope `merge:routine` targets the repository
+  or work unit (consults `review`, `checks`, `acceptance`, `head`, `authority`,
+  `repository`, `work_unit`); `repair` only on CHANGES REQUIRED for the current
+  HEAD (`review`, `head`); `wait-review` only when no verdict binds the current
+  HEAD or a required check is pending, missing or UNKNOWN (`head`, `review`,
+  `checks` as present); `stop-decision-required` only when an input is
+  CONFLICT, the verdict is DECISION REQUIRED, or the reason names the
+  authority fact's reserved boundaries (the inputs, `review` and `authority` as
+  present). The behavioral suite checks these conditions and the input coverage
+  against every example.
 
 ## Versioning
 
@@ -249,10 +253,10 @@ action follows mechanically from named inputs.
    "provenance": "https://github.com/acme/widgets/commit/0123456789abcdef0123456789abcdef01234567/checks"},
   {"schema_version": "1", "key": "next_action.governed", "class": "next_action", "status": "ESTABLISHED",
    "value": {"action": "merge", "because": ["review.independent", "checks.required", "head.exact", "authority.standing", "acceptance.contract"]},
-   "source": {"type": "derived", "identity": "fact-model/1", "version": "1;acceptance.contract@2026-09-05T18:00:00Z;authority.standing@9001;checks.required@0123456789abcdef0123456789abcdef01234567;head.exact@0123456789abcdef0123456789abcdef01234567;review.independent@2026-09-06T11:58:00Z"},
+   "source": {"type": "derived", "identity": "fact-model/1", "version": "1;acceptance.contract@2026-09-05T18:00:00Z;authority.standing@9001;checks.required@0123456789abcdef0123456789abcdef01234567;head.exact@0123456789abcdef0123456789abcdef01234567;repository.identity@2026-09-01T08:00:00Z;review.independent@2026-09-06T11:58:00Z;work_unit.identity@2026-09-06T12:00:00Z"},
    "observed_at": "2026-09-06T12:00:05Z", "invalidators": ["head:0123456789abcdef0123456789abcdef01234567"],
    "provenance": "preferences/fact-model.tsv",
-   "inputs": ["review.independent", "checks.required", "head.exact", "authority.standing", "acceptance.contract"]}
+   "inputs": ["review.independent", "checks.required", "head.exact", "authority.standing", "acceptance.contract", "repository.identity", "work_unit.identity"]}
 ]
 ```
 
