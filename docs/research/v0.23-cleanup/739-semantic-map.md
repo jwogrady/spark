@@ -42,7 +42,7 @@ each lead was confirmed or dismissed by reading the code.
 | Non-paginated readers of paginated REST lists | 2 | 0 |
 | Call sites changed (fanout) | — | 7: `bin/spark` ×4 (labels gate, milestone snapshot, governance validate, next), `planning.sh` ×3 |
 | Functions | `bin/spark` 147, `planning.sh` 15 | 148, 16 |
-| Lines | `bin/spark` 8,865, `planning.sh` 801 | 8,916, 825 (each contract is stated in a comment, and every row is validated) — regenerated for the committed HEAD by the ship step |
+| Lines | `bin/spark` 8,865, `planning.sh` 801 | 8,917, 825 (each contract is stated in a comment, and every row is validated) — regenerated for the committed HEAD by the ship step |
 
 **Defect found and fixed while consolidating.** `gov_collect`'s probe loop read the issue
 stream with `IFS=$'\t' read -r kind n ms blk_n`. Tab is IFS *whitespace*, so an
@@ -84,7 +84,7 @@ The loop now projects the issues to probe with `awk` (field-exact) before iterat
 
 | Removed | Behaviour / invariant | Proven by |
 |---|---|---|
-| `bin/spark:4535` inline blocked-by read (validate) | open + same-repo edges; foreign numbers never fuse; failed probe → `?`; unknown own identity keeps the edge | `tests/test-canonical-primitives.sh` (six stubbed scenarios over `gov_collect`); `tests/test-governance-engine.sh` (cycle detection over edges) |
+| `bin/spark:4535` inline blocked-by read (validate) | every open issue probed (the summary count never gates it); open + same-repo edges; foreign numbers never fuse; failed probe → `?`; unknown own identity keeps the edge | `tests/test-canonical-primitives.sh` (six stubbed scenarios over `gov_collect`); `tests/test-governance-engine.sh` (cycle detection over edges) |
 | `bin/spark:8693` inline open-count (next) | count of open blockers, any repository; unreadable or malformed → `?` | `tests/test-canonical-primitives.sh` (projection, malformed rows); `tests/test-next-governance-gate.sh` (selection with the endpoint stubbed); `tests/test-course-derivation.sh`, `tests/test-member-identity.sh` and `tests/test-release-gate-role.sh` — whose stubs had answered the endpoint with a pre-shaped count `0` that assumed the old consumer's jq, wrong-layer mocks the validated reader exposed; they now answer with no rows |
 | `planning.sh:298` inline blocked-by read (verify) | the declared blocker by number and repository; foreign same-numbered issue → `~`; unknown repository or unreadable identity → `?`; unreadable graph → `?` | `tests/test-plan-verify-coverage.sh` (`unread:blockedby`, `no-dependency`, `foreign-number`, `unknown-repo`, `unread:identity`, wired) |
 | `planning.sh:277`, `:328` inline sub-issue reads | hierarchy and relative order; unreadable → `?` | `tests/test-plan-verify-coverage.sh` (`unread:subissues`, `no-hierarchy`, `bad-order`, the unmentioned `999` child) |
@@ -105,7 +105,12 @@ source** in the runtime, by design, and must not be reconciled by precedence gue
    compiled `review` fact maps *only* the reviewer lane's verdicts and never widens.
 
 Dependency state now has one runtime source (`gh_blocked_by`) and needs no
-reconciliation rule.
+reconciliation rule. Governance validate probes **every** open issue through it; the
+issue endpoint's `issue_dependencies_summary.blocked_by` count stays in the stream but no
+longer gates the probe, because a second source that is missing, malformed or wrongly zero
+must never skip the canonical reader. This costs one `gh` call per open issue instead of
+per issue with a non-zero count — a deliberate correctness-over-cost choice the cleanup
+impact measurement should record rather than optimize away.
 
 ## Findings recorded, not changed (need their own authority)
 

@@ -123,6 +123,10 @@ for bad_nwo in 'owner/.' './repo' '../repo' 'owner/..' '.' '/repo' 'owner/' 'o/s
   [ "$rc" -ne 0 ] && ok || bad "a malformed identity ($bad_nwo) is a failed read — non-empty but wrong would make every local blocker read as foreign"
   assert_eq "and nothing is printed" "" "$out"
 done
+reset; printf 'o/self\no/other\n' > "$SC/nwo"
+rc=0; out="$(di_repo_nwo)" || rc=$?
+[ "$rc" -ne 0 ] && ok || bad "two valid identities are not ONE identity — a multi-line answer is a failed read"
+assert_eq "and nothing is printed" "" "$out"
 reset; printf 'my.org/my-repo.js\n' > "$SC/nwo"
 out="$(di_repo_nwo)" && ok || bad "control: dots inside real segments are a valid owner/name"
 assert_eq "and are printed as read" "my.org/my-repo.js" "$out"
@@ -179,6 +183,16 @@ assert_contains "and says why" "probe failed" "$out"
 reset; printf 'issue\t1\tv1.0\t1\nissue\t2\tv1.0\t1\n' > "$SC/issues"; printf 'o/self\n' > "$SC/nwo"
 printf '2\topen\to/self\n' > "$SC/blocked_by.1"; printf '1\topen\to/self\n' > "$SC/blocked_by.2"
 assert_contains "a milestoned issue is probed the same way" "cannot be started" "$(dep_rows)"
+# the endpoint's summary count is a SECOND source and never gates the canonical reader: a zero, empty or
+# malformed count with real blockers behind it must still surface the cycle
+for cnt in 0 '' x; do
+  reset; printf 'issue\t1\t\t%s\nissue\t2\t\t%s\n' "$cnt" "$cnt" > "$SC/issues"; printf 'o/self\n' > "$SC/nwo"
+  printf '2\topen\to/self\n' > "$SC/blocked_by.1"; printf '1\topen\to/self\n' > "$SC/blocked_by.2"
+  assert_contains "a summary count of '$cnt' does not skip the probe — the cycle is still caught" "cannot be started" "$(dep_rows)"
+done
+reset; printf 'issue\t1\t\t0\n' > "$SC/issues"; printf 'o/self\n' > "$SC/nwo"
+out="$(dep_rows)"
+assert_eq "an issue whose graph cannot be read is not assessed even when the summary says zero" "?" "$(printf '%s\n' "$out" | awk -F'\t' '{print $2; exit}')"
 
 reset; issues_fixture > "$SC/issues"   # own identity unknown: edges are KEPT rather than dropped
 printf '2\topen\to/self\n' > "$SC/blocked_by.1"; printf '1\topen\to/self\n' > "$SC/blocked_by.2"

@@ -3416,9 +3416,11 @@ di_repo_nwo() {
   # two segments, each with something other than dots — a dot-only segment is
   # not a name, and an identity that is malformed but non-empty would make every
   # valid local blocker fail the equality filter and read as foreign.
+  # Exactly ONE record: two valid lines would be emitted as one multi-line
+  # identity that equals nothing, so every local blocker would read as foreign.
   printf '%s\n' "$nwo" | awk '
-    $0 !~ /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/ || $0 ~ /(^|\/)\.+(\/|$)/ { bad = 1 }
-    END { exit bad ? 1 : 0 }' || return 1
+    NR > 1 || $0 !~ /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/ || $0 ~ /(^|\/)\.+(\/|$)/ { bad = 1 }
+    END { exit (bad || NR != 1) ? 1 : 0 }' || return 1
   printf '%s\n' "$nwo"
 }
 
@@ -4515,10 +4517,10 @@ gov_collect() {
 
   # ONE paginated call for the issue population. Paginated because a silent
   # truncation would compute metadata and dependencies from an arbitrary subset
-  # and then report PASS for issues nobody fetched. The REST issues endpoint
-  # also carries issue_dependencies_summary, which says WHICH issues have a
-  # prerequisite — so the edge probe below runs only for those, instead of once
-  # per open issue whether or not it has one.
+  # and then report PASS for issues nobody fetched. The summary count the
+  # endpoint also carries is kept in the stream for the reader but is NOT a
+  # gate on the edge probe below: the native graph has one canonical reader,
+  # and a missing, malformed or wrongly-zero count must never skip it.
   if issues="$(gh api --paginate 'repos/{owner}/{repo}/issues?state=open&per_page=100' \
       --jq '.[] | select(.pull_request == null) | . as $i
             | ([ "issue", ($i.number | tostring), ($i.milestone.title // ""),
@@ -4569,14 +4571,13 @@ EOF_GUNREAD
   if [ -n "$issues" ]; then
     local blk probe_failed=0 nwo="" probe_list
     nwo="$(di_repo_nwo)" || nwo=""
-    # Only issue records carry a blocked-by count (label records are the other
-    # half of the same stream), and only a non-zero count is probed. Projected
-    # with awk rather than `read`: tab is IFS whitespace, so `read` collapses the
-    # empty milestone field of an unmilestoned issue and its count lands in the
-    # milestone variable — such an issue was never probed, and a cycle through
-    # it was invisible.
-    probe_list="$(printf '%s\n' "$issues" \
-      | awk -F'\t' '$1 == "issue" && $2 != "" && $4 != "" && $4 != "0" { print $2 }')"
+    # EVERY open issue is probed through the one canonical reader; the
+    # endpoint's summary count is a second source and is not trusted to say
+    # which issues have no prerequisite — a count that is missing, malformed or
+    # wrongly zero would otherwise hide a cycle. Projected with awk rather than
+    # `read`: tab is IFS whitespace, so `read` collapses the empty milestone
+    # field of an unmilestoned issue and shifts the columns.
+    probe_list="$(printf '%s\n' "$issues" | awk -F'\t' '$1 == "issue" && $2 != "" { print $2 }')"
     while IFS= read -r n; do
       [ -n "$n" ] || continue
       # Blockers may live in ANOTHER repository, and a bare number cannot tell
