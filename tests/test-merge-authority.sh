@@ -73,6 +73,14 @@ case "$jq" in
   ".parent_issue_url"*)  [ "${GH_FAIL:-}" = parent ] && exit 1; printf '%s' "${GH_PARENT:-}" ;;
   *author_association*)
       [ "${GH_FAIL:-}" = comments ] && exit 1
+      json=""
+      case "$path" in
+        *"/issues/${GH_PARENT_NUM:-0}/comments"*) json="${GH_PARENT_JSON:-}" ;;
+        *) json="${GH_PR_JSON:-}" ;;
+      esac
+      # Serving real JSON through the production expression is what makes the
+      # ENCODER observable; the pre-encoded fixtures only exercise the decoder.
+      if [ -n "$json" ]; then printf '%s' "$json" | jq -r "$jq"; exit 0; fi
       case "$path" in
         *"/issues/${GH_PARENT_NUM:-0}/comments"*) printf '%s' "${GH_PARENT_COMMENTS:-}" ;;
         *) printf '%s' "${GH_PR_COMMENTS:-}" ;;
@@ -86,7 +94,8 @@ export PATH="$STUB/bin:$PATH"
 GH_LOG="$STUB/calls"
 export GH_LOG GH_STATUSES GH_PROT GH_PROTECTED GH_RULECHECKS GH_RULEFLOWS GH_RUNS GH_PERM
 export GH_SLUG GH_CLOSING GH_DEFBRANCH GH_HEAD GH_PR GH_FILES GH_CHECKS \
-       GH_PARENT GH_PARENT_NUM GH_PARENT_COMMENTS GH_PR_COMMENTS GH_FAIL
+       GH_PARENT GH_PARENT_NUM GH_PARENT_COMMENTS GH_PR_COMMENTS GH_FAIL \
+       GH_PARENT_JSON GH_PR_JSON
 
 TAB="$(printf '\t')"
 # Observations carry four fields, the last being the app identity: name,
@@ -121,6 +130,8 @@ doctor${TAB}
 gate${TAB}15368"
   GH_PROTECTED="true"
   GH_PERM="admin"
+  GH_PARENT_JSON=""
+  GH_PR_JSON=""
   GH_RULECHECKS=""
   GH_RULEFLOWS=""
   GH_RUNS=""
@@ -585,6 +596,31 @@ $ACCEPT_MET"
 verdict "ROUTINE MERGE" 0 "a malformed reviewer marker for a different commit does not decline this one" "${ELIGIBLE[@]}"
 reset_world
 
+# --- a reviewer record is set aside only on ESTABLISHED identity ------------
+# The grammar checked field order and the verdict vocabulary but not whether the
+# identity was canonical, so `pr=0727` or `head=deadbeef` parsed and was then
+# skipped as "another candidate" — leaving a contradicting verdict beside a
+# valid PASS unaccounted for.
+for broken in "pr=0727 head=$SHA verdict=CHANGES REQUIRED" \
+              "pr= head=$SHA verdict=CHANGES REQUIRED" \
+              "pr=727 head=deadbeef verdict=CHANGES REQUIRED" \
+              "pr=727 head=${SHA}00 verdict=CHANGES REQUIRED" \
+              "pr=727 head=0123456789ABCDEF0123456789abcdef01234567 verdict=CHANGES REQUIRED" \
+              "pr=727 head= verdict=CHANGES REQUIRED"; do
+  GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->\\n<!-- spark-openai-review $broken -->
+$ACCEPT_MET"
+  verdict "NOT ELIGIBLE" 4 "a reviewer record with unestablished identity ('$broken') declines beside a PASS" "${ELIGIBLE[@]}"
+done
+# A UNIQUE, CANONICAL identity naming another candidate is still set aside, or
+# every stale verdict on a long-lived pull request would block it forever.
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->\\n<!-- spark-openai-review pr=999 head=$SHA verdict=CHANGES REQUIRED -->
+$ACCEPT_MET"
+verdict "ROUTINE MERGE" 0 "a reviewer verdict for another pull request is set aside" "${ELIGIBLE[@]}"
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->\\n<!-- spark-openai-review pr=727 head=$SHA2 verdict=CHANGES REQUIRED -->
+$ACCEPT_MET"
+verdict "ROUTINE MERGE" 0 "a reviewer verdict for an earlier commit is set aside" "${ELIGIBLE[@]}"
+reset_world
+
 # --- a repeated identity field is ambiguity, not "about something else" -----
 # Keeping only the first pr= or head= let a record carrying both pr=999 and
 # pr=727 — or a stale head beside the current one — be waved through as
@@ -601,6 +637,19 @@ verdict "NOT ELIGIBLE" 4 "a malformed acceptance record naming two pull requests
 GH_PR_COMMENTS="$REV
 OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->\\n<!-- spark-acceptance pr=727 child=#724 head=$SHA2 head=$SHA contract=$ACC verdict=MET -->"
 verdict "NOT ELIGIBLE" 4 "a malformed acceptance record naming two commits declines" "${ELIGIBLE[@]}"
+reset_world
+
+# --- a malformed native-parent identity fails closed ------------------------
+# Rewriting an unusable parent slug to the pull request's repository redirected
+# a cross-repository parent to a LOCAL issue that merely shares its number, and
+# then consumed that issue's grants.
+for bad_url in "https://api.github.com/repos/not-a-slug/issues/722" \
+               "https://api.github.com/repos/other/org-repo/extra/issues/722" \
+               "https://api.github.com/repos//org-repo/issues/722" \
+               "https://api.github.com/repos/other/org repo/issues/722"; do
+  GH_PARENT="$bad_url"
+  verdict "NOT ELIGIBLE" 4 "an unusable native-parent repository identity declines, not falls back" "${ELIGIBLE[@]}"
+done
 reset_world
 
 # --- the work unit lives in the PULL REQUEST's repository -------------------
@@ -703,6 +752,65 @@ verdict "NOT ELIGIBLE" 4 "a grant line naming two work units declines" "${ELIGIB
 GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=#724 acceptance=$ACC
 OWNER${TAB}jwogrady${TAB}spark-authorizes child=#725 acceptance=$ACC extra=1"
 verdict "ROUTINE MERGE" 0 "a malformed grant for a different work unit does not decline this one" "${ELIGIBLE[@]}"
+reset_world
+
+# The encoder and the decoder are only correct as a PAIR, and pre-encoded
+# fixtures exercise the decoder alone — a mutation that stopped doubling
+# backslashes in the PRODUCTION expression was invisible to them. These run the
+# real jq over a real JSON body and require the decoder to return the original
+# text exactly, so neither half can drift from the other.
+if command -v jq >/dev/null 2>&1; then
+  RAW='Example:\nspark-authorizes child=#724 acceptance=quoted-not-granted
+spark-authorizes child=#724 acceptance='"$ACC"'
+A trailing backslash: \'
+  GH_PARENT_JSON="$(jq -n --arg b "$RAW" \
+    '[{author_association:"OWNER",user:{login:"jwogrady"},body:$b}]')"
+  ENC="$(xm_comments jwogrady/spark 722)"
+  BODY="${ENC#*$TAB}"; BODY="${BODY#*$TAB}"
+  DEC="$(xm_body_lines "$BODY")"
+  if [ "$DEC" = "$RAW" ]; then ok
+  else bad "the comment transport must round-trip exactly; got: $(printf '%s' "$DEC" | head -1)"; fi
+  case "$ENC" in
+    *"$TAB"*"$TAB"*) ok ;;
+    *) bad "the encoded comment must remain one record with its association and login" ;;
+  esac
+  # End to end through the real encoder: the quoted marker is prose, and only
+  # the marker that genuinely starts a line is the grant.
+  verdict "ROUTINE MERGE" 0 "the real encoder keeps a quoted marker as prose beside a genuine grant" "${ELIGIBLE[@]}"
+  GH_PARENT_JSON="$(jq -n --arg b 'Write it as:\nspark-authorizes child=#724 acceptance='"$ACC" \
+    '[{author_association:"OWNER",user:{login:"jwogrady"},body:$b}]')"
+  verdict "NOT ELIGIBLE" 4 "the real encoder does not turn a quoted marker into a grant" "${ELIGIBLE[@]}"
+  reset_world
+fi
+
+# A correct encoder never emits a lone backslash, so the decoder's defensive arm
+# for one cannot be reached through jq at all. It is asserted directly instead of
+# being reported as covered: a byte the transport should not contain must still
+# survive decoding literally rather than vanish.
+case "$(xm_body_lines 'a\qb')" in
+  'a\qb') ok ;;
+  *) bad "a backslash the encoder would never emit must decode literally, not vanish" ;;
+esac
+case "$(xm_body_lines 'ends with\')" in
+  'ends with\') ok ;;
+  *) bad "a trailing lone backslash must decode literally, not vanish" ;;
+esac
+
+# The comment transport encodes newlines as the two characters \n, so it must
+# also escape backslashes that are already in the text. Without that, a comment
+# whose PROSE contains "\n" decoded into two lines and a marker quoted inside a
+# sentence became a marker at the start of a line — which is a canonical grant.
+# In the fixtures below the transport is what the stub emits, so a literal
+# backslash in the comment arrives already doubled.
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}Example:\\\\nspark-authorizes child=#724 acceptance=$ACC"
+verdict "NOT ELIGIBLE" 4 "a marker behind a literal backslash-n in prose is not a grant" "${ELIGIBLE[@]}"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}Write it as:\\\\nspark-authorizes child=#724 acceptance=$ACC\\nBut I have not approved it yet."
+verdict "NOT ELIGIBLE" 4 "a quoted marker stays quoted even beside real lines" "${ELIGIBLE[@]}"
+# ...and a genuine backslash elsewhere in the body must not disturb a real grant.
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}Escape it with \\\\ when needed.\\nspark-authorizes child=#724 acceptance=$ACC"
+verdict "ROUTINE MERGE" 0 "a literal backslash elsewhere in the comment does not disturb a real grant" "${ELIGIBLE[@]}"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=#724 acceptance=$ACC\\nA trailing backslash: \\\\"
+verdict "ROUTINE MERGE" 0 "a trailing literal backslash does not disturb a real grant" "${ELIGIBLE[@]}"
 reset_world
 
 # A real comment does not end exactly at the marker. Parsing the flattened tail

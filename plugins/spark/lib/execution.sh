@@ -2370,8 +2370,15 @@ xm_parent_url()  { xm_api "$1" "issues/$2" '.parent_issue_url // empty'; }
 xm_permission()  { xm_api "$1" "collaborators/$2/permission" '.permission // empty'; }
 # One comment per line: association, login, then the body with newlines escaped.
 # The marker grammars are single-line, so nothing that matters is lost.
+#
+# BACKSLASHES ARE DOUBLED FIRST, and that is the whole point. Escaping only
+# newlines made the transport ambiguous: a comment whose text contains the two
+# characters `\n` — "Example:\nspark-authorizes child=#124 …" — decoded into two
+# lines, and a marker quoted inside prose became a marker at the start of a line,
+# which is a canonical grant. Doubling first makes the encoding injective, so
+# `\n` (a real newline) and `\\n` (the literal characters) stay distinguishable.
 xm_comments()    { xm_api_all "$1" "issues/$2/comments?per_page=100" \
-                     '.[] | .author_association + "\t" + .user.login + "\t" + (.body | gsub("\r?\n"; "\\n"))'; }
+                     '.[] | .author_association + "\t" + .user.login + "\t" + (.body | gsub("\\\\"; "\\\\") | gsub("\r?\n"; "\\n"))'; }
 # The bounded work unit is whatever the PR CLOSES. Governance already makes that
 # the authoritative linkage ("a linked PR plus a closing keyword"), so it is
 # read rather than asserted.
@@ -2385,16 +2392,29 @@ xm_closing()     { command -v gh >/dev/null 2>&1 || return 1
 # tail. Parsing the tail meant a grant followed by any ordinary prose was
 # rejected — fail-closed, but it made the feature unusable, because nobody
 # writes a comment that ends exactly at the marker.
+# The decoder is the exact inverse of that encoding: `\n` becomes a line break,
+# `\\` becomes one literal backslash, and a trailing lone backslash stays
+# literal. It advances backslash to backslash rather than character to
+# character, so a long comment costs one iteration per backslash.
 xm_body_lines() {
-  local rest="${1:-}" seg
+  local rest="${1:-}" out="" pre c
   while :; do
     case "$rest" in
-      *'\n'*) seg="${rest%%\\n*}"; rest="${rest#*\\n}" ;;
-      *)      seg="$rest"; rest="" ;;
+      *'\'*) ;;
+      *) out="$out$rest"; break ;;
     esac
-    printf '%s\n' "$seg"
-    [ -n "$rest" ] || break
+    pre="${rest%%\\*}"
+    rest="${rest#*\\}"
+    out="$out$pre"
+    c="${rest%"${rest#?}"}"
+    case "$c" in
+      n)    out="$out
+"; rest="${rest#?}" ;;
+      '\')  out="$out\\"; rest="${rest#?}" ;;
+      *)    out="$out\\" ;;
+    esac
   done
+  printf '%s\n' "$out"
 }
 
 xm_is_authorizing() {
@@ -2533,7 +2553,10 @@ EOF
   xm_num "$parent_num" || { echo "the native parent of #$child_num could not be read as an issue number"; return 1; }
   # repos/<owner>/<repo>/issues/<n> -> owner/repo
   parent_slug="${parent_url#*/repos/}"; parent_slug="${parent_slug%%/issues/*}"
-  xm_repo_id "$parent_slug" || parent_slug="$slug"
+  # A malformed parent identity FAILS CLOSED. Rewriting it to the pull request's
+  # repository redirected an unreadable cross-repository parent to a local issue
+  # that merely shares its number, and then consumed that issue's grants.
+  xm_repo_id "$parent_slug" || { echo "the native parent of #$child_num reported the unusable repository identity '$parent_slug', so which repository owns the authorization is not established"; return 1; }
   # The bounded work unit lives in the PULL REQUEST's repository. Borrowing the
   # parent's would let a "#724" on a parent in another repository stand for
   # this repository's #724 — a different issue with the same number.
@@ -2630,8 +2653,14 @@ EOF
         if rf="$(xm_review_fields "$mline")"; then
           r_pr="${rf%%	*}"; rtail="${rf#*	}"
           r_head="${rtail%%	*}"; r_v="${rtail#*	}"
-          [ "$r_pr" = "$prnum" ] || continue
-          [ "$r_head" = "$sha" ] || continue
+          # Identity must be ESTABLISHED before a record may be classified as
+          # unrelated. `pr=0727` and `head=deadbeef` parse as fields but name
+          # nothing canonical, so skipping them as "another candidate" left a
+          # contradicting verdict beside a valid PASS unaccounted for.
+          if ! xm_num "$r_pr" || ! xm_sha "$r_head"; then
+            rev_bad=$((rev_bad + 1)); continue
+          fi
+          [ "$r_pr" = "$prnum" ] && [ "$r_head" = "$sha" ] || continue
           # A later CHANGES REQUIRED does not sit quietly beside an earlier
           # PASS: two different verdicts for one commit are a conflict, and a
           # conflict is not a pass.

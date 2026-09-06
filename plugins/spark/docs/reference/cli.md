@@ -702,13 +702,25 @@ request's** repository is read and must be `admin`, `maintain` or `write` — an
 unreadable or absent permission is not authority. The read happens only for the
 cross-repository case, since a same-repository association already answers it.
 
-**An acceptance record is set aside only on established identity.** A missing or
-non-canonical `pr`/`head` does not prove a record concerns some other candidate —
-it proves nothing, and beside a valid `MET` that is ambiguous evidence about this
-commit. Only a *unique, canonical* identity naming another pull request or
-commit is skipped; once a record is about this pull request at this commit,
-every remaining field must agree, and a disagreement is contradictory evidence
-rather than an ignorable sibling.
+**A record is set aside only on established identity** — acceptance and review
+alike. A missing or non-canonical `pr`/`head` does not prove a record concerns
+some other candidate: it proves nothing, and beside a valid `MET` or `PASS` that
+is ambiguous evidence about this commit. `pr=0727` and `head=deadbeef` parse as
+fields and name nothing canonical, so they decline rather than being skipped.
+Only a *unique, canonical* identity naming another pull request or commit is
+set aside; once a record is about this pull request at this commit, every
+remaining field must agree, and a disagreement is contradictory evidence rather
+than an ignorable sibling.
+
+**The comment transport is injective.** Comment bodies arrive one record per
+line with newlines encoded as the two characters `\n`, so backslashes are
+doubled first. Without that, a comment whose *prose* contains `\n` decoded into
+two lines and a marker quoted inside a sentence became a marker at the start of
+a line — which is a canonical grant. The owning issue's repository identity is
+also taken as read or not at all: a `parent_issue_url` that does not yield a
+usable `owner/repo` declines, rather than falling back to the pull request's
+repository and consuming the grants of a local issue that merely shares the
+parent's number.
 
 Grants are counted the same way: a **candidate** authorization line is any line
 opening with the marker, valid or not, and a malformed same-unit line beside a
