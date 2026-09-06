@@ -96,7 +96,7 @@ def w_group(name):
     for w in windows:
         if w["name"] == name: return w.get("group")
 agg = {w["name"]: collections.defaultdict(int) for w in windows}
-detail = {w["name"]: {"reads": collections.Counter(), "endpoints": collections.Counter(), "edits": collections.Counter(),
+detail = {w["name"]: {"reads": collections.Counter(), "read_tool_paths": collections.Counter(), "endpoints": collections.Counter(), "edits": collections.Counter(),
                       "bash_kinds": collections.Counter(), "tools": collections.Counter(), "stable": collections.Counter(),
                       "head": collections.Counter(), "first": None, "last": None, "requests": set()} for w in windows}
 seen_req = {}
@@ -116,7 +116,7 @@ for o in recs:
         name = b["name"]; inp = b.get("input") or {}; rb = results.get(b["id"], 0)
         d["tools"][name] += 1; a["tool_calls"] += 1; a["result_bytes"] += rb
         if name == "Read":
-            p = rel(inp.get("file_path", "")); d["reads"][p] += 1; a["read_calls"] += 1; a["read_bytes"] += rb
+            p = rel(inp.get("file_path", "")); d["reads"][p] += 1; d["read_tool_paths"][p] += 1; a["read_calls"] += 1; a["read_bytes"] += rb
             if p.startswith("/tmp/claude-1000/"): a["read_task_output_calls"] += 1; a["read_task_output_bytes"] += rb
             elif not p.startswith(TMP) and not p.startswith("/"):
                 a["read_repo_calls"] += 1; a["read_repo_bytes"] += rb; touches[p] += 1; touches_by_group[w_group(w)][p] += 1
@@ -155,11 +155,15 @@ for o in recs:
 out = {"source": os.path.basename(src), "windows": []}
 for w in windows:
     n = w["name"]; a = agg[n]; d = detail[n]
+    # two path statistics, kept apart: Read-tool calls only, and the combined set of Read-tool paths plus
+    # repository paths named in shell read commands (sed/grep/cat) — the latter is what "reads" holds.
     reads = d["reads"]; uniq = len(reads); rep = sum(reads.values()) - uniq
+    rt = d["read_tool_paths"]; rt_uniq = len(rt); rt_rep = sum(rt.values()) - rt_uniq
     eps = d["endpoints"]; ue = len(eps); re_ = sum(eps.values()) - ue
     row = dict(a); row.update({
         "name": n, "group": w.get("group"), "start": w["start"], "end": w["end"], "first_activity": d["first"], "last_activity": d["last"],
-        "api_requests": len(d["requests"]), "read_unique_files": uniq, "read_repeated": rep,
+        "api_requests": len(d["requests"]), "read_tool_unique_paths": rt_uniq, "read_tool_repeated": rt_rep,
+        "paths_all_unique": uniq, "paths_all_repeated": rep, "read_unique_files": uniq, "read_repeated": rep,
         "gh_unique_endpoints": ue, "gh_repeated_endpoints": re_,
         "edit_unique_files": len(d["edits"]), "tools": dict(d["tools"]), "bash_kinds": dict(d["bash_kinds"]),
         "top_reads": reads.most_common(12), "top_endpoints": eps.most_common(15),
@@ -171,9 +175,9 @@ out["file_touches_by_group"] = {g: c.most_common() for g, c in touches_by_group.
 json.dump(out, open(outp, "w"), indent=1)
 
 def fmt(n): return f"{n:,}"
-print("| window | api req | tool calls | tool-result bytes | Read (uniq/rep) | shell-read cmds | Bash | gh inv (LB) | gh uniq/rep | stable-fact | head-dep | tests tgt/full | doctor | edits (files) | cache_read tok | cache_create tok | output tok |")
-print("|---|---:|---:|---:|---|---:|---:|---:|---|---:|---:|---|---:|---|---:|---:|---:|")
+print("| window | api req | tool calls | tool-result bytes | Read calls (Read-tool uniq/rep) | all paths uniq/rep (Read + shell-read) | shell-read cmds | Bash | gh inv (LB) | gh uniq/rep | stable-fact | head-dep | tests tgt/full | doctor | edits (files) | cache_read tok | cache_create tok | output tok |")
+print("|---|---:|---:|---:|---|---|---:|---:|---:|---|---:|---:|---|---:|---|---:|---:|---:|")
 for r in out["windows"]:
-    print(f"| {r['name']} | {r['api_requests']} | {r.get('tool_calls',0)} | {fmt(r.get('result_bytes',0))} | {r.get('read_calls',0)} ({r['read_unique_files']}/{r['read_repeated']}) | {r.get('bash:shell:read',0)} | {r.get('bash_calls',0)} | {r.get('gh_invocations_lower_bound',0)} | {r['gh_unique_endpoints']}/{r['gh_repeated_endpoints']} | {r.get('gh_stable_fact_fetches',0)} | {r.get('gh_head_dependent_fetches',0)} | {r.get('bash:test:targeted',0)}/{r.get('bash:test:full',0)} | {r.get('bash:doctor',0)} | {r.get('edit_calls',0)} ({r['edit_unique_files']}) | {fmt(r.get('tok_cache_read',0))} | {fmt(r.get('tok_cache_create',0))} | {fmt(r.get('tok_output',0))} |")
+    print(f"| {r['name']} | {r['api_requests']} | {r.get('tool_calls',0)} | {fmt(r.get('result_bytes',0))} | {r.get('read_calls',0)} ({r['read_tool_unique_paths']}/{r['read_tool_repeated']}) | {r['paths_all_unique']}/{r['paths_all_repeated']} | {r.get('bash:shell:read',0)} | {r.get('bash_calls',0)} | {r.get('gh_invocations_lower_bound',0)} | {r['gh_unique_endpoints']}/{r['gh_repeated_endpoints']} | {r.get('gh_stable_fact_fetches',0)} | {r.get('gh_head_dependent_fetches',0)} | {r.get('bash:test:targeted',0)}/{r.get('bash:test:full',0)} | {r.get('bash:doctor',0)} | {r.get('edit_calls',0)} ({r['edit_unique_files']}) | {fmt(r.get('tok_cache_read',0))} | {fmt(r.get('tok_cache_create',0))} | {fmt(r.get('tok_output',0))} |")
 print("\nrepo file touches (Read + Edit/Write + shell-read path mentions), top 25:")
 for p, n in touches.most_common(25): print(f"  {n:4d}  {p}")

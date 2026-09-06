@@ -30,9 +30,11 @@
 | tool calls | 529 | 884 | session transcript (writer lane), analyze-transcript.py |
 | tool-result bytes returned to the model | 290,841 | 332,602 | session transcript (writer lane), analyze-transcript.py |
 | Read tool calls | 16 | 148 | session transcript (writer lane), analyze-transcript.py |
-|   unique paths | 24 | 101 | session transcript (writer lane), analyze-transcript.py |
-|   repeated reads | 35 | 79 | session transcript (writer lane), analyze-transcript.py |
+|   Read-tool unique paths | 9 | 98 | session transcript (writer lane), analyze-transcript.py |
+|   Read-tool repeated reads | 7 | 50 | session transcript (writer lane), analyze-transcript.py |
 | shell read commands (sed/grep/cat over repo files) | 64 | 84 | session transcript (writer lane), analyze-transcript.py |
+| combined unique paths (Read-tool paths + repo paths named in shell reads) | 24 | 101 | session transcript (writer lane), analyze-transcript.py |
+| combined repeated path touches | 35 | 79 | session transcript (writer lane), analyze-transcript.py |
 | Bash calls | 342 | 548 | session transcript (writer lane), analyze-transcript.py |
 | gh invocations (lower bound) | 110 | 152 | session transcript (writer lane), analyze-transcript.py |
 |   unique normalized endpoints | 34 | 39 | session transcript (writer lane), analyze-transcript.py |

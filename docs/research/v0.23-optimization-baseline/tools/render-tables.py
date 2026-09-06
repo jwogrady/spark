@@ -55,7 +55,9 @@ rows.append(("push → verdict latency median (s)", d["A"]["_lat"][len(d["A"]["_
 for wfn in ("OpenAI Review", "validate", "milestone-gate", "docs-truth"):
     rows.append((f"CI workflow '{wfn}' runs / seconds", f"{d['A']['workflow_runs'][wfn]['runs']} / {d['A']['workflow_runs'][wfn]['seconds']}", f"{d['B']['workflow_runs'][wfn]['runs']} / {d['B']['workflow_runs'][wfn]['seconds']}", "actions/runs on the PR branch"))
 tx = [("api_requests", "model API requests (assistant turns)"), ("tool_calls", "tool calls"), ("result_bytes", "tool-result bytes returned to the model"),
-      ("read_calls", "Read tool calls"), ("read_unique_files", "  unique paths"), ("read_repeated", "  repeated reads"), ("bash:shell:read", "shell read commands (sed/grep/cat over repo files)"),
+      ("read_calls", "Read tool calls"), ("read_tool_unique_paths", "  Read-tool unique paths"), ("read_tool_repeated", "  Read-tool repeated reads"),
+      ("bash:shell:read", "shell read commands (sed/grep/cat over repo files)"),
+      ("paths_all_unique", "combined unique paths (Read-tool paths + repo paths named in shell reads)"), ("paths_all_repeated", "combined repeated path touches"),
       ("bash_calls", "Bash calls"), ("gh_invocations_lower_bound", "gh invocations (lower bound)"), ("gh_unique_endpoints", "  unique normalized endpoints"), ("gh_repeated_endpoints", "  repeated endpoint fetches"),
       ("gh_stable_fact_fetches", "  HEAD-independent fact fetches (authority/parent/milestone/identity)"), ("gh_head_dependent_fetches", "  HEAD-dependent fetches (PR conversation, checks)"),
       ("bash:test:targeted", "targeted verification runs (run.sh --only / single suite)"), ("bash:test:full", "full-suite certification runs"), ("bash:doctor", "spark doctor runs"), ("bash:syntax-check", "bash -n runs"),
