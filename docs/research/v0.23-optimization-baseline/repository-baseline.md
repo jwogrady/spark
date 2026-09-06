@@ -130,8 +130,9 @@ shared GitHub-transport helper**; every consumer opens its own `gh` call and its
 
 Full inventory per suite: `raw/agent-test-representation.md`. Headline facts: 91 suites, 19,246 LOC, 3,799
 assertions executed in 161 s; 26 suites build a private `gh` stub on disk, 34 a private `PATH` shim, 82 a temp
-fixture (68 via the shared `sandbox_init`); 10 suites do not source `tests/lib.sh` at all; **22 suites carry a
-byte-identical `assert_eq` (381 call sites) that `lib.sh` does not offer**; 12 redefine `ok`/`bad`; 88 of 91
+fixture (68 via the shared `sandbox_init`); 11 suites do not source `tests/lib.sh` at all; **22 suites carry a
+byte-identical `assert_eq` (381 call sites) that `lib.sh` does not offer**; 12 redefine `ok`/`bad` (8 of them
+without sourcing `lib.sh`, 4 sourcing it and shadowing the helpers); 88 of 91
 have explicit negative controls; 11 use the shared `mutant_runtime` guard-the-guard helper; 0 suites touch real
 `gh` or the network; 53 are pure bash, 23 use python3, 32 use jq.
 

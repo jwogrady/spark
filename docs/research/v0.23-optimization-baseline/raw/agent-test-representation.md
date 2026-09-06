@@ -117,7 +117,7 @@ Legend: `G` = defines its own gh stub/fake; `P` = private `PATH=` shim; `F` = te
 - Files with a private gh stub/fake: **26** create an executable `.../gh` stub on disk; **0** define a `gh()` shell function. (`test-e2e-bounded-run.sh` has `make_stub` for non-gh tools.)
 - Files with private temp-repo/fixture bootstrap: **82** of 91 (`F`); of those, **68** call the shared `sandbox_init`, **44** call the shared `make_repo`.
 - Files with a private `PATH=` shim: **34**.
-- Files that do **not** source `tests/lib.sh` at all: **10** — `test-crossroad.sh`, `test-e2e-bounded-run.sh`, `test-eval-lib.sh`, `test-guard-bash.sh`, `test-issue-manifest.sh`, `test-milestone-gate.sh`, `test-release-notes-check.sh`, `test-release-notes-runner.sh`, `test-roadmap-check.sh`, `test-skill-descriptions.sh`.
+- Files that do **not** source `tests/lib.sh` at all: **11** — `test-crossroad.sh`, `test-e2e-bounded-run.sh`, `test-eval-lib.sh`, `test-guard-bash.sh`, `test-issue-manifest.sh`, `test-milestone-gate.sh`, `test-openai-review.sh`, `test-release-notes-check.sh`, `test-release-notes-runner.sh`, `test-roadmap-check.sh`, `test-skill-descriptions.sh`. (Corrected 2026-09-06 after review: `test-openai-review.sh` references the reviewer lane's own `lib.sh`, not `tests/lib.sh`, and was omitted from the original count of 10.)
 
 ---
 
@@ -131,7 +131,7 @@ Representatives: `tests/test-docs-impact.sh:20`, `tests/test-governance-schema.s
 **B2. Byte-identical `ok()`/`bad()` redefinition — 12 suites.**
 Identical to `tests/lib.sh:85-86`.
 Representatives: `tests/test-crossroad.sh:17-18`, `tests/test-openai-review.sh:14-15`, `tests/test-eval-lib.sh:14-15` (also milestone-gate:14, next-selection:19, next-routing:20, issue-manifest:14, release-notes-{check:14,runner:17,carriers:23}, skill-descriptions:18, next-gate-order:38).
-**Shared helper in lib.sh? YES** (`lib.sh:85-86`) — but 10 of these suites do not source lib.sh at all, and 2 shadow it.
+**Shared helper in lib.sh? YES** (`lib.sh:85-86`) — but 8 of these 12 suites do not source `tests/lib.sh` at all (crossroad, openai-review, eval-lib, milestone-gate, issue-manifest, release-notes-check, release-notes-runner, skill-descriptions) and the other 4 source it and shadow the helpers (next-selection, next-routing, release-notes-carriers, next-gate-order). (Corrected 2026-09-06 after review by a mechanical grep for `. …lib.sh` / `source …lib.sh` lines; the original text said 10 and 2.)
 
 **B3. Private PATH-shim directory + `gh` stub + `chmod +x` + `env PATH=…` invocation — 24+ suites.**
 Every suite invents its own directory name (`$WORK/bin`, `$WORK/shim`, `$WORK/fakegh`, `$WORK/stub`, `$abin`, `$nxbin`, `$lsbin`, `$qbin`, `$dupbin`, `$WORK/lshim`, `$WORK/dishim`, `$WORK/hshim`, `$WORK/oshim`).

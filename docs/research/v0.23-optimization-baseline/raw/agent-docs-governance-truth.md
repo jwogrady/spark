@@ -191,4 +191,4 @@ Orphan in the other direction: **`docs/ops/openai-reviewer-lane.md` has no inbou
 | 11 | Benchmark vocabulary (10) | 2 (guarded by a parity test) | LOW |
 | 12 | Naming / Status26 (11) | 1 (two mechanical guards) | LOW |
 
-Concepts 10, 11 and 12 are the three that already carry a single authority plus a mechanical lockstep guard; concepts 1, 4 and 5 carry the most hand-maintained copies with no parity check between them.
+Concepts 8, 10 and 11 are the three that already carry a single authority plus a mechanical lockstep guard (the closed verdict vocabulary in code, the benchmark-vocabulary parity test, the two naming guards). Concept 12 (released-version truth) is coherent but different in kind: two machine surfaces plus prose projections, with no lockstep guard identified by this audit. Concepts 1, 4 and 5 carry the most hand-maintained copies with no parity check between them. (Corrected 2026-09-06 after review: the original sentence named concepts 10, 11 and 12.)
