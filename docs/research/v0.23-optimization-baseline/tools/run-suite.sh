@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # One full-suite run in the frozen worktree; the runner's own --json is the single projection (never re-run for a second summary).
 set -uo pipefail
-cd /home/john/code/spark/.claude/worktrees/baseline-921c982 || exit 1
-out=/home/john/.claude/jobs/046f256e/tmp/raw
+# usage: run-suite.sh [frozen-worktree] [output-dir]
+cd "${1:-/home/john/code/spark/.claude/worktrees/baseline-921c982}" || exit 1
+out="${2:-/home/john/.claude/jobs/046f256e/tmp/raw}"; mkdir -p "$out"
 echo "sha=$(git rev-parse HEAD)" > "$out/run-full.meta"
 echo "start_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$out/run-full.meta"
 s0=$(date +%s)

@@ -69,8 +69,8 @@ Other physical counts:
 | Release records / workflows / .github scripts | 13 / 6 / 12 | ls |
 | External binaries referenced by runtime (textual) | awk 286, git 201, gh 128, jq 83, grep 67, tr 66, sort 45, sed 41, wc 36, python3 35 | grep over runtime files; mentions, not invocations |
 | Remote branches (excluding master) | 134: 109 already ancestors of master, 25 not (several squash-merged, e.g. `perf/722-…` ahead 34) | `raw/branches.tsv`; ancestry, not GitHub merge state |
-| Hot paths (offline) | brief --short 64 ms / 19 shimmed; footprint 667 / 257; governance 104 / 42; doctor 2,142 ms / 804 shimmed / 443 parsers / 2 gh | `tests/bench.sh --json`, 3 runs |
-| Hot paths (live, observational) | governance validate 4,997 ms / 10 gh; triage 7,225 ms / 16 gh | bench.sh; network-dependent |
+| Hot paths (offline, reproducible on this host) | brief --short 64 ms / 19 shimmed; footprint 667 ms / 257 shimmed; governance 104 ms / 42 shimmed | `tests/bench.sh --json`, 3 runs; `mode: offline` |
+| Hot paths (live, observational) | doctor 2,142 ms / 804 shimmed / 443 parsers / 2 gh; governance validate 4,997 ms / 10 gh; triage 7,225 ms / 16 gh | bench.sh; `mode: live` — network-dependent |
 
 ## 3. Active reasoning surface (observed, not inferred from location)
 
@@ -155,9 +155,11 @@ dependency"); four tiers 4; CLI verb list 4 (3 mechanically locked by doctor); m
 near-disjoint statements and **no canonical definition of "#677 standing orchestration" in the tree**; version
 claims 4 (coherent); reviewer verdict vocabulary 3 (closed in code); benchmark vocabulary 2 (parity-tested);
 Status26 naming 1 (two mechanical guards). Nine verified stale/incomplete statements, including
-`reference/stability.md:57` (Experimental row lists 5 verbs, tsv classifies 7; doctor checks only the Stable row),
-`docs/README.md` omitting ADR-0030 and two shipped reference pages, and `plugins/spark/docs/README.md` with no
-how-to for `onboard`. Zero broken relative links; zero phantom verbs or skills.
+`plugins/spark/docs/reference/stability.md:57` (Experimental row lists 5 verbs, tsv classifies 7; doctor checks
+only the Stable row), the dev-side ADR index `docs/README.md:15-45` omitting ADR-0030, the shipped docs index
+`plugins/spark/docs/README.md:66-77` omitting two shipped reference pages (`compatibility.md`, `stability.md`),
+and the same shipped index having no how-to for `onboard`. Zero broken relative links; zero phantom verbs or
+skills.
 
 ## 7. Dead / stale candidates and surfaces that must not be removed
 
