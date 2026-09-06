@@ -1,0 +1,107 @@
+# fact-model — Spark's canonical operative fact model (schema version 1).
+#
+# ONE machine-readable authority for the SHAPE of an operative fact: the fact
+# classes an agent needs to execute a governed work unit, the envelope every
+# fact is carried in, the closed status vocabulary, and the canonical
+# identifier forms. reference/fact-model.md renders the same facts for a reader
+# and is checked against this data (tests/test-fact-model.sh); prose is never
+# the schema.
+#
+# This file defines HOW a fact is represented. It is NEVER an authority for
+# WHAT is true: values come from their sources (GitHub, git, the repository,
+# a durable human decision), and a fact only ever states what is currently
+# established, with provenance pointing to why.
+#
+# FORMAT — line-oriented, tab-separated, '#'-comment and blank-line tolerant,
+# the same discipline as the governance model. Records:
+#
+#   version     <int>
+#   class       <name>        <required>     <value-shape>       <description>
+#   facet       <name>        <envelope-field(s)>                <description>
+#   field       <name>        <required>     <type>              <description>
+#   status      <token>       <value-allowed>                    <description>
+#   identifier  <kind>        <regex>                            <canonical form>
+#   source      <type>        <version-identity>                 <description>
+#   rule        <id>          <statement>
+#
+#   required       required | optional | derived
+#   value-allowed  yes | no      (whether the `value` field may be present)
+#
+# EVOLUTION. `version` is the schema version every fact carries as
+# `schema_version`. A consumer that reads a fact whose schema_version it does
+# not know MUST treat the fact as UNKNOWN, never reinterpret field meaning.
+# Adding an optional field or a class is a minor change under the same
+# version; changing the meaning, type or requiredness of an existing field,
+# renaming a class, or altering a status token is a new version.
+
+version	1
+
+# --- Fact classes: what an agent must know to execute a governed work unit --
+# value-shape names the object the `value` field carries when ESTABLISHED.
+class	work_unit	required	{kind: issue|pull_request, id: <work-unit>}	Canonical identity of the task being executed
+class	repository	required	{id: <repository>, default_branch: <ref>}	Canonical identity of the repository the work unit belongs to
+class	placement	required	{milestone: <milestone>|none, release: <release>|none, gate: <work-unit>|none}	Release / milestone / gate placement
+class	graph	required	{parent: <work-unit>|none, children: [<work-unit>], blocked_by: [<work-unit>]}	Native parent / child / dependency state
+class	authority	required	{grants: [{decision: <comment>|<work-unit>, scope: <text>}], human_boundaries: [<text>]}	Standing authority and the boundaries reserved for a human
+class	acceptance	required	{contract: <work-unit>, items: [{id: <text>, state: MET|NOT_MET|UNKNOWN}]}	Acceptance contract identity and current satisfaction
+class	head	required	{head: <commit>, base_ref: <ref>, base: <commit>, current: true|false}	Exact HEAD, base and staleness of the work unit's change
+class	review	required	{verdict: <verdict>, head: <commit>, reviewer: <login>, record: <comment>}	Independent review verdict bound to an exact HEAD
+class	checks	required	{head: <commit>, required: [<text>], results: [{name: <text>, conclusion: <text>}]}	Required-check state on the exact HEAD
+class	next_action	derived	{action: <action>, because: [<fact-key>]}	The next governed action where it is mechanically derivable
+
+# --- Facets carried by the envelope rather than as separate facts ----------
+facet	provenance	source, provenance	Source identity and the pointer that lets an auditor drill down
+facet	freshness	source.version, observed_at, invalidators	What was observed, when, and what makes the fact stale
+facet	certainty	status, detail	UNKNOWN / CONFLICT / NOT_APPLICABLE are explicit statuses, never empty values
+
+# --- Envelope fields: every fact carries exactly this shape ------------------
+field	schema_version	required	string	The schema version the fact conforms to (this file's `version`)
+field	key	required	string	Fact key `<class>.<name>`; one representation per operative fact
+field	class	required	string	One of the class names above
+field	status	required	string	One of the status tokens below
+field	value	optional	any	Present only when status is ESTABLISHED; its shape is the class's value-shape
+field	source	required	object	{type: <source-type>, identity: <canonical locator>, version: <observed version identity>}
+field	observed_at	required	string	ISO-8601 UTC instant the source was read
+field	invalidators	required	list	Canonical invalidator tokens; a change to any one makes the fact stale
+field	provenance	required	string	Pointer to the authoritative record (URL or canonical locator); never the record itself
+field	inputs	optional	list	Fact keys this fact was derived from; required when source.type is derived
+field	inferred	optional	boolean	true only for a legitimately inferred fact; an inferred fact is never authority
+field	detail	optional	object	Machine-shaped explanation for UNKNOWN or CONFLICT: {reason: <text>, candidates: [<canonical locator>]}
+
+# --- Status vocabulary: closed; nothing outside it is a fact ----------------
+status	ESTABLISHED	yes	The source was read and yields one value
+status	UNKNOWN	no	The source could not be read or the fact is outside the observed snapshot; never a permissive default
+status	CONFLICT	no	Two authoritative inputs disagree or evidence is malformed beside valid evidence; a human or a released contract resolves it, never the model
+status	NOT_APPLICABLE	no	The fact class does not apply to this work unit (a repository without a milestone, an issue without a HEAD)
+
+# --- Canonical identifiers: one representation; anything else is a projection
+identifier	repository	^[a-z0-9.-]+/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$	<host>/<owner>/<name>, lower-case host, no scheme, no .git
+identifier	work-unit	^[a-z0-9.-]+/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#[1-9][0-9]*$	<repository>#<number>; a bare #<number> is a projection, never an identity
+identifier	comment	^[a-z0-9.-]+/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#[1-9][0-9]*/comment/[1-9][0-9]*$	<work-unit>/comment/<comment id>
+identifier	milestone	^[a-z0-9.-]+/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/milestone/[1-9][0-9]*$	<repository>/milestone/<number>
+identifier	commit	^[0-9a-f]{40}$	Full 40-hex lower-case object id; abbreviations are projections
+identifier	ref	^[A-Za-z0-9_./-]+$	A git ref name without the refs/heads/ prefix
+identifier	release	^v[0-9]+\.[0-9]+\.[0-9]+$	A release tag as published
+identifier	login	^login:[A-Za-z0-9-]+(\[bot\])?$	An actor identity; naming an actor never confers authority
+identifier	verdict	^(PASS|CHANGES REQUIRED|DECISION REQUIRED|NOT ASSESSED)$	The independent reviewer's closed vocabulary
+identifier	action	^(wait-review|repair|merge|close|stop-decision-required|stop-crossroad|none)$	The closed next-action vocabulary
+identifier	fact-key	^[a-z_]+\.[a-z_]+$	<class>.<name>
+
+# --- Source types and the version identity each must observe ----------------
+source	github-api	node updated_at, etag, or the observed head/id the record is keyed by	A GitHub REST or GraphQL read
+source	git	the commit id or ref target observed	A read of the local or remote git object store
+source	repository-file	the commit id the file was read at	A committed file in the repository tree
+source	human-decision	the comment id or commit id that records the decision	A durable, source-backed human decision; never a role, label or summary
+source	derived	the schema version plus the input facts' versions	A conclusion computed from other facts (requires inputs)
+
+# --- Rules the shape enforces ------------------------------------------------
+rule	R1	Canonical identifiers have one representation; labels, abbreviations and pretty names are projections.
+rule	R2	Raw issue or comment bodies, timelines and explanatory prose are not fact values; a fact points at them through provenance.
+rule	R3	A fact states what is established now; provenance states why and how. The two are separate fields, never merged.
+rule	R4	A derived fact lists the keys of every fact that decided it, so invalidating an input invalidates the conclusion.
+rule	R5	Human judgment is a human-decision source with a durable record identity; it is never inferred from capability, membership, labels or cached prose.
+rule	R6	value is present only when status is ESTABLISHED; UNKNOWN, CONFLICT and NOT_APPLICABLE carry no value and cannot collapse into false, null or empty.
+rule	R7	A fact bound to a HEAD (head, review, checks, acceptance) lists that HEAD among its invalidators and is stale the moment the HEAD changes.
+rule	R8	Two authoritative inputs that disagree are a CONFLICT with both candidates named; no first-write, last-write or plausibility rule resolves them.
+rule	R9	A consumer that meets an unknown schema_version treats the fact as UNKNOWN; it never reinterprets fields.
+rule	R10	Nothing here is written to .spark/state.json; mutable GitHub execution truth is read from its source and carried in a snapshot, not stored as state.
