@@ -41,7 +41,7 @@ assert_eq "value is optional in the envelope (present only when ESTABLISHED)" "o
 assert_eq "five source types" "5" "$(rec source | wc -l | tr -d ' ')"
 assert_eq "fifteen rules" "15" "$(rec rule | wc -l | tr -d ' ')"
 assert_eq "one source-version grammar per source type" "$(rec source | cut -f2 | sort | tr '\n' ' ')" "$(rec source-version | cut -f2 | sort | tr '\n' ' ')"
-assert_eq "seventeen identifier kinds" "17" "$(rec identifier | wc -l | tr -d ' ')"
+assert_eq "eighteen identifier kinds" "18" "$(rec identifier | wc -l | tr -d ' ')"
 for k in issue-state check-state scope boundary decision-record derived-version; do rec identifier | cut -f2 | grep -qx "$k" && ok || bad "closed vocabulary $k declared"; done
 assert_eq "one source-identity grammar per source type" "$(rec source | cut -f2 | sort | tr '\n' ' ')" "$(rec source-identity | cut -f2 | sort | tr '\n' ' ')"
 while IFS=$'\t' read -r _ kind rx _; do
@@ -125,6 +125,9 @@ def shape(c, v):
     for k in ("required", "because", "human_boundaries"):
         if k in v and not isinstance(v[k], list): fail(f"{c}.{k} must be a list")
 version = [r[1] for r in rows if r[0] == "version"][0]
+LOCATOR_KINDS = ("repository", "work-unit", "comment", "milestone", "commit")
+def locator(x):
+    return any(ids[k].match(x) for k in LOCATOR_KINDS) or any(rx.match(x) for rx in sid.values())
 HEAD_BOUND = {"head", "review", "checks", "acceptance"}
 FORBIDDEN_KEYS = {"body", "comments", "timeline", "prose", "summary", "history"}
 ISO = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
@@ -149,6 +152,14 @@ def check_fact(f):
     if statuses[f["status"]] == "no" and "value" in f: fail(f"{f['status']} fact carries a value")
     if f["status"] == "ESTABLISHED" and "value" not in f: fail("ESTABLISHED fact without value")
     if f["status"] in ("UNKNOWN", "CONFLICT") and "detail" not in f: fail(f"{f['status']} without detail")
+    if "detail" in f:
+        if f["status"] not in ("UNKNOWN", "CONFLICT"): fail("detail is present only on UNKNOWN or CONFLICT")
+        d = f["detail"]
+        exact(d, {"reason", "candidates"}, "detail")
+        if not isinstance(d["reason"], str) or not d["reason"].strip() or "\n" in d["reason"]: fail("detail.reason must be one non-empty line")
+        if not isinstance(d["candidates"], list): fail("detail.candidates must be a list")
+        for cand in d["candidates"]:
+            if not isinstance(cand, str) or not locator(cand): fail(f"detail candidate is not a canonical locator: {cand!r}")
     src = f["source"]
     if set(src) != {"type", "identity", "version"}: fail("source must be {type, identity, version}")
     if src["type"] not in sources: fail(f"unknown source type {src['type']}")
@@ -192,6 +203,9 @@ def check_fact(f):
             wu(x["id"]); ids["issue-state"].match(x["state"]) or fail(f"relationship state outside vocabulary: {x['state']}")
         v["parent"] == "none" or rel(v["parent"])
         for x in v["children"] + v["blocked_by"]: rel(x)
+        for name in ("children", "blocked_by"):
+            got = [x["id"] for x in v[name]]
+            if len(set(got)) != len(got): fail(f"graph.{name} names a work unit twice (R14)")
     if c == "authority":
         for g in v["grants"]:
             ids["decision-record"].match(g["decision"]) or fail("grant decision is not a durable decision record (R5)")
@@ -202,10 +216,16 @@ def check_fact(f):
             ids["repository"].match(b["target"]) or ids["work-unit"].match(b["target"]) or fail("boundary target must be a canonical repository or work unit (R14)")
             ids["boundary"].match(b["boundary"]) or fail("boundary outside the closed vocabulary (R13)")
         if f["source"]["type"] != "human-decision": fail("authority must come from a human-decision source")
+        for rec in v["grants"] + v["human_boundaries"]:
+            if rec["decision"] != f["source"]["identity"]: fail(f"authority record names decision {rec['decision']} but the fact's source is {f['source']['identity']}: one authority fact carries one decision record (R5)")
         if "inferred" in f: fail("authority can never be inferred")
     if c == "acceptance":
         wu(v["contract"]); sha(v["head"])
-        for it in v["items"]: it["state"] in ("MET", "NOT_MET", "UNKNOWN") or fail("bad acceptance state")
+        for it in v["items"]:
+            it["state"] in ("MET", "NOT_MET", "UNKNOWN") or fail("bad acceptance state")
+            if not isinstance(it["id"], str) or not ids["item-id"].match(it["id"]): fail(f"acceptance item id is not a scalar item-id: {it['id']!r} (R14)")
+        item_ids = [it["id"] for it in v["items"]]
+        if len(set(item_ids)) != len(item_ids): fail("acceptance item ids must be unique within the fact (R14)")
     if c == "head": sha(v["head"]); sha(v["base"]); ids["ref"].match(v["base_ref"]) or fail("bad base_ref"); isinstance(v["current"], bool) or fail("current must be boolean")
     if c == "review": ids["verdict"].match(v["verdict"]) or fail("verdict outside vocabulary"); sha(v["head"]); ids["login"].match(v["reviewer"]) or fail("reviewer not login:"); ids["comment"].match(v["record"]) or fail("record not a comment id")
     if c == "checks":
@@ -333,6 +353,13 @@ accepts "$base" && ok || bad "control: the canonical review fact is accepted"
 mut() { printf '%s' "$base" | python3 -c "import json,sys; f=json.load(sys.stdin); exec(sys.argv[1]); print(json.dumps(f))" "$1"; }
 accepts "$(mut 'f["status"]="UNKNOWN"; f["detail"]={"reason":"x","candidates":[]}')" && bad "UNKNOWN with a value must be rejected (R6)" || ok
 accepts "$(mut 'f["status"]="UNKNOWN"; del f["value"]')" && bad "UNKNOWN without detail must be rejected" || ok
+accepts "$(mut 'f["status"]="UNKNOWN"; del f["value"]; f["detail"]={"reason":"the endpoint returned 403","candidates":[]}')" && ok || bad "control: an UNKNOWN with a well-shaped detail is accepted"
+accepts "$(mut 'f["status"]="UNKNOWN"; del f["value"]; f["detail"]="could not read the review"')" && bad "a string detail must be rejected (R14)" || ok
+accepts "$(mut 'f["status"]="UNKNOWN"; del f["value"]; f["detail"]={"reason":"x"}')" && bad "a detail without candidates must be rejected (R14)" || ok
+accepts "$(mut 'f["status"]="UNKNOWN"; del f["value"]; f["detail"]={"reason":"x","candidates":[],"body":"the raw comment"}')" && bad "a detail carrying an extra (prose) key must be rejected (R2/R14)" || ok
+accepts "$(mut 'f["status"]="UNKNOWN"; del f["value"]; f["detail"]={"reason":"","candidates":[]}')" && bad "an empty detail.reason must be rejected (R14)" || ok
+accepts "$(mut 'f["status"]="UNKNOWN"; del f["value"]; f["detail"]={"reason":"x","candidates":["the comment the bot left yesterday"]}')" && bad "a prose candidate must be rejected (R14)" || ok
+accepts "$(mut 'f["detail"]={"reason":"x","candidates":[]}')" && bad "detail on an ESTABLISHED fact must be rejected" || ok
 accepts "$(mut 'f["value"]["record"]="#42"')" && bad "a bare #42 must not pass as an identity (R1)" || ok
 accepts "$(mut 'f["key"]="review.cached"')" && bad "a key other than the class's canonical key must be rejected (R1)" || ok
 accepts "$(mut 'f["key"]="review.foo"')" && bad "an arbitrary <class>.<name> key must be rejected (R1)" || ok
@@ -363,10 +390,16 @@ acc='{"schema_version":"1","key":"acceptance.contract","class":"acceptance","sta
 accepts "$acc" && ok || bad "control: a canonical acceptance fact is accepted"
 accepts "$(printf '%s' "$acc" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["value"]["items"][0]["summary"]="done, I think"; print(json.dumps(f))')" && bad "acceptance.items[].summary must be rejected (R2/R14)" || ok
 accepts "$(printf '%s' "$acc" | python3 -c 'import json,sys; f=json.load(sys.stdin); del f["value"]["head"]; print(json.dumps(f))')" && bad "an acceptance fact without an explicit HEAD must be rejected (R7)" || ok
+accepts "$(printf '%s' "$acc" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["value"]["items"].append({"id":"a1","state":"NOT_MET"}); print(json.dumps(f))')" && bad "duplicate acceptance item ids (one MET, one NOT_MET) must be rejected (R14)" || ok
+accepts "$(printf '%s' "$acc" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["value"]["items"][0]["id"]={"body":"raw prose"}; print(json.dumps(f))')" && bad "an object as an acceptance item id must be rejected (R2/R14)" || ok
+accepts "$(printf '%s' "$acc" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["value"]["items"][0]["id"]=""; print(json.dumps(f))')" && bad "an empty acceptance item id must be rejected (R14)" || ok
+accepts "$(printf '%s' "$acc" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["value"]["items"][0]["id"]="the first criterion, roughly"; print(json.dumps(f))')" && bad "a prose acceptance item id must be rejected (R14)" || ok
 auth='{"schema_version":"1","key":"authority.standing","class":"authority","status":"ESTABLISHED","value":{"grants":[{"decision":"github.com/acme/widgets#7/comment/9001","target":"github.com/acme/widgets","scopes":["merge:routine"]}],"human_boundaries":[{"decision":"github.com/acme/widgets#7/comment/9001","target":"github.com/acme/widgets","boundary":"release:approve"}]},"source":{"type":"human-decision","identity":"github.com/acme/widgets#7/comment/9001","version":"9001"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["comment:github.com/acme/widgets#7/comment/9001"],"provenance":"https://github.com/acme/widgets/issues/7"}'
 accepts "$auth" && ok || bad "control: a canonical authority fact is accepted"
 amut() { printf '%s' "$auth" | python3 -c "import json,sys; f=json.load(sys.stdin); exec(sys.argv[1]); print(json.dumps(f))" "$1"; }
 accepts "$(amut 'f["source"]["type"]="github-api"')" && bad "authority from a non-human-decision source must be rejected (R5)" || ok
+accepts "$(amut 'f["value"]["grants"][0]["decision"]="github.com/acme/widgets#7/comment/9002"')" && bad "a grant naming a decision the fact's source does not back must be rejected (R5)" || ok
+accepts "$(amut 'f["value"]["human_boundaries"][0]["decision"]="github.com/acme/widgets#8/comment/9100"')" && bad "a boundary naming a decision the fact's source does not back must be rejected (R5)" || ok
 accepts "$(amut 'f["inferred"]=True')" && bad "an inferred authority fact must be rejected (R5)" || ok
 accepts "$(amut 'f["inferred"]=False')" && bad "inferred: false on authority must be rejected (never a representation)" || ok
 accepts "$(amut 'f["source"]["identity"]="role:owner"')" && bad "a human-decision source whose identity is a role must be rejected (R5/R14)" || ok
@@ -392,6 +425,8 @@ gmut() { printf '%s' "$gr" | python3 -c "import json,sys; f=json.load(sys.stdin)
 accepts "$gr" && ok || bad "control: a graph fact with relationship states is accepted"
 accepts "$(gmut 'f["value"]["blocked_by"]=["github.com/acme/widgets#39"]')" && bad "a relationship without state must be rejected" || ok
 accepts "$(gmut 'f["value"]["parent"]["state"]="done"')" && bad "a relationship state outside the vocabulary must be rejected" || ok
+accepts "$(gmut 'f["value"]["blocked_by"].append({"id":"github.com/acme/widgets#39","state":"open"})')" && bad "one blocker listed as both closed and open must be rejected (R14)" || ok
+accepts "$(gmut 'f["value"]["children"]=[{"id":"github.com/acme/widgets#42","state":"open"},{"id":"github.com/acme/widgets#42","state":"open"}]')" && bad "a child listed twice must be rejected (R14)" || ok
 # snapshot-level controls (R11): the page's complete snapshot minus one required class must be rejected as a snapshot
 sets() { printf '%s' "$1" | python3 "$VAL" "$TSV" "$DOC" set >/dev/null 2>&1; }
 full="$(python3 - "$DOC" <<'PY'

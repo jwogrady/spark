@@ -33,9 +33,9 @@ a **fragment**: useful to show one situation, never consumed as a snapshot
 | `work_unit` | `work_unit.identity` | required | `{kind: issue\|pull_request, id: <work-unit>}` | Which task is being executed |
 | `repository` | `repository.identity` | required | `{id: <repository>, default_branch: <ref>}` | Which repository owns it |
 | `placement` | `placement.current` | required | `{milestone: <milestone>\|none, release: <release>\|none, gate: <work-unit>\|none}` | Where it sits in release, milestone and gate |
-| `graph` | `graph.native` | required | `{parent: {id: <work-unit>, state: <issue-state>}\|none, children: [{id, state}], blocked_by: [{id, state}]}` | Its native parent, children and dependencies, each with its current state; a blocker is satisfied exactly when its state is `closed` |
-| `authority` | `authority.standing` | required | `{grants: [{decision: <decision-record>, target: <repository>\|<work-unit>, scopes: [<scope>]}], human_boundaries: [{decision: <decision-record>, target: <repository>\|<work-unit>, boundary: <boundary>}]}` | Each grant and each reserved boundary names its durable decision record, the repository or work unit it applies to, and a closed token; the wording lives behind `provenance` |
-| `acceptance` | `acceptance.contract` | required | `{contract: <work-unit>, head: <commit>, items: [{id, state: MET\|NOT_MET\|UNKNOWN}]}` | Which acceptance contract governs and how far it is satisfied, as judged on an exact HEAD |
+| `graph` | `graph.native` | required | `{parent: {id: <work-unit>, state: <issue-state>}\|none, children: [{id, state}], blocked_by: [{id, state}]}` | Its native parent, children and dependencies, each with its current state; a blocker is satisfied exactly when its state is `closed`; a work unit appears at most once per list |
+| `authority` | `authority.standing` | required | `{grants: [{decision: <decision-record>, target: <repository>\|<work-unit>, scopes: [<scope>]}], human_boundaries: [{decision: <decision-record>, target: <repository>\|<work-unit>, boundary: <boundary>}]}` | Each grant and each reserved boundary names its durable decision record, the repository or work unit it applies to, and a closed token; the wording lives behind `provenance`; every `decision` inside the value is the fact's own `source.identity` (R5) |
+| `acceptance` | `acceptance.contract` | required | `{contract: <work-unit>, head: <commit>, items: [{id: <item-id>, state: MET\|NOT_MET\|UNKNOWN}]}` | Which acceptance contract governs and how far it is satisfied, as judged on an exact HEAD; each item id is a scalar `item-id`, unique within the fact |
 | `head` | `head.exact` | required | `{head: <commit>, base_ref: <ref>, base: <commit>, current: true\|false}` | The exact HEAD and base, and whether the HEAD is still current |
 | `review` | `review.independent` | required | `{verdict: <verdict>, head: <commit>, reviewer: <login>, record: <comment>}` | The independent verdict, bound to the HEAD it judged |
 | `checks` | `checks.required` | required | `{head: <commit>, required: [<text>], results: [{name, state: <check-state>}]}` | Required-check state on that exact HEAD: exactly one result per required name (R12); `merge` is derivable only when every state is `success` |
@@ -66,7 +66,7 @@ Every fact, whatever its class, has exactly this shape:
 | `provenance` | required | A pointer to the authoritative record, never the record itself |
 | `inputs` | when derived | The keys of the facts this one was computed from |
 | `inferred` | optional | the literal `true`, present only on a legitimately inferred fact — `false`, `"true"` or any other value is rejected; an inferred fact is never authority |
-| `detail` | optional | Machine-shaped explanation for UNKNOWN or CONFLICT: `{reason, candidates}` |
+| `detail` | optional | Exact shape `{reason, candidates}`, present only when `status` is UNKNOWN or CONFLICT: `reason` is one non-empty line; `candidates` is a list (possibly empty) of canonical locators — a repository, work unit, comment, milestone or commit identifier, or a source identity in its grammar — never prose or a raw record |
 
 Optional means *absent*. A missing `value` is the statement "no value is
 established"; the model never uses `null`, `false` or `""` to mean that, so a
@@ -102,6 +102,7 @@ or bind.
 | login | `login:<name>` | `login:github-actions[bot]` — naming an actor never confers authority |
 | verdict | the reviewer's closed vocabulary | `PASS`, `CHANGES REQUIRED`, `DECISION REQUIRED`, `NOT ASSESSED` |
 | action | the closed next-action vocabulary — only actions this version can derive (R15); a new action is a new version | `wait-review`, `repair`, `merge`, `stop-decision-required` |
+| item-id | a scalar acceptance item id: one token, no whitespace, unique within its fact | `a1`, `acceptance/3` |
 | fact-key | the class's one canonical key (class table) | `review.independent` |
 | issue-state | current state of a related work unit | `open`, `closed` |
 | check-state | normalized state of one required check | `success`, `failure`, `pending`, `missing` (required but no run observed) |
@@ -151,7 +152,10 @@ of the source type; a role name, a label, a summary, or a word such as
   changes and invalidates the conclusion.
 - **R5** Human judgment is a `human-decision` source with a durable record
   identity. It is never inferred from capability, membership, labels or cached
-  prose.
+  prose. Every `decision` an authority value names is that fact's own
+  `source.identity`, so the envelope's provenance backs each grant and boundary
+  the value carries; authority resting on several records is UNKNOWN in this
+  version, its `detail` naming them as candidates.
 - **R6** `value` is present only when `status` is ESTABLISHED. UNKNOWN,
   CONFLICT and NOT_APPLICABLE carry no value and cannot collapse into `false`,
   `null` or empty.
@@ -177,7 +181,10 @@ of the source type; a role name, a label, a summary, or a word such as
   value a consumer must interpret.
 - **R14** Every value has an exact shape: only the declared keys, recursively;
   `source.identity` and `source.version` each match the grammar of their source
-  type; a grant names the repository or work unit it applies to.
+  type; a grant names the repository or work unit it applies to. `detail` has
+  the exact shape `{reason, candidates}` with canonical locators as candidates;
+  acceptance item ids are scalar `item-id`s, unique within the fact; a work unit
+  appears at most once per graph list.
 - **R15** `next_action` is derived, never asserted, and every fact its
   derivation consulted is in its `inputs`, so R4 re-versions it when any of
   them changes. `merge` only when the review is PASS on the current HEAD, every
