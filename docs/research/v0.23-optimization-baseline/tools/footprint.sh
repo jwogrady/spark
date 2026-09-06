@@ -71,11 +71,20 @@ bucket evaluations.fixtures ':(glob)evaluations/*/fixtures/**'
 bucket evaluations.runs_evidence ':(glob)evaluations/*/runs/**'
 bucket evaluations.prose ':(glob)evaluations/*/*.md'
 echo
+# Coverage integrity: every tracked file must be in exactly one bucket. The inventories are materialized with
+# status-checked commands (no process substitution, whose failures comm cannot see), and a non-empty uncovered
+# or multiply-bucketed list is a FAILURE of the measurement, not a note — the run exits 3.
+ALL="$(mktemp)"; UNIQ="$(mktemp)"; trap 'rm -f "$COVER" "$ALL" "$UNIQ"' EXIT
+git ls-files | sort > "$ALL"
+sort -u "$COVER" > "$UNIQ"
+uncovered="$(comm -23 "$ALL" "$UNIQ")"
+dups="$(sort "$COVER" | uniq -d)"
 echo "=== bucket coverage check: tracked files in no bucket ==="
-comm -23 <(git ls-files | sort) <(sort -u "$COVER")
+[ -z "$uncovered" ] || printf '%s\n' "$uncovered"
 echo "=== bucket coverage check: tracked files in more than one bucket ==="
-sort "$COVER" | uniq -d
+[ -z "$dups" ] || printf '%s\n' "$dups"
 s="$(wc -l < "$COVER")";                            emit bucket_file_sum "$s"
+if [ -n "$uncovered" ] || [ -n "$dups" ]; then echo "COVERAGE FAILURE: every tracked file must be in exactly one bucket" >&2; exit 3; fi
 echo
 echo "=== by extension (tracked) ==="
 git ls-files | sed -E 's/.*\.([A-Za-z0-9]+)$/\1/; t; s/.*/(noext)/' | sort | uniq -c | sort -rn

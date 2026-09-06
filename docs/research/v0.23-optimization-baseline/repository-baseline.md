@@ -237,9 +237,11 @@ run.
 All four wrappers fail closed: setup and metadata collection run under `set -euo pipefail`, every required
 number is captured into a variable before it is printed (so a failing `git`, `cat`, `wc`, `find` or `awk` aborts
 instead of hiding behind a successful `echo`), and the suite/bench/structure runs report their own status as the
-wrapper's exit status. The only statuses treated as measurements rather than failures are `grep` status 1 (no
-match → a zero count) and `git merge-base --is-ancestor` status 1 (not an ancestor → not merged); any higher
-status propagates.
+wrapper's exit status. `footprint.sh` materializes its coverage inventories with status-checked commands and exits
+3 if any tracked file is in no bucket or in more than one — the "389/389 files bucketed" claim is enforced, not
+just printed — and `branches.sh` captures and checks every provenance value before building its header. The
+only statuses treated as measurements rather than failures are `grep` status 1 (no match → a zero count) and
+`git merge-base --is-ancestor` status 1 (not an ancestor → not merged); any higher status propagates.
 The committed `raw/footprint.txt` was re-produced byte-identically by the fail-closed `footprint.sh` against the
 frozen worktree; `raw/branches.tsv` carries a provenance header naming the fetch state it was observed from; the
 `run-suite.sh` projection reproduces the committed `raw/run-full.json` and `raw/run-full-suites.txt` byte-for-byte

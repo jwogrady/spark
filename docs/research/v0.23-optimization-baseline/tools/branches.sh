@@ -6,12 +6,17 @@
 # against 921c982, which cannot see squash merges. Fail-closed: any git failure aborts with a non-zero status.
 set -euo pipefail
 M=921c9820b92e99ef3620f4f46a0a8a6d7bb0c8b5
+# every provenance value is captured and checked on its own line before the header is built, so a failed
+# `date`, `git fetch` or `ls-remote` aborts instead of leaving an incomplete header behind a successful printf
+observed_at="$(date -u +%FT%TZ)"; [ -n "$observed_at" ]
 prov="local remote-tracking refs, not refreshed by this run"
 if [ "${1:-}" = "--fetch" ]; then
   git fetch -q --prune origin
-  prov="after git fetch --prune origin at $(date -u +%FT%TZ); remote heads by ls-remote: $(git ls-remote --heads origin | wc -l)"
+  fetched_at="$(date -u +%FT%TZ)"; [ -n "$fetched_at" ]
+  remote_heads="$(git ls-remote --heads origin | wc -l)"; [ "$remote_heads" -gt 0 ]
+  prov="after git fetch --prune origin at $fetched_at; remote heads by ls-remote: $remote_heads"
 fi
-printf '# provenance: %s; observed at %s; ancestry vs %s\n' "$prov" "$(date -u +%FT%TZ)" "$M"
+printf '# provenance: %s; observed at %s; ancestry vs %s\n' "$prov" "$observed_at" "$M"
 printf 'branch\tlast_commit_date\tahead_of_master\tbehind_master\tmerged_into_master\n'
 refs="$(git for-each-ref --format='%(refname:short)' refs/remotes/origin)"
 [ -n "$refs" ] || { echo "no remote-tracking refs found under refs/remotes/origin" >&2; exit 1; }
