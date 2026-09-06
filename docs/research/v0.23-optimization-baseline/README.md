@@ -49,11 +49,14 @@ apart: everything under `raw/` is a mechanical capture; this file is the interpr
   them from the session record.
 - **GitHub evidence**: fetched by `tools/fetch-pr.sh` and `tools/fetch-commits.sh` (REST). The raw JSON is
   re-fetchable and is not committed; `raw/pr*/derived.compact.json` carries every derived fact, including the
-  id and URL of each reviewer comment of record. The verbatim, complete finding text (whole bullet blocks,
-  including continuation lines and sub-bullets) is committed in the companion PR as `raw/pr*/findings.txt`
+  id and URL of each reviewer comment of record, plus the frozen head and observation cutoff the derivation was
+  pinned to (`analyze-pr.py` refuses a different PR head and ignores anything created after the cutoff). The
+  verbatim, complete finding text (whole bullet blocks byte-for-byte, each preceded by a `### <round>.<bullet>`
+  id envelope that is not part of the finding) is committed in the companion PR as `raw/pr*/findings.txt`
   (`tools/dump-findings.py`), with `findings-validation.txt` proving every block is a substring of the live
-  comment body (`tools/validate-findings.py`). `tables.md` is rendered from the committed compact projections
-  alone; every tool takes its input directory as an argument.
+  comment body after envelope removal (`tools/validate-findings.py`). `tables.md` is rendered from the committed
+  projections alone (`raw/transcript-aug.compact.json` is committed here as well, so T6 renders identically);
+  every tool takes its input directory as an argument.
 
 ## 2. #730 — effective reasoning surface and context amplification
 
@@ -203,8 +206,10 @@ BASE=docs/research/v0.23-optimization-baseline
 # GitHub evidence (re-fetches the raw JSON that is not committed)
 bash $BASE/tools/fetch-pr.sh 727 726 $BASE/raw/pr727 && bash $BASE/tools/fetch-commits.sh $BASE/raw/pr727
 bash $BASE/tools/fetch-pr.sh 724 722 $BASE/raw/pr724 && bash $BASE/tools/fetch-commits.sh $BASE/raw/pr724
-python3 $BASE/tools/analyze-pr.py $BASE/raw/pr727 727 && python3 $BASE/tools/dump-findings.py $BASE/raw/pr727 727
-python3 $BASE/tools/analyze-pr.py $BASE/raw/pr724 724 && python3 $BASE/tools/dump-findings.py $BASE/raw/pr724 724
+# the frozen head and observation cutoff pin the derivation: a later comment, rerun or commit cannot change the baseline
+python3 $BASE/tools/analyze-pr.py $BASE/raw/pr727 727 e3ced28f6a469b09990dfd96b3435bfb5b2b342a 2026-09-06T16:24:54Z
+python3 $BASE/tools/analyze-pr.py $BASE/raw/pr724 724 cdc04a504afc573148af4fb034e43c9e335ca5a0 2026-09-06T16:24:54Z
+python3 $BASE/tools/dump-findings.py $BASE/raw/pr727 727 && python3 $BASE/tools/dump-findings.py $BASE/raw/pr724 724
 python3 $BASE/tools/validate-findings.py $BASE/raw/pr727 727   # proves findings.txt against the live comment bodies
 python3 $BASE/tools/validate-findings.py $BASE/raw/pr724 724
 # writer-lane consumption (needs the session record; the two window files are committed)

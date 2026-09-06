@@ -1,5 +1,7 @@
 {
 "pr": 727,
+"frozen_head_expected": "e3ced28f6a469b09990dfd96b3435bfb5b2b342a",
+"observation_cutoff": "2026-09-06T16:24:54Z",
 "state": "open",
 "merged_at": null,
 "head": "e3ced28f6a469b09990dfd96b3435bfb5b2b342a",

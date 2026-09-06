@@ -175,7 +175,7 @@ HEAD-independent fetches by kind: {'authority/parent/placement issue': 10, 'mile
 
 - PR #727: `plugins/spark/lib/execution.sh` ×62; `plugins/spark/skills/ship/SKILL.md` ×18; `tests/test-merge-authority.sh` ×12; `plugins/spark/docs/reference/cli.md` ×11; `plugins/spark/skills/ship/references/bounded-merge.md` ×7; `docs/adr/0032-bounded-increment-merge-authority.md` ×6; `plugins/spark/bin/spark` ×5; `docs/adr/0019-human-directed-product-model.md` ×3
 - PR #724: `tests/bench-memo.sh` ×43; `plugins/spark/bin/spark` ×41; `tests/test-hot-path-memo.sh` ×34; `docs/ops/execution-configuration-surface.md` ×31; `docs/releases/v0.23.md` ×3; `plugins/spark/lib/repository.sh` ×1
-- Aug 30–31 session: see `raw/transcript-aug.compact.json` in the repository-baseline bundle (#737).
+- Aug 30–31 session (different work, same lane): `plugins/spark/bin/spark` ×106; `plugins/spark/docs/reference/cli.md` ×22; `.claude/worktrees/fix-611-selector-order/plugins/spark/bin/spark` ×13; `ROADMAP.md` ×9; `tests/structure.sh` ×9; `plugins/spark/skills/plan/scripts/issue-manifest.sh` ×8; `tests/bench.sh` ×8; `.github/scripts/docs-truth.sh` ×7; `tests/test-ci-handoff.sh` ×6; `tests/run.sh` ×6
 
 ## T7 — Reviewer comments of record (immutable source for the classification)
 

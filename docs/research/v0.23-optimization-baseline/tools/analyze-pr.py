@@ -10,6 +10,10 @@ import json, re, sys, os, collections
 from datetime import datetime, timezone
 
 raw = sys.argv[1]; pr = int(sys.argv[2])
+# Frozen-baseline guards: the expected PR head and the observation cutoff (ISO-8601 Z). With them the
+# derivation is pinned — a later comment, rerun or commit cannot silently change the "frozen" facts.
+expect_head = sys.argv[3] if len(sys.argv) > 3 else None
+cutoff = sys.argv[4] if len(sys.argv) > 4 else None
 def J(n):
     # `gh api --paginate` on an object-shaped endpoint concatenates one object per page.
     s = open(os.path.join(raw, n)).read(); dec = json.JSONDecoder(); i = 0; objs = []
@@ -29,6 +33,14 @@ T = lambda s: datetime.strptime(s, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone
 
 prj = J("pr.json"); commits = J("commits.json"); comments = J("issue-comments.json")
 reviews = J("reviews.json"); runs = J("workflow-runs.json"); checks = J("check-runs-head.json")
+if expect_head and prj["head"]["sha"] != expect_head:
+    raise SystemExit(f"PR #{pr} head is {prj['head']['sha']}, expected frozen head {expect_head}: refusing to derive a different baseline")
+if cutoff:
+    comments = [c for c in comments if c["created_at"] <= cutoff]
+    reviews = [r for r in reviews if r["submitted_at"] <= cutoff]
+    commits = [c for c in commits if c["commit"]["author"]["date"] <= cutoff]
+    if isinstance(runs, dict): runs = {**runs, "workflow_runs": [r for r in runs["workflow_runs"] if r["created_at"] <= cutoff]}
+    else: runs = [r for r in runs if r["created_at"] <= cutoff]
 
 MARK = re.compile(r"<!-- spark-openai-review pr=(\d+) head=([0-9a-f]{40}) verdict=(PASS|CHANGES REQUIRED|DECISION REQUIRED|NOT ASSESSED) -->")
 FILE = re.compile(r"`([\w./-]+\.(?:sh|md|json|tsv|yml|yaml))(?::[\d,-]+)?`")
@@ -109,7 +121,7 @@ wf = {k: {"runs": v["runs"], "seconds": int(v["seconds"]), "distinct_heads": len
 touched = collections.Counter(f for c in cl for f in c["files"])
 first = cl[0]["date"]; last_verdict = rounds[-1]["at"] if rounds else None
 out = {
-  "pr": pr, "state": prj["state"], "merged_at": prj.get("merged_at"), "head": prj["head"]["sha"], "base": prj["base"]["ref"],
+  "pr": pr, "frozen_head_expected": expect_head, "observation_cutoff": cutoff, "state": prj["state"], "merged_at": prj.get("merged_at"), "head": prj["head"]["sha"], "base": prj["base"]["ref"],
   "created_at": prj["created_at"], "first_commit": first, "last_verdict": last_verdict,
   "wall_first_commit_to_last_verdict_s": int((T(last_verdict) - T(first)).total_seconds()) if last_verdict else None,
   "commits": len(cl), "commit_types": dict(collections.Counter(c["type"] for c in cl)),
