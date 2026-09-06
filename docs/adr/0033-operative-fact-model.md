@@ -62,9 +62,17 @@ fixtures.**
 - Authority is a `human-decision` source with a durable record identity, never
   an inference from capability, role or prose. Facts are never written to
   `.spark/state.json`; the state file keeps its two judgment values.
+- Everything a consumer must act on is a closed token, not prose: authority
+  scopes and human boundaries, check states, relationship states, verdicts and
+  next actions. A snapshot is the complete set of required classes exactly
+  once; anything smaller is a fragment and is never consumed as a snapshot.
 - The model is classified Experimental. Its `version` is the schema version
   every fact carries; a consumer that meets an unknown version treats the fact
-  as UNKNOWN and never reinterprets fields.
+  as UNKNOWN and never reinterprets fields. Under one version only ignorable
+  additions are allowed (an optional envelope field, a derived class); a new
+  required class or field, or any change to a closed vocabulary, is a new
+  version, so an older consumer can never accept a snapshot it cannot judge
+  complete.
 
 Why this shape: the baseline showed the cost is in *re-establishing* facts, so
 the contract must make a fact self-describing enough to be reused safely — what

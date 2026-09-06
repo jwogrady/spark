@@ -34,7 +34,9 @@ assert_eq "ESTABLISHED is the only status that may carry a value" "ESTABLISHED" 
 assert_eq "twelve envelope fields" "12" "$(rec field | wc -l | tr -d ' ')"
 assert_eq "value is optional in the envelope (present only when ESTABLISHED)" "optional" "$(rec field | awk -F'\t' '$2=="value"{print $3}')"
 assert_eq "five source types" "5" "$(rec source | wc -l | tr -d ' ')"
-assert_eq "ten rules" "10" "$(rec rule | wc -l | tr -d ' ')"
+assert_eq "thirteen rules" "13" "$(rec rule | wc -l | tr -d ' ')"
+assert_eq "fifteen identifier kinds" "15" "$(rec identifier | wc -l | tr -d ' ')"
+for k in issue-state check-state scope boundary; do rec identifier | cut -f2 | grep -qx "$k" && ok || bad "closed vocabulary $k declared"; done
 for c in work_unit repository placement graph authority acceptance head review checks next_action; do
   rec class | cut -f2 | grep -qx "$c" && ok || bad "class $c declared"
 done
@@ -55,6 +57,8 @@ for r in $(rec rule | cut -f2); do grep -q "^- \*\*$r\*\*" "$DOC" && ok || bad "
 grep -q 'preferences/fact-model.tsv' "$DOC" && ok || bad "doc names its machine-readable authority"
 grep -qE '^| `next_action` \| derived' "$DOC" && ok || bad "doc marks next_action as derived"
 assert_eq "seven examples on the page" "7" "$(grep -c '^### Example [1-7] — ' "$DOC")"
+assert_eq "exactly one example is a complete snapshot" "1" "$(grep -c '^### Example [1-7] — .*(complete snapshot)$' "$DOC")"
+assert_eq "the other six are marked as fragments" "6" "$(grep -c '^### Example [1-7] — .*(fragment)$' "$DOC")"
 # shipped docs carry no bare issue-number references (doctor's tier boundary); a canonical work-unit id
 # such as github.com/acme/widgets#42 has a name immediately before the '#', so it is not a bare reference
 if grep -qE '(^|[^A-Za-z0-9/])#[0-9]+' "$DOC"; then bad "doc contains a bare issue reference"; else ok; fi
@@ -122,11 +126,17 @@ def check_fact(f):
         v["release"] == "none" or ids["release"].match(v["release"]) or fail("release not canonical")
         v["gate"] == "none" or wu(v["gate"])
     if c == "graph":
-        v["parent"] == "none" or wu(v["parent"])
-        for x in v["children"] + v["blocked_by"]: wu(x)
+        def rel(x):
+            if not isinstance(x, dict) or set(x) != {"id", "state"}: fail("relationship must be {id, state}")
+            wu(x["id"]); ids["issue-state"].match(x["state"]) or fail(f"relationship state outside vocabulary: {x['state']}")
+        v["parent"] == "none" or rel(v["parent"])
+        for x in v["children"] + v["blocked_by"]: rel(x)
     if c == "authority":
         for g in v["grants"]:
+            set(g) == {"decision", "scopes"} or fail("grant must be {decision, scopes}")
             ids["comment"].match(g["decision"]) or ids["work-unit"].match(g["decision"]) or fail("grant decision not a canonical record")
+            g["scopes"] and all(ids["scope"].match(s) for s in g["scopes"]) or fail("grant scopes must be non-empty closed tokens (R13)")
+        all(ids["boundary"].match(b) for b in v["human_boundaries"]) or fail("human boundaries must be closed tokens (R13)")
         if f["source"]["type"] != "human-decision": fail("authority must come from a human-decision source")
         if f.get("inferred"): fail("authority can never be inferred")
     if c == "acceptance":
@@ -134,33 +144,63 @@ def check_fact(f):
         for it in v["items"]: it["state"] in ("MET", "NOT_MET", "UNKNOWN") or fail("bad acceptance state")
     if c == "head": sha(v["head"]); sha(v["base"]); ids["ref"].match(v["base_ref"]) or fail("bad base_ref"); isinstance(v["current"], bool) or fail("current must be boolean")
     if c == "review": ids["verdict"].match(v["verdict"]) or fail("verdict outside vocabulary"); sha(v["head"]); ids["login"].match(v["reviewer"]) or fail("reviewer not login:"); ids["comment"].match(v["record"]) or fail("record not a comment id")
-    if c == "checks": sha(v["head"]); isinstance(v["required"], list) or fail("required must be a list")
+    if c == "checks":
+        sha(v["head"]); isinstance(v["required"], list) or fail("required must be a list")
+        names = [r["name"] for r in v["results"]]
+        sorted(names) == sorted(v["required"]) or fail("checks results must cover every required check exactly once (R12)")
+        len(set(names)) == len(names) or fail("duplicate check result (R12)")
+        all(ids["check-state"].match(r["state"]) for r in v["results"]) or fail("check state outside vocabulary (R12)")
     if c == "next_action":
         ids["action"].match(v["action"]) or fail("action outside vocabulary")
         set(v["because"]) <= set(f.get("inputs", [])) or fail("because must be a subset of inputs")
 
-def snapshots_from_doc(text):
-    blocks = re.findall(r"```json\n(.*?)\n```", text, flags=re.S)
-    return [json.loads(b) for b in blocks]
+REQUIRED = {c for c, req in classes.items() if req == "required"}
+def check_set(facts, complete):
+    """Snapshot-level rules (R11): a complete snapshot has every required class exactly once; a fragment
+    never repeats a class. Both: every fact validates; next_action.because ⊆ keys present."""
+    seen = [f["class"] for f in facts]
+    if len(set(seen)) != len(seen): fail("a class appears twice in one set")
+    if complete:
+        missing = REQUIRED - set(seen)
+        if missing: fail(f"complete snapshot lacks required classes: {sorted(missing)}")
+    keys = {f["key"] for f in facts}
+    for f in facts:
+        for i in f.get("inputs", []) or []:
+            if i not in keys: fail(f"derived input {i} is not present in the same set")
+
+def examples_from_doc(text):
+    """(kind, facts) per example, kind read from the heading marker: complete snapshot | fragment."""
+    out = []
+    for m in re.finditer(r"^### Example \d+ — [^\n]*\((complete snapshot|fragment)\)\n(.*?)```json\n(.*?)\n```", text, flags=re.S | re.M):
+        out.append((m.group(1), json.loads(m.group(3))))
+    return out
 
 mode = sys.argv[3] if len(sys.argv) > 3 else "doc"
 if mode == "doc":
-    snaps = snapshots_from_doc(open(doc).read())
+    exs = examples_from_doc(open(doc).read())
     n = 0
-    for s in snaps:
-        for f in s: check_fact(f); n += 1
+    for kind, facts in exs:
+        for f in facts: check_fact(f); n += 1
+        check_set(facts, kind == "complete snapshot")
     kinds = {"UNKNOWN": 0, "CONFLICT": 0}
-    for s in snaps:
-        for f in s:
+    for _, facts in exs:
+        for f in facts:
             if f["status"] in kinds: kinds[f["status"]] += 1
-    print(f"snapshots={len(snaps)} facts={n} unknown={kinds['UNKNOWN']} conflict={kinds['CONFLICT']}")
+    print(f"snapshots={len(exs)} complete={sum(1 for k,_ in exs if k=='complete snapshot')} facts={n} unknown={kinds['UNKNOWN']} conflict={kinds['CONFLICT']}")
+elif mode == "set":
+    # snapshot-level control: stdin = {"complete": bool, "facts": [...]}
+    d = json.load(sys.stdin)
+    try:
+        for f in d["facts"]: check_fact(f)
+        check_set(d["facts"], d["complete"]); print("accepted")
+    except (ValueError, KeyError, TypeError) as e: print(f"rejected: {e}"); sys.exit(1)
 else:
     # mutation control: read one fact JSON from stdin; exit 0 if it validates, 1 if rejected
     try: check_fact(json.load(sys.stdin)); print("accepted")
     except (ValueError, KeyError, TypeError) as e: print(f"rejected: {e}"); sys.exit(1)
 PY
 if out="$(python3 "$VAL" "$TSV" "$DOC" doc 2>&1)"; then ok; else bad "every example on the page validates: $out"; fi
-case "$out" in *"snapshots=7 "*) ok ;; *) bad "seven snapshots parsed: $out" ;; esac
+case "$out" in *"snapshots=7 complete=1 "*) ok ;; *) bad "seven examples parsed, one complete snapshot: $out" ;; esac
 case "$out" in *"unknown=1 conflict=1"*) ok ;; *) bad "examples include exactly one UNKNOWN and one CONFLICT fact: $out" ;; esac
 
 # ======================== mutation controls: the validator discriminates ========================
@@ -181,7 +221,37 @@ accepts "$(mut 'f["value"]=None')" && bad "value: null must not stand in for abs
 derived='{"schema_version":"1","key":"next_action.governed","class":"next_action","status":"ESTABLISHED","value":{"action":"merge","because":["review.independent"]},"source":{"type":"derived","identity":"fact-model","version":"1"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["head:0123456789abcdef0123456789abcdef01234567"],"provenance":"preferences/fact-model.tsv","inputs":["review.independent"]}'
 accepts "$derived" && ok || bad "control: a derived fact with inputs is accepted"
 accepts "$(printf '%s' "$derived" | python3 -c 'import json,sys; f=json.load(sys.stdin); del f["inputs"]; print(json.dumps(f))')" && bad "a derived fact without inputs must be rejected (R4)" || ok
-auth='{"schema_version":"1","key":"authority.standing","class":"authority","status":"ESTABLISHED","value":{"grants":[{"decision":"github.com/acme/widgets#7/comment/9001","scope":"routine merge"}],"human_boundaries":["release approval"]},"source":{"type":"github-api","identity":"github.com/acme/widgets#7","version":"x"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["comment:github.com/acme/widgets#7/comment/9001"],"provenance":"https://github.com/acme/widgets/issues/7"}'
-accepts "$auth" && bad "authority from a non-human-decision source must be rejected (R5)" || ok
+auth='{"schema_version":"1","key":"authority.standing","class":"authority","status":"ESTABLISHED","value":{"grants":[{"decision":"github.com/acme/widgets#7/comment/9001","scopes":["merge:routine"]}],"human_boundaries":["release:approve"]},"source":{"type":"human-decision","identity":"github.com/acme/widgets#7/comment/9001","version":"9001"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["comment:github.com/acme/widgets#7/comment/9001"],"provenance":"https://github.com/acme/widgets/issues/7"}'
+accepts "$auth" && ok || bad "control: a canonical authority fact is accepted"
+amut() { printf '%s' "$auth" | python3 -c "import json,sys; f=json.load(sys.stdin); exec(sys.argv[1]); print(json.dumps(f))" "$1"; }
+accepts "$(amut 'f["source"]["type"]="github-api"')" && bad "authority from a non-human-decision source must be rejected (R5)" || ok
+accepts "$(amut 'f["value"]["grants"][0]["scopes"]=["routine merge of a green PR"]')" && bad "a prose scope must be rejected (R13)" || ok
+accepts "$(amut 'f["value"]["human_boundaries"]=["release approval"]')" && bad "a prose boundary must be rejected (R13)" || ok
+accepts "$(amut 'f["value"]["grants"][0]["scopes"]=[]')" && bad "a grant with no scopes must be rejected (R13)" || ok
+chk='{"schema_version":"1","key":"checks.required","class":"checks","status":"ESTABLISHED","value":{"head":"0123456789abcdef0123456789abcdef01234567","required":["doctor","tests"],"results":[{"name":"doctor","state":"success"},{"name":"tests","state":"success"}]},"source":{"type":"github-api","identity":"github.com/acme/widgets","version":"0123456789abcdef0123456789abcdef01234567"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["head:0123456789abcdef0123456789abcdef01234567"],"provenance":"https://github.com/acme/widgets/commit/0123456789abcdef0123456789abcdef01234567/checks"}'
+cmut() { printf '%s' "$chk" | python3 -c "import json,sys; f=json.load(sys.stdin); exec(sys.argv[1]); print(json.dumps(f))" "$1"; }
+accepts "$chk" && ok || bad "control: a covered checks fact is accepted"
+accepts "$(cmut 'f["value"]["results"]=f["value"]["results"][:1]')" && bad "a required check with no result must be rejected (R12)" || ok
+accepts "$(cmut 'f["value"]["results"][1]["state"]="green"')" && bad "a check state outside the vocabulary must be rejected (R12)" || ok
+accepts "$(cmut 'f["value"]["results"].append({"name":"tests","state":"failure"})')" && bad "a duplicate check result must be rejected (R12)" || ok
+gr='{"schema_version":"1","key":"graph.native","class":"graph","status":"ESTABLISHED","value":{"parent":{"id":"github.com/acme/widgets#40","state":"open"},"children":[],"blocked_by":[{"id":"github.com/acme/widgets#39","state":"closed"}]},"source":{"type":"github-api","identity":"github.com/acme/widgets#41","version":"x"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["issue:github.com/acme/widgets#41"],"provenance":"https://github.com/acme/widgets/issues/41"}'
+gmut() { printf '%s' "$gr" | python3 -c "import json,sys; f=json.load(sys.stdin); exec(sys.argv[1]); print(json.dumps(f))" "$1"; }
+accepts "$gr" && ok || bad "control: a graph fact with relationship states is accepted"
+accepts "$(gmut 'f["value"]["blocked_by"]=["github.com/acme/widgets#39"]')" && bad "a relationship without state must be rejected" || ok
+accepts "$(gmut 'f["value"]["parent"]["state"]="done"')" && bad "a relationship state outside the vocabulary must be rejected" || ok
+# snapshot-level controls (R11): the page's complete snapshot minus one required class must be rejected as a snapshot
+sets() { printf '%s' "$1" | python3 "$VAL" "$TSV" "$DOC" set >/dev/null 2>&1; }
+full="$(python3 - "$DOC" <<'PY'
+import json, re, sys
+t = open(sys.argv[1]).read()
+m = re.search(r"^### Example 1 — [^\n]*\(complete snapshot\)\n.*?```json\n(.*?)\n```", t, flags=re.S | re.M)
+print(json.dumps(json.loads(m.group(1))))
+PY
+)"
+sets "$(printf '{"complete": true, "facts": %s}' "$full")" && ok || bad "control: the page's complete snapshot is accepted as a snapshot"
+sets "$(printf '{"complete": true, "facts": %s}' "$(printf '%s' "$full" | python3 -c 'import json,sys; s=json.load(sys.stdin); print(json.dumps([f for f in s if f["class"]!="authority"]))')")" && bad "a snapshot lacking a required class must be rejected (R11)" || ok
+sets "$(printf '{"complete": false, "facts": %s}' "$(printf '%s' "$full" | python3 -c 'import json,sys; s=json.load(sys.stdin); print(json.dumps(s+[s[0]]))')")" && bad "a set repeating a class must be rejected (R11)" || ok
+sets "$(printf '{"complete": false, "facts": %s}' "$(printf '%s' "$full" | python3 -c 'import json,sys; s=json.load(sys.stdin); print(json.dumps([f for f in s if f["class"] not in ("authority","next_action")]))')")" && ok || bad "control: a subset with no dangling derived inputs is a valid fragment when not claimed complete"
+sets "$(printf '{"complete": false, "facts": %s}' "$(printf '%s' "$full" | python3 -c 'import json,sys; s=json.load(sys.stdin); print(json.dumps([f for f in s if f["class"]!="authority"]))')")" && bad "a fragment whose derived fact names an absent input must be rejected (R4)" || ok
 
 finish "fact model (#731)"

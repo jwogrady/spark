@@ -30,9 +30,17 @@
 # EVOLUTION. `version` is the schema version every fact carries as
 # `schema_version`. A consumer that reads a fact whose schema_version it does
 # not know MUST treat the fact as UNKNOWN, never reinterpret field meaning.
-# Adding an optional field or a class is a minor change under the same
-# version; changing the meaning, type or requiredness of an existing field,
-# renaming a class, or altering a status token is a new version.
+# Under the SAME version the only permitted change is an addition a consumer
+# can ignore without changing any conclusion: a new OPTIONAL envelope field,
+# or a new `derived` class. Adding a required class or a required field,
+# changing the meaning, type or requiredness of an existing field, renaming a
+# class, altering a status token, or changing any closed vocabulary is a NEW
+# version — an older consumer would otherwise accept a snapshot it cannot
+# judge complete.
+#
+# SNAPSHOT versus FRAGMENT. A snapshot is the complete set: every `required`
+# class exactly once (plus derived classes). Anything smaller is a fragment —
+# useful to show one situation — and is never consumed as a snapshot.
 
 version	1
 
@@ -41,12 +49,12 @@ version	1
 class	work_unit	required	{kind: issue|pull_request, id: <work-unit>}	Canonical identity of the task being executed
 class	repository	required	{id: <repository>, default_branch: <ref>}	Canonical identity of the repository the work unit belongs to
 class	placement	required	{milestone: <milestone>|none, release: <release>|none, gate: <work-unit>|none}	Release / milestone / gate placement
-class	graph	required	{parent: <work-unit>|none, children: [<work-unit>], blocked_by: [<work-unit>]}	Native parent / child / dependency state
-class	authority	required	{grants: [{decision: <comment>|<work-unit>, scope: <text>}], human_boundaries: [<text>]}	Standing authority and the boundaries reserved for a human
+class	graph	required	{parent: {id: <work-unit>, state: <issue-state>}|none, children: [{id: <work-unit>, state: <issue-state>}], blocked_by: [{id: <work-unit>, state: <issue-state>}]}	Native parent / child / dependency relationships, each with its current state (a blocker is satisfied when its state is closed)
+class	authority	required	{grants: [{decision: <comment>|<work-unit>, scopes: [<scope>]}], human_boundaries: [<boundary>]}	Standing authority (closed scope tokens) and the boundaries reserved for a human (closed boundary tokens); wording lives behind provenance
 class	acceptance	required	{contract: <work-unit>, items: [{id: <text>, state: MET|NOT_MET|UNKNOWN}]}	Acceptance contract identity and current satisfaction
 class	head	required	{head: <commit>, base_ref: <ref>, base: <commit>, current: true|false}	Exact HEAD, base and staleness of the work unit's change
 class	review	required	{verdict: <verdict>, head: <commit>, reviewer: <login>, record: <comment>}	Independent review verdict bound to an exact HEAD
-class	checks	required	{head: <commit>, required: [<text>], results: [{name: <text>, conclusion: <text>}]}	Required-check state on the exact HEAD
+class	checks	required	{head: <commit>, required: [<text>], results: [{name: <text>, state: <check-state>}]}	Required-check state on the exact HEAD: exactly one result per required name, each in the closed check-state vocabulary
 class	next_action	derived	{action: <action>, because: [<fact-key>]}	The next governed action where it is mechanically derivable
 
 # --- Facets carried by the envelope rather than as separate facts ----------
@@ -86,6 +94,10 @@ identifier	login	^login:[A-Za-z0-9-]+(\[bot\])?$	An actor identity; naming an ac
 identifier	verdict	^(PASS|CHANGES REQUIRED|DECISION REQUIRED|NOT ASSESSED)$	The independent reviewer's closed vocabulary
 identifier	action	^(wait-review|repair|merge|close|stop-decision-required|stop-crossroad|none)$	The closed next-action vocabulary
 identifier	fact-key	^[a-z_]+\.[a-z_]+$	<class>.<name>
+identifier	issue-state	^(open|closed)$	Current state of a related work unit; a blocked_by entry is satisfied exactly when closed
+identifier	check-state	^(success|failure|pending|missing)$	Normalized state of one required check on the exact HEAD: missing = required but no run observed
+identifier	scope	^(merge:routine|close:issue|metadata:labels|metadata:hierarchy|evidence:publish|branch:push)$	What a standing grant permits; the closed scope vocabulary
+identifier	boundary	^(release:approve|authority:grant|settings:repository|action:destructive|placement:release|semantics:product)$	What a human reserves; the closed boundary vocabulary
 
 # --- Source types and the version identity each must observe ----------------
 source	github-api	node updated_at, etag, or the observed head/id the record is keyed by	A GitHub REST or GraphQL read
@@ -105,3 +117,6 @@ rule	R7	A fact bound to a HEAD (head, review, checks, acceptance) lists that HEA
 rule	R8	Two authoritative inputs that disagree are a CONFLICT with both candidates named; no first-write, last-write or plausibility rule resolves them.
 rule	R9	A consumer that meets an unknown schema_version treats the fact as UNKNOWN; it never reinterprets fields.
 rule	R10	Nothing here is written to .spark/state.json; mutable GitHub execution truth is read from its source and carried in a snapshot, not stored as state.
+rule	R11	A snapshot carries every required class exactly once; a smaller set is a fragment and is never consumed as a snapshot.
+rule	R12	A checks fact carries exactly one result per required check name, each in the closed check-state vocabulary; merge is derivable only when every result is success.
+rule	R13	Authority scopes and human boundaries are closed tokens; explanatory wording is provenance, never a value a consumer must interpret.

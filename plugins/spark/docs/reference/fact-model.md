@@ -21,22 +21,24 @@ values.
 
 ## Fact classes
 
-Every governed work unit is described by one fact per class. `required`
-classes must be present in a snapshot (as ESTABLISHED, UNKNOWN, CONFLICT or
-NOT_APPLICABLE — never silently absent); `derived` classes are computed from
-other facts and name their inputs.
+Every governed work unit is described by one fact per class. A **snapshot** is
+the complete set: every `required` class exactly once (as ESTABLISHED, UNKNOWN,
+CONFLICT or NOT_APPLICABLE — never silently absent) plus any `derived` classes,
+which are computed from other facts and name their inputs. Anything smaller is
+a **fragment**: useful to show one situation, never consumed as a snapshot
+(R11).
 
 | Class | Required | Value shape when ESTABLISHED | What it answers |
 |---|---|---|---|
 | `work_unit` | required | `{kind: issue\|pull_request, id: <work-unit>}` | Which task is being executed |
 | `repository` | required | `{id: <repository>, default_branch: <ref>}` | Which repository owns it |
 | `placement` | required | `{milestone: <milestone>\|none, release: <release>\|none, gate: <work-unit>\|none}` | Where it sits in release, milestone and gate |
-| `graph` | required | `{parent: <work-unit>\|none, children: [<work-unit>], blocked_by: [<work-unit>]}` | Its native parent, children and dependencies |
-| `authority` | required | `{grants: [{decision: <comment>\|<work-unit>, scope: <text>}], human_boundaries: [<text>]}` | What standing authority applies and what is reserved for a human |
+| `graph` | required | `{parent: {id: <work-unit>, state: <issue-state>}\|none, children: [{id, state}], blocked_by: [{id, state}]}` | Its native parent, children and dependencies, each with its current state; a blocker is satisfied exactly when its state is `closed` |
+| `authority` | required | `{grants: [{decision: <comment>\|<work-unit>, scopes: [<scope>]}], human_boundaries: [<boundary>]}` | What standing authority permits (closed scope tokens) and what a human reserves (closed boundary tokens); the wording of the grant lives behind `provenance` |
 | `acceptance` | required | `{contract: <work-unit>, items: [{id, state: MET\|NOT_MET\|UNKNOWN}]}` | Which acceptance contract governs and how far it is satisfied |
 | `head` | required | `{head: <commit>, base_ref: <ref>, base: <commit>, current: true\|false}` | The exact HEAD and base, and whether the HEAD is still current |
 | `review` | required | `{verdict: <verdict>, head: <commit>, reviewer: <login>, record: <comment>}` | The independent verdict, bound to the HEAD it judged |
-| `checks` | required | `{head: <commit>, required: [<text>], results: [{name, conclusion}]}` | Required-check state on that exact HEAD |
+| `checks` | required | `{head: <commit>, required: [<text>], results: [{name, state: <check-state>}]}` | Required-check state on that exact HEAD: exactly one result per required name (R12); `merge` is derivable only when every state is `success` |
 | `next_action` | derived | `{action: <action>, because: [<fact-key>]}` | The next governed action, where it follows mechanically |
 
 Three further concerns are **facets of the envelope**, not separate facts:
@@ -94,6 +96,10 @@ or bind.
 | verdict | the reviewer's closed vocabulary | `PASS`, `CHANGES REQUIRED`, `DECISION REQUIRED`, `NOT ASSESSED` |
 | action | the closed next-action vocabulary | `wait-review`, `repair`, `merge`, `close`, `stop-decision-required`, `stop-crossroad`, `none` |
 | fact-key | `<class>.<name>` | `review.independent` |
+| issue-state | current state of a related work unit | `open`, `closed` |
+| check-state | normalized state of one required check | `success`, `failure`, `pending`, `missing` (required but no run observed) |
+| scope | what a standing grant permits | `merge:routine`, `close:issue`, `metadata:labels`, `metadata:hierarchy`, `evidence:publish`, `branch:push` |
+| boundary | what a human reserves | `release:approve`, `authority:grant`, `settings:repository`, `action:destructive`, `placement:release`, `semantics:product` |
 
 ## Sources and their version identity
 
@@ -132,25 +138,38 @@ or bind.
   GitHub execution truth is read from its source and carried in a snapshot;
   the state file keeps holding only the two judgment values it holds today
   (see [state.md](state.md)).
+- **R11** A snapshot carries every required class exactly once; a smaller set
+  is a fragment and is never consumed as a snapshot.
+- **R12** A `checks` fact carries exactly one result per required check name,
+  each in the closed check-state vocabulary; `merge` is derivable only when
+  every result is `success`.
+- **R13** Authority scopes and human boundaries are closed tokens; explanatory
+  wording is provenance, never a value a consumer must interpret.
 
 ## Versioning
 
 `schema_version` is the `version` record of `preferences/fact-model.tsv`.
-Adding an optional field or a new class is a minor change under the same
-version. Changing the meaning, type or requiredness of an existing field,
-renaming a class, or altering a status token is a new version, and consumers
-apply R9 to anything they do not recognise. The invalidation and migration
-rules that follow from a version change belong to the freshness contract that
-builds on this page.
+Under the same version the only permitted change is an addition a consumer can
+ignore without changing any conclusion: a new optional envelope field, or a new
+`derived` class. Adding a required class or a required field, changing the
+meaning, type or requiredness of an existing field, renaming a class, altering
+a status token, or changing any closed vocabulary is a new version — an older
+consumer would otherwise accept a snapshot it cannot judge complete — and
+consumers apply R9 to anything they do not recognise. The invalidation and
+migration rules that follow from a version change belong to the freshness
+contract that builds on this page.
 
 ## Examples
 
-Each example is a snapshot: a JSON array of facts. The behavioral suite
-validates every example on this page against the machine-readable schema, so
-the examples are fixtures, not illustrations. The repository, numbers and ids
-are invented; the situations are the ones a governed work unit actually meets.
+Each example is a JSON array of facts. Example 1 is a **complete snapshot**
+(every required class exactly once); Examples 2–7 are **fragments** that show
+only the classes the situation turns on. The behavioral suite validates every
+fact on this page against the machine-readable schema, enforces the
+snapshot's cardinality and forbids duplicate classes within a fragment, so the
+examples are fixtures, not illustrations. The repository, numbers and ids are
+invented; the situations are the ones a governed work unit actually meets.
 
-### Example 1 — a normal pull request
+### Example 1 — a normal pull request (complete snapshot)
 
 The straightforward case: every required class is ESTABLISHED, and the next
 action follows mechanically from named inputs.
@@ -173,13 +192,13 @@ action follows mechanically from named inputs.
    "observed_at": "2026-09-06T12:00:05Z", "invalidators": ["issue:github.com/acme/widgets#41", "milestone:github.com/acme/widgets/milestone/7"],
    "provenance": "https://github.com/acme/widgets/issues/41"},
   {"schema_version": "1", "key": "graph.native", "class": "graph", "status": "ESTABLISHED",
-   "value": {"parent": "github.com/acme/widgets#40", "children": [], "blocked_by": []},
+   "value": {"parent": {"id": "github.com/acme/widgets#40", "state": "open"}, "children": [], "blocked_by": [{"id": "github.com/acme/widgets#39", "state": "closed"}]},
    "source": {"type": "github-api", "identity": "github.com/acme/widgets#41", "version": "2026-09-05T18:00:00Z"},
-   "observed_at": "2026-09-06T12:00:05Z", "invalidators": ["issue:github.com/acme/widgets#41", "issue:github.com/acme/widgets#40"],
+   "observed_at": "2026-09-06T12:00:05Z", "invalidators": ["issue:github.com/acme/widgets#41", "issue:github.com/acme/widgets#40", "issue:github.com/acme/widgets#39"],
    "provenance": "https://github.com/acme/widgets/issues/41"},
   {"schema_version": "1", "key": "authority.standing", "class": "authority", "status": "ESTABLISHED",
-   "value": {"grants": [{"decision": "github.com/acme/widgets#7/comment/9001", "scope": "routine merge of a green, reviewed, current PR in this repository"}],
-             "human_boundaries": ["release approval", "new authority", "destructive action"]},
+   "value": {"grants": [{"decision": "github.com/acme/widgets#7/comment/9001", "scopes": ["merge:routine", "close:issue"]}],
+             "human_boundaries": ["release:approve", "authority:grant", "action:destructive"]},
    "source": {"type": "human-decision", "identity": "github.com/acme/widgets#7/comment/9001", "version": "9001"},
    "observed_at": "2026-09-06T12:00:05Z", "invalidators": ["comment:github.com/acme/widgets#7/comment/9001"],
    "provenance": "https://github.com/acme/widgets/issues/7#issuecomment-9001"},
@@ -199,7 +218,7 @@ action follows mechanically from named inputs.
    "observed_at": "2026-09-06T12:00:05Z", "invalidators": ["head:0123456789abcdef0123456789abcdef01234567", "comment:github.com/acme/widgets#42/comment/9100"],
    "provenance": "https://github.com/acme/widgets/pull/42#issuecomment-9100"},
   {"schema_version": "1", "key": "checks.required", "class": "checks", "status": "ESTABLISHED",
-   "value": {"head": "0123456789abcdef0123456789abcdef01234567", "required": ["doctor", "tests"], "results": [{"name": "doctor", "conclusion": "success"}, {"name": "tests", "conclusion": "success"}]},
+   "value": {"head": "0123456789abcdef0123456789abcdef01234567", "required": ["doctor", "tests"], "results": [{"name": "doctor", "state": "success"}, {"name": "tests", "state": "success"}]},
    "source": {"type": "github-api", "identity": "github.com/acme/widgets", "version": "0123456789abcdef0123456789abcdef01234567"},
    "observed_at": "2026-09-06T12:00:05Z", "invalidators": ["head:0123456789abcdef0123456789abcdef01234567", "ruleset:github.com/acme/widgets"],
    "provenance": "https://github.com/acme/widgets/commit/0123456789abcdef0123456789abcdef01234567/checks"},
@@ -212,7 +231,7 @@ action follows mechanically from named inputs.
 ]
 ```
 
-### Example 2 — exact-HEAD review, acceptance and check state
+### Example 2 — exact-HEAD review, acceptance and check state (fragment)
 
 The three HEAD-bound classes share one invalidator, the HEAD they were
 observed on. Nothing here can be reused for another HEAD.
@@ -230,7 +249,7 @@ observed on. Nothing here can be reused for another HEAD.
    "observed_at": "2026-09-06T13:00:00Z", "invalidators": ["head:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "comment:github.com/acme/widgets#42/comment/9200"],
    "provenance": "https://github.com/acme/widgets/pull/42#issuecomment-9200"},
   {"schema_version": "1", "key": "checks.required", "class": "checks", "status": "ESTABLISHED",
-   "value": {"head": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "required": ["doctor", "tests"], "results": [{"name": "doctor", "conclusion": "success"}, {"name": "tests", "conclusion": "success"}]},
+   "value": {"head": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "required": ["doctor", "tests"], "results": [{"name": "doctor", "state": "success"}, {"name": "tests", "state": "pending"}]},
    "source": {"type": "github-api", "identity": "github.com/acme/widgets", "version": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
    "observed_at": "2026-09-06T13:00:00Z", "invalidators": ["head:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
    "provenance": "https://github.com/acme/widgets/commit/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/checks"},
@@ -247,7 +266,7 @@ observed on. Nothing here can be reused for another HEAD.
 ]
 ```
 
-### Example 3 — a stale HEAD invalidates only HEAD-bound facts
+### Example 3 — a stale HEAD invalidates only HEAD-bound facts (fragment)
 
 A new push moved the HEAD. The head fact records `current: false` against the
 old HEAD; the review that judged the old HEAD is still a true statement about
@@ -280,7 +299,7 @@ and graph facts carry no HEAD invalidator and remain established.
 ]
 ```
 
-### Example 4 — conflicting authoritative evidence
+### Example 4 — conflicting authoritative evidence (fragment)
 
 Two markers for the same HEAD disagree, and both come from a source the
 contract trusts. The fact is a CONFLICT that names both candidates; it carries
@@ -302,11 +321,13 @@ the newer or the more plausible one.
 ]
 ```
 
-### Example 5 — a cross-repository parent
+### Example 5 — a cross-repository parent (fragment)
 
 The work unit lives in one repository and its parent in another. Because every
 work-unit identity is fully qualified, the two never compare equal on a bare
-number, and the authority fact names the repository the grant applies to.
+number, and the grant's scopes are the only thing a consumer reads; that the
+grant applies to one repository and not the other is in the decision record
+behind `provenance`.
 
 ```json
 [
@@ -316,20 +337,20 @@ number, and the authority fact names the repository the grant applies to.
    "observed_at": "2026-09-06T16:00:05Z", "invalidators": ["pull_request:github.com/acme/widgets#42"],
    "provenance": "https://github.com/acme/widgets/pull/42"},
   {"schema_version": "1", "key": "graph.native", "class": "graph", "status": "ESTABLISHED",
-   "value": {"parent": "github.com/acme/program#42", "children": [], "blocked_by": ["github.com/acme/widgets#39"]},
+   "value": {"parent": {"id": "github.com/acme/program#42", "state": "open"}, "children": [], "blocked_by": [{"id": "github.com/acme/widgets#39", "state": "open"}]},
    "source": {"type": "github-api", "identity": "github.com/acme/widgets#41", "version": "2026-09-06T15:30:00Z"},
    "observed_at": "2026-09-06T16:00:05Z", "invalidators": ["issue:github.com/acme/widgets#41", "issue:github.com/acme/program#42", "issue:github.com/acme/widgets#39"],
    "provenance": "https://github.com/acme/widgets/issues/41"},
   {"schema_version": "1", "key": "authority.standing", "class": "authority", "status": "ESTABLISHED",
-   "value": {"grants": [{"decision": "github.com/acme/widgets#7/comment/9001", "scope": "routine merge in github.com/acme/widgets only; a grant recorded in github.com/acme/program confers nothing here"}],
-             "human_boundaries": ["release approval", "cross-repository authority"]},
+   "value": {"grants": [{"decision": "github.com/acme/widgets#7/comment/9001", "scopes": ["merge:routine"]}],
+             "human_boundaries": ["release:approve", "authority:grant"]},
    "source": {"type": "human-decision", "identity": "github.com/acme/widgets#7/comment/9001", "version": "9001"},
    "observed_at": "2026-09-06T16:00:05Z", "invalidators": ["comment:github.com/acme/widgets#7/comment/9001"],
    "provenance": "https://github.com/acme/widgets/issues/7#issuecomment-9001"}
 ]
 ```
 
-### Example 6 — a reserved human boundary
+### Example 6 — a reserved human boundary (fragment)
 
 Every mechanical condition holds, but the change touches release placement,
 which the standing grant reserves for a human. The authority fact says so from
@@ -339,8 +360,8 @@ from the actor's role or from the fact that the merge is technically possible.
 ```json
 [
   {"schema_version": "1", "key": "authority.standing", "class": "authority", "status": "ESTABLISHED",
-   "value": {"grants": [{"decision": "github.com/acme/widgets#7/comment/9001", "scope": "routine merge of a green, reviewed, current PR"}],
-             "human_boundaries": ["release placement", "release approval", "repository settings"]},
+   "value": {"grants": [{"decision": "github.com/acme/widgets#7/comment/9001", "scopes": ["merge:routine"]}],
+             "human_boundaries": ["placement:release", "release:approve", "settings:repository"]},
    "source": {"type": "human-decision", "identity": "github.com/acme/widgets#7/comment/9001", "version": "9001"},
    "observed_at": "2026-09-06T17:00:00Z", "invalidators": ["comment:github.com/acme/widgets#7/comment/9001"],
    "provenance": "https://github.com/acme/widgets/issues/7#issuecomment-9001"},
@@ -357,7 +378,7 @@ from the actor's role or from the fact that the merge is technically possible.
 ]
 ```
 
-### Example 7 — a fact that is UNKNOWN because the source cannot be read
+### Example 7 — a fact that is UNKNOWN because the source cannot be read (fragment)
 
 The required-check source answered with a permission error. The fact is
 UNKNOWN with the reason recorded; it carries no value, so nothing downstream
