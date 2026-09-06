@@ -83,6 +83,7 @@ MAP
   ".head.sha")           [ "${GH_FAIL:-}" = head ] && exit 1; printf '%s' "${GH_HEAD:-}" ;;
   ".head.sha, .state"*)  [ "${GH_FAIL:-}" = pr ] && exit 1; printf '%s' "${GH_PR:-}" ;;
   ".[].filename")        [ "${GH_FAIL:-}" = files ] && exit 1; printf '%s' "${GH_FILES:-}" ;;
+  ".[].name")            [ "${GH_FAIL:-}" = labels ] && exit 1; printf '%s' "${GH_LABELS:-}" ;;
   *check_runs*)          [ "${GH_FAIL:-}" = checks ] && exit 1; printf '%s' "${GH_CHECKS:-}" ;;
   ".parent_issue_url"*)  [ "${GH_FAIL:-}" = parent ] && exit 1; printf '%s' "${GH_PARENT:-}" ;;
   *author_association*)
@@ -106,7 +107,7 @@ EOS
 chmod +x "$STUB/bin/gh"
 export PATH="$STUB/bin:$PATH"
 GH_LOG="$STUB/calls"
-export GH_LOG GH_STATUSES GH_PROT GH_PROTECTED GH_RULECHECKS GH_RULEFLOWS GH_RUNS GH_PERM GH_PERM_MAP
+export GH_LOG GH_STATUSES GH_PROT GH_PROTECTED GH_RULECHECKS GH_RULEFLOWS GH_RUNS GH_PERM GH_PERM_MAP GH_LABELS
 export GH_SLUG GH_CLOSING GH_DEFBRANCH GH_HEAD GH_PR GH_FILES GH_CHECKS \
        GH_PARENT GH_PARENT_NUM GH_PARENT_COMMENTS GH_PR_COMMENTS GH_FAIL \
        GH_PARENT_JSON GH_PR_JSON
@@ -152,6 +153,7 @@ gate${TAB}15368"
   GH_PROTECTED="true"
   GH_PERM="admin"
   GH_PERM_MAP=""
+  GH_LABELS="type: feat"
   GH_PARENT_JSON=""
   GH_PR_JSON=""
   GH_RULECHECKS=""
@@ -181,7 +183,7 @@ ELIGIBLE=(--pr 727)
 # passes for the wrong reason.
 verdict "ROUTINE MERGE" 0 "the derived base world is eligible before any control changes it" "${ELIGIBLE[@]}"
 # Every stubbed read must really be performed, or its controls are vacuous.
-for ep in slug closing defbranch head pr files checks statuses parent comments prot rules; do
+for ep in slug closing defbranch head pr files labels checks statuses parent comments prot rules; do
   GH_FAIL="$ep"
   verdict "NOT ELIGIBLE" 4 "the '$ep' read is really performed" "${ELIGIBLE[@]}"
   GH_FAIL=""
@@ -709,6 +711,43 @@ GH_PR_COMMENTS="$REV
 $ACCEPT_MET
 OWNER${TAB}jwogrady${TAB}${TS_REVIEW}${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA2 contract=$ACC verdict=NOT-MET extra=1 -->"
 verdict "ROUTINE MERGE" 0 "a malformed acceptance marker canonically naming another commit is set aside" "${ELIGIBLE[@]}"
+reset_world
+
+# --- a release pull request is identified by what it IS, not what it is called
+# A branch name is a convention. A release cut from any other branch would
+# otherwise read as routine, and final release approval is human-owned.
+GH_PR="$SHA
+open
+false
+master
+chore/version-bump"
+verdict "ROUTINE MERGE" 0 "an ordinary branch name alone does not make a release" "${ELIGIBLE[@]}"
+GH_LABELS="autorelease: pending"
+verdict "NOT ELIGIBLE" 4 "an autorelease label makes it a release wherever the branch is" "${ELIGIBLE[@]}"
+GH_LABELS="release"
+verdict "NOT ELIGIBLE" 4 "a release label makes it a release wherever the branch is" "${ELIGIBLE[@]}"
+GH_LABELS="type: feat"
+GH_FILES="CHANGELOG.md
+plugins/spark/bin/spark"
+verdict "NOT ELIGIBLE" 4 "a changelog edit is a release artifact wherever the branch is" "${ELIGIBLE[@]}"
+GH_FILES="plugins/spark/CHANGELOG.md"
+verdict "NOT ELIGIBLE" 4 "a per-plugin changelog is a release artifact too" "${ELIGIBLE[@]}"
+GH_FILES=".release-please-manifest.json"
+verdict "NOT ELIGIBLE" 4 "the release manifest is a release artifact" "${ELIGIBLE[@]}"
+GH_FILES="release-please-config.json"
+verdict "NOT ELIGIBLE" 4 "the release configuration is a release artifact" "${ELIGIBLE[@]}"
+GH_FILES="plugins/spark/.claude-plugin/plugin.json"
+verdict "NOT ELIGIBLE" 4 "a plugin manifest carries the version, so it is a release artifact" "${ELIGIBLE[@]}"
+reset_world
+# An unreadable label set is not an empty one — it is exactly where the
+# autorelease stamp would be.
+GH_FAIL=labels
+verdict "NOT ELIGIBLE" 4 "an unreadable label set declines rather than assuming no release stamp" "${ELIGIBLE[@]}"
+GH_FAIL=""
+# And ordinary labels on ordinary work still merge.
+GH_LABELS="type: fix
+priority: p2"
+verdict "ROUTINE MERGE" 0 "ordinary labels do not make a release" "${ELIGIBLE[@]}"
 reset_world
 
 # --- an association is not a permission ------------------------------------

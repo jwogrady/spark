@@ -2236,6 +2236,12 @@ XM_NON_AUTHORIZING=(585 relay orchestrator coordination reviewer consensus)
 # Paths whose mutation is not routine: CI and the enforcement settings are
 # human-gated by AGENTS.md, and #677 excludes ruleset/secrets/admin entirely.
 XM_NON_ROUTINE_PATHS=(".github/workflows/" "plugins/spark/settings/")
+# Release ARTIFACTS. A branch name is a convention, not durable metadata: a
+# release pull request cut from any other branch would otherwise read as routine.
+# Touching what a release touches is the durable signal, whatever it is called.
+XM_RELEASE_FILES=("CHANGELOG.md" ".release-please-manifest.json" "release-please-config.json" ".claude-plugin/plugin.json")
+# Release-Please stamps its pull requests; any autorelease label is decisive.
+XM_RELEASE_LABELS=(autorelease release)
 
 # The durable grant a parent comment must carry, and the durable attestation
 # that the bounded acceptance is TRUE at an exact commit. Both imitate the
@@ -2326,6 +2332,8 @@ xm_pr_head()     { xm_api "$1" "pulls/$2" '.head.sha'; }
 # Every changed path, to exhaustion: scope depends on the WHOLE file list, so a
 # non-routine path on a later page would otherwise be classified routine.
 xm_pr_files()    { xm_api_all "$1" "pulls/$2/files?per_page=100" '.[].filename'; }
+# Labels are durable pull-request metadata, unlike a branch name.
+xm_pr_labels()   { xm_api_all "$1" "issues/$2/labels?per_page=100" '.[].name'; }
 # Check runs and commit statuses both carry required contexts, so both are read.
 # The app identity travels with each observation, because a requirement bound to
 # an app is not satisfied by a same-named check from a different one.
@@ -2918,15 +2926,35 @@ OUTERW
   [ "$draft" = false ] || scope=draft
   [ -z "$defbranch" ] || [ "$base" = "$defbranch" ] || scope="not-trunk:$base"
   case "$headref" in release-please--*|release/*) scope=release ;; esac
+  # Durable release identity, independent of what the branch is called.
+  local labels lb rl lab_rc=0
+  labels="$(xm_pr_labels "$slug" "$prnum")" || lab_rc=$?
+  # An unreadable label set is not an empty one: it is exactly where the
+  # autorelease stamp would be.
+  [ "$lab_rc" -eq 0 ] || scope=unknown-labels
+  while IFS= read -r lb; do
+    [ -n "$lb" ] || continue
+    for rl in "${XM_RELEASE_LABELS[@]}"; do
+      case "$lb" in "$rl"*) scope=release ;; esac
+    done
+  done <<EOF
+$labels
+EOF
   local files
   files="$(xm_pr_files "$slug" "$prnum")" || files=""
   # An unreadable file list is not an empty one. Without this the loop below
   # simply never ran and the optimistic default survived.
   [ -n "$files" ] || scope=unknown-files
+  local rf
   while IFS= read -r f; do
     [ -n "$f" ] || continue
     for p in "${XM_NON_ROUTINE_PATHS[@]}"; do
       case "$f" in "$p"*) scope="non-routine-path:$p" ;; esac
+    done
+    # A release artifact makes this a release pull request wherever it lives and
+    # whatever the branch is called.
+    for rf in "${XM_RELEASE_FILES[@]}"; do
+      case "$f" in "$rf"|*"/$rf") scope=release ;; esac
     done
   done <<EOF
 $files
@@ -3157,8 +3185,10 @@ cmd_merge_authority() {
     echo "  that head, whether the acceptance is attested met at it, whether the"
     echo "  operation is a routine reversible merge, and that the head has not moved."
     echo
-    echo "  The parent must carry exactly one grant, from an OWNER, MEMBER or"
-    echo "  COLLABORATOR:"
+    echo "  The parent must carry exactly one grant, from an author who really"
+    echo "  holds write, maintain or admin permission in this repository — an"
+    echo "  OWNER/MEMBER/COLLABORATOR association is not a permission — and it"
+    echo "  must predate the independent review of this commit:"
     echo "    $XM_MARKER_PREFIX child=#124 acceptance=<id>"
     echo "  and the acceptance must be attested on the PR, bound to the commit:"
     echo "    <!-- $XM_ACCEPT_TAG pr=<n> child=#124 head=<40-hex> contract=<id> verdict=MET -->"

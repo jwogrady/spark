@@ -631,7 +631,7 @@ invocation returns `4`, and `--help` is the single explicit success path.
 | acceptance is *true* | a durable attestation bound to this exact commit |
 | independent review | the exact-HEAD `spark-openai-review … verdict=PASS` marker from `github-actions[bot]` |
 | required checks | the **whole applicable requirement model** for the base branch — branch protection's app-bound `checks[]` (`contexts[]` for the legacy shape) plus every check and workflow required by an applicable repository or organization **ruleset** — each verified on that exact commit |
-| routine/reversible scope | PR state, base branch, head branch and changed paths |
+| routine/reversible scope | PR state, base branch, head branch, **labels** and changed paths |
 | stale-head protection | the head re-read **after** everything above |
 
 Exactly one issue must be closed and exactly one grant must exist: two of either
@@ -701,6 +701,16 @@ association describes the wrong repository as well. So for **every** grant and
 **every** attestation, the author's permission in the *pull request's*
 repository is read and must be `admin`, `maintain` or `write`. An unreadable or
 absent permission is not authority.
+
+**A release pull request is identified by what it is, not what it is called.**
+A branch name is a convention, so `release-please--*` and `release/*` are only
+one signal. A release is also any pull request carrying a `release`/`autorelease`
+label, or touching a release artifact — `CHANGELOG.md` at any depth, the
+Release-Please manifest or config, or a plugin manifest, which carries the
+version. An unreadable label set is not an empty one and declines: it is exactly
+where the autorelease stamp would be. The direction is deliberately conservative,
+so an ordinary change that happens to touch a plugin manifest declines rather
+than merging.
 
 **The authorization must precede the review of this commit.** A broad issue
 authorizes bounded work *in advance*; authority invented for work already

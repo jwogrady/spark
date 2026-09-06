@@ -103,7 +103,9 @@ and the evaluation must be redone.
   not describe the merge as completing it.
 - It **never authorizes a release.** A trunk merge is integration. Release PRs,
   tags and GitHub Releases stay human-owned (ADR-0026, ADR-0006, ADR-0009), and
-  a release PR is refused outright.
+  a release PR is refused outright — identified by what it *is*, not what it is
+  called: a `release`/`autorelease` label, or a changelog, release manifest or
+  plugin manifest among its changed files, not merely a `release/*` branch.
 - It **never covers** CI or enforcement-settings changes, drafts, non-trunk
   bases, destructive or irreversible actions, a genuine Crossroad, or any
   authority not already encoded in the model.
