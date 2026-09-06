@@ -69,7 +69,7 @@ Other physical counts:
 | ADRs / partially superseded / retired-machinery | 31 (+template) / 7 / 4 | status lines; no ADR is fully `Superseded` |
 | Release records / workflows / .github scripts | 13 / 6 / 12 | ls |
 | External binaries referenced by runtime (textual) | awk 286, git 201, gh 128, jq 83, grep 67, tr 66, sort 45, sed 41, wc 36, python3 35 | grep over runtime files; mentions, not invocations |
-| Remote-tracking refs `refs/remotes/origin/*` (excluding master) at the local observation state | 134: 109 already ancestors of 921c982, 25 not (several squash-merged, e.g. `perf/722-…` ahead 34) | `raw/branches.tsv`, `tools/branches.sh`; refs as fetched by `git fetch --all --prune` on 2026-09-06 between 16:04 and 16:24 UTC, before the freeze comment and before any evidence branch was pushed; ancestry via `merge-base --is-ancestor`, which cannot see squash merges; not GitHub's merge state |
+| Remote-tracking refs `refs/remotes/origin/*` (excluding master) at the local observation state | 134: 109 already ancestors of 921c982, 25 not (several squash-merged, e.g. `perf/722-…` ahead 34) | `raw/branches.tsv` (recorded observation: first-version `branches.sh` rows + hand-added provenance header; see §9 for why it is not byte-regenerable); refs as fetched by `git fetch --all --prune` on 2026-09-06 between 16:04 and 16:24 UTC, before the freeze comment and before any evidence branch was pushed; ancestry via `merge-base --is-ancestor`, which cannot see squash merges; not GitHub's merge state |
 | Hot paths (offline, reproducible on this host) | brief --short 64 ms / 19 shimmed; footprint 667 ms / 257 shimmed; governance 104 ms / 42 shimmed | `tests/bench.sh --json`, 3 runs; `mode: offline` |
 | Hot paths (live, observational) | doctor 2,142 ms / 804 shimmed / 443 parsers / 2 gh; governance validate 4,997 ms / 10 gh; triage 7,225 ms / 16 gh | bench.sh; `mode: live` — network-dependent |
 
@@ -200,9 +200,21 @@ Surfaces that look historical or orphaned but evidence says must **not** be remo
 
 ## 9. Reproduction
 
-All commands run from the **repository root**; `BASE` is this directory. The four wrappers under `tools/` are the
-exact tools that produced the committed evidence; each takes the frozen worktree and the output directory as
-arguments and writes the committed artifact names directly.
+All commands run from the **repository root**; `BASE` is this directory. Argument conventions differ per tool and
+are stated exactly: `footprint.sh` takes the worktree and writes to stdout (redirect it); `run-suite.sh` and
+`run-structure-bench.sh` take the worktree and an output directory and write the committed artifact names;
+`branches.sh` takes only an optional `--fetch` and writes to stdout.
+
+**What is and is not regenerable.** `raw/footprint.txt`, `raw/run-full.json`, `raw/run-full-suites.txt`,
+`raw/structure.*` and `raw/bench.*` are regenerable from the frozen worktree with the committed tools
+(`footprint.txt` and the two `run-full` projections were re-produced byte-for-byte; bench and structure numbers
+are host- and time-dependent by their own definition). `raw/branches.tsv` is **not** byte-regenerable: its rows
+were produced by the first version of `branches.sh` (no header, no fail-closed handling) against the local
+remote-tracking refs after a `git fetch --all --prune` on 2026-09-06 between 16:04 and 16:24 UTC, and its
+`# provenance:` header line was added by hand afterwards to record that state. The current tool prints a
+different header (`not refreshed by this run` with the run time, or the `--fetch` provenance), and a run today
+also lists the four evidence branches created since. The snapshot is kept because it is the pre-freeze state;
+treat it as a recorded observation, not as a re-runnable measurement.
 
 ```
 BASE=docs/research/v0.23-optimization-baseline
@@ -214,8 +226,9 @@ bash "$BASE/tools/run-suite.sh" "$FZ" "$BASE/raw"           # one tests/run.sh -
                                                             #   finish lines); run-full.out/.err are the full streams and are not committed
 bash "$BASE/tools/run-structure-bench.sh" "$FZ" "$BASE/raw" # tests/structure.sh --json / text → raw/structure.{json,txt};
                                                             #   tests/bench.sh --json / text → raw/bench.{json,txt}; *.err not committed
-bash "$BASE/tools/branches.sh" > "$BASE/raw/branches.tsv"    # remote-tracking refs at the local observation state, with a provenance
-                                                            #   header; add --fetch to refresh from origin first and record the fetch
+bash "$BASE/tools/branches.sh" > branches.today.tsv         # a NEW observation of remote-tracking refs (local state; --fetch refreshes
+                                                            #   from origin and records the fetch) — compare with raw/branches.tsv, do
+                                                            #   not expect to reproduce its pre-freeze header or rows
 ```
 
 `tests/run.sh` is executed exactly once by `run-suite.sh`; every number quoted from it is a projection of that one
