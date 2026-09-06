@@ -1,0 +1,18 @@
+# PR #727: findings.txt validated against live comment bodies via gh api
+r1 comment 5555345257: 4/4 findings verbatim in body; 4 top-level bullets in body
+r2 comment 5555370419: 4/4 findings verbatim in body; 4 top-level bullets in body
+r3 comment 5555393693: 4/4 findings verbatim in body; 4 top-level bullets in body
+r4 comment 5555443019: 3/3 findings verbatim in body; 3 top-level bullets in body
+r5 comment 5555478568: 3/3 findings verbatim in body; 3 top-level bullets in body
+r6 comment 5555522727: 3/3 findings verbatim in body; 3 top-level bullets in body
+r7 comment 5555624886: 4/4 findings verbatim in body; 4 top-level bullets in body
+r8 comment 5555747928: 4/4 findings verbatim in body; 4 top-level bullets in body
+r9 comment 5555811436: 3/3 findings verbatim in body; 3 top-level bullets in body
+r10 comment 5559975617: 4/4 findings verbatim in body; 4 top-level bullets in body
+r11 comment 5560093436: 2/2 findings verbatim in body; 2 top-level bullets in body
+r12 comment 5560155814: 3/3 findings verbatim in body; 3 top-level bullets in body
+r13 comment 5560233736: 2/2 findings verbatim in body; 2 top-level bullets in body
+r14 comment 5560278135: 2/2 findings verbatim in body; 2 top-level bullets in body
+r15 comment 5560358402: 3/3 findings verbatim in body; 3 top-level bullets in body
+r16 comment 5560416150: 2/2 findings verbatim in body; 2 top-level bullets in body
+RESULT: OK (0 problem(s))

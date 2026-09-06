@@ -1,5 +1,7 @@
 # PR #727 reviewer findings — source of record: the GitHub comments below (trusted login github-actions[bot]).
-# Bullets are copied verbatim and complete; sub-bullets of a finding are part of that finding's text.
+# Each finding is the whole top-level bullet block copied verbatim: the `- ` line plus its continuation
+# lines, indented sub-bullets and internal blank lines. Validated against the live comment bodies by
+# tools/validate-findings.py (see findings-validation.txt).
 
 ## r1 head=f8c825d7ba29f1f79060f274faff5485353550e1 verdict=CHANGES REQUIRED comment_id=5555345257 at=2026-09-05T22:55:35Z
 1.1 - `plugins/spark/lib/execution.sh:2330-2353` — A zero-argument `spark merge-authority` invocation prints usage and returns `0`, even though `0` is documented as `ROUTINE MERGE`. Status-only callers can therefore interpret completely absent evidence as merge authority. Return `4`/`NOT ELIGIBLE` for missing arguments; keep `--help` as the explicit successful help path. `tests/test-merge-authority.sh:250-254` currently enshrines the unsafe behavior and must change.
@@ -21,6 +23,12 @@
 
 ## r4 head=c1ed999482e311d90a50169e3f878e6e8a9e1b9c verdict=CHANGES REQUIRED comment_id=5555443019 at=2026-09-05T23:15:24Z
 4.1 - `plugins/spark/lib/execution.sh:2304-2348` — Shell globs do not enforce the documented record formats:
+  - `sub-issue:'#'[0-9]*` accepts trailing prose such as `sub-issue:#724 arbitrary-authorization-claim`.
+  - `*'#issuecomment-'[0-9]*` accepts malformed prefixes and trailing junk.
+  - `https://*github.com/*[0-9]*` accepts non-GitHub hosts containing that substring, such as `https://notgithub.com/1`, and arbitrary GitHub URLs unrelated to an issue authorization.
+  - The undocumented `sub_issue:#123` alias is accepted despite the stated exact-value discipline.
+  
+  Validate complete, anchored forms and add fully eligible-shaped regressions for trailing prose, malformed comment references, unrelated URLs, and lookalike hosts.
 4.2 - `plugins/spark/lib/execution.sh:2282-2303` — Qualified `parent-authorizes` values only have their suffix after the final `#` checked. Inputs such as `anything#still#722`, `/repo#722`, or `owner/repo/extra#722` are accepted despite documentation requiring exactly `owner/repo#123`. Enforce one `#` and a valid two-component repository identity, with negative tests.
 4.3 - Trusted governance evidence still reports `#726` outside the v0.24 `#481` hierarchy. Later comments claim an approved projection, but no trusted read-back confirming that relationship is supplied; governance close-out therefore remains unresolved.
 
@@ -53,6 +61,11 @@
 
 ## r10 head=cd3eafd5cd5cab5b20a8c2ef4c5db46f34b33232 verdict=CHANGES REQUIRED comment_id=5559975617 at=2026-09-06T14:43:21Z
 10.1 - `plugins/spark/lib/execution.sh` (`xm_checks`, `xm_statuses`, check evaluation): failures from either observation endpoint are converted to an empty result:
+  ```sh
+  runs="$(xm_checks ...)" || runs=""
+  statuses="$(xm_statuses ...)" || statuses=""
+  ```
+  Eligibility can therefore pass when one evidence surface is unreadable but the other contains successful observations. The unreadable surface could contain a conflicting failed or pending observation. Track both return codes and decline if either complete observation set cannot be read. Add tests where check-runs fail but statuses satisfy all requirements, and vice versa.
 10.2 - `plugins/spark/lib/execution.sh` (`xm_pr_files`, scope derivation): changed files are fetched with non-paginated `xm_api` despite scope depending on every changed path. A PR with more than 100 files can hide a later `.github/workflows/` or `plugins/spark/settings/` change and be classified routine. Use an exhaustive paginated read and add a pagination-boundary non-routine-path regression.
 10.3 - `plugins/spark/lib/execution.sh` (`xm_marker_other`): malformed markers with repeated identity fields can be incorrectly classified as concerning another PR/HEAD because only the first `pr=` and `head=` tokens are retained. For example, a malformed sibling containing both `pr=999` and `pr=727`, or both an old and current `head=`, is ignored when the first value differs. Repeated identity fields are ambiguous, not legibly unrelated, and must decline. Add reviewer and acceptance regressions with duplicate PR/HEAD fields beside otherwise valid evidence.
 10.4 - `plugins/spark/lib/execution.sh` (`xm_derive`, native-parent handling): the derived child identity is emitted and compared as `"$parent_slug#$child_num"` rather than the PR repository’s `"$slug#$child_num"`. If native hierarchy can reference a parent in another repository, this changes the identity of the issue the PR actually closes and permits a parent-repository `#N` grant/attestation to stand for `slug#N`. Preserve the child’s repository from the PR; require an explicit full child identity where a cross-repository parent makes bare `#N` ambiguous. Add a cross-repository-parent regression.
@@ -68,6 +81,10 @@
 
 ## r13 head=d47d0e8e3f8bdb55cd6d685939d3c3acd31836c4 verdict=CHANGES REQUIRED comment_id=5560233736 at=2026-09-06T15:27:53Z
 13.1 - `plugins/spark/lib/execution.sh` (`xm_marker_other`, and its reviewer/acceptance call sites in `xm_derive`): malformed markers can still be dismissed using **noncanonical** identities. For example, beside a valid record:
+  - `<!-- spark-openai-review pr=0727 head=<current> verdict=CHANGES REQUIRED extra=1 -->`
+  - `<!-- spark-acceptance pr=0727 child=#724 head=<current> contract=<id> verdict=NOT-MET extra=1 -->`
+  
+  The extra field makes normal parsing fail, after which `xm_marker_other` sees `0727 != 727` and classifies the record as unrelated without applying `xm_num`; the valid `PASS`/`MET` can therefore remain sufficient. Similarly, malformed records with a noncanonical `head` can be skipped. Require every present `pr`/`head` in `xm_marker_other` to pass `xm_num`/`xm_sha` before it may establish another candidate. Add regressions combining malformed grammar with noncanonical PR and SHA identities.
 13.2 - PR metadata: no closing issue reference was found, despite the added contract describing a closing reference as the authoritative PR-to-work-unit linkage (`plugins/spark/docs/reference/cli.md`). Add the intended closing reference, such as `Closes #726`, or identify the actual governed work unit.
 
 ## r14 head=ee6cf2ad7d6932427664d09c3fbdf3b0f430e975 verdict=CHANGES REQUIRED comment_id=5560278135 at=2026-09-06T15:35:45Z

@@ -1,5 +1,7 @@
 # PR #724 reviewer findings — source of record: the GitHub comments below (trusted login github-actions[bot]).
-# Bullets are copied verbatim and complete; sub-bullets of a finding are part of that finding's text.
+# Each finding is the whole top-level bullet block copied verbatim: the `- ` line plus its continuation
+# lines, indented sub-bullets and internal blank lines. Validated against the live comment bodies by
+# tools/validate-findings.py (see findings-validation.txt).
 
 ## r1 head=e5a8c87221b4c8d25cca45763f7ce14d3411fd2b verdict=CHANGES REQUIRED comment_id=5553496635 at=2026-09-05T17:22:07Z
 1.1 - `plugins/spark/bin/spark:30`: `git_root` reuses `$__SPARK_MEMO/gitroot` after the working directory changes. A command that calls it outside a repository, then `cd`s into one—or moves between repositories—receives the stale first result.
@@ -82,6 +84,8 @@
 
 ## r19 head=688a306c6f9813da657ba1da0dbfb5f8ae19bd49 verdict=CHANGES REQUIRED comment_id=5554505218 at=2026-09-05T20:16:03Z
 19.1 - `tests/bench-memo.sh:151-165`: `sf="$(state_args "$want")"` executes `state_args` in a command-substitution subshell. Its `run_state` increment never reaches the parent shell, so every OFF invocation reuses `state.off.1` and every ON invocation reuses `state.on.1`. Because those files are not cleared first, a later invocation that fails to write state can pass `assert_state` using stale evidence from an earlier run. This defeats the stated per-invocation verification and can publish an unmemoized sample as memo ON.
+  
+  Allocate unique state paths without command substitution (or use checked `mktemp` paths), ensure each path is absent before execution, and require a freshly created state record for every timed, counted, and traced invocation. Add a discriminating test where a later invocation does not write state and confirm the benchmark aborts rather than accepting the earlier record.
 
 ## r20 head=9c6665d97a4d8350c76496f0a1b141734d128b44 verdict=CHANGES REQUIRED comment_id=5554549808 at=2026-09-05T20:24:12Z
 20.1 - `plugins/spark/bin/spark:34-52,306-338`: the encoded absolute `$PWD` becomes a single filename component. A valid path exceeding the filesystem’s component limit causes cache writes to fail with `File name too long`; because `> "$tmp"` is processed before `2>/dev/null`, Bash can also emit that error on stderr. Memo ON can therefore differ from OFF and repeatedly pay miss-path overhead. Use a bounded key and add a long-path transparency/negative-control fixture for both `git_root` and `resolve_prefs`.
