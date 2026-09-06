@@ -5,7 +5,11 @@
 # Probes that may legitimately match nothing (a grep -c count, the "not covered" listing) are guarded explicitly.
 set -euo pipefail
 cd "${1:-/home/john/code/spark/.claude/worktrees/baseline-921c982}"
-count() { grep -cE "$1" "${@:2}" || true; }   # grep -c exits 1 on zero matches; zero is a valid measurement here
+# gc <grep args…>: grep whose exit status 1 (no match) is a valid zero measurement, while any status greater than 1
+# (missing file, bad expression, I/O error) aborts the run. `grep -c` already prints 0 on status 1; `grep -l`/`-o`
+# print nothing, which downstream `wc -l` counts as 0.
+gc() { local rc=0; grep "$@" || rc=$?; [ "$rc" -le 1 ] || { echo "grep failed with status $rc: grep $*" >&2; exit "$rc"; }; }
+count() { gc -cE "$1" "${@:2}"; }
 echo "sha=$(git rev-parse HEAD)"
 echo "tracked_files=$(git ls-files | wc -l)"
 echo "tracked_bytes=$(git ls-files -z | xargs -0 cat | wc -c)"
@@ -87,17 +91,17 @@ echo "lib_modules:"; for m in plugins/spark/lib/*.sh; do printf '  %s\tlines=%s\
 echo
 echo "=== counts ==="
 echo "adr_files=$(git ls-files docs/adr | wc -l)"
-echo "adr_superseded_or_deprecated=$(grep -liE '^\*?\*?status\*?\*?:?.*(superseded|deprecated)' docs/adr/*.md | wc -l || true)"
+echo "adr_superseded_or_deprecated=$(gc -liE '^\*?\*?status\*?\*?:?.*(superseded|deprecated)' docs/adr/*.md | wc -l)"
 echo "release_records=$(git ls-files docs/releases | wc -l)"
 echo "skills_core=$(ls -d plugins/spark/skills/*/ | wc -l)"
 echo "skills_companion=$(ls -d plugins/spark-*/skills/*/ | wc -l)"
 echo "test_suites=$(ls tests/test-*.sh | wc -l)"
 echo "workflows=$(git ls-files .github/workflows | wc -l)"
-echo "preferences_rows=$(cat plugins/spark/preferences/*.tsv | grep -vc '^#' || true)"
+echo "preferences_rows=$(cat plugins/spark/preferences/*.tsv | gc -vc '^#')"
 echo "cli_verbs_documented=$(count '^## `spark ' plugins/spark/docs/reference/cli.md)"
-echo "cli_stability_rows=$(grep -vcE '^#|^\s*$|^verb\b' plugins/spark/preferences/cli-stability.tsv || true)"
+echo "cli_stability_rows=$(gc -vcE '^#|^\s*$|^verb\b' plugins/spark/preferences/cli-stability.tsv)"
 echo "governance_models=$(git ls-files plugins/spark/preferences/governance-models | wc -l)"
 echo "test_lib_helpers=$(count '^[a-z_]+\(\)' tests/lib.sh)"
 echo
 echo "=== runtime dependency surface (external binaries referenced by runtime, textual) ==="
-cat plugins/spark/bin/spark plugins/spark/lib/*.sh plugins/spark/scripts/hooks/* plugins/spark/hooks/*.sh | { grep -oE '\b(gh|jq|python3|awk|sed|grep|curl|git|date|mktemp|sort|tr|cut|wc|find|xargs|flock|stat|strace)\b' || true; } | sort | uniq -c | sort -rn
+cat plugins/spark/bin/spark plugins/spark/lib/*.sh plugins/spark/scripts/hooks/* plugins/spark/hooks/*.sh | gc -oE '\b(gh|jq|python3|awk|sed|grep|curl|git|date|mktemp|sort|tr|cut|wc|find|xargs|flock|stat|strace)\b' | sort | uniq -c | sort -rn

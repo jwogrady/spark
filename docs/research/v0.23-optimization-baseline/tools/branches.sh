@@ -21,7 +21,9 @@ for ref in $refs; do
   d="$(git log -1 --format=%cs "$ref")"
   ab="$(git rev-list --left-right --count "$M...$ref")"
   behind="${ab%%	*}"; ahead="${ab##*	}"
-  if git merge-base --is-ancestor "$ref" "$M"; then merged=yes; else merged=no; fi
+  # exit 1 means "not an ancestor" (a measurement); anything greater is a git failure and must abort
+  if git merge-base --is-ancestor "$ref" "$M"; then merged=yes
+  else rc=$?; [ "$rc" -eq 1 ] || { echo "git merge-base failed ($rc) for $ref" >&2; exit "$rc"; }; merged=no; fi
   printf '%s\t%s\t%s\t%s\t%s\n' "$ref" "$d" "$ahead" "$behind" "$merged"
   n=$((n + 1))
 done

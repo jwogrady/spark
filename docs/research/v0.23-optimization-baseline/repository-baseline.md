@@ -211,8 +211,10 @@ bash $BASE/tools/footprint.sh /tmp/spark-921c982            # raw/footprint.txt
 bash $BASE/tools/branches.sh [--fetch]                       # raw/branches.tsv: remote-tracking refs; --fetch refreshes and records the fetch
 ```
 
-All four wrappers fail closed: a failing git, wc, find or measurement aborts the run with a non-zero status, and
-probes that may legitimately match nothing (`grep -c` counts, the "not covered" listing) are guarded explicitly.
+All four wrappers fail closed: a failing git, wc, find or measurement aborts the run with a non-zero status. The
+two statuses that are measurements, not failures, are accepted explicitly and nothing else is masked: `grep`
+status 1 (no match → a zero count) and `git merge-base --is-ancestor` status 1 (not an ancestor → not merged);
+any higher status propagates.
 The committed `raw/footprint.txt` was re-produced byte-identically by the fail-closed `footprint.sh` against the
 frozen worktree; `raw/branches.tsv` carries a provenance header naming the fetch state it was observed from.
 
