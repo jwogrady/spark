@@ -2306,17 +2306,33 @@ xm_api() { # <slug> <path> <jq>
   command -v gh >/dev/null 2>&1 || return 1
   gh api "repos/$1/$2" --jq "$3" 2>/dev/null
 }
+# xm_api_all — the same read, but across EVERY page. A conflicting grant, a
+# second acceptance record, a superseding review verdict or a failing check on
+# page two is invisible to a single-page read, and "exactly one" concluded from
+# a truncated list is not exactly one.
+xm_api_all() { # <slug> <path> <jq>
+  command -v gh >/dev/null 2>&1 || return 1
+  gh api --paginate "repos/$1/$2" --jq "$3" 2>/dev/null
+}
 xm_slug()        { command -v gh >/dev/null 2>&1 || return 1
                    gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null; }
 xm_default_branch() { xm_api "$1" "" '.default_branch'; }
 xm_pr_facts()    { xm_api "$1" "pulls/$2" '.head.sha, .state, (.draft|tostring), .base.ref, .head.ref'; }
 xm_pr_head()     { xm_api "$1" "pulls/$2" '.head.sha'; }
 xm_pr_files()    { xm_api "$1" "pulls/$2/files?per_page=100" '.[].filename'; }
-xm_checks()      { xm_api "$1" "commits/$2/check-runs" '.check_runs[] | .status + " " + (.conclusion // "none")'; }
+# Check runs and commit statuses both carry required contexts, so both are read.
+xm_checks()      { xm_api_all "$1" "commits/$2/check-runs?per_page=100" \
+                     '.check_runs[] | .name + "\t" + .status + "\t" + (.conclusion // "none")'; }
+xm_statuses()    { xm_api_all "$1" "commits/$2/status?per_page=100" \
+                     '.statuses[] | .context + "\t" + "completed" + "\t" + .state'; }
+# The REQUIRED set, from branch protection. Without it there is no way to know a
+# required check is missing rather than merely unmentioned, so an unreadable
+# required set is not an empty one.
+xm_required()    { xm_api_all "$1" "branches/$2/protection/required_status_checks" '.contexts[]'; }
 xm_parent_url()  { xm_api "$1" "issues/$2" '.parent_issue_url // empty'; }
 # One comment per line: association, login, then the body with newlines escaped.
 # The marker grammars are single-line, so nothing that matters is lost.
-xm_comments()    { xm_api "$1" "issues/$2/comments?per_page=100" \
+xm_comments()    { xm_api_all "$1" "issues/$2/comments?per_page=100" \
                      '.[] | .author_association + "\t" + .user.login + "\t" + (.body | gsub("\r?\n"; "\\n"))'; }
 # The bounded work unit is whatever the PR CLOSES. Governance already makes that
 # the authoritative linkage ("a linked PR plus a closing keyword"), so it is
@@ -2324,6 +2340,24 @@ xm_comments()    { xm_api "$1" "issues/$2/comments?per_page=100" \
 xm_closing()     { command -v gh >/dev/null 2>&1 || return 1
                    gh pr view "$2" --repo "$1" --json closingIssuesReferences \
                      --jq '.closingIssuesReferences[].number' 2>/dev/null; }
+
+# xm_body_lines <flattened-body> — recover the comment's lines. Bodies arrive
+# with newlines escaped so one comment is one record; the marker grammars are
+# single-line, so they must be matched against LINES, not against the flattened
+# tail. Parsing the tail meant a grant followed by any ordinary prose was
+# rejected — fail-closed, but it made the feature unusable, because nobody
+# writes a comment that ends exactly at the marker.
+xm_body_lines() {
+  local rest="${1:-}" seg
+  while :; do
+    case "$rest" in
+      *'\n'*) seg="${rest%%\\n*}"; rest="${rest#*\\n}" ;;
+      *)      seg="$rest"; rest="" ;;
+    esac
+    printf '%s\n' "$seg"
+    [ -n "$rest" ] || break
+  done
+}
 
 xm_is_authorizing() {
   local a
@@ -2385,19 +2419,30 @@ EOF
     done
     [ -z "$skip" ] || continue
     gchild=""; gacc=""
-    local badfield=""
-    for field in ${body#*"$XM_MARKER_PREFIX "}; do
-      case "$field" in
-        child=*)      [ -z "$gchild" ] || badfield=1; gchild="${field#child=}" ;;
-        acceptance=*) [ -z "$gacc" ]   || badfield=1; gacc="${field#acceptance=}" ;;
-        # An unrecognised field INVALIDATES the record rather than ending the
-        # scan: a grant carrying something this cannot interpret is a grant
-        # whose meaning is not established.
-        *) badfield=1 ;;
-      esac
+    local badfield="" gline lines_seen=0
+    while IFS= read -r gline; do
+      case "$gline" in "$XM_MARKER_PREFIX "*) ;; *) continue ;; esac
+      lines_seen=$((lines_seen + 1))
+      # Two grant lines in one comment are ambiguous about what was granted.
+      [ "$lines_seen" -le 1 ] || { badfield=1; break; }
+      gchild=""; gacc=""
+      for field in ${gline#"$XM_MARKER_PREFIX" }; do
+        case "$field" in
+          child=*)      [ -z "$gchild" ] || badfield=1; gchild="${field#child=}" ;;
+          acceptance=*) [ -z "$gacc" ]   || badfield=1; gacc="${field#acceptance=}" ;;
+          # An unrecognised field INVALIDATES the record rather than ending the
+          # scan: a grant carrying something this cannot interpret is a grant
+          # whose meaning is not established.
+          *) badfield=1 ;;
+        esac
+        [ -z "$badfield" ] || break
+      done
       [ -z "$badfield" ] || break
-    done
+    done <<LINES
+$(xm_body_lines "$body")
+LINES
     [ -z "$badfield" ] || continue
+    [ "$lines_seen" -eq 1 ] || continue
     xm_issue_ref "$gchild" || continue
     xm_token "$gacc" || continue
     xm_same_issue "$gchild" "#$child_num" "$parent_slug" || continue
@@ -2412,14 +2457,25 @@ EOF
   fi
 
   # Review and acceptance, both bound to THIS commit, read from the PR.
-  local rev=no acc=no acc_seen=0
+  local rev=no acc=no acc_seen=0 rev_seen=0 rev_verdict="" rev_conflict="" acc_bad=0
   while IFS= read -r line; do
     [ -n "$line" ] || continue
     assoc="${line%%	*}"; rest="${line#*	}"
     local login="${rest%%	*}"; body="${rest#*	}"
     case "$body" in
-      *"<!-- $XM_REVIEW_TAG pr=$prnum head=$sha verdict=PASS -->"*)
-        [ "$login" = "$XM_REVIEW_PRODUCER" ] && rev=yes ;;
+      *"<!-- $XM_REVIEW_TAG pr=$prnum head=$sha verdict="*)
+        # Every terminal verdict for THIS head is collected. A later
+        # CHANGES REQUIRED does not sit quietly beside an earlier PASS: two
+        # different verdicts for one commit are a conflict, and a conflict is
+        # not a pass.
+        [ "$login" = "$XM_REVIEW_PRODUCER" ] || continue
+        local vtail="${body#*<!-- $XM_REVIEW_TAG pr=$prnum head=$sha verdict=}"
+        vtail="${vtail%%-->*}"
+        vtail="${vtail% }"
+        rev_seen=$((rev_seen + 1))
+        if [ -z "$rev_verdict" ]; then rev_verdict="$vtail"
+        elif [ "$rev_verdict" != "$vtail" ]; then rev_conflict=1
+        fi ;;
     esac
     case "$body" in
       *"<!-- $XM_ACCEPT_TAG "*)
@@ -2438,7 +2494,7 @@ EOF
           esac
           [ -z "$a_bad" ] || break
         done
-        [ -z "$a_bad" ] || continue
+        if [ -n "$a_bad" ]; then acc_bad=$((acc_bad + 1)); continue; fi
         [ "$a_pr" = "$prnum" ] || continue
         xm_issue_ref "$a_child" || continue
         xm_same_issue "$a_child" "#$child_num" "$parent_slug" || continue
@@ -2446,36 +2502,75 @@ EOF
         [ "$a_head" = "$sha" ] || continue
         [ "$a_contract" = "$m_acc" ] || continue
         # A closed vocabulary that fails toward the non-affirming value, as the
-        # reviewer lane does: only MET affirms, anything else proves nothing.
-        [ "$a_verdict" = MET ] || continue
+        # reviewer lane does: only MET affirms. A NOT-MET for the SAME identity
+        # and commit is not something to skip past — it is contradictory
+        # evidence, and contradictory evidence is not proof.
         acc_seen=$((acc_seen + 1))
+        [ "$a_verdict" = MET ] || { acc_bad=$((acc_bad + 1)); continue; }
         acc=yes ;;
     esac
   done <<EOF
 $(xm_comments "$slug" "$prnum")
 EOF
 
-  if [ "$acc_seen" -gt 1 ]; then
-    echo "pull request #$prnum carries $acc_seen acceptance proofs for this commit and contract; two are ambiguous about what was proven"
+  if [ "$acc_seen" -gt 1 ] || [ "$acc_bad" -gt 0 ]; then
+    echo "pull request #$prnum carries $acc_seen acceptance record(s) and $acc_bad malformed or contradictory one(s) for this commit; exactly one unambiguous proof is required, and a MET beside a NOT-MET proves nothing"
     return 1
   fi
+  if [ -n "$rev_conflict" ]; then
+    echo "pull request #$prnum carries conflicting reviewer verdicts for $sha; one commit cannot be both, and a conflict is not a pass"
+    return 1
+  fi
+  # ONE canonical terminal record. The lane upserts its marker in place, so more
+  # than one for a single commit means something else wrote them, and which is
+  # authoritative is then a guess.
+  if [ "$rev_seen" -gt 1 ]; then
+    echo "pull request #$prnum carries $rev_seen reviewer verdict records for $sha; exactly one canonical terminal record is required"
+    return 1
+  fi
+  case "$rev_verdict" in
+    PASS) rev=yes ;;
+    "")   [ "$rev_seen" -eq 0 ] || { echo "pull request #$prnum carries a reviewer marker for $sha with no readable verdict"; return 1; } ;;
+  esac
 
-  # Checks, on that exact commit.
-  local runs st concl c okc checks=green seen=0
+  # Checks, on that exact commit. What matters is not "some runs went green" but
+  # "every REQUIRED check went green" — a single unrelated success would
+  # otherwise mask a required check that never ran at all. A required check is
+  # held to `success`: skipped or neutral means it did not do its job.
+  local runs statuses required checks=green want got rname rstat rconcl found
+  required="$(xm_required "$slug" "$base")" || required=""
   runs="$(xm_checks "$slug" "$sha")" || runs=""
-  if [ -z "$runs" ]; then checks=absent; fi
-  while IFS= read -r line; do
-    [ -n "$line" ] || continue
-    seen=$((seen + 1))
-    st="${line%% *}"; concl="${line#* }"
-    if [ "$st" != completed ]; then checks="pending:$st"; break; fi
-    okc=0
-    for c in "${XM_OK_CONCLUSIONS[@]}"; do [ "$concl" = "$c" ] && { okc=1; break; }; done
-    if [ "$okc" != 1 ]; then checks="failed:$concl"; break; fi
-  done <<EOF
-$runs
-EOF
-  [ "$seen" -ge 1 ] || checks=absent
+  statuses="$(xm_statuses "$slug" "$sha")" || statuses=""
+  local observed
+  observed="$(printf '%s\n%s\n' "$runs" "$statuses")"
+  if [ -z "$required" ]; then
+    # No required set could be read. That is not the same as "nothing is
+    # required", and guessing in the permissive direction is exactly the
+    # mistake this whole command exists to avoid.
+    checks=required-set-unknown
+  else
+    while IFS= read -r want; do
+      [ -n "$want" ] || continue
+      found=""
+      while IFS= read -r got; do
+        [ -n "$got" ] || continue
+        rname="${got%%	*}"; rstat="${got#*	}"; rconcl="${rstat#*	}"; rstat="${rstat%%	*}"
+        [ "$rname" = "$want" ] || continue
+        if [ "$rstat" != completed ]; then found="pending:$want"; break; fi
+        if [ "$rconcl" != success ]; then found="failed:$want:$rconcl"; break; fi
+        found=ok; break
+      done <<INNER
+$observed
+INNER
+      case "$found" in
+        ok) ;;
+        "") checks="missing-required:$want"; break ;;
+        *)  checks="$found"; break ;;
+      esac
+    done <<OUTER
+$required
+OUTER
+  fi
 
   # Is this the routine repository merge operation at all?
   local defbranch scope=routine-reversible f p
@@ -2566,7 +2661,13 @@ xm_decide() {
   - child: the bounded work unit was not resolved to a canonical identity."
   xm_issue_ref "$parent" || why="${why}
   - parent: no owning issue was resolved through the native hierarchy."
-  if [ -n "$child" ] && [ -n "$grant_child" ] && ! xm_same_issue "$grant_child" "$child" "$slug"; then
+  # The grant identity is REQUIRED, not merely compared when present. Skipping
+  # the comparison because the fact is absent is the same fail-open shape as
+  # inferring success from the absence of a failure.
+  if ! xm_issue_ref "$grant_child"; then
+    why="${why}
+  - grant-child: no canonical authorized work unit was derived, so there is nothing to compare the merge candidate against."
+  elif ! xm_same_issue "$grant_child" "$child" "$slug"; then
     why="${why}
   - grant: the durable record authorizes '$grant_child', not '$child'. Repository identity is part of that comparison, so the same number elsewhere is a different work unit."
   fi

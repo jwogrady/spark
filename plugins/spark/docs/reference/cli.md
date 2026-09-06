@@ -630,12 +630,30 @@ invocation returns `4`, and `--help` is the single explicit success path.
 | the acceptance identity | whatever that grant binds |
 | acceptance is *true* | a durable attestation bound to this exact commit |
 | independent review | the exact-HEAD `spark-openai-review … verdict=PASS` marker from `github-actions[bot]` |
-| checks | the check runs for that exact commit |
+| required checks | the repository's **required contexts** for the base branch, each verified on that exact commit — as a check run or a commit status |
 | routine/reversible scope | PR state, base branch, head branch and changed paths |
 | stale-head protection | the head re-read **after** everything above |
 
 Exactly one issue must be closed and exactly one grant must exist: two of either
 is ambiguous about what was authorized, and ambiguity declines.
+
+**Required, not merely observed.** Green means every *required* context passed,
+not that some run reported success — an unrelated success can otherwise stand in
+for a required check that never ran. A required check must conclude `success`:
+`skipped` and `neutral` mean it did not do its job. A required set that cannot
+be read is not an empty one, and declines.
+
+**Read to exhaustion.** Comments, review and acceptance records, check runs and
+the required set are all paginated. "Exactly one" concluded from a truncated
+page is not exactly one, and a conflicting grant or a failing check on a later
+page would otherwise be invisible.
+
+**Conflicting evidence is not passing evidence.** One canonical terminal
+reviewer record is required for the evaluated commit: a `PASS` beside a
+`CHANGES REQUIRED`, two records, or a marker with no readable verdict all
+decline. The same holds for acceptance — a `MET` beside a `NOT-MET`, a
+malformed same-contract record, or two proofs decline. Nothing wins by mere
+existence.
 
 ### The two durable records
 

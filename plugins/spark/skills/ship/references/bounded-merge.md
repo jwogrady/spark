@@ -58,9 +58,14 @@ the bounded work unit is identified — and that issue must have a **native
 parent**, which is how the owning issue is identified. Two of either is
 ambiguous, and ambiguity declines.
 
+The grant must be its own line, and prose around it is fine — a comment does not
+have to end at the marker. Two grant lines, or two granting comments, are
+ambiguous and decline.
+
 Everything unproven declines: missing, malformed, duplicate, unreadable, stale,
 wrong-repository, wrong-child, wrong-acceptance or wrong-HEAD records; a PASS
-for a different commit; a check that has not finished. When the HEAD moves,
+for a different commit; a check that has not finished; a required check that
+never ran or that skipped; conflicting evidence of any kind. When the HEAD moves,
 every fact gathered describes a commit that is no longer the candidate, so the
 answer becomes `NOT ELIGIBLE` and the evaluation must be redone.
 

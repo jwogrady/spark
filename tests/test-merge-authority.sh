@@ -42,6 +42,7 @@ sub="${1:-}"; shift || true
 path=""; jq=""; json=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
+    --paginate) PAGED=paginate; shift ;;
     --jq)   jq="$2"; shift 2 ;;
     --json) json="$2"; shift 2 ;;
     --repo) shift 2 ;;
@@ -54,7 +55,10 @@ case "$sub" in
   repo) [ "${GH_FAIL:-}" = slug ] && exit 1; printf '%s' "${GH_SLUG:-}"; exit 0 ;;
   pr)   [ "${GH_FAIL:-}" = closing ] && exit 1; printf '%s' "${GH_CLOSING:-}"; exit 0 ;;
 esac
+printf '%s\n' "$jq${PAGED:+ }${PAGED:-}" >> "${GH_LOG:-/dev/null}"
 case "$jq" in
+  ".contexts[]")         [ "${GH_FAIL:-}" = required ] && exit 1; printf '%s' "${GH_REQUIRED:-}" ;;
+  ".statuses[]"*)        [ "${GH_FAIL:-}" = statuses ] && exit 1; printf '%s' "${GH_STATUSES:-}" ;;
   ".default_branch")     [ "${GH_FAIL:-}" = defbranch ] && exit 1; printf '%s' "${GH_DEFBRANCH:-}" ;;
   ".head.sha")           [ "${GH_FAIL:-}" = head ] && exit 1; printf '%s' "${GH_HEAD:-}" ;;
   ".head.sha, .state"*)  [ "${GH_FAIL:-}" = pr ] && exit 1; printf '%s' "${GH_PR:-}" ;;
@@ -73,6 +77,8 @@ exit 0
 EOS
 chmod +x "$STUB/bin/gh"
 export PATH="$STUB/bin:$PATH"
+GH_LOG="$STUB/calls"
+export GH_LOG GH_REQUIRED GH_STATUSES
 export GH_SLUG GH_CLOSING GH_DEFBRANCH GH_HEAD GH_PR GH_FILES GH_CHECKS \
        GH_PARENT GH_PARENT_NUM GH_PARENT_COMMENTS GH_PR_COMMENTS GH_FAIL
 
@@ -96,9 +102,15 @@ feat/724-memo"
   GH_HEAD="$SHA"
   GH_FILES="plugins/spark/bin/spark
 tests/test-hot-path-memo.sh"
-  GH_CHECKS="completed success
-completed success
-completed skipped"
+  GH_REQUIRED="tests
+doctor
+gate"
+  GH_CHECKS="tests${TAB}completed${TAB}success
+doctor${TAB}completed${TAB}success
+gate${TAB}completed${TAB}success
+recover${TAB}completed${TAB}skipped"
+  GH_STATUSES=""
+  : > "$GH_LOG"
   GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}Approving the bounded unit.\\nspark-authorizes child=#724 acceptance=$ACC"
   GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->
 OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
@@ -210,18 +222,99 @@ done
 reset_world
 
 # --- derived: checks for that exact HEAD ------------------------------------
-GH_CHECKS="completed success
-completed failure"
+GH_CHECKS="tests${TAB}completed${TAB}success
+doctor${TAB}completed${TAB}success
+gate${TAB}completed${TAB}failure"
 verdict "NOT ELIGIBLE" 4 "a required check that failed is not green" "${ELIGIBLE[@]}"
-GH_CHECKS="completed success
-in_progress none"
+GH_CHECKS="tests${TAB}completed${TAB}success
+doctor${TAB}completed${TAB}success
+gate${TAB}in_progress${TAB}none"
 verdict "NOT ELIGIBLE" 4 "a required check still pending is not green" "${ELIGIBLE[@]}"
-GH_CHECKS="queued none"
-verdict "NOT ELIGIBLE" 4 "a queued check is not green" "${ELIGIBLE[@]}"
-GH_CHECKS="completed cancelled"
-verdict "NOT ELIGIBLE" 4 "a cancelled check is not green" "${ELIGIBLE[@]}"
+GH_CHECKS="tests${TAB}queued${TAB}none"
+verdict "NOT ELIGIBLE" 4 "a queued required check is not green" "${ELIGIBLE[@]}"
+GH_CHECKS="tests${TAB}completed${TAB}cancelled"
+verdict "NOT ELIGIBLE" 4 "a cancelled required check is not green" "${ELIGIBLE[@]}"
 GH_CHECKS=""
 verdict "NOT ELIGIBLE" 4 "absent check evidence is not green evidence" "${ELIGIBLE[@]}"
+
+# --- required checks: presence, not merely cheerful noise -------------------
+# A single unrelated success must never stand in for a required check that
+# never ran. This is the shape that made "green" meaningless.
+GH_CHECKS="something-unrelated${TAB}completed${TAB}success"
+verdict "NOT ELIGIBLE" 4 "an unrelated success does not satisfy a missing required check" "${ELIGIBLE[@]}"
+GH_CHECKS="tests${TAB}completed${TAB}success
+doctor${TAB}completed${TAB}success"
+verdict "NOT ELIGIBLE" 4 "a required check absent from the run list declines" "${ELIGIBLE[@]}"
+# A REQUIRED check that skipped did not do its job.
+GH_CHECKS="tests${TAB}completed${TAB}success
+doctor${TAB}completed${TAB}success
+gate${TAB}completed${TAB}skipped"
+verdict "NOT ELIGIBLE" 4 "a required check that skipped is not green" "${ELIGIBLE[@]}"
+GH_CHECKS="tests${TAB}completed${TAB}success
+doctor${TAB}completed${TAB}success
+gate${TAB}completed${TAB}neutral"
+verdict "NOT ELIGIBLE" 4 "a required check concluding neutral is not green" "${ELIGIBLE[@]}"
+# An unreadable required set is not an empty one.
+GH_REQUIRED=""
+verdict "NOT ELIGIBLE" 4 "an unreadable required-check set declines" "${ELIGIBLE[@]}"
+reset_world
+GH_FAIL=required
+verdict "NOT ELIGIBLE" 4 "a failed required-set read declines" "${ELIGIBLE[@]}"
+GH_FAIL=""
+# A required context may arrive as a commit status rather than a check run.
+GH_CHECKS="tests${TAB}completed${TAB}success
+doctor${TAB}completed${TAB}success"
+GH_STATUSES="gate${TAB}completed${TAB}success"
+verdict "ROUTINE MERGE" 0 "a required context satisfied by a commit status counts" "${ELIGIBLE[@]}"
+GH_STATUSES="gate${TAB}completed${TAB}failure"
+verdict "NOT ELIGIBLE" 4 "a failing commit status for a required context declines" "${ELIGIBLE[@]}"
+reset_world
+
+# --- every trusted list read must be paginated ------------------------------
+# "Exactly one" concluded from a truncated page is not exactly one, and a
+# failing check on page two is invisible.
+xr_merge_check "${ELIGIBLE[@]}" >/dev/null 2>&1 || true
+for expect in "author_association" "check_runs" "contexts"; do
+  if grep -q "$expect.*paginate" "$GH_LOG"; then ok
+  else bad "the '$expect' read must be paginated, or a later page is invisible"; fi
+done
+reset_world
+
+# --- conflicting evidence is not passing evidence ---------------------------
+# A later CHANGES REQUIRED for the same commit does not sit quietly beside an
+# earlier PASS; one commit cannot be both.
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->
+github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=CHANGES REQUIRED -->
+OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
+verdict "NOT ELIGIBLE" 4 "a PASS beside a CHANGES REQUIRED for the same head declines" "${ELIGIBLE[@]}"
+# ...and in the other order, so this is not an artefact of which came first.
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=CHANGES REQUIRED -->
+github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->
+OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
+verdict "NOT ELIGIBLE" 4 "the order of conflicting verdicts does not matter" "${ELIGIBLE[@]}"
+# A MET beside a NOT-MET for the same identity and commit proves nothing.
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->
+OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->
+OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=NOT-MET -->"
+verdict "NOT ELIGIBLE" 4 "a MET beside a NOT-MET for the same commit declines" "${ELIGIBLE[@]}"
+# A malformed acceptance record is not something to step over.
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->
+OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->
+OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC bogus=1 -->"
+verdict "NOT ELIGIBLE" 4 "a malformed acceptance record beside a good one declines" "${ELIGIBLE[@]}"
+reset_world
+
+# Two records for one commit, even agreeing, are not one canonical record.
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->
+github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->
+OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
+verdict "NOT ELIGIBLE" 4 "two reviewer records for one commit are ambiguous" "${ELIGIBLE[@]}"
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict= -->
+OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
+verdict "NOT ELIGIBLE" 4 "a reviewer marker with no readable verdict declines" "${ELIGIBLE[@]}"
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=NOT ASSESSED -->
+OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
+verdict "NOT ELIGIBLE" 4 "NOT ASSESSED is never a pass" "${ELIGIBLE[@]}"
 reset_world
 
 # --- derived: stale-head protection by construction -------------------------
@@ -255,6 +348,25 @@ GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}Thanks, this looks reasonable to me
 verdict "NOT ELIGIBLE" 4 "an unrelated comment on the parent authorizes nothing" "${ELIGIBLE[@]}"
 GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}I authorize bounded unit #724 with acceptance $ACC."
 verdict "NOT ELIGIBLE" 4 "prose naming the child and acceptance is not a grant" "${ELIGIBLE[@]}"
+# A real comment does not end exactly at the marker. Parsing the flattened tail
+# instead of the LINE rejected every grant with prose after it — fail-closed,
+# but it made the feature unusable.
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=#724 acceptance=$ACC\\nThanks for the quick turnaround."
+verdict "ROUTINE MERGE" 0 "a grant followed by ordinary prose still authorizes" "${ELIGIBLE[@]}"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}Approving this.\\nspark-authorizes child=#724 acceptance=$ACC\\nSee the plan above."
+verdict "ROUTINE MERGE" 0 "a grant surrounded by prose still authorizes" "${ELIGIBLE[@]}"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=#724 acceptance=$ACC\\nspark-authorizes child=#724 acceptance=other-v1"
+verdict "NOT ELIGIBLE" 4 "two grant lines in one comment are ambiguous" "${ELIGIBLE[@]}"
+# IDENTICAL lines too: a "take the last" implementation sails through a control
+# whose duplicates merely disagree.
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=#724 acceptance=$ACC\\nspark-authorizes child=#724 acceptance=$ACC"
+verdict "NOT ELIGIBLE" 4 "two identical grant lines in one comment are ambiguous" "${ELIGIBLE[@]}"
+# The marker must START the line. Prose that merely mentions it is discussion,
+# not a grant — otherwise quoting the syntax in a sentence would authorize.
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}Write spark-authorizes child=#724 acceptance=$ACC to approve."
+verdict "NOT ELIGIBLE" 4 "a marker quoted mid-sentence is discussion, not a grant" "${ELIGIBLE[@]}"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}  spark-authorizes child=#724 acceptance=$ACC"
+verdict "NOT ELIGIBLE" 4 "an indented marker is not the canonical line form" "${ELIGIBLE[@]}"
 GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=#725 acceptance=$ACC"
 verdict "NOT ELIGIBLE" 4 "a grant for the wrong child does not authorize this one" "${ELIGIBLE[@]}"
 GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=#7241 acceptance=$ACC"
@@ -395,6 +507,10 @@ dec() {
 }
 dec "ROUTINE MERGE" "the core accepts a complete normalized fact set" "${FACTS[@]}"
 dec "NOT ELIGIBLE" "the core refuses an unknown fact" "${FACTS[@]}" bogus=1
+# The advertised fail-closed core must REQUIRE the grant identity, not skip the
+# comparison when it happens to be absent.
+dec "NOT ELIGIBLE" "the core refuses a missing grant-child" "${FACTS[@]/grant-child=*/grant-child=}"
+dec "NOT ELIGIBLE" "the core refuses a non-canonical grant-child" "${FACTS[@]/grant-child=*/grant-child=nonsense}"
 for drop in review acceptance-met checks scope; do
   dec "NOT ELIGIBLE" "the core refuses when '$drop' is not affirmed" \
     "${FACTS[@]/$drop=*/$drop=no}"
