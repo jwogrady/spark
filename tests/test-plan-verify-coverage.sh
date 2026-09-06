@@ -60,13 +60,15 @@ stub="$work/stub"; mkdir -p "$stub"
 # The stub answers with the JSON GitHub returns and applies the CALLER's --jq
 # (gh_stub_prelude), so the binary's own jq programs — the milestone list, the
 # sub-issue list, the shared blocked-by reader, the identity read — are
-# exercised rather than assumed; pre-shaped rows would agree with any jq.
+# exercised rather than assumed; pre-shaped rows would agree with any jq. Each
+# answer exits with jq's own status, as gh does: a rejected program is a failed
+# call, never a silent success.
 { echo '#!/usr/bin/env bash'; gh_stub_prelude; cat <<'STUB'; } > "$stub/gh"
 sc="${SC:-ok}"
 args="$*"
 case "$1 $2" in
   "auth status") exit 0 ;;
-  "repo view") [ "$sc" = "unread:identity" ] && exit 1; answer_json '{"nameWithOwner":"acme/widgets"}'; exit 0 ;;
+  "repo view") [ "$sc" = "unread:identity" ] && exit 1; answer_json '{"nameWithOwner":"acme/widgets"}'; exit $? ;;
 esac
 # gh_issue_json <title> <label-csv> <milestone> — emit the JSON `gh issue view`
 # returns, then apply the --jq the CALLER passed. A stub that returns
@@ -111,27 +113,27 @@ if [ "$1" = "api" ]; then
   case "$args" in
     *"/milestones?"*)
       [ "$sc" = "unread:milestones" ] && exit 1
-      [ "$sc" = "no-ms-record" ] && { answer_json '[{"title":"something else","description":"desc"}]'; exit 0; }
-      [ "$sc" = "bad-ms-desc" ] && { answer_json '[{"title":"v9.9 — audit probe","description":"wrong description"}]'; exit 0; }
-      answer_json '[{"title":"v9.9 — audit probe","description":"Audit milestone"}]'; exit 0 ;;
+      [ "$sc" = "no-ms-record" ] && { answer_json '[{"title":"something else","description":"desc"}]'; exit $?; }
+      [ "$sc" = "bad-ms-desc" ] && { answer_json '[{"title":"v9.9 — audit probe","description":"wrong description"}]'; exit $?; }
+      answer_json '[{"title":"v9.9 — audit probe","description":"Audit milestone"}]'; exit $? ;;
     *"/issues/100/sub_issues"*)
       [ "$sc" = "unread:subissues" ] && exit 1
-      [ "$sc" = "no-hierarchy" ] && { answer_json '[]'; exit 0; }
+      [ "$sc" = "no-hierarchy" ] && { answer_json '[]'; exit $?; }
       # 999 is a sub-issue the artifact never mentions: order is RELATIVE, so
       # its presence must not be read as drift. The two ordered children are
       # what the order check compares, and bad-order swaps exactly them.
       if [ "$sc" = "bad-order" ]; then answer_json '[{"number":102},{"number":999},{"number":101}]'
       else answer_json '[{"number":101},{"number":999},{"number":102}]'; fi
-      exit 0 ;;
+      exit $? ;;
     *"/issues/101/dependencies/blocked_by"*)
       [ "$sc" = "unread:blockedby" ] && exit 1
-      [ "$sc" = "no-dependency" ] && { answer_json '[]'; exit 0; }
+      [ "$sc" = "no-dependency" ] && { answer_json '[]'; exit $?; }
       # The JSON GitHub returns for a blocker: number, state, owning repository.
       # A foreign repository's #100 must never satisfy an edge declared between
       # two local issues, and a blocker whose repository is unknown is `?`.
-      [ "$sc" = "foreign-number" ] && { answer_json '[{"number":100,"state":"open","repository":{"full_name":"other/elsewhere"}}]'; exit 0; }
-      [ "$sc" = "unknown-repo" ] && { answer_json '[{"number":100,"state":"open"}]'; exit 0; }
-      answer_json '[{"number":100,"state":"open","repository":{"full_name":"acme/widgets"}}]'; exit 0 ;;
+      [ "$sc" = "foreign-number" ] && { answer_json '[{"number":100,"state":"open","repository":{"full_name":"other/elsewhere"}}]'; exit $?; }
+      [ "$sc" = "unknown-repo" ] && { answer_json '[{"number":100,"state":"open"}]'; exit $?; }
+      answer_json '[{"number":100,"state":"open","repository":{"full_name":"acme/widgets"}}]'; exit $? ;;
   esac
   exit 1
 fi

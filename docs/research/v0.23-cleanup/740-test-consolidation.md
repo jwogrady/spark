@@ -203,22 +203,18 @@ it means adopting `gh_stub_prelude` across ten stubs in one suite.
 
 ---
 
-## Remaining scope (later packets, in order)
+## Remaining scope (later packets, in order; packets 1 and 2 above are done)
 
-2. **Wrong-layer mocks** (contract: "mocks that assume production transport/parser output").
-   Candidates found so far: stubs that answer `gh api … --jq` with rows already shaped the
-   way *one* caller's jq shapes them, so the production jq is never exercised —
-   `tests/test-plan-verify-coverage.sh` (`api` branch: sub_issues, blocked_by, milestones)
-   and `tests/test-canonical-primitives.sh` (its recording stub). The pattern to adopt
-   exists in the same corpus: `gh_issue_json` in the plan-verify suite applies the
-   caller's `--jq` to a JSON fixture. Three stubs of this kind were already corrected by
-   #739 (course-derivation, member-identity, release-gate-role).
-3. **Repeated `gh` stub scaffolding** (baseline B3/B4): 24+ suites each invent a shim
-   directory, write a stub, `chmod +x`, prepend `PATH`. A `shim_init`/`stub_gh` pair in
-   `lib.sh` would remove the scaffolding while leaving each stub's *answers* in the suite
-   that owns them. Discrimination is unaffected by construction; the risk is in PATH
-   ordering, so it is its own packet with its own per-suite proof.
-4. **Same-invariant candidates** (baseline C1–C7). The baseline's own verdicts stand:
+1. **Repeated `gh` stub scaffolding** (baseline B3/B4): 24+ suites each invent a shim
+   directory, write a stub, `chmod +x`, prepend `PATH`; `test-codify-prereqs.sh` alone
+   carries ten inline stubs with pre-shaped answers (`api repos/{owner}/{repo} --jq
+   .full_name`, the blocked-by endpoint in the skill script's own jq shape, GraphQL
+   closing-reference queries). `gh_stub_prelude` (packet 2) is the first shared piece; a
+   `shim_init`/`stub_gh` pair would remove the rest of the scaffolding while leaving each
+   stub's *answers* in the suite that owns them, and converting the codify-prereqs stubs
+   rides the same change. Discrimination is unaffected by construction; the risk is in
+   PATH ordering, so it is its own packet with its own per-suite proof.
+2. **Same-invariant candidates** (baseline C1–C7). The baseline's own verdicts stand:
    most groups are layered, not duplicated. The two worth a line-level read are
    `test-context-budget.sh` vs `test-footprint-budget.sh` (C4: same fixture marketplace,
    hard-error vs warn — but different functions under test) and the three

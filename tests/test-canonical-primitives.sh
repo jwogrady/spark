@@ -35,11 +35,13 @@ printf '%s\n' "$*" >> "$CALLS"
 # <name>.partial.json is answered through the caller's jq and then FAILS — a
 # first page delivered, a later page lost, which is what gh --paginate does;
 # <name>.json is the normal answer; nothing at all is an unreadable endpoint.
+# The normal answer exits with jq's own status, as gh does: a program jq
+# rejects is a failed call, never a silent success.
 answer() {
   [ -f "$SC/$1.raw" ] && { cat "$SC/$1.raw"; exit 0; }
   [ -f "$SC/$1.partial.json" ] && { answer_json "$(cat "$SC/$1.partial.json")"; exit 1; }
   [ -f "$SC/$1.json" ] || exit 1
-  answer_json "$(cat "$SC/$1.json")"; exit 0
+  answer_json "$(cat "$SC/$1.json")"
 }
 case "$*" in
   "auth status"*) exit 0 ;;
