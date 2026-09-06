@@ -69,19 +69,52 @@ child's question, not dead code.)
 
 ## Candidates and classification
 
-| Candidate | Where | Evidence | Class |
-|---|---|---|---|
-| `bg_dir` | `plugins/spark/lib/execution.sh` (budget domain) | 0 references in runtime, tests or docs; no indirect construction; introduced by the budget feature (`22a9f75`), moved by the module extraction (`d86e78d`); no other commit ever mentions it; `bg_file` (1 call site) is the helper the code uses | **Safe delete** |
-| `bg_get` | same | 0 references anywhere, ever (`22a9f75`, `d86e78d` only); the budget domain reads its records through `bg_apply_staged`, not this accessor | **Safe delete** |
-| `route_class_desc` | `plugins/spark/lib/execution.sh` (routing) | 0 references anywhere, ever (`0b84a82`, `d86e78d` only); `route_class_rank` (3 call sites) is the sibling the router uses; no consumer reads the description column | **Safe delete** |
-| `ci_dir` | `plugins/spark/lib/execution.sh` (CI hand-off) | 0 references anywhere, ever (`96702b4`, `d86e78d` only); `ci_file` is the helper in use | **Safe delete** |
-| `ci_get` | same | 0 references anywhere, ever (`96702b4`, `d86e78d` only); `ci_load` reads the record | **Safe delete** |
-| `ms_open_count_of` | `plugins/spark/bin/spark` (milestone snapshot) | 0 non-comment references; introduced by `4baea20` (2026-08-29) with 0 reference lines at that revision; the snapshot's consumers read `ms` rows through `milestone_snapshot`'s own awk, not this accessor | **Safe delete** |
-| `leaves_of` | same | 0 non-comment references; introduced by `4baea20` with 0 reference lines at that revision; `containers_of`, the sibling defined next to it, is the one the leaf/container rule calls | **Safe delete** |
-| `fp_over_budget` | `plugins/spark/bin/spark` (latency) | 0 non-comment references; 6 call sites at introduction (`e335532`, 2026-07-21) removed the same day by `ef1a204`, 0 since; `fp_latency` compares inline; `tests/test-latency.sh` does not reference it | **Safe delete** |
-| Legacy state keys (`STATE_LEGACY_KEYS`, `is_legacy_key`, the "legacy keys found and ignored" notice, the close-out migration) | `plugins/spark/bin/spark` (state) | A compatibility path for pre-v0.16 `.spark/state.json` files that still carry `stage`/`issue`/`branch`/`pr`; referenced at 3 sites and executes; 0 test references; whether any downstream repository still carries such a file is unknowable from this repository | **Needs review** — behavior-bearing compatibility; remove only with evidence that no consumer has an unmigrated file, or after a documented deprecation window |
-| `enhancement` deprecated-alias handling and `--prune-deprecated` | `plugins/spark/bin/spark` (labels) | A documented flag of a Stable CLI verb (`spark labels`) that deliberately handles GitHub's default label; referenced and tested | **Do not delete** — public CLI/compatibility behavior |
-| `cmd_*`, `fp_hot_*` and other single-reference runtime functions | `plugins/spark/bin/spark` | One reference each because they are dispatched through the `VERBS` table or passed by name (`fp_median3_ms fp_hot_guard`); the reference is the dispatch, not dead code | **Do not delete** |
+Confidence is how certain the evidence makes the classification; risk is what a wrong call would cost.
+
+| Candidate | Where | Evidence | Confidence | Risk if removed | Class |
+|---|---|---|---|---|---|
+| `bg_dir` | `plugins/spark/lib/execution.sh` (budget domain) | 0 references in runtime, tests or docs; no indirect construction; introduced by the budget feature (`22a9f75`), moved by the module extraction (`d86e78d`); no other commit ever mentions it; `bg_file` (1 call site) is the helper the code uses | **High** — zero references in every surface and every revision, no indirect construction | **Low** — a pure path helper; a future caller re-adds a one-liner | **Safe delete** |
+| `bg_get` | same | 0 references anywhere, ever (`22a9f75`, `d86e78d` only); the budget domain reads its records through `bg_apply_staged`, not this accessor | **High** | **Low** — the record reader in use is `bg_apply_staged` | **Safe delete** |
+| `route_class_desc` | `plugins/spark/lib/execution.sh` (routing) | 0 references anywhere, ever (`0b84a82`, `d86e78d` only); `route_class_rank` (3 call sites) is the sibling the router uses; no consumer reads the description column | **High** | **Low** — the description column stays in the routing TSV; only the unused accessor goes | **Safe delete** |
+| `ci_dir` | `plugins/spark/lib/execution.sh` (CI hand-off) | 0 references anywhere, ever (`96702b4`, `d86e78d` only); `ci_file` is the helper in use | **High** | **Low** | **Safe delete** |
+| `ci_get` | same | 0 references anywhere, ever (`96702b4`, `d86e78d` only); `ci_load` reads the record | **High** | **Low** — `ci_load` is the reader | **Safe delete** |
+| `ms_open_count_of` | `plugins/spark/bin/spark` (milestone snapshot) | 0 non-comment references; introduced by `4baea20` (2026-08-29) with 0 reference lines at that revision; the snapshot's consumers read `ms` rows through `milestone_snapshot`'s own awk, not this accessor | **High** — 0 non-comment references at introduction and since | **Low** — the snapshot rows it would read stay; consumers use `milestone_snapshot`'s own awk | **Safe delete** |
+| `leaves_of` | same | 0 non-comment references; introduced by `4baea20` with 0 reference lines at that revision; `containers_of`, the sibling defined next to it, is the one the leaf/container rule calls | **High** | **Low** — `containers_of` beside it carries the live rule | **Safe delete** |
+| `fp_over_budget` | `plugins/spark/bin/spark` (latency) | 0 non-comment references; 6 call sites at introduction (`e335532`, 2026-07-21) removed the same day by `ef1a204`, 0 since; `fp_latency` compares inline; `tests/test-latency.sh` does not reference it | **High** — callers removed the day it was added, none since; `test-latency.sh` does not use it | **Low** — a one-line comparison; `fp_latency` compares inline | **Safe delete** |
+| Legacy state keys (`STATE_LEGACY_KEYS`, `is_legacy_key`, the "legacy keys found and ignored" notice, the close-out migration) | `plugins/spark/bin/spark` (state) | A compatibility path for pre-v0.16 `.spark/state.json` files that still carry `stage`/`issue`/`branch`/`pr`; referenced at 3 sites and executes; 0 test references; whether any downstream repository still carries such a file is unknowable from this repository | **Medium** — the code path is real and executes (runtime fixture below), but whether any downstream `.spark/state.json` still carries pre-v0.16 keys is unknowable from this repository | **Medium** — removing it would leave stale `stage`/`issue`/`branch`/`pr` keys in old files unmigrated and silently carried forward on every write | **Needs review** — behavior-bearing compatibility; remove only with evidence that no consumer has an unmigrated file, or after a documented deprecation window |
+| `enhancement` deprecated-alias handling and `--prune-deprecated` | `plugins/spark/bin/spark` (labels) | A documented flag of a Stable CLI verb (`spark labels`) that deliberately handles GitHub's default label; referenced and tested | **High** — documented flag of a Stable verb, two suites and two shipped reference pages depend on it | **High** — a Stable CLI contract; removal is a major-version change under the stability contract | **Do not delete** — public CLI/compatibility behavior |
+| `cmd_*`, `fp_hot_*` and other single-reference runtime functions | `plugins/spark/bin/spark` | One reference each because they are dispatched through the `VERBS` table or passed by name (`fp_median3_ms fp_hot_guard`); the reference is the dispatch, not dead code | **High** — the single reference is the dispatch table or a by-name call, both verified below | **High** — removing a dispatched verb handler breaks the verb | **Do not delete** |
+
+### Evidence for the retained candidates
+
+The scan's zero-reference test is the evidence for removals; retained candidates need the opposite kind of
+evidence — that the code is live — and it is recorded here reproducibly. `tools/retained-evidence.sh`
+regenerates every line of `738-retained-evidence.txt` (committed) from the tree: call sites, `git log -S`
+history, a runtime execution against a fixture, and the suites that cover the behavior.
+
+**Legacy state keys** (`plugins/spark/bin/spark`): call sites at lines 7237 (`spark resume`/`brief` reads a
+state file and flags legacy keys), 7899–7900 (the key list and predicate) and 7948 (the writer drops them on
+the next `spark state --set`); introduced by `21ebd5f` (2026-08-11, "derive the session brief from the repo
+instead of recorded state", the v0.16 change the state reference describes). Runtime execution: against a
+fixture `.spark/state.json` carrying `stage`, `issue`, `branch` and `pr`, `spark state` reads only the two
+judgment values and a subsequent `spark state --set blockers=none` rewrites the file with exactly
+`next_action`, `blockers`, `updated` — the migration path executes and is behavior a downstream repository
+with an old file depends on. Test coverage: `tests/test-brief-resume.sh` and `tests/test-state.sh` reference
+the legacy-key behavior (the earlier statement "0 test references" counted references to the *function name*
+only and is corrected here). Evidence categories not relevant: none.
+
+**`enhancement` deprecated alias and `--prune-deprecated`** (`plugins/spark/bin/spark`): call sites at 1522
+(the governance-model check refuses the alias), 2913–2918 (the documented flag), 3135–3167 (detection,
+deliberate pruning, and the operator notice); introduced by `a165860` (2026-08-24, `spark labels`) and
+tightened by `12ef587` (2026-08-26). Test coverage: `tests/test-labels.sh`, `tests/test-governance-schema.sh`.
+Documented in the shipped `reference/cli.md` and `reference/metadata-governance.md`. Runtime execution evidence
+is not reproduced offline because the path talks to GitHub labels; the two suites exercise it through a stub,
+which is the repository's own standard for this surface.
+
+**Single-reference functions** (`cmd_*`, `fp_hot_*`): the one reference is the `VERBS` dispatch table (29
+`|cmd_…|` entries) or a by-name call (`fp_median3_ms fp_hot_guard|brief|doctor|governance` at lines
+7627–7630); every verb is exercised by the behavioral suites through the dispatcher. No history search is
+needed: the reference is present and executing today.
 
 ## What was removed
 
