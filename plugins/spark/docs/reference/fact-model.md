@@ -161,7 +161,7 @@ of the source type; a role name, a label, a summary, or a word such as
 | `github-api` | a repository, work-unit, comment or milestone locator — the node that was read | the node's `updated_at` (ISO-8601 `Z`) or its etag; the 40-hex head only on a HEAD-bound class, where it is that fact's own HEAD — never a numeric node id, which does not change when the node does |
 | `git` | `<repository>@<commit>` or `<repository>@ref/<ref>` | the 40-hex commit id observed (a ref target is recorded as the commit it pointed at) |
 | `repository-file` | `<repository>@<commit>:<path>` | the 40-hex commit id the file was read at |
-| `human-decision` | the decision record itself: a comment locator or `<repository>@<commit>` | the numeric comment id or the 40-hex commit id that records the decision |
+| `human-decision` | the decision record itself: a comment locator or `<repository>@<commit>` | the recording comment's `updated_at` (ISO-8601 `Z`) — a comment can be edited, so its id alone cannot version the decision — or the 40-hex commit id that records it |
 | `derived` | `fact-model/<schema version>` | a `derived-version`: the schema version, then `<input key>@<that input's source.version>` for every input, sorted by key — so the version changes whenever any input's version does |
 
 ## Rules
@@ -213,13 +213,14 @@ behavioral suite checks the two never drift.
   exact shape {reason, candidates} with canonical locators as candidates;
   acceptance item ids are scalar item-ids, unique within the fact; a work unit
   appears at most once per graph list. Every envelope field has the type its
-  field record declares. Where a source identity embeds the version observed —
-  the commit in <repository>@<commit>, <repository>@<commit>:<path>, or the id
-  in a comment locator — source.version equals it. A github-api version that is
-  a commit is allowed only on a HEAD-bound class and is that fact's HEAD; a
-  derived identity's schema version equals the fact's schema_version and its
-  derived-version prefix. Every grammar is matched against the whole string, and
-  whitespace of any kind is outside every locator.
+  field record declares. Where a source identity embeds the commit observed —
+  <repository>@<commit> or <repository>@<commit>:<path> — source.version equals
+  it; a decision recorded in a comment is versioned by that comment's
+  updated_at, never by its id. A github-api version that is a commit is allowed
+  only on a HEAD-bound class and is that fact's HEAD; a derived identity's
+  schema version equals the fact's schema_version and its derived-version
+  prefix. Every grammar is matched against the whole string, and whitespace of
+  any kind is outside every locator.
 - **R15** next_action is derived, never asserted, and every fact its derivation
   consulted is in its inputs (so R4 re-versions it when any of them changes):
   merge only when the review is PASS on the current HEAD, every required check
@@ -251,7 +252,11 @@ behavioral suite checks the two never drift.
   set, the work unit itself or the issue it implements, never an unrelated node
   — and list it as an issue: or pull_request: invalidator; head read from GitHub
   names a work unit and checks name a repository — within one set, the work
-  unit's own node and the repository's. inputs and because list each key once.
+  unit's own node and the repository's. A graph lists every parent, child and
+  blocker whose state it represents as an issue: or pull_request: invalidator;
+  head lists its base as ref:<repository>/<base_ref>; checks list
+  ruleset:<repository> for the repository whose rulesets require them. inputs
+  and because list each key once.
 
 ## Versioning
 
@@ -311,7 +316,7 @@ action follows mechanically from named inputs.
   {"schema_version": "1", "key": "authority.standing", "class": "authority", "status": "ESTABLISHED",
    "value": {"grants": [{"decision": "github.com/acme/widgets#7/comment/9001", "target": "github.com/acme/widgets", "scopes": ["merge:routine", "close:issue"]}],
              "human_boundaries": [{"decision": "github.com/acme/widgets#7/comment/9001", "target": "github.com/acme/widgets", "boundary": "release:approve"}, {"decision": "github.com/acme/widgets#7/comment/9001", "target": "github.com/acme/widgets", "boundary": "authority:grant"}, {"decision": "github.com/acme/widgets#7/comment/9001", "target": "github.com/acme/widgets", "boundary": "action:destructive"}]},
-   "source": {"type": "human-decision", "identity": "github.com/acme/widgets#7/comment/9001", "version": "9001"},
+   "source": {"type": "human-decision", "identity": "github.com/acme/widgets#7/comment/9001", "version": "2026-09-01T09:00:00Z"},
    "observed_at": "2026-09-06T12:00:05Z", "invalidators": ["comment:github.com/acme/widgets#7/comment/9001"],
    "provenance": "https://github.com/acme/widgets/issues/7#issuecomment-9001"},
   {"schema_version": "1", "key": "acceptance.contract", "class": "acceptance", "status": "ESTABLISHED",
@@ -336,7 +341,7 @@ action follows mechanically from named inputs.
    "provenance": "https://github.com/acme/widgets/commit/0123456789abcdef0123456789abcdef01234567/checks"},
   {"schema_version": "1", "key": "next_action.governed", "class": "next_action", "status": "ESTABLISHED",
    "value": {"action": "merge", "because": ["review.independent", "checks.required", "head.exact", "authority.standing", "acceptance.contract"], "boundary": "none"},
-   "source": {"type": "derived", "identity": "fact-model/1", "version": "1;acceptance.contract@2026-09-05T18:00:00Z;authority.standing@9001;checks.required@0123456789abcdef0123456789abcdef01234567;graph.native@2026-09-05T18:00:00Z;head.exact@0123456789abcdef0123456789abcdef01234567;placement.current@2026-09-05T18:00:00Z;repository.identity@2026-09-01T08:00:00Z;review.independent@2026-09-06T11:58:00Z;work_unit.identity@2026-09-06T12:00:00Z"},
+   "source": {"type": "derived", "identity": "fact-model/1", "version": "1;acceptance.contract@2026-09-05T18:00:00Z;authority.standing@2026-09-01T09:00:00Z;checks.required@0123456789abcdef0123456789abcdef01234567;graph.native@2026-09-05T18:00:00Z;head.exact@0123456789abcdef0123456789abcdef01234567;placement.current@2026-09-05T18:00:00Z;repository.identity@2026-09-01T08:00:00Z;review.independent@2026-09-06T11:58:00Z;work_unit.identity@2026-09-06T12:00:00Z"},
    "observed_at": "2026-09-06T12:00:05Z", "invalidators": ["head:0123456789abcdef0123456789abcdef01234567"],
    "provenance": "preferences/fact-model.tsv",
    "inputs": ["review.independent", "checks.required", "head.exact", "authority.standing", "acceptance.contract", "repository.identity", "work_unit.identity", "placement.current", "graph.native"]}
@@ -353,7 +358,7 @@ observed on. Nothing here can be reused for another HEAD.
   {"schema_version": "1", "key": "head.exact", "class": "head", "status": "ESTABLISHED",
    "value": {"head": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "base_ref": "master", "base": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "current": true},
    "source": {"type": "github-api", "identity": "github.com/acme/widgets#42", "version": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
-   "observed_at": "2026-09-06T13:00:00Z", "invalidators": ["head:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+   "observed_at": "2026-09-06T13:00:00Z", "invalidators": ["head:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "ref:github.com/acme/widgets/master"],
    "provenance": "https://github.com/acme/widgets/pull/42/commits"},
   {"schema_version": "1", "key": "review.independent", "class": "review", "status": "ESTABLISHED",
    "value": {"verdict": "CHANGES REQUIRED", "head": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "reviewer": "login:github-actions[bot]", "record": "github.com/acme/widgets#42/comment/9200"},
@@ -363,7 +368,7 @@ observed on. Nothing here can be reused for another HEAD.
   {"schema_version": "1", "key": "checks.required", "class": "checks", "status": "ESTABLISHED",
    "value": {"head": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "required": ["doctor", "tests"], "results": [{"name": "doctor", "state": "success"}, {"name": "tests", "state": "pending"}]},
    "source": {"type": "github-api", "identity": "github.com/acme/widgets", "version": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
-   "observed_at": "2026-09-06T13:00:00Z", "invalidators": ["head:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+   "observed_at": "2026-09-06T13:00:00Z", "invalidators": ["head:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "ruleset:github.com/acme/widgets"],
    "provenance": "https://github.com/acme/widgets/commit/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/checks"},
   {"schema_version": "1", "key": "acceptance.contract", "class": "acceptance", "status": "ESTABLISHED",
    "value": {"contract": "github.com/acme/widgets#41", "head": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "items": [{"id": "a1", "state": "MET"}, {"id": "a2", "state": "NOT_MET"}]},
@@ -396,7 +401,7 @@ no HEAD invalidator and remain established.
   {"schema_version": "1", "key": "head.exact", "class": "head", "status": "ESTABLISHED",
    "value": {"head": "cccccccccccccccccccccccccccccccccccccccc", "base_ref": "master", "base": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "current": true},
    "source": {"type": "github-api", "identity": "github.com/acme/widgets#42", "version": "cccccccccccccccccccccccccccccccccccccccc"},
-   "observed_at": "2026-09-06T14:00:00Z", "invalidators": ["head:cccccccccccccccccccccccccccccccccccccccc"],
+   "observed_at": "2026-09-06T14:00:00Z", "invalidators": ["head:cccccccccccccccccccccccccccccccccccccccc", "ref:github.com/acme/widgets/master"],
    "provenance": "https://github.com/acme/widgets/pull/42/commits"},
   {"schema_version": "1", "key": "review.independent", "class": "review", "status": "ESTABLISHED",
    "value": {"verdict": "CHANGES REQUIRED", "head": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "reviewer": "login:github-actions[bot]", "record": "github.com/acme/widgets#42/comment/9200"},
@@ -456,7 +461,7 @@ its target and confer nothing here, without anyone reading the decision record.
   {"schema_version": "1", "key": "authority.standing", "class": "authority", "status": "ESTABLISHED",
    "value": {"grants": [{"decision": "github.com/acme/widgets#7/comment/9001", "target": "github.com/acme/widgets", "scopes": ["merge:routine"]}],
              "human_boundaries": [{"decision": "github.com/acme/widgets#7/comment/9001", "target": "github.com/acme/widgets", "boundary": "release:approve"}, {"decision": "github.com/acme/widgets#7/comment/9001", "target": "github.com/acme/widgets", "boundary": "authority:grant"}]},
-   "source": {"type": "human-decision", "identity": "github.com/acme/widgets#7/comment/9001", "version": "9001"},
+   "source": {"type": "human-decision", "identity": "github.com/acme/widgets#7/comment/9001", "version": "2026-09-01T09:00:00Z"},
    "observed_at": "2026-09-06T16:00:05Z", "invalidators": ["comment:github.com/acme/widgets#7/comment/9001"],
    "provenance": "https://github.com/acme/widgets/issues/7#issuecomment-9001"}
 ]
@@ -489,7 +494,7 @@ derivation, and it re-versions if any of them changes.
    "provenance": "https://github.com/acme/widgets"},
   {"schema_version": "1", "key": "authority.standing", "class": "authority", "status": "ESTABLISHED",
    "value": {"grants": [{"decision": "github.com/acme/widgets#7/comment/9001", "target": "github.com/acme/widgets", "scopes": ["merge:routine"]}], "human_boundaries": [{"decision": "github.com/acme/widgets#7/comment/9001", "target": "github.com/acme/widgets", "boundary": "placement:release"}, {"decision": "github.com/acme/widgets#7/comment/9001", "target": "github.com/acme/widgets", "boundary": "release:approve"}, {"decision": "github.com/acme/widgets#7/comment/9001", "target": "github.com/acme/widgets", "boundary": "settings:repository"}]},
-   "source": {"type": "human-decision", "identity": "github.com/acme/widgets#7/comment/9001", "version": "9001"},
+   "source": {"type": "human-decision", "identity": "github.com/acme/widgets#7/comment/9001", "version": "2026-09-01T09:00:00Z"},
    "observed_at": "2026-09-06T17:00:00Z", "invalidators": ["comment:github.com/acme/widgets#7/comment/9001"],
    "provenance": "https://github.com/acme/widgets/issues/7#issuecomment-9001"},
   {"schema_version": "1", "key": "placement.current", "class": "placement", "status": "ESTABLISHED",
@@ -499,7 +504,7 @@ derivation, and it re-versions if any of them changes.
    "provenance": "https://github.com/acme/widgets/pull/43"},
   {"schema_version": "1", "key": "next_action.governed", "class": "next_action", "status": "ESTABLISHED",
    "value": {"action": "stop-decision-required", "because": ["authority.standing", "placement.current", "repository.identity", "work_unit.identity"], "boundary": "placement:release"},
-   "source": {"type": "derived", "identity": "fact-model/1", "version": "1;authority.standing@9001;placement.current@2026-09-06T16:50:00Z;repository.identity@2026-09-01T08:00:00Z;work_unit.identity@2026-09-06T16:50:00Z"},
+   "source": {"type": "derived", "identity": "fact-model/1", "version": "1;authority.standing@2026-09-01T09:00:00Z;placement.current@2026-09-06T16:50:00Z;repository.identity@2026-09-01T08:00:00Z;work_unit.identity@2026-09-06T16:50:00Z"},
    "observed_at": "2026-09-06T17:00:00Z", "invalidators": ["comment:github.com/acme/widgets#7/comment/9001", "pull_request:github.com/acme/widgets#43", "milestone:github.com/acme/widgets/milestone/8", "repository:github.com/acme/widgets"],
    "provenance": "preferences/fact-model.tsv",
    "inputs": ["authority.standing", "placement.current", "repository.identity", "work_unit.identity"]}
