@@ -206,7 +206,7 @@ Overlap evidence: `test-governance-contract.sh:23` states "test-next-selection.s
 ### C7. release-notes-* — 3 suites
 Files: `test-release-notes-carriers.sh`, `test-release-notes-check.sh`, `test-release-notes-runner.sh`.
 Shared invariant: *release notes are derived from commit/PR carriers and a note that cannot be derived is reported, not invented.*
-**Discrimination: UNKNOWN.** All three are pure-bash, none sources `tests/lib.sh` (carriers does), each redefines `ok`/`bad`, and all three build their own `gitc`/`seed` commit fixtures (`carriers:96-97`, `runner:170-171`). The fixture duplication is certain (B-class); the invariant overlap needs a line-level read I did not do.
+**Discrimination: UNKNOWN.** All three are pure-bash and each redefines `ok`/`bad`; `release-notes-check` and `release-notes-runner` do not source `tests/lib.sh` while `release-notes-carriers` sources it and shadows the helpers (consistent with the 8/4 breakdown in B2); all three build their own `gitc`/`seed` commit fixtures (`carriers:96-97`, `runner:170-171`). (Corrected 2026-09-06 after review: the original sentence said "none sources … (carriers does)".) The fixture duplication is certain (B-class); the invariant overlap needs a line-level read I did not do.
 
 ---
 

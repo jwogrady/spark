@@ -15,3 +15,5 @@ echo "wall_seconds=$((s1-s0))" >> "$out/run-full.meta"
 echo "end_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$out/run-full.meta"
 cat "$out/run-full.meta"
 tail -c 2500 "$out/run-full.out"
+# The wrapper's own status is the suite's status: a failed run must not look like a successful measurement.
+exit "$rc"
