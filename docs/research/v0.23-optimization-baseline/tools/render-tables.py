@@ -35,17 +35,22 @@ out.append("| Metric | A: PR #727 (#726) | B: PR #724 (#722) | Method |")
 out.append("|---|---:|---:|---|")
 rows = []
 for k, label in (("commits", "commits"), ("additions", "lines added"), ("deletions", "lines deleted"), ("distinct_files_touched", "distinct files touched"),
-                 ("reviewer_verdicts", "reviewer verdicts (exact-HEAD, trusted login)"), ("findings_total", "reviewer finding bullets (raw)"),
-                 ("author_comments", "writer top-level PR comments"), ("author_comment_chars", "writer comment chars"), ("reviewer_body_chars", "reviewer body chars"),
-                 ("formal_reviews", "formal PR reviews (human)"), ("echo_markers_untrusted_login", "marker echoes by untrusted login (not verdicts)")):
-    rows.append((label, d["A"][k], d["B"][k], "GitHub REST, derived.json"))
+                 ("review_attempts_total", "marked reviewer attempts (all logins, chronological)"),
+                 ("reviewer_verdicts", "  trusted exact-HEAD verdicts (reviewer lane login)"), ("relayed_attempts", "  relayed attempts (marker posted by another login)"),
+                 ("findings_total", "blocking findings (list items / prose of non-PASS attempts)"), ("findings_trusted", "  in trusted attempts"), ("findings_relayed", "  in relayed attempts"),
+                 ("evidence_bullets_in_pass", "evidentiary bullets in the PASS comment (not findings)"),
+                 ("author_comments", "writer top-level PR comments (marker relays excluded)"), ("author_comment_chars", "writer comment chars"), ("reviewer_body_chars", "reviewer body chars (all attempts)"),
+                 ("formal_reviews", "formal PR reviews (human)")):
+    rows.append((label, d["A"].get(k, 0), d["B"].get(k, 0), "GitHub REST, derived.json"))
+for g in ("A", "B"):
+    d[g]["_trusted"] = [r for r in d[g]["rounds"] if r.get("trust", "trusted") == "trusted"]
 rows.append(("verdict outcome", f"16× CHANGES REQUIRED, no PASS ({d['A'].get('state_at_cutoff', d['A'].get('state'))} at cutoff)", f"31× CHANGES REQUIRED → PASS, {d['B'].get('state_at_cutoff', d['B'].get('state'))} at cutoff", "derived verdict_counts; state as of the observation cutoff"))
 aA, gA = active_seconds(d["A"]); aB, gB = active_seconds(d["B"])
 rows.append(("wall clock first commit → last verdict (s)", d["A"]["wall_first_commit_to_last_verdict_s"], d["B"]["wall_first_commit_to_last_verdict_s"], "commit author date → verdict comment created_at"))
 rows.append(("of which idle gaps >30 min (s)", gA, gB, "inter-verdict intervals > 1800s"))
 rows.append(("active wall clock (s)", aA, aB, "wall minus idle gaps"))
 for g in ("A", "B"):  # per-round rows carry the latency; the compact projection has no top-level list
-    lat = sorted(r["push_to_verdict_s"] for r in d[g]["rounds"] if r.get("push_to_verdict_s") is not None); d[g]["_lat"] = lat
+    lat = sorted(r["push_to_verdict_s"] for r in d[g]["_trusted"] if r.get("push_to_verdict_s") is not None); d[g]["_lat"] = lat
 rows.append(("push → verdict latency median (s)", d["A"]["_lat"][len(d["A"]["_lat"])//2], d["B"]["_lat"][len(d["B"]["_lat"])//2], "head commit date → marker created_at"))
 for wfn in ("OpenAI Review", "validate", "milestone-gate", "docs-truth"):
     rows.append((f"CI workflow '{wfn}' runs / seconds", f"{d['A']['workflow_runs'][wfn]['runs']} / {d['A']['workflow_runs'][wfn]['seconds']}", f"{d['B']['workflow_runs'][wfn]['runs']} / {d['B']['workflow_runs'][wfn]['seconds']}", "actions/runs on the PR branch"))
@@ -74,13 +79,17 @@ for g, pr in (("A", 727), ("B", 724)):
     out.append("| round | head | verdict | findings | files cited by reviewer | push→verdict s | round wall s | API req | tool calls | gh (LB) | stable | head-dep | tests tgt/full | doctor | edits | ctx tokens |")
     out.append("|---:|---|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---|---:|---:|---:|")
     prev = T(d[g]["first_commit"])
-    for r in d[g]["rounds"]:
+    for r in d[g]["_trusted"]:
         w = next((x for x in tr if x["group"] == g and x["name"].split()[1] == f"r{r['n']}"), {})
         wall = int((T(r["at"]) - prev).total_seconds()); prev = T(r["at"])
         ctx = w.get("tok_cache_read", 0) + w.get("tok_cache_create", 0) + w.get("tok_input", 0)
         out.append(f"| {r['n']} | {r['head7']} | {r['verdict']} | {r['findings']} | {', '.join(f.split('/')[-1] for f in r['files_cited'])} | {int(r['push_to_verdict_s']) if r['push_to_verdict_s'] is not None else '-'} | {wall} | {w.get('api_requests',0)} | {w.get('tool_calls',0)} | {w.get('gh_invocations_lower_bound',0)} | {w.get('gh_stable_fact_fetches',0)} | {w.get('gh_head_dependent_fetches',0)} | {w.get('bash:test:targeted',0)}/{w.get('bash:test:full',0)} | {w.get('bash:doctor',0)} | {w.get('edit_calls',0)} | {fmt(ctx)} |")
+    relayed = [r for r in d[g]["rounds"] if r.get("trust") == "relayed"]
+    if relayed:
+        out.append(f"\nRelayed attempts (marker posted by `{relayed[0]['comment_login']}`, inside the trusted-round windows above): " +
+                   "; ".join(f"r{r['n']} on {r['head7']} at {r['at']} — {r['verdict']}, {r['findings']} finding(s), kind {r['kind']} (comment {r['comment_id']})" for r in relayed))
 
-out.append("\n## T3 — Reviewer finding classification (hand-classified from the reviewer bodies; PASS-round affirmations excluded)\n")
+out.append("\n## T3 — Reviewer finding classification (hand-classified from every marked attempt's blocking findings; PASS evidentiary bullets excluded)\n")
 cats = {"IMPL": "genuinely new implementation defect", "REPR": "representation / transport boundary defect", "DUP": "duplicated-semantic drift (two surfaces disagree)",
         "STALE": "stale / reconstructed-state defect", "TEST": "test-harness / fixture / instrument defect", "GOV": "governance / specification / evidence-contract ambiguity"}
 out.append("| category | meaning | A: #727 | B: #724 |")
@@ -96,7 +105,7 @@ out.append(f"| of which repeats of an earlier finding (same lineage, unfixed or 
 
 out.append("\n## T4 — Reviewer-cited files by round (revisit concentration)\n")
 for g, pr in (("A", 727), ("B", 724)):
-    out.append(f"- PR #{pr}: " + "; ".join(f"`{f}` cited in {n}/{len(d[g]['rounds'])} rounds" for f, n in list(d[g]["files_cited_rounds"].items())[:5]))
+    out.append(f"- PR #{pr}: " + "; ".join(f"`{f}` cited in {n}/{len(d[g]['rounds'])} attempts" for f, n in list(d[g]["files_cited_rounds"].items())[:5]))
 
 out.append("\n## T5 — Repeated GitHub surfaces fetched by the writer lane (normalized endpoint → invocations, lower bound)\n")
 for g, pr in (("A", 727), ("B", 724)):
@@ -117,8 +126,7 @@ for cand in ("transcript-aug.json", "transcript-aug.compact.json"):
         out.append("- Aug 30–31 session (different work, same lane): " + "; ".join(f"`{p}` ×{n}" for p, n in J(cand)["file_touches_all"][:10])); break
 else:
     out.append("- Aug 30–31 session: see `raw/transcript-aug.compact.json` in the repository-baseline bundle (#737).")
-out.append("\n## T7 — Reviewer comments of record (immutable source for the classification)\n")
+out.append("\n## T7 — Reviewer comments of record (every marked attempt; source for the classification)\n")
 for g, pr in (("A", 727), ("B", 724)):
-    out.append(f"- PR #{pr}: " + ", ".join(f"r{r['n']} [{r['comment_id']}]({r['comment_url']})" for r in d[g]["rounds"]))
-open(os.path.join(raw, "baseline-tables.md"), "w").write("\n".join(out) + "\n")
-print("\n".join(out))
+    out.append(f"- PR #{pr}: " + ", ".join(f"r{r['n']}{'ᴿ' if r.get('trust') == 'relayed' else ''} [{r['comment_id']}]({r['comment_url']})" for r in d[g]["rounds"]) + "  (ᴿ = relayed attempt)")
+print("\n".join(out))  # the caller redirects stdout to tables.md; nothing is written into raw/

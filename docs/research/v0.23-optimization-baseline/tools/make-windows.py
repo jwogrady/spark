@@ -21,6 +21,9 @@ work = [
 ]
 rounds = []
 prev = B_START
+# round windows are bounded by TRUSTED exact-HEAD verdicts; relayed attempts fall inside those windows
+d724["rounds"] = [r for r in d724["rounds"] if r.get("trust", "trusted") == "trusted"]
+d727["rounds"] = [r for r in d727["rounds"] if r.get("trust", "trusted") == "trusted"]
 for r in d724["rounds"]:
     rounds.append({"name": f"B r{r['n']} {r['head7']} {r['verdict']}", "group": "B", "start": prev, "end": r["at"]}); prev = r["at"]
 rounds.append({"name": "B post-PASS → merge", "group": "B", "start": prev, "end": B_END})

@@ -9,8 +9,8 @@ reviewed completely:
 
 | Bundle | Files | Landed via |
 |---|---|---|
-| #730 analysis (this file, `tables.md`, `raw/pr*/derived.compact.json`, `raw/transcript-*`, `raw/findings-classification.tsv`, `tools/`) | this PR | PR #747 |
-| #730 reviewer finding text of record (`raw/pr727/findings.txt`, `raw/pr724/findings.txt`, verbatim and complete) | companion | PR "chore/730-reviewer-findings-text" |
+| #730 analysis (this file, `tables.md`, `raw/pr*/derived.compact.json`, `raw/transcript-*`, `raw/findings-classification.tsv`, the transcript/table tools) | this PR | PR #747 |
+| #730 reviewer attempts and finding text of record (`raw/pr727/findings.txt`, `raw/pr724/findings.txt`, byte-for-byte, every marked attempt) **plus the finding-record toolchain** (`tools/fetch-pr.sh`, `fetch-commits.sh`, `findings_parser.py`, `analyze-pr.py`, `dump-findings.py`, `validate-findings.py`, `test-findings-parser.py`) | companion | PR #748 (merged `ed9d614`), completed by PR "chore/730-findings-completeness" after the #730 merge-audit finding |
 | #737 repository baseline (`repository-baseline.md`, `raw/footprint.txt`, `raw/run-full*`, `raw/bench*`, `raw/structure*`, `raw/branches.tsv`, `raw/agent-*.md`, `raw/transcript-aug.compact.json`, `tools/footprint.sh` …) | companion | PR "chore/737-repository-baseline" |
 
 `tables.md` is generated from `raw/` by `tools/render-tables.py`. Raw evidence and interpretation are kept
@@ -50,13 +50,20 @@ apart: everything under `raw/` is a mechanical capture; this file is the interpr
 - **GitHub evidence**: fetched by `tools/fetch-pr.sh` and `tools/fetch-commits.sh` (REST). The raw JSON is
   re-fetchable and is not committed; `raw/pr*/derived.compact.json` carries every derived fact, including the
   id and URL of each reviewer comment of record, plus the frozen head and observation cutoff the derivation was
-  pinned to (`analyze-pr.py` refuses a different PR head and ignores anything created after the cutoff). The
-  verbatim, complete finding text (whole bullet blocks byte-for-byte, each preceded by a `### <round>.<bullet>`
-  id envelope that is not part of the finding) is committed in the companion PR as `raw/pr*/findings.txt`
-  (`tools/dump-findings.py`), with `findings-validation.txt` proving every block is a substring of the live
-  comment body after envelope removal (`tools/validate-findings.py`). `tables.md` is rendered from the committed
-  projections alone (`raw/transcript-aug.compact.json` is committed here as well, so T6 renders identically);
-  every tool takes its input directory as an argument.
+  pinned to (`analyze-pr.py` refuses a different PR head and ignores anything created after the cutoff).
+  **Every marked reviewer attempt** is recorded, not only the reviewer lane's own login: a `spark-openai-review`
+  marker posted by another login is a *relayed* attempt (`trust=relayed`), numbered after the trusted round of the
+  same HEAD (`r26r`, …); PR #724 has 35 attempts (32 trusted, 3 relayed), PR #727 16 (all trusted). Findings are
+  the top-level list items — hyphen bullets **or ordered `1.` items** — of a blocking verdict, each as its whole
+  block; a blocking verdict with no list items is one prose/code finding (its whole reviewer section); PASS bullets
+  are recorded as evidence, not findings (`tools/findings_parser.py`, with discriminating fixtures in
+  `tools/test-findings-parser.py`). The text is committed byte-for-byte in the companion bundle as
+  `raw/pr*/findings.txt` (`tools/dump-findings.py`), each block preceded by a `### <id>.<n>` envelope that is not
+  part of it, and `findings-validation.txt` proves the record in **both directions** against live GitHub: every
+  block is a substring of its comment and every marked comment within the cutoff has a header
+  (`tools/validate-findings.py`). `tables.md` is rendered from the committed projections alone
+  (`raw/transcript-aug.compact.json` is committed here as well, so T6 renders identically); every tool takes its
+  input directory as an argument.
 
 ## 2. #730 — effective reasoning surface and context amplification
 
@@ -64,7 +71,7 @@ apart: everything under `raw/` is a mechanical capture; this file is the interpr
 
 | | Workload A | Workload B | Workload C |
 |---|---|---|---|
-| Unit | PR #727 (issue #726, bounded-increment merge authority), rounds 1–16 to HEAD `e3ced28` | PR #724 (issue #722, per-process memoization), rounds 1–32 to PASS and merge (`cdc04a5`) | Rehydration control: (i) repeat rounds on unchanged non-HEAD facts inside A and B; (ii) mechanical: `tests/bench.sh` live paths |
+| Unit | PR #727 (issue #726, bounded-increment merge authority), 16 review attempts (all trusted) to HEAD `e3ced28` | PR #724 (issue #722, per-process memoization), 35 review attempts — 32 trusted exact-HEAD verdicts (rounds 1–32) plus 3 relayed attempts — to PASS and merge (`cdc04a5`) | Rehydration control: (i) repeat rounds on unchanged non-HEAD facts inside A and B; (ii) mechanical: `tests/bench.sh` live paths |
 | Why representative | The `CHANGES REQUIRED` repair/review slice #730 requires; the PR that exposed the suspected representation problem | Same reviewer lane, same repository, same writer lane, materially different subject (runtime hot path + benchmark harness + ops doc), and it reached a terminal PASS — so it shows a complete loop, not a truncated one | Facts such as repo identity, milestone, parent, gate, authority and contract did not change during either workload; C measures how much of them was still fetched or re-derived |
 | Boundary | Whole path: repository reads, GitHub reads, verification, evidence reconstruction, CI, review iterations | Same | Same |
 | Cold/warm | Warm: one continuous session; A began in the same session right after B merged | Warm: the window opens 2h18m before the first commit to include orientation | — |
@@ -83,7 +90,7 @@ The rows below add the control and session-start facts that T1 does not carry.
 | A | | gh invocations (LB) / unique / repeated; HEAD-independent / HEAD-dependent | 110 / 34 / 76; 12 / 34 | endpoint normalization | transcript, T5 | lower bound |
 | A | | targeted / full-suite / doctor runs | 109 / 0 / 10 | command classification | transcript | exact |
 | A | | context tokens processed; per request; per changed line | 168,731,098; 302,385; 26,294 | API usage | transcript, T1 | observational |
-| B: #724 | cdc04a5 | commits / changed lines / files; verdicts; findings (repeats) | 34 / 2,314 / 4; 31 × CHANGES REQUIRED + PASS; 76 (11) | GitHub REST | `raw/pr724/derived.compact.json`, T1 | exact |
+| B: #724 | cdc04a5 | commits / changed lines / files; attempts (trusted verdicts + relayed); findings (repeats) | 34 / 2,314 / 4; 35 (31 × CHANGES REQUIRED + PASS, + 3 relayed CHANGES REQUIRED); 81 = 76 trusted + 5 relayed (15 repeats); 4 PASS evidence bullets not counted | GitHub REST | `raw/pr724/derived.compact.json`, T1 | exact |
 | B | | active wall clock / push→verdict median | 18,289 s / 11 s | as above | derived | exact |
 | B | | API requests / tool calls / tool-result bytes | 991 / 884 / 332,602 | session record | transcript | exact |
 | B | | gh (LB) / unique / repeated; HEAD-independent / HEAD-dependent | 152 / 39 / 113; 18 / 57 | as above | transcript, T5 | lower bound |
@@ -140,28 +147,31 @@ window inherits context from the earlier part of the same session.)
 
 ### 2.4 Reviewer finding classification
 
-Source of record: the reviewer comments listed in `tables.md` T7 (comment id + URL per round, also in
-`raw/pr*/derived.compact.json`); their finding bullets are committed verbatim and complete as
-`raw/pr727/findings.txt` and `raw/pr724/findings.txt` in the companion PR. One row per bullet in
-`raw/findings-classification.tsv` (finding id = round.bullet), classified by hand:
+Source of record: every marked reviewer comment listed in `tables.md` T7 (comment id + URL per attempt, also in
+`raw/pr*/derived.compact.json`, trusted and relayed alike); their finding blocks are committed byte-for-byte as
+`raw/pr727/findings.txt` and `raw/pr724/findings.txt` in the companion bundle. One row per blocking finding in
+`raw/findings-classification.tsv` (finding id = attempt.item; relayed attempts carry ids like `26r.1`), classified
+by hand; the 4 evidentiary bullets of B's PASS comment are excluded:
 
-| category | A: #727 (50) | B: #724 (76) |
+| category | A: #727 (50) | B: #724 (81 = 76 trusted + 5 relayed) |
 |---|---:|---:|
 | IMPL — genuinely new implementation defect | 15 (30 %) | 9 (11 %) |
 | REPR — representation / transport boundary (grammar, encoding, pagination, identity, path bytes) | 17 (34 %) | 6 (7 %) |
-| DUP — duplicated-semantic drift (doc ↔ code, comment ↔ code, help ↔ impl, doc ↔ doc) | 7 (14 %) | 17 (22 %) |
+| DUP — duplicated-semantic drift (doc ↔ code, comment ↔ code, help ↔ impl, doc ↔ doc) | 7 (14 %) | 19 (23 %) |
 | STALE — stale / reconstructed-state (state asserted, not read; temporal ordering) | 3 (6 %) | 0 |
-| TEST — test-harness / fixture / measurement-instrument defect | 2 (4 %) | 36 (47 %) |
+| TEST — test-harness / fixture / measurement-instrument defect | 2 (4 %) | 39 (48 %) |
 | GOV — governance / specification / evidence-contract ambiguity | 6 (12 %) | 8 (10 %) |
-| repeats of an earlier finding (same lineage) | 8 | 11 |
+| repeats of an earlier finding (same lineage) | 8 | 15 |
 
 In A, representation, stale-state and duplicate-semantics classes together are 54 % of findings, against 30 %
 new implementation defects; the reviewer's dominant complaint about #727 was how facts were represented,
 parsed, bound and re-read, not what the code intended. In B the loop was dominated by instrument definitions
-(what "process creation" or "executed program image" means) and by prose that lagged the code (17 DUP findings,
-including a PR body that was stale three times). Round 29 of B repeated all three round-28 findings verbatim: one
-full push–review cycle produced no accepted change. None of this is causal proof about round counts; it is the
-distribution the AFTER side must be compared against.
+(what "process creation" or "executed program image" means) and by prose that lagged the code (19 DUP findings,
+including a PR body reported stale by four attempts — two relayed, two trusted). Round 29 of B repeated all three
+round-28 findings verbatim: one full push–review cycle produced no accepted change. The three relayed attempts
+on HEADs `1bb345c`, `02d88c7`, `143bd9c` each duplicated the trusted verdict's substance on the same HEAD and
+added one new finding (`28r.1`, a zero-result path emitting two zeros). None of this is causal proof about round
+counts; it is the distribution the AFTER side must be compared against.
 
 ### 2.5 Contract-required versus repeated or avoidable work
 
@@ -199,7 +209,11 @@ Reported separately in `repository-baseline.md` (companion PR), with its raw evi
 
 ## 4. Reproduction
 
-All commands run from the **repository root**; `BASE` is this directory.
+All commands run from the **repository root**; `BASE` is this directory. The finding-record toolchain
+(`fetch-pr.sh`, `fetch-commits.sh`, `findings_parser.py`, `analyze-pr.py`, `dump-findings.py`,
+`validate-findings.py`, `test-findings-parser.py`) lands with the finding text (companion PR
+"chore/730-findings-completeness"); the transcript and table tools land here. Once both are on `master` the
+whole sequence runs from a clean checkout.
 
 ```
 BASE=docs/research/v0.23-optimization-baseline
@@ -210,8 +224,9 @@ bash $BASE/tools/fetch-pr.sh 724 722 $BASE/raw/pr724 && bash $BASE/tools/fetch-c
 python3 $BASE/tools/analyze-pr.py $BASE/raw/pr727 727 e3ced28f6a469b09990dfd96b3435bfb5b2b342a 2026-09-06T16:24:54Z
 python3 $BASE/tools/analyze-pr.py $BASE/raw/pr724 724 cdc04a504afc573148af4fb034e43c9e335ca5a0 2026-09-06T16:24:54Z
 python3 $BASE/tools/dump-findings.py $BASE/raw/pr727 727 && python3 $BASE/tools/dump-findings.py $BASE/raw/pr724 724
-python3 $BASE/tools/validate-findings.py $BASE/raw/pr727 727   # proves findings.txt against the live comment bodies
-python3 $BASE/tools/validate-findings.py $BASE/raw/pr724 724
+python3 $BASE/tools/test-findings-parser.py                    # parser fixtures: hyphen, ordered, prose-only, PASS evidence, CRLF
+python3 $BASE/tools/validate-findings.py $BASE/raw/pr727 727 2026-09-06T16:24:54Z   # both directions vs live GitHub
+python3 $BASE/tools/validate-findings.py $BASE/raw/pr724 724 2026-09-06T16:24:54Z
 # writer-lane consumption (needs the session record; the two window files are committed)
 python3 $BASE/tools/make-windows.py $BASE/raw    # regenerates both window files from derived*.json
 python3 $BASE/tools/analyze-transcript.py <session.jsonl> $BASE/raw/windows-workloads.json $BASE/raw/transcript-workloads.json

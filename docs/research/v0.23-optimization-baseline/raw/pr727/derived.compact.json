@@ -34,23 +34,20 @@
 "docs/adr/0019-human-directed-product-model.md": 1,
 "docs/adr/0027-delivery-model.md": 1
 },
+"review_attempts_total": 16,
 "reviewer_verdicts": 16,
+"relayed_attempts": 0,
 "verdict_counts": {
 "CHANGES REQUIRED": 16
 },
-"echo_markers_untrusted_login": 0,
+"relayed_verdict_counts": {},
+"attempt_kinds": {
+"findings": 16
+},
 "formal_reviews": 2,
 "author_comments": 29,
 "author_comment_chars": 123211,
 "author_comments_by_round": {
-"2": 2,
-"3": 2,
-"4": 3,
-"5": 2,
-"6": 1,
-"7": 4,
-"8": 4,
-"9": 2,
 "10": 1,
 "11": 2,
 "12": 1,
@@ -58,10 +55,21 @@
 "14": 1,
 "15": 1,
 "16": 1,
-"17": 1
+"17": 1,
+"2": 2,
+"3": 2,
+"4": 3,
+"5": 2,
+"6": 1,
+"7": 4,
+"8": 4,
+"9": 2
 },
 "reviewer_body_chars": 32454,
 "findings_total": 50,
+"findings_trusted": 50,
+"findings_relayed": 0,
+"evidence_bullets_in_pass": 0,
 "files_cited_rounds": {
 "plugins/spark/lib/execution.sh": 15,
 "tests/test-merge-authority.sh": 8,
@@ -121,7 +129,9 @@
 ],
 "rounds": [
 {
-"n": 1,
+"n": "1",
+"trust": "trusted",
+"kind": "findings",
 "head7": "f8c825d",
 "head": "f8c825d7ba29f1f79060f274faff5485353550e1",
 "verdict": "CHANGES REQUIRED",
@@ -132,6 +142,7 @@
 "commit_at": "2026-09-05T22:54:43Z",
 "push_to_verdict_s": 52.0,
 "findings": 4,
+"evidence_bullets": 0,
 "files_cited": [
 "docs/adr/0032-bounded-increment-merge-authority.md",
 "plugins/spark/lib/execution.sh",
@@ -140,7 +151,9 @@
 "body_chars": 2050
 },
 {
-"n": 2,
+"n": "2",
+"trust": "trusted",
+"kind": "findings",
 "head7": "073fbd7",
 "head": "073fbd70021e78d7bbfd1127d97772d275d1718c",
 "verdict": "CHANGES REQUIRED",
@@ -151,6 +164,7 @@
 "commit_at": "2026-09-05T23:00:39Z",
 "push_to_verdict_s": 13.0,
 "findings": 4,
+"evidence_bullets": 0,
 "files_cited": [
 "docs/adr/0032-bounded-increment-merge-authority.md",
 "plugins/spark/lib/execution.sh",
@@ -160,7 +174,9 @@
 "body_chars": 1709
 },
 {
-"n": 3,
+"n": "3",
+"trust": "trusted",
+"kind": "findings",
 "head7": "3735edd",
 "head": "3735eddbe7c8e2b4db1ae19c5700ee5afa875cd7",
 "verdict": "CHANGES REQUIRED",
@@ -171,6 +187,7 @@
 "commit_at": "2026-09-05T23:05:13Z",
 "push_to_verdict_s": 13.0,
 "findings": 4,
+"evidence_bullets": 0,
 "files_cited": [
 "plugins/spark/lib/execution.sh",
 "tests/test-merge-authority.sh"
@@ -178,7 +195,9 @@
 "body_chars": 2010
 },
 {
-"n": 4,
+"n": "4",
+"trust": "trusted",
+"kind": "findings",
 "head7": "c1ed999",
 "head": "c1ed999482e311d90a50169e3f878e6e8a9e1b9c",
 "verdict": "CHANGES REQUIRED",
@@ -189,13 +208,16 @@
 "commit_at": "2026-09-05T23:15:15Z",
 "push_to_verdict_s": 9.0,
 "findings": 3,
+"evidence_bullets": 0,
 "files_cited": [
 "plugins/spark/lib/execution.sh"
 ],
 "body_chars": 1938
 },
 {
-"n": 5,
+"n": "5",
+"trust": "trusted",
+"kind": "findings",
 "head7": "2abdd5e",
 "head": "2abdd5ef8fa2d562b640eaf73cc2690cf52735d1",
 "verdict": "CHANGES REQUIRED",
@@ -206,6 +228,7 @@
 "commit_at": "2026-09-05T23:22:35Z",
 "push_to_verdict_s": 15.0,
 "findings": 3,
+"evidence_bullets": 0,
 "files_cited": [
 "plugins/spark/lib/execution.sh",
 "tests/test-merge-authority.sh"
@@ -213,7 +236,9 @@
 "body_chars": 1754
 },
 {
-"n": 6,
+"n": "6",
+"trust": "trusted",
+"kind": "findings",
 "head7": "bc1f5ff",
 "head": "bc1f5ffc137a40fb52495d7532a835afbf8b3a62",
 "verdict": "CHANGES REQUIRED",
@@ -224,6 +249,7 @@
 "commit_at": "2026-09-05T23:32:00Z",
 "push_to_verdict_s": 11.0,
 "findings": 3,
+"evidence_bullets": 0,
 "files_cited": [
 "plugins/spark/lib/execution.sh",
 "tests/test-merge-authority.sh"
@@ -231,7 +257,9 @@
 "body_chars": 1796
 },
 {
-"n": 7,
+"n": "7",
+"trust": "trusted",
+"kind": "findings",
 "head7": "a1f6174",
 "head": "a1f6174c6b92096ba5f6181c70f54fd706f1339e",
 "verdict": "CHANGES REQUIRED",
@@ -242,6 +270,7 @@
 "commit_at": "2026-09-05T23:53:59Z",
 "push_to_verdict_s": 11.0,
 "findings": 4,
+"evidence_bullets": 0,
 "files_cited": [
 "plugins/spark/docs/reference/cli.md",
 "plugins/spark/lib/execution.sh",
@@ -251,7 +280,9 @@
 "body_chars": 2254
 },
 {
-"n": 8,
+"n": "8",
+"trust": "trusted",
+"kind": "findings",
 "head7": "eedd339",
 "head": "eedd339c74f69180a57ce345b996e5127c70187e",
 "verdict": "CHANGES REQUIRED",
@@ -262,13 +293,16 @@
 "commit_at": "2026-09-06T00:19:34Z",
 "push_to_verdict_s": 12.0,
 "findings": 4,
+"evidence_bullets": 0,
 "files_cited": [
 "plugins/spark/lib/execution.sh"
 ],
 "body_chars": 2727
 },
 {
-"n": 9,
+"n": "9",
+"trust": "trusted",
+"kind": "findings",
 "head7": "6e9206e",
 "head": "6e9206ead6f0d66685e6f9037d23debb2e75f5bd",
 "verdict": "CHANGES REQUIRED",
@@ -279,13 +313,16 @@
 "commit_at": "2026-09-06T00:32:46Z",
 "push_to_verdict_s": 12.0,
 "findings": 3,
+"evidence_bullets": 0,
 "files_cited": [
 "plugins/spark/lib/execution.sh"
 ],
 "body_chars": 2455
 },
 {
-"n": 10,
+"n": "10",
+"trust": "trusted",
+"kind": "findings",
 "head7": "cd3eafd",
 "head": "cd3eafd5cd5cab5b20a8c2ef4c5db46f34b33232",
 "verdict": "CHANGES REQUIRED",
@@ -296,13 +333,16 @@
 "commit_at": "2026-09-06T14:43:02Z",
 "push_to_verdict_s": 19.0,
 "findings": 4,
+"evidence_bullets": 0,
 "files_cited": [
 "plugins/spark/lib/execution.sh"
 ],
 "body_chars": 2702
 },
 {
-"n": 11,
+"n": "11",
+"trust": "trusted",
+"kind": "findings",
 "head7": "549a709",
 "head": "549a709bcf9ff1b336d0ce0a78ef2097c4d13219",
 "verdict": "CHANGES REQUIRED",
@@ -313,11 +353,14 @@
 "commit_at": "2026-09-06T15:03:13Z",
 "push_to_verdict_s": 14.0,
 "findings": 2,
+"evidence_bullets": 0,
 "files_cited": [],
 "body_chars": 1853
 },
 {
-"n": 12,
+"n": "12",
+"trust": "trusted",
+"kind": "findings",
 "head7": "f4ebacc",
 "head": "f4ebacc08982f2cfc618d6ea069929d72641cc28",
 "verdict": "CHANGES REQUIRED",
@@ -328,13 +371,16 @@
 "commit_at": "2026-09-06T15:13:52Z",
 "push_to_verdict_s": 14.0,
 "findings": 3,
+"evidence_bullets": 0,
 "files_cited": [
 "plugins/spark/lib/execution.sh"
 ],
 "body_chars": 2012
 },
 {
-"n": 13,
+"n": "13",
+"trust": "trusted",
+"kind": "findings",
 "head7": "d47d0e8",
 "head": "d47d0e8e3f8bdb55cd6d685939d3c3acd31836c4",
 "verdict": "CHANGES REQUIRED",
@@ -345,6 +391,7 @@
 "commit_at": "2026-09-06T15:27:36Z",
 "push_to_verdict_s": 17.0,
 "findings": 2,
+"evidence_bullets": 0,
 "files_cited": [
 "plugins/spark/docs/reference/cli.md",
 "plugins/spark/lib/execution.sh"
@@ -352,7 +399,9 @@
 "body_chars": 1718
 },
 {
-"n": 14,
+"n": "14",
+"trust": "trusted",
+"kind": "findings",
 "head7": "ee6cf2a",
 "head": "ee6cf2ad7d6932427664d09c3fbdf3b0f430e975",
 "verdict": "CHANGES REQUIRED",
@@ -363,6 +412,7 @@
 "commit_at": "2026-09-06T15:35:32Z",
 "push_to_verdict_s": 13.0,
 "findings": 2,
+"evidence_bullets": 0,
 "files_cited": [
 "plugins/spark/lib/execution.sh",
 "tests/test-merge-authority.sh"
@@ -370,7 +420,9 @@
 "body_chars": 1877
 },
 {
-"n": 15,
+"n": "15",
+"trust": "trusted",
+"kind": "findings",
 "head7": "34b136b",
 "head": "34b136b1443aaa9236066ff78a99919a5d047371",
 "verdict": "CHANGES REQUIRED",
@@ -381,6 +433,7 @@
 "commit_at": "2026-09-06T15:49:58Z",
 "push_to_verdict_s": 12.0,
 "findings": 3,
+"evidence_bullets": 0,
 "files_cited": [
 "plugins/spark/lib/execution.sh",
 "plugins/spark/preferences/cli-stability.tsv"
@@ -388,7 +441,9 @@
 "body_chars": 1571
 },
 {
-"n": 16,
+"n": "16",
+"trust": "trusted",
+"kind": "findings",
 "head7": "e3ced28",
 "head": "e3ced28f6a469b09990dfd96b3435bfb5b2b342a",
 "verdict": "CHANGES REQUIRED",
@@ -399,6 +454,7 @@
 "commit_at": "2026-09-06T16:00:27Z",
 "push_to_verdict_s": 11.0,
 "findings": 2,
+"evidence_bullets": 0,
 "files_cited": [
 "plugins/spark/lib/execution.sh",
 "tests/test-merge-authority.sh"

@@ -113,7 +113,7 @@ pr	finding	category	repeat_of	note
 724	26.2	DUP	4.1	shim count described as TOTAL
 724	27.1	TEST		CLONE_THREAD counted as process
 724	27.2	DUP	25.3	doc repeats interpretation
-724	27.3	DUP		PR body stale vs HEAD
+724	27.3	DUP	26r.1	PR body stale vs HEAD (first raised by relayed attempt 26r.1)
 724	28.1	REPR	24.1	resolve_prefs strips trailing newline
 724	28.2	TEST		unfinished strace lines counted
 724	28.3	DUP		commentary says mirrors, impl is digest
@@ -125,3 +125,8 @@ pr	finding	category	repeat_of	note
 724	30.3	DUP	27.2	doc + PR body repeat definition
 724	31.1	TEST		ERESTART records counted
 724	31.2	DUP	27.3	PR body assertion count stale
+724	26r.1	DUP		PR body stale and materially false vs exact HEAD (relayed attempt on 1bb345c)
+724	26r.2	TEST	26.1	procs counts raw creation-syscall lines, not created processes (relayed; same head as 26.1)
+724	27r.1	DUP	26r.1	PR body still stale (relayed attempt on 02d88c7)
+724	27r.2	TEST	27.1	successful clone with CLONE_THREAD is not a process (relayed; same head as 27.1)
+724	28r.1	TEST		count_procs zero-result path emits two zeros under pipefail (relayed attempt on 143bd9c; prose/code-only finding)

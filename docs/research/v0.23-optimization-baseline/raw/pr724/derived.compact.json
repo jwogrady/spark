@@ -26,23 +26,25 @@
 "plugins/spark/bin/spark": 15,
 "docs/ops/execution-configuration-surface.md": 12
 },
+"review_attempts_total": 35,
 "reviewer_verdicts": 32,
+"relayed_attempts": 3,
 "verdict_counts": {
 "CHANGES REQUIRED": 31,
 "PASS": 1
 },
-"echo_markers_untrusted_login": 3,
+"relayed_verdict_counts": {
+"CHANGES REQUIRED": 3
+},
+"attempt_kinds": {
+"findings": 33,
+"prose": 1,
+"evidence": 1
+},
 "formal_reviews": 0,
-"author_comments": 46,
-"author_comment_chars": 92078,
+"author_comments": 43,
+"author_comment_chars": 87230,
 "author_comments_by_round": {
-"3": 1,
-"4": 1,
-"5": 1,
-"6": 1,
-"7": 1,
-"8": 2,
-"9": 1,
 "10": 1,
 "11": 1,
 "12": 1,
@@ -60,16 +62,26 @@
 "24": 2,
 "25": 1,
 "26": 1,
-"27": 2,
-"28": 2,
-"29": 2,
+"27": 1,
+"28": 1,
+"29": 1,
+"3": 1,
 "30": 2,
 "31": 3,
 "32": 2,
-"33": 4
+"33": 4,
+"4": 1,
+"5": 1,
+"6": 1,
+"7": 1,
+"8": 2,
+"9": 1
 },
-"reviewer_body_chars": 48689,
-"findings_total": 80,
+"reviewer_body_chars": 53537,
+"findings_total": 81,
+"findings_trusted": 76,
+"findings_relayed": 5,
+"evidence_bullets_in_pass": 4,
 "files_cited_rounds": {
 "tests/test-hot-path-memo.sh": 20,
 "tests/bench-memo.sh": 18,
@@ -127,7 +139,9 @@
 ],
 "rounds": [
 {
-"n": 1,
+"n": "1",
+"trust": "trusted",
+"kind": "findings",
 "head7": "e5a8c87",
 "head": "e5a8c87221b4c8d25cca45763f7ce14d3411fd2b",
 "verdict": "CHANGES REQUIRED",
@@ -138,13 +152,16 @@
 "commit_at": "2026-09-05T17:18:39Z",
 "push_to_verdict_s": 208.0,
 "findings": 3,
+"evidence_bullets": 0,
 "files_cited": [
 "tests/test-hot-path-memo.sh"
 ],
 "body_chars": 1565
 },
 {
-"n": 2,
+"n": "2",
+"trust": "trusted",
+"kind": "findings",
 "head7": "e2ca402",
 "head": "e2ca402ce248639c3e71834108bdeae7733412f1",
 "verdict": "CHANGES REQUIRED",
@@ -155,13 +172,16 @@
 "commit_at": "2026-09-05T17:32:07Z",
 "push_to_verdict_s": 17.0,
 "findings": 2,
+"evidence_bullets": 0,
 "files_cited": [
 "tests/test-hot-path-memo.sh"
 ],
 "body_chars": 1261
 },
 {
-"n": 3,
+"n": "3",
+"trust": "trusted",
+"kind": "findings",
 "head7": "38f7188",
 "head": "38f7188ad960bfcee892b4528ac2e8a71ee30cd7",
 "verdict": "CHANGES REQUIRED",
@@ -172,13 +192,16 @@
 "commit_at": "2026-09-05T17:41:34Z",
 "push_to_verdict_s": 10.0,
 "findings": 2,
+"evidence_bullets": 0,
 "files_cited": [
 "tests/test-hot-path-memo.sh"
 ],
 "body_chars": 1481
 },
 {
-"n": 4,
+"n": "4",
+"trust": "trusted",
+"kind": "findings",
 "head7": "ff7a8ce",
 "head": "ff7a8ce2b93e37dee4b7806f1298c8929a5b8420",
 "verdict": "CHANGES REQUIRED",
@@ -189,13 +212,16 @@
 "commit_at": "2026-09-05T17:50:54Z",
 "push_to_verdict_s": 12.0,
 "findings": 2,
+"evidence_bullets": 0,
 "files_cited": [
 "tests/test-hot-path-memo.sh"
 ],
 "body_chars": 1406
 },
 {
-"n": 5,
+"n": "5",
+"trust": "trusted",
+"kind": "findings",
 "head7": "a6dfde1",
 "head": "a6dfde1a6d0dd675e9c23a0dbb65515bf333ca94",
 "verdict": "CHANGES REQUIRED",
@@ -206,11 +232,14 @@
 "commit_at": "2026-09-05T17:59:43Z",
 "push_to_verdict_s": 10.0,
 "findings": 2,
+"evidence_bullets": 0,
 "files_cited": [],
 "body_chars": 1156
 },
 {
-"n": 6,
+"n": "6",
+"trust": "trusted",
+"kind": "findings",
 "head7": "67743e4",
 "head": "67743e4ed06fa63c3302b7852d1653e72f50f5f6",
 "verdict": "CHANGES REQUIRED",
@@ -221,6 +250,7 @@
 "commit_at": "2026-09-05T18:09:54Z",
 "push_to_verdict_s": 198.0,
 "findings": 2,
+"evidence_bullets": 0,
 "files_cited": [
 "docs/ops/execution-configuration-surface.md",
 "tests/test-hot-path-memo.sh"
@@ -228,7 +258,9 @@
 "body_chars": 1378
 },
 {
-"n": 7,
+"n": "7",
+"trust": "trusted",
+"kind": "findings",
 "head7": "cecbb5c",
 "head": "cecbb5c88128aa01f18f49bb936af7a42027d875",
 "verdict": "CHANGES REQUIRED",
@@ -239,6 +271,7 @@
 "commit_at": "2026-09-05T18:22:32Z",
 "push_to_verdict_s": 8.0,
 "findings": 3,
+"evidence_bullets": 0,
 "files_cited": [
 ".spark/state.json",
 "docs/ops/execution-configuration-surface.md"
@@ -246,7 +279,9 @@
 "body_chars": 1630
 },
 {
-"n": 8,
+"n": "8",
+"trust": "trusted",
+"kind": "findings",
 "head7": "4c805d6",
 "head": "4c805d66163637520b12055965917db068ef9276",
 "verdict": "CHANGES REQUIRED",
@@ -257,13 +292,16 @@
 "commit_at": "2026-09-05T18:33:32Z",
 "push_to_verdict_s": 9.0,
 "findings": 3,
+"evidence_bullets": 0,
 "files_cited": [
 "docs/ops/execution-configuration-surface.md"
 ],
 "body_chars": 1665
 },
 {
-"n": 9,
+"n": "9",
+"trust": "trusted",
+"kind": "findings",
 "head7": "4a7b366",
 "head": "4a7b3661e97e7d386237dd040a0b085b91bd7f8a",
 "verdict": "CHANGES REQUIRED",
@@ -274,13 +312,16 @@
 "commit_at": "2026-09-05T18:42:27Z",
 "push_to_verdict_s": 11.0,
 "findings": 3,
+"evidence_bullets": 0,
 "files_cited": [
 "tests/test-hot-path-memo.sh"
 ],
 "body_chars": 1509
 },
 {
-"n": 10,
+"n": "10",
+"trust": "trusted",
+"kind": "findings",
 "head7": "0db6fa6",
 "head": "0db6fa6f1410f882ae99a45ea31794ac776497d6",
 "verdict": "CHANGES REQUIRED",
@@ -291,6 +332,7 @@
 "commit_at": "2026-09-05T18:53:58Z",
 "push_to_verdict_s": 9.0,
 "findings": 3,
+"evidence_bullets": 0,
 "files_cited": [
 "docs/ops/execution-configuration-surface.md",
 "tests/test-hot-path-memo.sh"
@@ -298,7 +340,9 @@
 "body_chars": 1556
 },
 {
-"n": 11,
+"n": "11",
+"trust": "trusted",
+"kind": "findings",
 "head7": "6cc4d1f",
 "head": "6cc4d1fad2dbe818eee585e42b630fe50cfbc329",
 "verdict": "CHANGES REQUIRED",
@@ -309,6 +353,7 @@
 "commit_at": "2026-09-05T19:03:07Z",
 "push_to_verdict_s": 12.0,
 "findings": 2,
+"evidence_bullets": 0,
 "files_cited": [
 "docs/ops/execution-configuration-surface.md",
 "tests/bench-memo.sh",
@@ -317,7 +362,9 @@
 "body_chars": 1447
 },
 {
-"n": 12,
+"n": "12",
+"trust": "trusted",
+"kind": "findings",
 "head7": "e263f60",
 "head": "e263f60300d55bfd0304c0687aadd0ffe2215a2b",
 "verdict": "CHANGES REQUIRED",
@@ -328,6 +375,7 @@
 "commit_at": "2026-09-05T19:13:13Z",
 "push_to_verdict_s": 8.0,
 "findings": 3,
+"evidence_bullets": 0,
 "files_cited": [
 "tests/bench-memo.sh",
 "tests/test-hot-path-memo.sh"
@@ -335,7 +383,9 @@
 "body_chars": 1762
 },
 {
-"n": 13,
+"n": "13",
+"trust": "trusted",
+"kind": "findings",
 "head7": "ebea342",
 "head": "ebea34297ebd8046a1adbb48898cf1ef40c998f3",
 "verdict": "CHANGES REQUIRED",
@@ -346,6 +396,7 @@
 "commit_at": "2026-09-05T19:22:06Z",
 "push_to_verdict_s": 11.0,
 "findings": 3,
+"evidence_bullets": 0,
 "files_cited": [
 "docs/ops/execution-configuration-surface.md",
 "tests/bench-memo.sh"
@@ -353,7 +404,9 @@
 "body_chars": 1636
 },
 {
-"n": 14,
+"n": "14",
+"trust": "trusted",
+"kind": "findings",
 "head7": "568d6d7",
 "head": "568d6d769f2890e9b31c42cd054eb9c7adb533ef",
 "verdict": "CHANGES REQUIRED",
@@ -364,6 +417,7 @@
 "commit_at": "2026-09-05T19:31:17Z",
 "push_to_verdict_s": 11.0,
 "findings": 2,
+"evidence_bullets": 0,
 "files_cited": [
 "tests/bench-memo.sh",
 "tests/test-hot-path-memo.sh"
@@ -371,7 +425,9 @@
 "body_chars": 1465
 },
 {
-"n": 15,
+"n": "15",
+"trust": "trusted",
+"kind": "findings",
 "head7": "b1a44d4",
 "head": "b1a44d4aed9c0c67261f77cef0bc0606d23b6ed1",
 "verdict": "CHANGES REQUIRED",
@@ -382,13 +438,16 @@
 "commit_at": "2026-09-05T19:41:02Z",
 "push_to_verdict_s": 11.0,
 "findings": 2,
+"evidence_bullets": 0,
 "files_cited": [
 "tests/test-hot-path-memo.sh"
 ],
 "body_chars": 1337
 },
 {
-"n": 16,
+"n": "16",
+"trust": "trusted",
+"kind": "findings",
 "head7": "c90da9e",
 "head": "c90da9eb042ae7c6ad4639d0e8ca288e3d1d0efb",
 "verdict": "CHANGES REQUIRED",
@@ -399,13 +458,16 @@
 "commit_at": "2026-09-05T19:50:02Z",
 "push_to_verdict_s": 12.0,
 "findings": 1,
+"evidence_bullets": 0,
 "files_cited": [
 "tests/bench-memo.sh"
 ],
 "body_chars": 1059
 },
 {
-"n": 17,
+"n": "17",
+"trust": "trusted",
+"kind": "findings",
 "head7": "9787cf1",
 "head": "9787cf1f2b6fc50fd6b96c90e10a5a6e166fc56c",
 "verdict": "CHANGES REQUIRED",
@@ -416,13 +478,16 @@
 "commit_at": "2026-09-05T19:58:23Z",
 "push_to_verdict_s": 9.0,
 "findings": 2,
+"evidence_bullets": 0,
 "files_cited": [
 "tests/bench-memo.sh"
 ],
 "body_chars": 1447
 },
 {
-"n": 18,
+"n": "18",
+"trust": "trusted",
+"kind": "findings",
 "head7": "62b7746",
 "head": "62b7746dc902cde9aea74144f79c364e77888302",
 "verdict": "CHANGES REQUIRED",
@@ -433,13 +498,16 @@
 "commit_at": "2026-09-05T20:06:42Z",
 "push_to_verdict_s": 8.0,
 "findings": 3,
+"evidence_bullets": 0,
 "files_cited": [
 "tests/bench-memo.sh"
 ],
 "body_chars": 1778
 },
 {
-"n": 19,
+"n": "19",
+"trust": "trusted",
+"kind": "findings",
 "head7": "688a306",
 "head": "688a306c6f9813da657ba1da0dbfb5f8ae19bd49",
 "verdict": "CHANGES REQUIRED",
@@ -450,13 +518,16 @@
 "commit_at": "2026-09-05T20:15:53Z",
 "push_to_verdict_s": 10.0,
 "findings": 1,
+"evidence_bullets": 0,
 "files_cited": [
 "tests/bench-memo.sh"
 ],
 "body_chars": 1426
 },
 {
-"n": 20,
+"n": "20",
+"trust": "trusted",
+"kind": "findings",
 "head7": "9c6665d",
 "head": "9c6665d97a4d8350c76496f0a1b141734d128b44",
 "verdict": "CHANGES REQUIRED",
@@ -467,6 +538,7 @@
 "commit_at": "2026-09-05T20:23:58Z",
 "push_to_verdict_s": 14.0,
 "findings": 3,
+"evidence_bullets": 0,
 "files_cited": [
 "docs/ops/execution-configuration-surface.md",
 "tests/test-hot-path-memo.sh"
@@ -474,7 +546,9 @@
 "body_chars": 1846
 },
 {
-"n": 21,
+"n": "21",
+"trust": "trusted",
+"kind": "findings",
 "head7": "475ff72",
 "head": "475ff7291746d9d64650ad1e02e889642026cb0b",
 "verdict": "CHANGES REQUIRED",
@@ -485,6 +559,7 @@
 "commit_at": "2026-09-05T20:34:14Z",
 "push_to_verdict_s": 8.0,
 "findings": 2,
+"evidence_bullets": 0,
 "files_cited": [
 "tests/bench-memo.sh",
 "tests/test-hot-path-memo.sh"
@@ -492,7 +567,9 @@
 "body_chars": 1541
 },
 {
-"n": 22,
+"n": "22",
+"trust": "trusted",
+"kind": "findings",
 "head7": "e5dcf55",
 "head": "e5dcf554e86c8f6672dcc6bd16922fc063b13a8f",
 "verdict": "CHANGES REQUIRED",
@@ -503,6 +580,7 @@
 "commit_at": "2026-09-05T20:44:26Z",
 "push_to_verdict_s": 11.0,
 "findings": 3,
+"evidence_bullets": 0,
 "files_cited": [
 "docs/ops/execution-configuration-surface.md",
 "tests/test-hot-path-memo.sh"
@@ -510,7 +588,9 @@
 "body_chars": 1842
 },
 {
-"n": 23,
+"n": "23",
+"trust": "trusted",
+"kind": "findings",
 "head7": "4253779",
 "head": "42537791b5b831f063ad33c7b80cefd362f21c5b",
 "verdict": "CHANGES REQUIRED",
@@ -521,6 +601,7 @@
 "commit_at": "2026-09-05T20:54:28Z",
 "push_to_verdict_s": 10.0,
 "findings": 2,
+"evidence_bullets": 0,
 "files_cited": [
 "docs/ops/execution-configuration-surface.md",
 "tests/bench-memo.sh",
@@ -529,7 +610,9 @@
 "body_chars": 1413
 },
 {
-"n": 24,
+"n": "24",
+"trust": "trusted",
+"kind": "findings",
 "head7": "0ef7d36",
 "head": "0ef7d36719d0dc1e15cd2aa8fa80626d7de5047d",
 "verdict": "CHANGES REQUIRED",
@@ -540,13 +623,16 @@
 "commit_at": "2026-09-05T21:04:58Z",
 "push_to_verdict_s": 10.0,
 "findings": 3,
+"evidence_bullets": 0,
 "files_cited": [
 "tests/test-hot-path-memo.sh"
 ],
 "body_chars": 1768
 },
 {
-"n": 25,
+"n": "25",
+"trust": "trusted",
+"kind": "findings",
 "head7": "fb2accf",
 "head": "fb2accfd9928c2a19234b4515043add0c5af236a",
 "verdict": "CHANGES REQUIRED",
@@ -557,6 +643,7 @@
 "commit_at": "2026-09-05T21:15:14Z",
 "push_to_verdict_s": 11.0,
 "findings": 3,
+"evidence_bullets": 0,
 "files_cited": [
 "docs/ops/execution-configuration-surface.md",
 "tests/bench-memo.sh"
@@ -564,7 +651,9 @@
 "body_chars": 1800
 },
 {
-"n": 26,
+"n": "26",
+"trust": "trusted",
+"kind": "findings",
 "head7": "1bb345c",
 "head": "1bb345c0549aa2929982618bb474ba58c69fdadc",
 "verdict": "CHANGES REQUIRED",
@@ -575,6 +664,7 @@
 "commit_at": "2026-09-05T21:25:47Z",
 "push_to_verdict_s": 10.0,
 "findings": 2,
+"evidence_bullets": 0,
 "files_cited": [
 "tests/bench-memo.sh",
 "tests/test-hot-path-memo.sh"
@@ -582,7 +672,27 @@
 "body_chars": 1318
 },
 {
-"n": 27,
+"n": "26r",
+"trust": "relayed",
+"kind": "findings",
+"head7": "1bb345c",
+"head": "1bb345c0549aa2929982618bb474ba58c69fdadc",
+"verdict": "CHANGES REQUIRED",
+"at": "2026-09-05T21:30:58Z",
+"comment_id": 5554916926,
+"comment_url": "https://github.com/jwogrady/spark/pull/724#issuecomment-5554916926",
+"comment_login": "jwogrady",
+"commit_at": "2026-09-05T21:25:47Z",
+"push_to_verdict_s": 311.0,
+"findings": 2,
+"evidence_bullets": 0,
+"files_cited": [],
+"body_chars": 2027
+},
+{
+"n": "27",
+"trust": "trusted",
+"kind": "findings",
 "head7": "02d88c7",
 "head": "02d88c7e194097de37529c08b588355bd7c4a39d",
 "verdict": "CHANGES REQUIRED",
@@ -593,6 +703,7 @@
 "commit_at": "2026-09-05T21:34:40Z",
 "push_to_verdict_s": 12.0,
 "findings": 3,
+"evidence_bullets": 0,
 "files_cited": [
 "docs/ops/execution-configuration-surface.md",
 "tests/bench-memo.sh"
@@ -600,7 +711,27 @@
 "body_chars": 1482
 },
 {
-"n": 28,
+"n": "27r",
+"trust": "relayed",
+"kind": "findings",
+"head7": "02d88c7",
+"head": "02d88c7e194097de37529c08b588355bd7c4a39d",
+"verdict": "CHANGES REQUIRED",
+"at": "2026-09-05T21:36:30Z",
+"comment_id": 5554946668,
+"comment_url": "https://github.com/jwogrady/spark/pull/724#issuecomment-5554946668",
+"comment_login": "jwogrady",
+"commit_at": "2026-09-05T21:34:40Z",
+"push_to_verdict_s": 110.0,
+"findings": 2,
+"evidence_bullets": 0,
+"files_cited": [],
+"body_chars": 1459
+},
+{
+"n": "28",
+"trust": "trusted",
+"kind": "findings",
 "head7": "143bd9c",
 "head": "143bd9c451d69106229616cfc0c4657b4a179777",
 "verdict": "CHANGES REQUIRED",
@@ -611,6 +742,7 @@
 "commit_at": "2026-09-05T21:41:06Z",
 "push_to_verdict_s": 9.0,
 "findings": 3,
+"evidence_bullets": 0,
 "files_cited": [
 ".spark/preferences.json",
 "tests/bench-memo.sh",
@@ -619,7 +751,27 @@
 "body_chars": 1782
 },
 {
-"n": 29,
+"n": "28r",
+"trust": "relayed",
+"kind": "prose",
+"head7": "143bd9c",
+"head": "143bd9c451d69106229616cfc0c4657b4a179777",
+"verdict": "CHANGES REQUIRED",
+"at": "2026-09-05T21:45:17Z",
+"comment_id": 5554992763,
+"comment_url": "https://github.com/jwogrady/spark/pull/724#issuecomment-5554992763",
+"comment_login": "jwogrady",
+"commit_at": "2026-09-05T21:41:06Z",
+"push_to_verdict_s": 251.0,
+"findings": 1,
+"evidence_bullets": 0,
+"files_cited": [],
+"body_chars": 1362
+},
+{
+"n": "29",
+"trust": "trusted",
+"kind": "findings",
 "head7": "7da4311",
 "head": "7da43114aef56d01f7d26fa8c8e0e393ebade574",
 "verdict": "CHANGES REQUIRED",
@@ -630,6 +782,7 @@
 "commit_at": "2026-09-05T21:50:02Z",
 "push_to_verdict_s": 9.0,
 "findings": 3,
+"evidence_bullets": 0,
 "files_cited": [
 ".spark/preferences.json",
 "docs/ops/execution-configuration-surface.md",
@@ -639,7 +792,9 @@
 "body_chars": 1812
 },
 {
-"n": 30,
+"n": "30",
+"trust": "trusted",
+"kind": "findings",
 "head7": "8718432",
 "head": "871843284add4cb306f9d22f929e5550c8c4d947",
 "verdict": "CHANGES REQUIRED",
@@ -650,6 +805,7 @@
 "commit_at": "2026-09-05T22:01:27Z",
 "push_to_verdict_s": 16.0,
 "findings": 3,
+"evidence_bullets": 0,
 "files_cited": [
 "docs/ops/execution-configuration-surface.md",
 "tests/bench-memo.sh"
@@ -657,7 +813,9 @@
 "body_chars": 1631
 },
 {
-"n": 31,
+"n": "31",
+"trust": "trusted",
+"kind": "findings",
 "head7": "fba8de3",
 "head": "fba8de39b9d3d02a2f61dafc08907eaea216a91c",
 "verdict": "CHANGES REQUIRED",
@@ -668,6 +826,7 @@
 "commit_at": "2026-09-05T22:15:10Z",
 "push_to_verdict_s": 18.0,
 "findings": 2,
+"evidence_bullets": 0,
 "files_cited": [
 "docs/ops/execution-configuration-surface.md",
 "tests/bench-memo.sh",
@@ -676,7 +835,9 @@
 "body_chars": 1338
 },
 {
-"n": 32,
+"n": "32",
+"trust": "trusted",
+"kind": "evidence",
 "head7": "cdc04a5",
 "head": "cdc04a504afc573148af4fb034e43c9e335ca5a0",
 "verdict": "PASS",
@@ -686,7 +847,8 @@
 "comment_login": "github-actions[bot]",
 "commit_at": "2026-09-05T22:23:10Z",
 "push_to_verdict_s": 18.0,
-"findings": 4,
+"findings": 0,
+"evidence_bullets": 4,
 "files_cited": [
 "tests/bench-memo.sh"
 ],
