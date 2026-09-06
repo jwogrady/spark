@@ -652,6 +652,43 @@ for bad_url in "https://api.github.com/repos/not-a-slug/issues/722" \
 done
 reset_world
 
+# --- a malformed record is dismissed only by a CANONICAL other identity ----
+# Failed grammar sends a record to the "is this about something else?" test, and
+# that test compared identities without checking they were readable. An extra
+# field made parsing fail, then `0727 != 727` waved the record away and a valid
+# PASS or MET stood alone.
+for broken in "pr=0727 head=$SHA verdict=CHANGES REQUIRED extra=1" \
+              "pr=727 head=deadbeef verdict=CHANGES REQUIRED extra=1" \
+              "pr=727 head=${SHA}00 verdict=CHANGES REQUIRED extra=1" \
+              "pr=727 head=0123456789ABCDEF0123456789abcdef01234567 verdict=PASS extra=1" \
+              "pr= head=$SHA verdict=PASS extra=1" \
+              "pr=727 head= verdict=PASS extra=1"; do
+  GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->\\n<!-- spark-openai-review $broken -->
+$ACCEPT_MET"
+  verdict "NOT ELIGIBLE" 4 "a malformed reviewer marker with a noncanonical identity ('$broken') declines" "${ELIGIBLE[@]}"
+done
+for broken in "pr=0727 child=#724 head=$SHA contract=$ACC verdict=NOT-MET extra=1" \
+              "pr=727 child=#724 head=deadbeef contract=$ACC verdict=NOT-MET extra=1" \
+              "pr=727 child=#724 head=${SHA}00 contract=$ACC verdict=MET extra=1" \
+              "pr= child=#724 head=$SHA contract=$ACC verdict=MET extra=1" \
+              "pr=727 child=#724 head= contract=$ACC verdict=MET extra=1"; do
+  GH_PR_COMMENTS="$REV
+$ACCEPT_MET
+OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance $broken -->"
+  verdict "NOT ELIGIBLE" 4 "a malformed acceptance marker with a noncanonical identity ('$broken') declines" "${ELIGIBLE[@]}"
+done
+# A malformed record whose identity IS canonical and names another candidate is
+# still set aside — otherwise unrelated noise on a busy pull request would block
+# every merge, which is the opposite defect.
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->\\n<!-- spark-openai-review pr=999 head=$SHA verdict=PASS extra=1 -->
+$ACCEPT_MET"
+verdict "ROUTINE MERGE" 0 "a malformed reviewer marker canonically naming another pull request is set aside" "${ELIGIBLE[@]}"
+GH_PR_COMMENTS="$REV
+$ACCEPT_MET
+OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA2 contract=$ACC verdict=NOT-MET extra=1 -->"
+verdict "ROUTINE MERGE" 0 "a malformed acceptance marker canonically naming another commit is set aside" "${ELIGIBLE[@]}"
+reset_world
+
 # --- the work unit lives in the PULL REQUEST's repository -------------------
 # The owning issue may live elsewhere. Borrowing the parent's repository for
 # the child's identity would let a bare "#724" written on a parent in another

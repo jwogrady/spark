@@ -2501,6 +2501,13 @@ xm_marker_other() {
   # stale head beside the current one — be waved through as "about something
   # else" on the strength of whichever came first.
   [ -z "$dup" ] || return 1
+  # A NONCANONICAL identity establishes nothing. `pr=0727` is not "another pull
+  # request" and `head=deadbeef` is not "another commit" — they are unreadable
+  # ones, so they may not dismiss a record whose grammar already failed. Without
+  # this, an extra field made parsing fail and then `0727 != 727` waved the
+  # record away, leaving a valid PASS or MET standing alone.
+  if [ -n "$pseen" ] && ! xm_num "$p"; then return 1; fi
+  if [ -n "$hseen" ] && ! xm_sha "$h"; then return 1; fi
   if [ -n "$p" ] && [ "$p" != "$want_pr" ]; then return 0; fi
   if [ -n "$h" ] && [ "$h" != "$want_head" ]; then return 0; fi
   return 1
