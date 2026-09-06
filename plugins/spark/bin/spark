@@ -3412,11 +3412,14 @@ di_grade() {
 di_repo_nwo() {
   local nwo
   nwo="$(gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null)" || return 1
-  case "$nwo" in
-    *[!A-Za-z0-9_./-]*|''|*/*/*|/*|*/) return 1 ;;
-    */*) printf '%s\n' "$nwo" ;;
-    *) return 1 ;;
-  esac
+  # The same owner/name shape gh_blocked_by demands of a blocker's repository:
+  # two segments, each with something other than dots — a dot-only segment is
+  # not a name, and an identity that is malformed but non-empty would make every
+  # valid local blocker fail the equality filter and read as foreign.
+  printf '%s\n' "$nwo" | awk '
+    $0 !~ /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/ || $0 ~ /(^|\/)\.+(\/|$)/ { bad = 1 }
+    END { exit bad ? 1 : 0 }' || return 1
+  printf '%s\n' "$nwo"
 }
 
 # gh_blocked_by <issue> — every blocker GitHub's native dependency graph records

@@ -42,7 +42,7 @@ each lead was confirmed or dismissed by reading the code.
 | Non-paginated readers of paginated REST lists | 2 | 0 |
 | Call sites changed (fanout) | — | 7: `bin/spark` ×4 (labels gate, milestone snapshot, governance validate, next), `planning.sh` ×3 |
 | Functions | `bin/spark` 147, `planning.sh` 15 | 148, 16 |
-| Lines | `bin/spark` 8,865, `planning.sh` 801 | 8,913, 825 (each contract is stated in a comment, and every row is validated) — regenerated for the committed HEAD by the ship step |
+| Lines | `bin/spark` 8,865, `planning.sh` 801 | 8,916, 825 (each contract is stated in a comment, and every row is validated) — regenerated for the committed HEAD by the ship step |
 
 **Defect found and fixed while consolidating.** `gov_collect`'s probe loop read the issue
 stream with `IFS=$'\t' read -r kind n ms blk_n`. Tab is IFS *whitespace*, so an
@@ -74,8 +74,10 @@ The loop now projects the issues to probe with `awk` (field-exact) before iterat
   own order, or the whole read fails; non-zero exit and no rows when unreadable (verify
   reports `?`, never "not wired").
 - `di_repo_nwo` — the owner/name exactly as GitHub spells it, buffered and validated:
-  output beside a failure, an empty success, or anything that is not `owner/name` is a
-  failed read; non-zero exit and empty output when gh cannot answer. Callers state their own fallback at the call site
+  output beside a failure, an empty success, or anything that is not `owner/name` (two
+  segments, neither dot-only — the same shape `gh_blocked_by` demands of a blocker's
+  repository) is a failed read, because a malformed non-empty identity would make every
+  local blocker read as foreign; non-zero exit and empty output when gh cannot answer. Callers state their own fallback at the call site
   (`|| repo_nwo=""` where "unknown" is survivable, `|| return 1` where it is not).
 
 ## Removed implementations → surviving tests

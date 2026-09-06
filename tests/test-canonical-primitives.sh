@@ -117,6 +117,15 @@ rc=0; out="$(di_repo_nwo)" || rc=$?
 reset; printf 'a/b/c\n' > "$SC/nwo"
 rc=0; out="$(di_repo_nwo)" || rc=$?
 [ "$rc" -ne 0 ] && ok || bad "three path segments are not an owner/name"
+for bad_nwo in 'owner/.' './repo' '../repo' 'owner/..' '.' '/repo' 'owner/' 'o/self extra'; do
+  reset; printf '%s\n' "$bad_nwo" > "$SC/nwo"
+  rc=0; out="$(di_repo_nwo)" || rc=$?
+  [ "$rc" -ne 0 ] && ok || bad "a malformed identity ($bad_nwo) is a failed read — non-empty but wrong would make every local blocker read as foreign"
+  assert_eq "and nothing is printed" "" "$out"
+done
+reset; printf 'my.org/my-repo.js\n' > "$SC/nwo"
+out="$(di_repo_nwo)" && ok || bad "control: dots inside real segments are a valid owner/name"
+assert_eq "and are printed as read" "my.org/my-repo.js" "$out"
 
 reset
 printf '101\n999\n102\n' > "$SC/sub_issues.100"
