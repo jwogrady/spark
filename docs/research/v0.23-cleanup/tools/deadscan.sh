@@ -6,44 +6,61 @@
 #   ci       .github/scripts/**/*.sh (support code the workflows execute)
 #   skills   plugins/spark/skills/*/scripts/*, plugins/spark-*/skills/*/scripts/* (shipped support scripts the skills run)
 #   tests    tests/lib.sh (the shared test harness; suite-local functions are the suite's own business)
-# For every function: whole-word reference counts outside its own definition line, in (a) its own surface,
-# (b) tests/, (c) everything else tracked. Zero references in (a)+(b)+(c) → candidate.
-# For every candidate the scan then records, per candidate:
-#   - an INDIRECT search: the name reached through prefix construction ("${x}_get", "bg_$…", "$name") or as
-#     a bare word inside a string anywhere in the tree;
-#   - GIT HISTORY: the commits that added/removed the string (git log -S) and every commit whose diff mentions
-#     it (git log -G) — a candidate that only ever appears in the commit that introduced it never had a caller.
-# Also: obsolete-compatibility markers in the scanned surfaces, and shipped scripts referenced nowhere.
+#
+# WHAT A "REFERENCE" IS HERE. A reference is a LINE, outside the function's own definition line and not a
+# comment line (first non-blank character `#`), that contains the function name as a whole word. Counted in
+# three places: (a) the function's own surface, (b) tests/, (c) every other tracked text file EXCEPT this
+# audit's own artifacts under docs/research/v0.23-cleanup/ (they list every function name and would give
+# everything an artificial reference). A name inside a string or a heredoc still counts — the count is an
+# UPPER BOUND on real call sites, which errs toward keeping code. A function is a candidate only when all
+# three counts are zero: nothing anywhere mentions it outside its definition and comments.
+#
+# PER-CANDIDATE EVIDENCE, recorded mechanically:
+#   - INDIRECT: the name reached through prefix construction ("${x}_get", "bg_$…") or as a quoted string,
+#     anywhere tracked (same exclusion);
+#   - HISTORY: `git log -S` (commits that added/removed the string), `git log -G` (commits whose diff mentions
+#     it), and for EVERY such commit a `git grep -w` of the whole tree at that revision with definition and
+#     comment lines removed — so "no revision ever called it" is a checked count per revision, not an inference.
+# Also: obsolete-compatibility markers in the scanned surfaces, and shipped or ci scripts referenced nowhere.
 # Output: <outdir>/functions.tsv (all functions), <outdir>/candidates.txt (per-candidate evidence), stdout summary.
 set -uo pipefail
 cd "${1:-.}" || exit 1
 OUT="${2:-$(mktemp -d)}"; mkdir -p "$OUT"
+EXCL="docs/research/v0.23-cleanup"
 RUNTIME="$(git ls-files plugins/spark/bin/spark 'plugins/spark/lib/*.sh' 'plugins/spark/hooks/*.sh' 'plugins/spark/scripts/hooks/*' | tr '\n' ' ')"
 CI="$(git ls-files '.github/scripts/*.sh' '.github/scripts/*/*.sh' | tr '\n' ' ')"
 SKILLS="$(git ls-files 'plugins/spark/skills/*/scripts/*' 'plugins/spark-*/skills/*/scripts/*' | tr '\n' ' ')"
 TESTLIB="tests/lib.sh"
-ALL_TRACKED="$(git ls-files | grep -vE '\.(png|svg)$' | tr '\n' ' ')"
-cnt() { { "$@" 2>/dev/null || true; } | wc -l | tr -d ' '; }
-defs() { # <file> -> "line<TAB>name"
-  grep -nE '^[A-Za-z_][A-Za-z0-9_]*\(\)[[:space:]]*\{' "$1" | sed -E 's/^([0-9]+):([A-Za-z_][A-Za-z0-9_]*)\(\).*/\1\t\2/'
-}
-refs_in() { # <name> <files...> -> count of whole-word hits that are not a definition line
+TEXT="$(git ls-files | grep -vE '\.(png|svg)$' | grep -v "^$EXCL/" | tr '\n' ' ')"
+TESTS="$(git ls-files 'tests/*' | tr '\n' ' ')"
+defs() { grep -nE '^[A-Za-z_][A-Za-z0-9_]*\(\)[[:space:]]*\{' "$1" | sed -E 's/^([0-9]+):([A-Za-z_][A-Za-z0-9_]*)\(\).*/\1\t\2/'; }
+# refs <name> <files...> — non-comment, non-definition lines containing the whole word
+refs() {
   local name="$1"; shift
-  { grep -wn -- "$name" "$@" 2>/dev/null || true; } | { grep -vE ":[0-9]+:$name\(\)[[:space:]]*\{" || true; } | wc -l | tr -d ' '
+  [ "$#" -gt 0 ] || { echo 0; return; }
+  { grep -Hnw -- "$name" "$@" 2>/dev/null || true; } \
+    | { grep -vE ":[0-9]+:[[:space:]]*#" || true; } \
+    | { grep -vE ":[0-9]+:$name\(\)[[:space:]]*\{" || true; } | wc -l | tr -d ' '
 }
+others() { # <files-in-own-surface...> → the "elsewhere" set: TEXT minus own surface minus tests
+  local own=" $* " f out=""
+  for f in $TEXT; do case "$own" in *" $f "*) ;; *) case "$f" in tests/*) ;; *) out="$out $f" ;; esac ;; esac; done
+  printf '%s' "$out"
+}
+ELSE_RUNTIME="$(others $RUNTIME)"; ELSE_CI="$(others $CI .github/workflows/*.yml)"; ELSE_SKILLS="$(others $SKILLS)"; ELSE_TESTLIB="$(others $TESTLIB)"
 {
 printf 'surface\tfunction\tdefined_in\trefs_same_surface\trefs_tests\trefs_elsewhere\n'
 for f in $RUNTIME; do defs "$f" | while IFS=$'\t' read -r ln name; do
-  printf 'runtime\t%s\t%s:%s\t%s\t%s\t%s\n' "$name" "$f" "$ln" "$(refs_in "$name" $RUNTIME)" "$(cnt grep -rlw -- "$name" tests)" "$(cnt grep -rlw -- "$name" plugins/spark/skills plugins/spark/docs .github plugins/spark-audit plugins/spark-connect plugins/spark-docs docs)"
+  printf 'runtime\t%s\t%s:%s\t%s\t%s\t%s\n' "$name" "$f" "$ln" "$(refs "$name" $RUNTIME)" "$(refs "$name" $TESTS)" "$(refs "$name" $ELSE_RUNTIME)"
 done; done
 for f in $CI; do defs "$f" | while IFS=$'\t' read -r ln name; do
-  printf 'ci\t%s\t%s:%s\t%s\t%s\t%s\n' "$name" "$f" "$ln" "$(refs_in "$name" $CI .github/workflows/*.yml)" "$(cnt grep -rlw -- "$name" tests)" "$(cnt grep -rlw -- "$name" plugins docs)"
+  printf 'ci\t%s\t%s:%s\t%s\t%s\t%s\n' "$name" "$f" "$ln" "$(refs "$name" $CI .github/workflows/*.yml)" "$(refs "$name" $TESTS)" "$(refs "$name" $ELSE_CI)"
 done; done
 for f in $SKILLS; do defs "$f" | while IFS=$'\t' read -r ln name; do
-  printf 'skills\t%s\t%s:%s\t%s\t%s\t%s\n' "$name" "$f" "$ln" "$(refs_in "$name" $SKILLS)" "$(cnt grep -rlw -- "$name" tests)" "$(cnt grep -rlw -- "$name" plugins/spark/skills/*/SKILL.md plugins/spark/skills/*/references plugins/spark-*/skills plugins/spark/docs docs .github plugins/spark/bin plugins/spark/lib)"
+  printf 'skills\t%s\t%s:%s\t%s\t%s\t%s\n' "$name" "$f" "$ln" "$(refs "$name" $SKILLS)" "$(refs "$name" $TESTS)" "$(refs "$name" $ELSE_SKILLS)"
 done; done
 defs "$TESTLIB" | while IFS=$'\t' read -r ln name; do
-  printf 'tests\t%s\t%s:%s\t%s\t%s\t%s\n' "$name" "$TESTLIB" "$ln" "$(refs_in "$name" $TESTLIB)" "$(cnt grep -rlw -- "$name" tests/test-*.sh tests/run.sh tests/bench.sh tests/bench-memo.sh tests/structure.sh)" "$(cnt grep -rlw -- "$name" plugins docs .github)"
+  printf 'tests\t%s\t%s:%s\t%s\t%s\t%s\n' "$name" "$TESTLIB" "$ln" "$(refs "$name" $TESTLIB)" "$(refs "$name" $(git ls-files 'tests/*' | grep -v '^tests/lib.sh$' | tr '\n' ' '))" "$(refs "$name" $ELSE_TESTLIB)"
 done
 } > "$OUT/functions.tsv"
 total=$(($(wc -l < "$OUT/functions.tsv") - 1))
@@ -56,22 +73,27 @@ while IFS=$'\t' read -r surface name where; do
   [ -n "$name" ] || continue
   {
     echo "### $surface $name ($where)"
-    echo "indirect (prefix construction / string mention anywhere tracked):"
-    { grep -nE "\\\$\\{?[A-Za-z_]+\\}?_${name#*_}\\b|${name%%_*}_\\\$|['\"]${name}['\"]|\\b${name}\\b" $ALL_TRACKED 2>/dev/null || true; } | { grep -vE ":[0-9]+:${name}\\(\\)[[:space:]]*\\{" || true; } | cut -c1-160 | sed 's/^/  /'
+    echo "indirect (prefix construction / quoted string, anywhere tracked except $EXCL):"
+    { grep -HnE "\\\$\\{?[A-Za-z_]+\\}?_${name#*_}\\b|${name%%_*}_\\\$|['\"]${name}['\"]" $TEXT 2>/dev/null || true; } | cut -c1-160 | sed 's/^/  /'
     echo "git log -S (commits that added/removed the string):"
     git log --format='  %h %cs %s' -S"$name" -- . | head -8
     echo "git log -G (commits whose diff mentions the name):"
     git log --format='  %h %cs %s' -G"\\b$name\\b" -- . | head -8
+    echo "per-revision whole-tree references (non-comment, non-definition lines) at each of those commits:"
+    for c in $( { git log --format='%h' -S"$name" -- .; git log --format='%h' -G"\\b$name\\b" -- .; } | sort -u); do
+      n=$({ git grep -nw -- "$name" "$c" -- . 2>/dev/null || true; } | { grep -vE ":[0-9]+:[[:space:]]*#" || true; } | { grep -vE ":[0-9]+:$name\(\)[[:space:]]*\{" || true; } | { grep -v "$EXCL/" || true; } | wc -l | tr -d ' ')
+      echo "  $c: $n reference line(s) outside definition and comments"
+    done
     echo
   } >> "$OUT/candidates.txt"
 done < "$OUT/zero.tsv"
 cat "$OUT/candidates.txt"
-echo "== obsolete-compatibility markers (runtime + ci) =="
+echo "== obsolete-compatibility markers (runtime + ci + skills) =="
 { grep -nEi 'legacy|deprecated|backward|compat(ibility)? (path|shim|fallback)|for compatibility|no longer (used|needed|read|written)|kept for|retained for|old (format|schema|name)|removed in v|since v0\.[0-9]+' $RUNTIME $CI $SKILLS || true; } | cut -c1-200
-echo "== shipped and ci scripts referenced nowhere =="
+echo "== shipped and ci scripts referenced nowhere (excluding $EXCL) =="
 for s in $(git ls-files 'plugins/spark/skills/*/scripts/*' plugins/spark/scripts '.github/scripts/*.sh' '.github/scripts/*/*.sh'); do
   b="$(basename "$s")"
-  n=$({ grep -rlF -- "$b" plugins docs tests .github AGENTS.md README.md 2>/dev/null || true; } | { grep -vF -- "$s" || true; } | wc -l | tr -d ' ')
+  n=$({ grep -rlF --exclude-dir=v0.23-cleanup -- "$b" plugins docs tests .github AGENTS.md README.md 2>/dev/null || true; } | { grep -vF -- "$s" || true; } | wc -l | tr -d ' ')
   [ "$n" -eq 0 ] && echo "  unreferenced: $s"
 done
 echo "(scan done; outputs in $OUT)"
