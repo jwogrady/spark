@@ -72,10 +72,10 @@ assert_eq "and emits no rows to mistake for evidence" "" "$out"
 
 # malformed rows: the primitive validates shape and vocabulary before emitting anything, so a consumer
 # that keeps only "open" blockers can never read a malformed row as "not blocking"
-for row in '12\tOPEN\to/self' '12\t\to/self' '12\tdraft\to/self' 'twelve\topen\to/self' '0\topen\to/self' '12\topen' '12\topen\to/self\textra' '12\topen\tnot a repo'; do
+for row in '12\tOPEN\to/self' '12\t\to/self' '12\tdraft\to/self' 'twelve\topen\to/self' '0\topen\to/self' '12\topen' '12\topen\to/self\textra' '12\topen\tnot a repo' '12\topen\tacme' '12\topen\t.' '12\topen\towner/.' '12\topen\t./name' '12\topen\ta/b/c' '12\topen\t/name' '12\topen\towner/'; do
   reset; printf '13\topen\to/self\n%b\n' "$row" > "$SC/blocked_by.7"
   rc=0; out="$(gh_blocked_by 7)" || rc=$?
-  [ "$rc" -ne 0 ] && ok || bad "a malformed blocker row ($row) fails the whole read"
+  [ "$rc" -ne 0 ] && ok || bad "a malformed blocker row ($row) fails the whole read — a bad repository shape would otherwise read as foreign and drop a local edge"
   assert_eq "and nothing is emitted, not even the well-formed sibling row" "" "$out"
 done
 reset; printf '12\topen\t\n' > "$SC/blocked_by.7"

@@ -42,7 +42,7 @@ each lead was confirmed or dismissed by reading the code.
 | Non-paginated readers of paginated REST lists | 2 | 0 |
 | Call sites changed (fanout) | — | 7: `bin/spark` ×4 (labels gate, milestone snapshot, governance validate, next), `planning.sh` ×3 |
 | Functions | `bin/spark` 147, `planning.sh` 15 | 148, 16 |
-| Lines | `bin/spark` 8,865, `planning.sh` 801 | 8,886, 808 (comments state each contract) |
+| Lines | `bin/spark` 8,865, `planning.sh` 801 | 8,913, 825 (each contract is stated in a comment, and every row is validated) — regenerated for the committed HEAD by the ship step |
 
 **Defect found and fixed while consolidating.** `gov_collect`'s probe loop read the issue
 stream with `IFS=$'\t' read -r kind n ms blk_n`. Tab is IFS *whitespace*, so an
@@ -65,8 +65,9 @@ The loop now projects the issues to probe with `awk` (field-exact) before iterat
   row per blocker `number\tstate\towner/name`, **validated before anything is emitted**: the
   number is a positive integer and the state is `open` or `closed`, or the whole read fails,
   so a consumer keeping only open blockers can never read a malformed row as "not
-  blocking"; the repository may be empty (GitHub omitted it) and consumers treat that as
-  unknown, never local; **non-zero exit and no rows** when the graph could not be read. No consumer may read a failed probe as "no
+  blocking"; the repository is empty (GitHub omitted it; consumers treat that as unknown,
+  never local) or exactly one `owner/name`, since any other shape would read as "foreign"
+  and drop a local edge; **non-zero exit and no rows** when the graph could not be read. No consumer may read a failed probe as "no
   prerequisite": validate emits `dependency ? all … probe failed`, next records `?`,
   verify emits `dependency ? #n … could not be read`.
 - `plan_sub_issues <parent>` — paginated and buffered; positive issue numbers in GitHub's
