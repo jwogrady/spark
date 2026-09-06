@@ -125,7 +125,7 @@ is a projection and is never used to compare or bind.
 A grammar alone cannot exclude every non-canonical spelling (`.git`, `refs/`, `..`,
 `@{`, a `.lock` suffix, a `.` path component). Those exclusions are **constraint
 records**: extended regular expressions with no lookaround, scoped to an identifier
-kind, to every invalidator, or to one source type's identity. A value is canonical only
+kind, to every invalidator, to one invalidator kind, or to one source type's identity. A value is canonical only
 when it matches its grammar *and* none of its constraints (R1). They are data, so a
 consumer applies them rather than reconstructing them from prose.
 
@@ -149,6 +149,18 @@ consumer applies them rather than reconstructing them from prose.
 | `source-identity/repository-file` | `\.git@` | the repository name never carries .git |
 | `source-identity/human-decision` | `\.git(#\|@)` | the repository name never carries .git |
 | `invalidator` | `\.git(#\|/\|$)` | the repository name inside any invalidator never carries .git |
+| `invalidator/ref` | `\.\.` | the embedded ref has no .. |
+| `invalidator/ref` | `@\{` | the embedded ref has no @{ |
+| `invalidator/ref` | `\.lock$` | the embedded ref never ends in .lock |
+| `invalidator/ref` | `\.$` | the embedded ref never ends in a dot |
+| `invalidator/ref` | `/@$` | the embedded ref is never the single name @ |
+| `invalidator/ref` | `^ref:[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+/refs/` | the embedded ref is the branch name, never the refs/ path |
+| `source-identity/git` | `@ref/.*\.\.` | the embedded ref has no .. |
+| `source-identity/git` | `@ref/.*@\{` | the embedded ref has no @{ |
+| `source-identity/git` | `@ref/.*\.lock$` | the embedded ref never ends in .lock |
+| `source-identity/git` | `@ref/.*\.$` | the embedded ref never ends in a dot |
+| `source-identity/git` | `@ref/@$` | the embedded ref is never the single name @ |
+| `source-identity/git` | `@ref/refs/` | the embedded ref is the branch name, never the refs/ path |
 
 ## Invalidators
 
@@ -204,7 +216,8 @@ behavioral suite checks the two never drift.
   key, so derived inputs and invalidation address a stable identity. A value is
   canonical only when it matches its grammar and none of the constraint records
   for its scope; the constraints are data, so no consumer reconstructs them from
-  prose.
+  prose. A ref embedded in an invalidator or a git identity is held to the ref
+  grammar and constraints like a bare one.
 - **R2** Raw issue or comment bodies, timelines and explanatory prose are not
   fact values; a fact points at them through provenance.
 - **R3** A fact states what is established now; provenance states why and how.
@@ -216,6 +229,8 @@ behavioral suite checks the two never drift.
   identity; it is never inferred from capability, membership, labels or cached
   prose. Every decision an authority value names is that fact's source.identity,
   so the envelope's provenance backs each grant and boundary the value carries.
+  An authority fact is never inferred and always human-decision-sourced,
+  whatever its status.
 - **R6** value is present only when status is ESTABLISHED; UNKNOWN, CONFLICT and
   NOT_APPLICABLE carry no value and cannot collapse into false, null or empty.
 - **R7** A HEAD-bound class (head, review, checks, acceptance) that is
@@ -297,7 +312,9 @@ behavioral suite checks the two never drift.
   child and blocker whose state it represents as an invalidator of that
   relationship's kind; head lists its base as ref:<repository>/<base_ref>;
   checks list ruleset:<repository> for the repository whose rulesets require
-  them. inputs and because list each key once.
+  them. inputs and because list each key once. These source and invalidator
+  requirements hold for every status; only the value-dependent ones wait for
+  ESTABLISHED.
 
 ## Versioning
 
