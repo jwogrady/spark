@@ -23,11 +23,6 @@ SCRIPT="$WORK/plugin/skills/plan/scripts/issue-manifest.sh"
 . "$SCRIPT" 2>/dev/null || true   # sourced for the pure predicates
 set +e
 
-assert_eq() {
-  local desc="$1" want="$2" got="$3"
-  if [ "$got" = "$want" ]; then ok; else bad "$desc — want '$want', got '$got'"; fi
-}
-
 work="$WORK/w"; mkdir -p "$work"
 echo body > "$work/child.md"
 

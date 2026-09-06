@@ -20,10 +20,6 @@ gov() { "$SPARK" governance "$@"; }
 # and substring asserts, and several checks here are about a value being
 # EXACTLY something (an empty member set after replacement, a declaration
 # order), where a substring match would pass on a superset.
-assert_eq() {
-  local desc="$1" want="$2" got="$3"
-  if [ "$got" = "$want" ]; then ok; else bad "$desc — want '$want', got '$got'"; fi
-}
 
 # Every case runs a fresh binary, so no fixture's model leaks into the next.
 

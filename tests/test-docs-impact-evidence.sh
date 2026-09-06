@@ -185,11 +185,6 @@ di() { # <EV_LOOKUP> <EV_FILES> -> prints tsv, sets DI_RC
 verdict() { printf '%s\n' "$DI_OUT" | awk -F'\t' '$1 == "verdict" { print $2 }'; }
 note()    { printf '%s\n' "$DI_OUT" | awk -F'\t' '$1 == "evidence-note" { print $2 }'; }
 
-assert_eq() {
-  local desc="$1" want="$2" got="$3"
-  if [ "$got" = "$want" ]; then ok; else bad "$desc — want '$want', got '$got'"; fi
-}
-
 # ============ the lookup FAILED: nothing is known ==========================
 di fail ok
 assert_rc "a failed linked-PR lookup is not assessed" 3 "$DI_RC"

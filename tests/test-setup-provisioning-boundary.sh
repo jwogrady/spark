@@ -26,11 +26,6 @@ sandbox_init
 . "$SPARK"
 set +e
 
-assert_eq() {
-  local desc="$1" want="$2" got="$3"
-  if [ "$got" = "$want" ]; then ok; else bad "$desc — want '$want', got '$got'"; fi
-}
-
 fresh="$WORK/fresh"; make_repo "$fresh"
 ( cd "$fresh" && "$SPARK" setup ) >/dev/null 2>&1
 model="$(cd "$fresh" && resolve_governance)"

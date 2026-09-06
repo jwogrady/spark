@@ -16,10 +16,6 @@ set -euo pipefail
 sandbox_init
 . "$SPARK"
 
-assert_eq() {
-  local desc="$1" want="$2" got="$3"
-  if [ "$got" = "$want" ]; then ok; else bad "$desc — want '$want', got '$got'"; fi
-}
 # field <rows> <id> <n> — column n of the row with that id
 field() { printf '%s\n' "$1" | awk -F'\t' -v i="$2" -v n="$3" '$4 == i { print $n; exit }'; }
 

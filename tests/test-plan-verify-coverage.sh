@@ -147,10 +147,6 @@ V() { # <SC> -> V_RC / V_OUT (tsv)
 verdict() { printf '%s\n' "$V_OUT" | awk -F'\t' '$1 == "verdict" { print $2 }'; }
 kinds()   { printf '%s\n' "$V_OUT" | awk -F'\t' 'NF > 2 { print $1 }' | LC_ALL=C sort -u | paste -sd, -; }
 
-assert_eq() {
-  local desc="$1" want="$2" got="$3"
-  if [ "$got" = "$want" ]; then ok; else bad "$desc — want '$want', got '$got'"; fi
-}
 # drift <SC> <desc> <substring-that-must-appear>
 drift() {
   V "$1"
@@ -380,7 +376,6 @@ case "$o" in
   *) ok ;;
 esac
 if [ "$r" -ne 0 ]; then ok; else bad "#517: verify exited 0 for that repository"; fi
-
 
 # ============ label SETS, compared as sets (#599) =========================
 # `[.labels[].name] | sort | join(",")` on the live side against a joined

@@ -11,8 +11,7 @@ claude_lib="$repo/.github/scripts/claude-lane/lib.sh"
 . "$lib"
 
 pass=0; fail=0
-ok()  { pass=$((pass + 1)); }
-bad() { fail=$((fail + 1)); echo "  ✖ $1"; }
+. "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 haswf()    { grep -qE -- "$2" "$wf" && ok || bad "$1 — workflow lacks /$2/"; }
 haswf_not(){ if grep -qE -- "$2" "$wf"; then bad "$1 — workflow wrongly matches /$2/"; else ok; fi; }
 
@@ -523,5 +522,4 @@ haswf "normalizes paginated comments into one array"  "jq -s 'add"
 haswf "absorbs check-runs propagation lag with a short retry" 'for attempt in 1 2 3 4 5 6'
 haswf_not "no bounded-wait timeout that can freeze a verdict" 'ci-not-terminal-timeout'
 
-echo "  $pass passed, $fail failed"
-[ "$fail" -eq 0 ]
+finish

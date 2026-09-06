@@ -27,10 +27,6 @@ T="$(printf '\t')"
 work="$WORK/w"; mkdir -p "$work"
 B="$work/b.md"; echo body > "$B"
 
-assert_eq() {
-  local desc="$1" want="$2" got="$3"
-  if [ "$got" = "$want" ]; then ok; else bad "$desc — want '$want', got '$got'"; fi
-}
 man() { local f="$work/m.tsv"; printf '%s\n' "$@" > "$f"; printf '%s' "$f"; }
 
 # Two gates, two children each. This is the shape the issue reports, widened to

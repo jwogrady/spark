@@ -11,11 +11,6 @@ set -euo pipefail
 sandbox_init
 . "$SPARK"
 
-assert_eq() {
-  local desc="$1" want="$2" got="$3"
-  if [ "$got" = "$want" ]; then ok; else bad "$desc — want '$want', got '$got'"; fi
-}
-
 # ======================== a new repo ========================
 new="$WORK/new"; make_repo "$new"
 ( cd "$new" && "$SPARK" setup ) >/dev/null 2>&1
