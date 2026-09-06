@@ -35,9 +35,13 @@ case "$*" in
   "repo view --json nameWithOwner"*) [ -f "$SC/nwo" ] || exit 1; cat "$SC/nwo" ;;
   *"dependencies/blocked_by"*)
     n="$(printf '%s' "$*" | sed -E 's|.*/issues/([0-9]+)/dependencies/blocked_by.*|\1|')"
+    # ".partial": a first page answered, then a later page failed — rows on
+    # stdout AND a non-zero exit, which is what gh --paginate does.
+    [ -f "$SC/blocked_by.$n.partial" ] && { cat "$SC/blocked_by.$n.partial"; exit 1; }
     [ -f "$SC/blocked_by.$n" ] || exit 1; cat "$SC/blocked_by.$n" ;;
   *"/sub_issues"*)
     n="$(printf '%s' "$*" | sed -E 's|.*/issues/([0-9]+)/sub_issues.*|\1|')"
+    [ -f "$SC/sub_issues.$n.partial" ] && { cat "$SC/sub_issues.$n.partial"; exit 1; }
     [ -f "$SC/sub_issues.$n" ] || exit 1; cat "$SC/sub_issues.$n" ;;
   *"issues?state=open"*) [ -f "$SC/issues" ] || exit 1; cat "$SC/issues" ;;
   *) exit 1 ;;
@@ -65,6 +69,12 @@ rc=0; out="$(gh_blocked_by 8)" || rc=$?
 assert_eq "and emits no rows to mistake for evidence" "" "$out"
 
 reset
+printf '12\topen\to/self\n' > "$SC/blocked_by.9.partial"
+rc=0; out="$(gh_blocked_by 9)" || rc=$?
+[ "$rc" -ne 0 ] && ok || bad "a first page followed by a failed page fails the read"
+assert_eq "and the rows already received are NOT emitted (buffered: all pages or nothing)" "" "$out"
+
+reset
 printf 'o/self\n' > "$SC/nwo"
 out="$(di_repo_nwo)"; rc=$?
 assert_rc "di_repo_nwo answers from gh" 0 "$rc"
@@ -83,6 +93,11 @@ assert_contains "sub-issues are read paginated" "--paginate" "$(grep 'issues/100
 reset
 rc=0; out="$(plan_sub_issues 100)" || rc=$?
 [ "$rc" -ne 0 ] && ok || bad "an unreadable sub-issue list fails the read"
+reset
+printf '101\n' > "$SC/sub_issues.100.partial"
+rc=0; out="$(plan_sub_issues 100)" || rc=$?
+[ "$rc" -ne 0 ] && ok || bad "a partial sub-issue read fails"
+assert_eq "and emits nothing" "" "$out"
 
 # ======================== the same rows, each consumer's own filter ========================
 # governance validate builds the prerequisite graph from gh_blocked_by rows: OPEN,
@@ -127,14 +142,16 @@ printf '2\topen\to/self\n' > "$SC/blocked_by.1"; printf '1\topen\to/self\n' > "$
 out="$(dep_rows)"
 assert_contains "an unknown own identity keeps the evidence (cycle still caught)" "cannot be started" "$out"
 
-# plan verify asks a different question of the same rows — membership by number,
-# whatever the blocker's state — and its coverage suite (tests/test-plan-verify-coverage.sh)
-# drives that through the binary; `next` counts open blockers in any repository
-# (tests/test-next-governance-gate.sh). Here: the three consumers read one endpoint shape.
-reset; printf '12\topen\to/self\n12\topen\to/self\n' > "$SC/blocked_by.7"
+# plan verify asks a different question of the same rows — a blocker with the
+# declared number AND this repository, whatever its state; a foreign #12 is not
+# the local #12 (its coverage suite, tests/test-plan-verify-coverage.sh, drives
+# the foreign-number, unknown-repository and unreadable-identity cases through
+# the binary). `next` counts open blockers in any repository
+# (tests/test-next-governance-gate.sh). Here: the consumers read one row shape.
+reset; printf '12\topen\to/self\n12\topen\tother/elsewhere\n' > "$SC/blocked_by.7"
 out="$(gh_blocked_by 7 | awk -F'\t' 'NF && $2 == "open"' | wc -l | tr -d ' ')"
-assert_eq "next's open count is a count of rows, exactly what the primitive returned" "2" "$out"
-out="$(gh_blocked_by 7 | awk -F'\t' 'NF { print $1 }' | grep -Fxc 12)"
-assert_eq "plan verify's membership projection sees the number column" "2" "$out"
+assert_eq "next's open count counts every open blocker, whichever repository" "2" "$out"
+out="$(gh_blocked_by 7 | awk -F'\t' -v me="o/self" 'NF && $1 == 12 && $3 == me' | wc -l | tr -d ' ')"
+assert_eq "verify's match needs number AND repository: one of the two same-numbered rows is local" "1" "$out"
 
 finish "canonical primitives"

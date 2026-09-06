@@ -3417,11 +3417,16 @@ di_repo_nwo() { gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/nul
 # list or a foreign blocker yielded three different answers. The row carries
 # state and owning repository so each consumer applies its own filter to the
 # same evidence rather than asking a different question. Paginated, so a list
-# longer than one page is never silently truncated. Fails (non-zero, no rows)
-# when the graph could not be read: a failed probe is never "no prerequisite".
+# longer than one page is never silently truncated, and BUFFERED: rows are
+# emitted only after every page was read, so a failure on a later page cannot
+# leave a partial list on stdout that reads as the whole graph. Fails (non-zero,
+# no rows) when the graph could not be read: a failed probe is never "no
+# prerequisite".
 gh_blocked_by() {
-  gh api --paginate "repos/{owner}/{repo}/issues/$1/dependencies/blocked_by" \
-    --jq '.[] | "\(.number)\t\(.state // "")\t\(.repository.full_name // "")"' 2>/dev/null
+  local rows
+  rows="$(gh api --paginate "repos/{owner}/{repo}/issues/$1/dependencies/blocked_by" \
+    --jq '.[] | "\(.number)\t\(.state // "")\t\(.repository.full_name // "")"' 2>/dev/null)" || return 1
+  [ -z "$rows" ] || printf '%s\n' "$rows"
 }
 
 # di_split_linked <rows> <kind> — the numbers of one kind from di_linked_prs's
