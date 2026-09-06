@@ -1,22 +1,23 @@
 # PR #727: findings.txt validated in both directions against live GitHub via `gh api`
-# record→source: envelope line removed, writer's trailing newline removed, body CRLF→LF, nothing else; block must be a verbatim substring;
-#               block count must equal findings_parser.extract on the live body; login/marker must match the header
-# source→record: every comment carrying a spark-openai-review marker for this PR (any login) must have a header
-r1 comment 5555345257 (trusted, findings): 4/4 blocks verbatim; parser agrees on 4
-r2 comment 5555370419 (trusted, findings): 4/4 blocks verbatim; parser agrees on 4
-r3 comment 5555393693 (trusted, findings): 4/4 blocks verbatim; parser agrees on 4
-r4 comment 5555443019 (trusted, findings): 3/3 blocks verbatim; parser agrees on 3
-r5 comment 5555478568 (trusted, findings): 3/3 blocks verbatim; parser agrees on 3
-r6 comment 5555522727 (trusted, findings): 3/3 blocks verbatim; parser agrees on 3
-r7 comment 5555624886 (trusted, findings): 4/4 blocks verbatim; parser agrees on 4
-r8 comment 5555747928 (trusted, findings): 4/4 blocks verbatim; parser agrees on 4
-r9 comment 5555811436 (trusted, findings): 3/3 blocks verbatim; parser agrees on 3
-r10 comment 5559975617 (trusted, findings): 4/4 blocks verbatim; parser agrees on 4
-r11 comment 5560093436 (trusted, findings): 2/2 blocks verbatim; parser agrees on 2
-r12 comment 5560155814 (trusted, findings): 3/3 blocks verbatim; parser agrees on 3
-r13 comment 5560233736 (trusted, findings): 2/2 blocks verbatim; parser agrees on 2
-r14 comment 5560278135 (trusted, findings): 2/2 blocks verbatim; parser agrees on 2
-r15 comment 5560358402 (trusted, findings): 3/3 blocks verbatim; parser agrees on 3
-r16 comment 5560416150 (trusted, findings): 2/2 blocks verbatim; parser agrees on 2
-source→record: 16 marked reviewer comments on PR #727 up to 2026-09-06T16:24:54Z; 16 recorded, 0 absent, 0 extra
+# record→source: envelope line removed, writer's trailing newline removed, body CRLF→LF, nothing else; the recorded block array must
+#               EQUAL the parser's block array for the live body (count, order, bytes); login/marker/kind must match the header;
+#               duplicate comment ids or round ids are rejected
+# source→record: every comment carrying a spark-openai-review marker for this PR (any login) within the cutoff has exactly one header
+r1 comment 5555345257 (trusted, findings): 4 recorded block(s) == parsed blocks (exact, ordered)
+r2 comment 5555370419 (trusted, findings): 4 recorded block(s) == parsed blocks (exact, ordered)
+r3 comment 5555393693 (trusted, findings): 4 recorded block(s) == parsed blocks (exact, ordered)
+r4 comment 5555443019 (trusted, findings): 3 recorded block(s) == parsed blocks (exact, ordered)
+r5 comment 5555478568 (trusted, findings): 3 recorded block(s) == parsed blocks (exact, ordered)
+r6 comment 5555522727 (trusted, findings): 3 recorded block(s) == parsed blocks (exact, ordered)
+r7 comment 5555624886 (trusted, findings): 4 recorded block(s) == parsed blocks (exact, ordered)
+r8 comment 5555747928 (trusted, findings): 4 recorded block(s) == parsed blocks (exact, ordered)
+r9 comment 5555811436 (trusted, findings): 3 recorded block(s) == parsed blocks (exact, ordered)
+r10 comment 5559975617 (trusted, findings): 4 recorded block(s) == parsed blocks (exact, ordered)
+r11 comment 5560093436 (trusted, findings): 2 recorded block(s) == parsed blocks (exact, ordered)
+r12 comment 5560155814 (trusted, findings): 3 recorded block(s) == parsed blocks (exact, ordered)
+r13 comment 5560233736 (trusted, findings): 2 recorded block(s) == parsed blocks (exact, ordered)
+r14 comment 5560278135 (trusted, findings): 2 recorded block(s) == parsed blocks (exact, ordered)
+r15 comment 5560358402 (trusted, findings): 3 recorded block(s) == parsed blocks (exact, ordered)
+r16 comment 5560416150 (trusted, findings): 2 recorded block(s) == parsed blocks (exact, ordered)
+source→record: 16 marked reviewer comments on PR #727 up to 2026-09-06T16:24:54Z; 16 recorded once each, 0 absent, 0 extra
 RESULT: OK (0 problem(s))

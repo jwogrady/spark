@@ -1,41 +1,42 @@
 # PR #724: findings.txt validated in both directions against live GitHub via `gh api`
-# record→source: envelope line removed, writer's trailing newline removed, body CRLF→LF, nothing else; block must be a verbatim substring;
-#               block count must equal findings_parser.extract on the live body; login/marker must match the header
-# source→record: every comment carrying a spark-openai-review marker for this PR (any login) must have a header
-r1 comment 5553496635 (trusted, findings): 3/3 blocks verbatim; parser agrees on 3
-r2 comment 5553558226 (trusted, findings): 2/2 blocks verbatim; parser agrees on 2
-r3 comment 5553615644 (trusted, findings): 2/2 blocks verbatim; parser agrees on 2
-r4 comment 5553673147 (trusted, findings): 2/2 blocks verbatim; parser agrees on 2
-r5 comment 5553725370 (trusted, findings): 2/2 blocks verbatim; parser agrees on 2
-r6 comment 5553807625 (trusted, findings): 2/2 blocks verbatim; parser agrees on 2
-r7 comment 5553862342 (trusted, findings): 3/3 blocks verbatim; parser agrees on 3
-r8 comment 5553926676 (trusted, findings): 3/3 blocks verbatim; parser agrees on 3
-r9 comment 5553978175 (trusted, findings): 3/3 blocks verbatim; parser agrees on 3
-r10 comment 5554048081 (trusted, findings): 3/3 blocks verbatim; parser agrees on 3
-r11 comment 5554101918 (trusted, findings): 2/2 blocks verbatim; parser agrees on 2
-r12 comment 5554159385 (trusted, findings): 3/3 blocks verbatim; parser agrees on 3
-r13 comment 5554208294 (trusted, findings): 3/3 blocks verbatim; parser agrees on 3
-r14 comment 5554258645 (trusted, findings): 2/2 blocks verbatim; parser agrees on 2
-r15 comment 5554313960 (trusted, findings): 2/2 blocks verbatim; parser agrees on 2
-r16 comment 5554362906 (trusted, findings): 1/1 blocks verbatim; parser agrees on 1
-r17 comment 5554407821 (trusted, findings): 2/2 blocks verbatim; parser agrees on 2
-r18 comment 5554454153 (trusted, findings): 3/3 blocks verbatim; parser agrees on 3
-r19 comment 5554505218 (trusted, findings): 1/1 blocks verbatim; parser agrees on 1
-r20 comment 5554549808 (trusted, findings): 3/3 blocks verbatim; parser agrees on 3
-r21 comment 5554606568 (trusted, findings): 2/2 blocks verbatim; parser agrees on 2
-r22 comment 5554663030 (trusted, findings): 3/3 blocks verbatim; parser agrees on 3
-r23 comment 5554718061 (trusted, findings): 2/2 blocks verbatim; parser agrees on 2
-r24 comment 5554776906 (trusted, findings): 3/3 blocks verbatim; parser agrees on 3
-r25 comment 5554833010 (trusted, findings): 3/3 blocks verbatim; parser agrees on 3
-r26 comment 5554889955 (trusted, findings): 2/2 blocks verbatim; parser agrees on 2
-r26r comment 5554916926 (relayed, findings): 2/2 blocks verbatim; parser agrees on 2
-r27 comment 5554937854 (trusted, findings): 3/3 blocks verbatim; parser agrees on 3
-r27r comment 5554946668 (relayed, findings): 2/2 blocks verbatim; parser agrees on 2
-r28 comment 5554971569 (trusted, findings): 3/3 blocks verbatim; parser agrees on 3
-r28r comment 5554992763 (relayed, prose): 1/1 blocks verbatim; parser agrees on 1
-r29 comment 5555018476 (trusted, findings): 3/3 blocks verbatim; parser agrees on 3
-r30 comment 5555076732 (trusted, findings): 3/3 blocks verbatim; parser agrees on 3
-r31 comment 5555149009 (trusted, findings): 2/2 blocks verbatim; parser agrees on 2
-r32 comment 5555189660 (trusted, evidence): 4/4 blocks verbatim; parser agrees on 4
-source→record: 35 marked reviewer comments on PR #724 up to 2026-09-06T16:24:54Z; 35 recorded, 0 absent, 0 extra
+# record→source: envelope line removed, writer's trailing newline removed, body CRLF→LF, nothing else; the recorded block array must
+#               EQUAL the parser's block array for the live body (count, order, bytes); login/marker/kind must match the header;
+#               duplicate comment ids or round ids are rejected
+# source→record: every comment carrying a spark-openai-review marker for this PR (any login) within the cutoff has exactly one header
+r1 comment 5553496635 (trusted, findings): 3 recorded block(s) == parsed blocks (exact, ordered)
+r2 comment 5553558226 (trusted, findings): 2 recorded block(s) == parsed blocks (exact, ordered)
+r3 comment 5553615644 (trusted, findings): 2 recorded block(s) == parsed blocks (exact, ordered)
+r4 comment 5553673147 (trusted, findings): 2 recorded block(s) == parsed blocks (exact, ordered)
+r5 comment 5553725370 (trusted, findings): 2 recorded block(s) == parsed blocks (exact, ordered)
+r6 comment 5553807625 (trusted, findings): 2 recorded block(s) == parsed blocks (exact, ordered)
+r7 comment 5553862342 (trusted, findings): 3 recorded block(s) == parsed blocks (exact, ordered)
+r8 comment 5553926676 (trusted, findings): 3 recorded block(s) == parsed blocks (exact, ordered)
+r9 comment 5553978175 (trusted, findings): 3 recorded block(s) == parsed blocks (exact, ordered)
+r10 comment 5554048081 (trusted, findings): 3 recorded block(s) == parsed blocks (exact, ordered)
+r11 comment 5554101918 (trusted, findings): 2 recorded block(s) == parsed blocks (exact, ordered)
+r12 comment 5554159385 (trusted, findings): 3 recorded block(s) == parsed blocks (exact, ordered)
+r13 comment 5554208294 (trusted, findings): 3 recorded block(s) == parsed blocks (exact, ordered)
+r14 comment 5554258645 (trusted, findings): 2 recorded block(s) == parsed blocks (exact, ordered)
+r15 comment 5554313960 (trusted, findings): 2 recorded block(s) == parsed blocks (exact, ordered)
+r16 comment 5554362906 (trusted, findings): 1 recorded block(s) == parsed blocks (exact, ordered)
+r17 comment 5554407821 (trusted, findings): 2 recorded block(s) == parsed blocks (exact, ordered)
+r18 comment 5554454153 (trusted, findings): 3 recorded block(s) == parsed blocks (exact, ordered)
+r19 comment 5554505218 (trusted, findings): 1 recorded block(s) == parsed blocks (exact, ordered)
+r20 comment 5554549808 (trusted, findings): 3 recorded block(s) == parsed blocks (exact, ordered)
+r21 comment 5554606568 (trusted, findings): 2 recorded block(s) == parsed blocks (exact, ordered)
+r22 comment 5554663030 (trusted, findings): 3 recorded block(s) == parsed blocks (exact, ordered)
+r23 comment 5554718061 (trusted, findings): 2 recorded block(s) == parsed blocks (exact, ordered)
+r24 comment 5554776906 (trusted, findings): 3 recorded block(s) == parsed blocks (exact, ordered)
+r25 comment 5554833010 (trusted, findings): 3 recorded block(s) == parsed blocks (exact, ordered)
+r26 comment 5554889955 (trusted, findings): 2 recorded block(s) == parsed blocks (exact, ordered)
+r26r comment 5554916926 (relayed, findings): 2 recorded block(s) == parsed blocks (exact, ordered)
+r27 comment 5554937854 (trusted, findings): 3 recorded block(s) == parsed blocks (exact, ordered)
+r27r comment 5554946668 (relayed, findings): 2 recorded block(s) == parsed blocks (exact, ordered)
+r28 comment 5554971569 (trusted, findings): 3 recorded block(s) == parsed blocks (exact, ordered)
+r28r comment 5554992763 (relayed, prose): 1 recorded block(s) == parsed blocks (exact, ordered)
+r29 comment 5555018476 (trusted, findings): 3 recorded block(s) == parsed blocks (exact, ordered)
+r30 comment 5555076732 (trusted, findings): 3 recorded block(s) == parsed blocks (exact, ordered)
+r31 comment 5555149009 (trusted, findings): 2 recorded block(s) == parsed blocks (exact, ordered)
+r32 comment 5555189660 (trusted, evidence): 4 recorded block(s) == parsed blocks (exact, ordered)
+source→record: 35 marked reviewer comments on PR #724 up to 2026-09-06T16:24:54Z; 35 recorded once each, 0 absent, 0 extra
 RESULT: OK (0 problem(s))
