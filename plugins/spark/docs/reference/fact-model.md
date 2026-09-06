@@ -224,7 +224,9 @@ behavioral suite checks the two never drift.
   The two are separate fields, never merged.
 - **R4** A derived fact lists the keys of every fact that decided it and records
   each input's source.version in its own source.version, so a change to any
-  input changes and invalidates the conclusion.
+  input changes and invalidates the conclusion. A class declared derived always
+  carries a derived source, and only a derived class does: a conclusion asserted
+  from a raw read would carry no input versions and never re-version.
 - **R5** Human judgment is a human-decision source with a durable record
   identity; it is never inferred from capability, membership, labels or cached
   prose. Every decision an authority value names is that fact's source.identity,

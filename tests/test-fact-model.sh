@@ -303,6 +303,8 @@ def check_fact(f):
         matches(ENVELOPE["detail"], f["detail"], "detail")
     src = f["source"]
     matches(ENVELOPE["source"], src, "source")
+    if classes[f["class"]] == "derived" and src["type"] != "derived": fail(f"{f['class']} is a derived class and carries a derived source, never a raw read (R4/R15)")
+    if classes[f["class"]] != "derived" and src["type"] == "derived": fail(f"{f['class']} is read from its source, never derived (R4)")
     if not sid[src["type"]].fullmatch(str(src["identity"])): fail(f"source.identity {src['identity']!r} is not in the {src['type']} grammar (R14)")
     constrained(f"source-identity/{src['type']}", str(src["identity"]), "source.identity")
     if not src["version"]: fail("source.version empty")
@@ -590,6 +592,8 @@ accepts "$(mut 'f["value"]=None')" && bad "value: null must not stand in for abs
 derived='{"schema_version":"1","key":"next_action.governed","class":"next_action","status":"ESTABLISHED","value":{"action":"merge","because":["review.independent"],"boundary":"none"},"source":{"type":"derived","identity":"fact-model/1","version":"1;review.independent@2026-09-06T11:58:00Z"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["head:0123456789abcdef0123456789abcdef01234567"],"provenance":"preferences/fact-model.tsv","inputs":["review.independent"]}'
 accepts "$derived" && ok || bad "control: a derived fact with inputs is accepted"
 accepts "$(printf '%s' "$derived" | python3 -c 'import json,sys; f=json.load(sys.stdin); del f["inputs"]; print(json.dumps(f))')" && bad "a derived fact without inputs must be rejected (R4)" || ok
+accepts "$(printf '%s' "$derived" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["source"]={"type":"github-api","identity":"github.com/acme/widgets#42","version":"2026-09-06T11:58:00Z"}; print(json.dumps(f))')" && bad "a next_action asserted from a raw read (a valid non-derived source) must be rejected — the class is derived, never asserted (R4/R15)" || ok
+accepts "$(mut 'f["source"]={"type":"derived","identity":"fact-model/1","version":"1;head.exact@0123456789abcdef0123456789abcdef01234567"}; f["inputs"]=["head.exact"]')" && bad "a review carrying a derived source must be rejected — a required class is read, never derived (R4)" || ok
 accepts "$(printf '%s' "$derived" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["inputs"]="review.independent"; print(json.dumps(f))')" && bad "inputs as a string must be rejected: the field record says list (R14)" || ok
 accepts "$(printf '%s' "$derived" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["source"]["identity"]="fact-model"; print(json.dumps(f))')" && bad "a derived source identity outside its grammar must be rejected (R14)" || ok
 accepts "$(printf '%s' "$derived" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["source"]["identity"]="fact-model/2"; print(json.dumps(f))')" && bad "a derived identity naming another schema version than the fact's must be rejected (R14)" || ok
