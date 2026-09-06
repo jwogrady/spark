@@ -30,16 +30,16 @@ a **fragment**: useful to show one situation, never consumed as a snapshot
 
 | Class | Canonical key | Required | Value shape when ESTABLISHED | What it answers |
 |---|---|---|---|---|
-| `work_unit` | `work_unit.identity` | required | `{kind: issue\|pull_request, id: <work-unit>}` | Which task is being executed |
-| `repository` | `repository.identity` | required | `{id: <repository>, default_branch: <ref>}` | Which repository owns it |
-| `placement` | `placement.current` | required | `{milestone: <milestone>\|none, release: <release>\|none, gate: <work-unit>\|none}` | Where it sits in release, milestone and gate |
-| `graph` | `graph.native` | required | `{parent: {id: <work-unit>, state: <issue-state>}\|none, children: [{id, state}], blocked_by: [{id, state}]}` | Its native parent, children and dependencies, each with its current state; a blocker is satisfied exactly when its state is `closed`; a work unit appears at most once per list |
-| `authority` | `authority.standing` | required | `{grants: [{decision: <decision-record>, target: <repository>\|<work-unit>, scopes: [<scope>]}], human_boundaries: [{decision: <decision-record>, target: <repository>\|<work-unit>, boundary: <boundary>}]}` | Each grant and each reserved boundary names its durable decision record, the repository or work unit it applies to, and a closed token; the wording lives behind `provenance`; every `decision` inside the value is the fact's own `source.identity` (R5) |
-| `acceptance` | `acceptance.contract` | required | `{contract: <work-unit>, head: <commit>, items: [{id: <item-id>, state: MET\|NOT_MET\|UNKNOWN}]}` | Which acceptance contract governs and how far it is satisfied, as judged on an exact HEAD; each item id is a scalar `item-id`, unique within the fact |
-| `head` | `head.exact` | required | `{head: <commit>, base_ref: <ref>, base: <commit>, current: true\|false}` | The exact HEAD and base, and whether the HEAD is still current |
-| `review` | `review.independent` | required | `{verdict: <verdict>, head: <commit>, reviewer: <login>, record: <comment>}` | The independent verdict, bound to the HEAD it judged |
-| `checks` | `checks.required` | required | `{head: <commit>, required: [<text>], results: [{name, state: <check-state>}]}` | Required-check state on that exact HEAD: exactly one result per required name (R12); `merge` is derivable only when every state is `success` |
-| `next_action` | `next_action.governed` | derived | `{action: <action>, because: [<fact-key>], boundary: <boundary>\|none}` | The next governed action, where it follows mechanically |
+| `work_unit` | `work_unit.identity` | required | `{kind: issue\|pull_request, id: <work-unit>}` | Canonical identity of the task being executed |
+| `repository` | `repository.identity` | required | `{id: <repository>, default_branch: <ref>}` | Canonical identity of the repository the work unit belongs to |
+| `placement` | `placement.current` | required | `{milestone: <milestone>\|none, release: <release>\|none, gate: <work-unit>\|none}` | Release / milestone / gate placement |
+| `graph` | `graph.native` | required | `{parent: {id: <work-unit>, state: <issue-state>}\|none, children: [{id: <work-unit>, state: <issue-state>}], blocked_by: [{id: <work-unit>, state: <issue-state>}]}` | Native parent / child / dependency relationships, each with its current state (a blocker is satisfied when its state is closed); a work unit appears at most once in each list, so one relationship can never carry two states |
+| `authority` | `authority.standing` | required | `{grants: [{decision: <decision-record>, target: <repository>\|<work-unit>, scopes: [<scope>]}], human_boundaries: [{decision: <decision-record>, target: <repository>\|<work-unit>, boundary: <boundary>}]}` | Standing authority: each grant and each reserved boundary names its durable decision record, the repository or work unit it applies to, and a closed token; wording lives behind provenance Every decision named inside the value is the fact's own source.identity: one authority fact carries one durable decision record; authority resting on several records is UNKNOWN in this version, its detail naming them as candidates |
+| `acceptance` | `acceptance.contract` | required | `{contract: <work-unit>, head: <commit>, items: [{id: <item-id>, state: MET\|NOT_MET\|UNKNOWN}]}` | Acceptance contract identity and its satisfaction as judged on an exact HEAD; each item id is a scalar item-id, unique within the fact, so one item can never be both MET and NOT_MET |
+| `head` | `head.exact` | required | `{head: <commit>, base_ref: <ref>, base: <commit>, current: true\|false}` | Exact HEAD, base and staleness of the work unit's change |
+| `review` | `review.independent` | required | `{verdict: <verdict>, head: <commit>, reviewer: <login>, record: <comment>}` | Independent review verdict bound to an exact HEAD |
+| `checks` | `checks.required` | required | `{head: <commit>, required: [<text>], results: [{name: <text>, state: <check-state>}]}` | Required-check state on the exact HEAD: exactly one result per required name, each in the closed check-state vocabulary |
+| `next_action` | `next_action.governed` | derived | `{action: <action>, because: [<fact-key>], boundary: <boundary>\|none}` | The next governed action where it is mechanically derivable |
 
 Each class has exactly one canonical key. `review.cached`, `review.foo` or a
 second `review.*` key is not a fact of the model: a derived fact's `inputs` and
@@ -55,18 +55,26 @@ Every fact, whatever its class, has exactly this shape:
 
 | Field | Required | Meaning |
 |---|---|---|
-| `schema_version` | required | The schema version the fact conforms to (`"1"`) |
-| `key` | required | the class's one canonical key (class table) — one representation per operative fact |
+| `schema_version` | required | The schema version the fact conforms to (this file's `version`) |
+| `key` | required | The class's one canonical fact key (the key records); one representation per operative fact, so inputs and invalidators address a stable identity |
 | `class` | required | One of the class names above |
-| `status` | required | One of the four status tokens below |
-| `value` | only when ESTABLISHED | The class's value shape |
-| `source` | required | `{type, identity, version}` — what was read, its canonical identity in the grammar of that source type (below), and the version identity observed |
-| `observed_at` | required | ISO-8601 UTC instant of the read |
-| `invalidators` | required | Canonical tokens; a change to any one makes the fact stale |
-| `provenance` | required | A pointer to the authoritative record, never the record itself |
-| `inputs` | when derived | The keys of the facts this one was computed from |
-| `inferred` | optional | the literal `true`, present only on a legitimately inferred fact — `false`, `"true"` or any other value is rejected; an inferred fact is never authority |
-| `detail` | optional | Exact shape `{reason, candidates}`, present only when `status` is UNKNOWN or CONFLICT: `reason` is one non-empty line; `candidates` is a list (possibly empty) of canonical locators — a repository, work unit, comment, milestone or commit identifier, or a source identity in its grammar — never prose or a raw record |
+| `status` | required | One of the status tokens below |
+| `value` | optional | Present only when status is ESTABLISHED; its shape is the class's value-shape |
+| `source` | required | The source shape below: what was read, its canonical identity in the grammar of that source type, and the version identity observed |
+| `observed_at` | required | ISO-8601 UTC instant the source was read |
+| `invalidators` | required | Canonical invalidator tokens, each in one of the invalidator grammars and unique within the fact; a change to any one makes the fact stale |
+| `provenance` | required | Pointer to the authoritative record in the provenance grammar (an https URL or a repository-relative path, no whitespace); never the record itself |
+| `inputs` | optional | Fact keys this fact was derived from; required when source.type is derived |
+| `inferred` | optional | The literal true, present only on a legitimately inferred fact (any other value is rejected); an inferred fact is never authority |
+| `detail` | optional | The detail shape below, present only when status is UNKNOWN or CONFLICT: reason is one non-empty line, candidates is a list (possibly empty) of canonical locators — never prose or a raw record |
+
+The two envelope objects have exact shapes, in the same grammar as a class's value
+shape:
+
+| Object | Shape |
+|---|---|
+| `source` | `{type: <source-type>, identity: <text>, version: <text>}` |
+| `detail` | `{reason: <text>, candidates: [<locator>]}` |
 
 Optional means *absent*. A missing `value` is the statement "no value is
 established"; the model never uses `null`, `false` or `""` to mean that, so a
@@ -92,24 +100,42 @@ or bind.
 
 | Kind | Canonical form | Example |
 |---|---|---|
-| repository | `<host>/<owner>/<name>`, lower-case host, no scheme, no `.git` | `github.com/acme/widgets` |
-| work-unit | `<repository>#<number>` | `github.com/acme/widgets#42` |
-| comment | `<work-unit>/comment/<comment id>` | `github.com/acme/widgets#42/comment/9001` |
-| milestone | `<repository>/milestone/<number>` | `github.com/acme/widgets/milestone/7` |
-| commit | full 40-hex lower-case object id | `4f3d…` (40 characters) |
-| ref | git ref name without `refs/heads/` | `master` |
-| release | the tag as published | `v0.22.0` |
-| login | `login:<name>` | `login:github-actions[bot]` — naming an actor never confers authority |
-| verdict | the reviewer's closed vocabulary | `PASS`, `CHANGES REQUIRED`, `DECISION REQUIRED`, `NOT ASSESSED` |
-| action | the closed next-action vocabulary — only actions this version can derive (R15); a new action is a new version | `wait-review`, `repair`, `merge`, `stop-decision-required` |
-| item-id | a scalar acceptance item id: one token, no whitespace, unique within its fact | `a1`, `acceptance/3` |
-| fact-key | the class's one canonical key (class table) | `review.independent` |
-| issue-state | current state of a related work unit | `open`, `closed` |
-| check-state | normalized state of one required check | `success`, `failure`, `pending`, `missing` (required but no run observed) |
-| scope | what a standing grant permits | `merge:routine`, `close:issue`, `metadata:labels`, `metadata:hierarchy`, `evidence:publish`, `branch:push` |
-| boundary | what a human reserves | `release:approve`, `authority:grant`, `settings:repository`, `action:destructive`, `placement:release`, `semantics:product` |
-| decision-record | a durable human decision: a comment locator or `<repository>@<commit>` | `github.com/acme/widgets#7/comment/9001` |
-| derived-version | `<schema version>;<input key>@<input source.version>;…`, one entry per input, sorted by key | `1;head.exact@4f3d…;review.independent@2026-09-06T11:58:00Z` |
+| repository | <host>/<owner>/<name>, lower-case host, no scheme, no .git | `github.com/acme/widgets` |
+| work-unit | <repository>#<number>; a bare #<number> is a projection, never an identity | `github.com/acme/widgets#42` |
+| comment | <work-unit>/comment/<comment id> | `github.com/acme/widgets#42/comment/9001` |
+| milestone | <repository>/milestone/<number> | `github.com/acme/widgets/milestone/7` |
+| commit | Full 40-hex lower-case object id; abbreviations are projections | `4f3d…` (40 characters) |
+| ref | A git ref name without the refs/heads/ prefix | `master` |
+| release | A release tag as published | `v0.22.0` |
+| login | An actor identity; naming an actor never confers authority | `login:github-actions[bot]` — naming an actor never confers authority |
+| verdict | The independent reviewer's closed vocabulary | `PASS`, `CHANGES REQUIRED`, `DECISION REQUIRED`, `NOT ASSESSED` |
+| action | The closed next-action vocabulary: only actions whose derivation rule (R15) this version defines; a new action is a new version | `wait-review`, `repair`, `merge`, `stop-decision-required` |
+| item-id | A scalar acceptance item id: one token, no whitespace, unique within its fact | `a1`, `acceptance/3` |
+| provenance | A pointer: an https URL or a repository-relative path, no whitespace; never the record itself | `https://github.com/acme/widgets/pull/42#issuecomment-9100`, `preferences/fact-model.tsv` |
+| fact-key | the class's one canonical key (the key records) | `review.independent` |
+| issue-state | Current state of a related work unit; a blocked_by entry is satisfied exactly when closed | `open`, `closed` |
+| check-state | Normalized state of one required check on the exact HEAD: missing = required but no run observed | `success`, `failure`, `pending`, `missing` (required but no run observed) |
+| scope | What a standing grant permits; the closed scope vocabulary | `merge:routine`, `close:issue`, `metadata:labels`, `metadata:hierarchy`, `evidence:publish`, `branch:push` |
+| boundary | What a human reserves; the closed boundary vocabulary | `release:approve`, `authority:grant`, `settings:repository`, `action:destructive`, `placement:release`, `semantics:product` |
+| derived-version | <schema version>;<input key>@<input source.version>;… — one entry per input, sorted by key | `1;head.exact@4f3d…;review.independent@2026-09-06T11:58:00Z` |
+| decision-record | A durable human decision: a <comment> locator or <repository>@<commit>; never a role, label or summary | `github.com/acme/widgets#7/comment/9001` |
+
+## Invalidators
+
+`invalidators` names what makes a fact stale, as closed tokens — one grammar per kind,
+each token at most once per fact (R16). A change to any named node invalidates the
+fact; prose can never be an invalidator.
+
+| Kind | Token form and meaning |
+|---|---|
+| `head` | head:<commit> — the exact HEAD a HEAD-bound fact was judged on (ESTABLISHED) or observed against (UNKNOWN, CONFLICT) |
+| `pull_request` | pull_request:<work-unit> — the pull request whose metadata or head the fact was read from |
+| `issue` | issue:<work-unit> — the issue whose metadata or relationships the fact was read from |
+| `comment` | comment:<comment> — the comment that records the verdict or decision |
+| `milestone` | milestone:<milestone> — the milestone the placement was read from |
+| `repository` | repository:<repository> — the repository node (default branch, settings) |
+| `ref` | ref:<repository>/<ref> — the branch whose target the fact depends on |
+| `ruleset` | ruleset:<repository> — the repository's rulesets (which checks are required) |
 
 ## Reserved boundaries the model can derive a stop from
 
@@ -140,69 +166,73 @@ of the source type; a role name, a label, a summary, or a word such as
 
 ## Rules
 
+Rendered verbatim from the `rule` records of `preferences/fact-model.tsv`; the
+behavioral suite checks the two never drift.
+
 - **R1** Canonical identifiers have one representation; labels, abbreviations
   and pretty names are projections. Each class has exactly one canonical fact
   key, so derived inputs and invalidation address a stable identity.
 - **R2** Raw issue or comment bodies, timelines and explanatory prose are not
-  fact values; a fact points at them through `provenance`.
+  fact values; a fact points at them through provenance.
 - **R3** A fact states what is established now; provenance states why and how.
-  Separate fields, never merged.
-- **R4** A derived fact lists every fact key that decided it and records each
-  input's `source.version` in its own `source.version`, so a change to any input
-  changes and invalidates the conclusion.
-- **R5** Human judgment is a `human-decision` source with a durable record
-  identity. It is never inferred from capability, membership, labels or cached
-  prose. Every `decision` an authority value names is that fact's own
-  `source.identity`, so the envelope's provenance backs each grant and boundary
-  the value carries; authority resting on several records is UNKNOWN in this
-  version, its `detail` naming them as candidates.
-- **R6** `value` is present only when `status` is ESTABLISHED. UNKNOWN,
-  CONFLICT and NOT_APPLICABLE carry no value and cannot collapse into `false`,
-  `null` or empty.
-- **R7** A fact bound to a HEAD (`head`, `review`, `checks`, `acceptance`)
-  carries that HEAD in its value and lists exactly that HEAD as a `head:`
-  invalidator; it is stale the moment the HEAD changes.
-- **R8** Two authoritative inputs that disagree are a CONFLICT naming both
-  candidates; no first-write, last-write or plausibility rule resolves them.
-- **R9** A consumer that meets an unknown `schema_version`, an unknown class or
-  an unknown field treats the fact as UNKNOWN; it never reinterprets or ignores
+  The two are separate fields, never merged.
+- **R4** A derived fact lists the keys of every fact that decided it and records
+  each input's source.version in its own source.version, so a change to any
+  input changes and invalidates the conclusion.
+- **R5** Human judgment is a human-decision source with a durable record
+  identity; it is never inferred from capability, membership, labels or cached
+  prose. Every decision an authority value names is that fact's source.identity,
+  so the envelope's provenance backs each grant and boundary the value carries.
+- **R6** value is present only when status is ESTABLISHED; UNKNOWN, CONFLICT and
+  NOT_APPLICABLE carry no value and cannot collapse into false, null or empty.
+- **R7** A HEAD-bound class (head, review, checks, acceptance) that is
+  ESTABLISHED carries its HEAD in the value and lists exactly that HEAD as its
+  one head: invalidator; UNKNOWN or CONFLICT in a HEAD-bound class lists exactly
+  one head: invalidator, the HEAD it was observed against; NOT_APPLICABLE lists
+  none, because there is no HEAD to be stale against, and is invalidated by its
+  work unit. A HEAD-bound fact is stale the moment its HEAD changes.
+- **R8** Two authoritative inputs that disagree are a CONFLICT with both
+  candidates named; no first-write, last-write or plausibility rule resolves
+  them.
+- **R9** A consumer that meets an unknown schema_version, an unknown class or an
+  unknown field treats the fact as UNKNOWN; it never reinterprets or ignores
   what it cannot judge.
-- **R10** Nothing in this model is written to `.spark/state.json`. Mutable
-  GitHub execution truth is read from its source and carried in a snapshot;
-  the state file keeps holding only the two judgment values it holds today
-  (see [state.md](state.md)).
-- **R11** A snapshot carries every required class exactly once; a smaller set
-  is a fragment and is never consumed as a snapshot.
-- **R12** A `checks` fact carries exactly one result per required check name,
-  each in the closed check-state vocabulary; `merge` is derivable only when
-  every result is `success`.
+- **R10** Nothing here is written to .spark/state.json; mutable GitHub execution
+  truth is read from its source and carried in a snapshot, not stored as state.
+- **R11** A snapshot carries every required class exactly once; a smaller set is
+  a fragment and is never consumed as a snapshot.
+- **R12** A checks fact carries exactly one result per required check name, each
+  in the closed check-state vocabulary; merge is derivable only when every
+  result is success.
 - **R13** Authority scopes and human boundaries are closed tokens carried in
   source-backed, targeted records; explanatory wording is provenance, never a
   value a consumer must interpret.
 - **R14** Every value has an exact shape: only the declared keys, recursively;
-  `source.identity` and `source.version` each match the grammar of their source
-  type; a grant names the repository or work unit it applies to. `detail` has
-  the exact shape `{reason, candidates}` with canonical locators as candidates;
-  acceptance item ids are scalar `item-id`s, unique within the fact; a work unit
+  source.identity and source.version each match the grammar of their source
+  type; a grant names the repository or work unit it applies to. detail has the
+  exact shape {reason, candidates} with canonical locators as candidates;
+  acceptance item ids are scalar item-ids, unique within the fact; a work unit
   appears at most once per graph list.
-- **R15** `next_action` is derived, never asserted, and every fact its
-  derivation consulted is in its `inputs`, so R4 re-versions it when any of
-  them changes. `merge` only when the review is PASS on the current HEAD, every
-  required check is `success` on it, every acceptance item is MET on it, the
-  HEAD is current, and a grant with scope `merge:routine` targets the repository
-  or work unit (consults `review`, `checks`, `acceptance`, `head`, `authority`,
-  `repository`, `work_unit`); `repair` only on CHANGES REQUIRED for the current
-  HEAD (`review`, `head`); `wait-review` only when no verdict binds the current
-  HEAD or a required check is pending, missing or UNKNOWN (`head`, `review`,
-  `checks` as present); `stop-decision-required` only when an input is
-  CONFLICT, the verdict is DECISION REQUIRED, or `boundary` names a reserved
-  boundary that applies here: the authority fact is in `because` and carries
-  that token with a target equal to the repository or work unit id (`authority`,
-  `repository`, `work_unit`), and the boundary's evidence row holds on the fact
-  it names, which is in `because`. `boundary` is `none` in every other case,
-  and a token with no evidence row has no derivation in this version. The
-  behavioral suite checks these conditions and the input coverage against every
-  example.
+- **R15** next_action is derived, never asserted, and every fact its derivation
+  consulted is in its inputs (so R4 re-versions it when any of them changes):
+  merge only when the review is PASS on the current HEAD, every required check
+  is success on it, every acceptance item is MET on it, the HEAD is current, and
+  a grant with scope merge:routine targets the repository or work unit (review,
+  checks, acceptance, head, authority, repository and work_unit are consulted);
+  repair only on CHANGES REQUIRED for the current HEAD (review, head);
+  wait-review only when no verdict binds the current HEAD or a required check is
+  pending, missing or UNKNOWN (head, review, checks as present);
+  stop-decision-required only when an input is CONFLICT, the verdict is DECISION
+  REQUIRED, or boundary names a reserved boundary that applies here: the
+  authority fact is in because and carries that boundary token with a target
+  equal to the repository or work unit id (authority, repository, work_unit
+  consulted), and the boundary-evidence record for that token holds on the fact
+  it names, which is in because. boundary is none in every other case; a
+  boundary token with no boundary-evidence record has no derivation in this
+  version.
+- **R16** Every invalidator is a token in one of the invalidator grammars and
+  appears once per fact; provenance is a pointer in the provenance grammar.
+  Neither carries prose, so freshness and drill-down are machine-normalized.
 
 ## Versioning
 
@@ -220,7 +250,7 @@ contract that builds on this page.
 ## Examples
 
 Each example is a JSON array of facts. Example 1 is a **complete snapshot**
-(every required class exactly once); Examples 2–7 are **fragments** that show
+(every required class exactly once); Examples 2–8 are **fragments** that show
 only the classes the situation turns on. The behavioral suite validates every
 fact on this page against the machine-readable schema, enforces the
 snapshot's cardinality and forbids duplicate classes within a fragment, so the
@@ -471,6 +501,33 @@ merging.
    "source": {"type": "derived", "identity": "fact-model/1", "version": "1;checks.required@eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"},
    "observed_at": "2026-09-06T18:00:00Z", "invalidators": ["head:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"],
    "provenance": "preferences/fact-model.tsv", "inputs": ["checks.required"]}
+]
+```
+
+### Example 8 — a work unit with no HEAD (fragment)
+
+The work unit is an issue: there is no branch, no HEAD, and so nothing for a
+review or a check run to bind to. The HEAD-bound classes are NOT_APPLICABLE —
+an explicit status, never an absent fact and never an invented HEAD. Because
+there is no HEAD to be stale against, these facts carry no `head:` invalidator;
+they are invalidated by the issue itself (a pull request opened for it makes
+them applicable again) (R7).
+
+```json
+[
+  {"schema_version": "1", "key": "work_unit.identity", "class": "work_unit", "status": "ESTABLISHED",
+   "value": {"kind": "issue", "id": "github.com/acme/widgets#41"},
+   "source": {"type": "github-api", "identity": "github.com/acme/widgets#41", "version": "2026-09-05T18:00:00Z"},
+   "observed_at": "2026-09-06T12:00:05Z", "invalidators": ["issue:github.com/acme/widgets#41"],
+   "provenance": "https://github.com/acme/widgets/issues/41"},
+  {"schema_version": "1", "key": "head.exact", "class": "head", "status": "NOT_APPLICABLE",
+   "source": {"type": "github-api", "identity": "github.com/acme/widgets#41", "version": "2026-09-05T18:00:00Z"},
+   "observed_at": "2026-09-06T12:00:05Z", "invalidators": ["issue:github.com/acme/widgets#41"],
+   "provenance": "https://github.com/acme/widgets/issues/41"},
+  {"schema_version": "1", "key": "review.independent", "class": "review", "status": "NOT_APPLICABLE",
+   "source": {"type": "github-api", "identity": "github.com/acme/widgets#41", "version": "2026-09-05T18:00:00Z"},
+   "observed_at": "2026-09-06T12:00:05Z", "invalidators": ["issue:github.com/acme/widgets#41"],
+   "provenance": "https://github.com/acme/widgets/issues/41"}
 ]
 ```
 

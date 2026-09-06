@@ -22,6 +22,8 @@
 #   field       <name>        <required>     <type>              <description>
 #   status      <token>       <value-allowed>                    <description>
 #   identifier  <kind>        <regex>                            <canonical form>
+#   invalidator <kind>        <regex>                            <token form and meaning>
+#   shape       <object>      <shape>                            (envelope objects: source, detail)
 #   source      <type>        <version-identity>                 <description>
 #   source-identity <type>    <regex>                            <canonical identity form for that source type>
 #   source-version  <type>    <regex>                            <version-identity grammar for that source type>
@@ -29,6 +31,11 @@
 #   rule        <id>          <statement>
 #
 #   required       required | optional | derived
+#   value-shape    a machine-readable shape: {key: shape, …} is an object with exactly those keys;
+#                  [shape] a list of that shape; a|b alternatives; <kind> an identifier (or the
+#                  pseudo-kinds <text> = one non-empty line, <locator> = any canonical locator or
+#                  source identity, <source-type> = a declared source type); a bare word is a
+#                  literal (true/false are JSON booleans). The validator READS this column.
 #   value-allowed  yes | no      (whether the `value` field may be present)
 #
 # EVOLUTION. `version` is the schema version every fact carries as
@@ -84,13 +91,13 @@ field	key	required	string	The class's one canonical fact key (the key records); 
 field	class	required	string	One of the class names above
 field	status	required	string	One of the status tokens below
 field	value	optional	any	Present only when status is ESTABLISHED; its shape is the class's value-shape
-field	source	required	object	{type: <source-type>, identity: <canonical locator>, version: <observed version identity>}
+field	source	required	object	The source shape below: what was read, its canonical identity in the grammar of that source type, and the version identity observed
 field	observed_at	required	string	ISO-8601 UTC instant the source was read
-field	invalidators	required	list	Canonical invalidator tokens; a change to any one makes the fact stale
-field	provenance	required	string	Pointer to the authoritative record (URL or canonical locator); never the record itself
+field	invalidators	required	list	Canonical invalidator tokens, each in one of the invalidator grammars and unique within the fact; a change to any one makes the fact stale
+field	provenance	required	string	Pointer to the authoritative record in the provenance grammar (an https URL or a repository-relative path, no whitespace); never the record itself
 field	inputs	optional	list	Fact keys this fact was derived from; required when source.type is derived
 field	inferred	optional	boolean	The literal true, present only on a legitimately inferred fact (any other value is rejected); an inferred fact is never authority
-field	detail	optional	object	Exact shape {reason: <text>, candidates: [<locator>]}, present only when status is UNKNOWN or CONFLICT: reason is one non-empty line, candidates is a list (possibly empty) of canonical locators — a repository, work unit, comment, milestone or commit identifier, or a source identity in its grammar — never prose or a raw record
+field	detail	optional	object	The detail shape below, present only when status is UNKNOWN or CONFLICT: reason is one non-empty line, candidates is a list (possibly empty) of canonical locators — never prose or a raw record
 
 # --- Status vocabulary: closed; nothing outside it is a fact ----------------
 status	ESTABLISHED	yes	The source was read and yields one value
@@ -110,6 +117,7 @@ identifier	login	^login:[A-Za-z0-9-]+(\[bot\])?$	An actor identity; naming an ac
 identifier	verdict	^(PASS|CHANGES REQUIRED|DECISION REQUIRED|NOT ASSESSED)$	The independent reviewer's closed vocabulary
 identifier	action	^(wait-review|repair|merge|stop-decision-required)$	The closed next-action vocabulary: only actions whose derivation rule (R15) this version defines; a new action is a new version
 identifier	item-id	^[A-Za-z0-9][A-Za-z0-9._:/-]{0,79}$	A scalar acceptance item id: one token, no whitespace, unique within its fact
+identifier	provenance	^(https://[^ ]+|[A-Za-z0-9_][A-Za-z0-9_./-]*)$	A pointer: an https URL or a repository-relative path, no whitespace; never the record itself
 identifier	fact-key	^(work_unit\.identity|repository\.identity|placement\.current|graph\.native|authority\.standing|acceptance\.contract|head\.exact|review\.independent|checks\.required|next_action\.governed)$	the class's one canonical key (the key records)
 identifier	issue-state	^(open|closed)$	Current state of a related work unit; a blocked_by entry is satisfied exactly when closed
 identifier	check-state	^(success|failure|pending|missing)$	Normalized state of one required check on the exact HEAD: missing = required but no run observed
@@ -117,6 +125,20 @@ identifier	scope	^(merge:routine|close:issue|metadata:labels|metadata:hierarchy|
 identifier	boundary	^(release:approve|authority:grant|settings:repository|action:destructive|placement:release|semantics:product)$	What a human reserves; the closed boundary vocabulary
 identifier	derived-version	^[1-9][0-9]*(;[a-z_]+\.[a-z_]+@[^; ]+)+$	<schema version>;<input key>@<input source.version>;… — one entry per input, sorted by key
 identifier	decision-record	^([a-z0-9.-]+/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#[1-9][0-9]*/comment/[1-9][0-9]*|[a-z0-9.-]+/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40})$	A durable human decision: a <comment> locator or <repository>@<commit>; never a role, label or summary
+
+# --- Invalidators: the closed token grammars a fact may name as what makes it stale
+invalidator	head	^head:[0-9a-f]{40}$	head:<commit> — the exact HEAD a HEAD-bound fact was judged on (ESTABLISHED) or observed against (UNKNOWN, CONFLICT)
+invalidator	pull_request	^pull_request:[a-z0-9.-]+/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#[1-9][0-9]*$	pull_request:<work-unit> — the pull request whose metadata or head the fact was read from
+invalidator	issue	^issue:[a-z0-9.-]+/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#[1-9][0-9]*$	issue:<work-unit> — the issue whose metadata or relationships the fact was read from
+invalidator	comment	^comment:[a-z0-9.-]+/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#[1-9][0-9]*/comment/[1-9][0-9]*$	comment:<comment> — the comment that records the verdict or decision
+invalidator	milestone	^milestone:[a-z0-9.-]+/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/milestone/[1-9][0-9]*$	milestone:<milestone> — the milestone the placement was read from
+invalidator	repository	^repository:[a-z0-9.-]+/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$	repository:<repository> — the repository node (default branch, settings)
+invalidator	ref	^ref:[a-z0-9.-]+/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+$	ref:<repository>/<ref> — the branch whose target the fact depends on
+invalidator	ruleset	^ruleset:[a-z0-9.-]+/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$	ruleset:<repository> — the repository's rulesets (which checks are required)
+
+# --- Envelope object shapes (same grammar as value-shape) --------------------
+shape	source	{type: <source-type>, identity: <text>, version: <text>}
+shape	detail	{reason: <text>, candidates: [<locator>]}
 
 # --- Source types and the version identity each must observe ----------------
 source	github-api	node updated_at, etag, or the observed head/id the record is keyed by	A GitHub REST or GraphQL read
@@ -151,7 +173,7 @@ rule	R3	A fact states what is established now; provenance states why and how. Th
 rule	R4	A derived fact lists the keys of every fact that decided it and records each input's source.version in its own source.version, so a change to any input changes and invalidates the conclusion.
 rule	R5	Human judgment is a human-decision source with a durable record identity; it is never inferred from capability, membership, labels or cached prose. Every decision an authority value names is that fact's source.identity, so the envelope's provenance backs each grant and boundary the value carries.
 rule	R6	value is present only when status is ESTABLISHED; UNKNOWN, CONFLICT and NOT_APPLICABLE carry no value and cannot collapse into false, null or empty.
-rule	R7	A fact bound to a HEAD (head, review, checks, acceptance) carries that HEAD in its value and lists exactly that HEAD as a head: invalidator; it is stale the moment the HEAD changes.
+rule	R7	A HEAD-bound class (head, review, checks, acceptance) that is ESTABLISHED carries its HEAD in the value and lists exactly that HEAD as its one head: invalidator; UNKNOWN or CONFLICT in a HEAD-bound class lists exactly one head: invalidator, the HEAD it was observed against; NOT_APPLICABLE lists none, because there is no HEAD to be stale against, and is invalidated by its work unit. A HEAD-bound fact is stale the moment its HEAD changes.
 rule	R8	Two authoritative inputs that disagree are a CONFLICT with both candidates named; no first-write, last-write or plausibility rule resolves them.
 rule	R9	A consumer that meets an unknown schema_version, an unknown class or an unknown field treats the fact as UNKNOWN; it never reinterprets or ignores what it cannot judge.
 rule	R10	Nothing here is written to .spark/state.json; mutable GitHub execution truth is read from its source and carried in a snapshot, not stored as state.
@@ -160,3 +182,4 @@ rule	R12	A checks fact carries exactly one result per required check name, each 
 rule	R13	Authority scopes and human boundaries are closed tokens carried in source-backed, targeted records; explanatory wording is provenance, never a value a consumer must interpret.
 rule	R14	Every value has an exact shape: only the declared keys, recursively; source.identity and source.version each match the grammar of their source type; a grant names the repository or work unit it applies to. detail has the exact shape {reason, candidates} with canonical locators as candidates; acceptance item ids are scalar item-ids, unique within the fact; a work unit appears at most once per graph list.
 rule	R15	next_action is derived, never asserted, and every fact its derivation consulted is in its inputs (so R4 re-versions it when any of them changes): merge only when the review is PASS on the current HEAD, every required check is success on it, every acceptance item is MET on it, the HEAD is current, and a grant with scope merge:routine targets the repository or work unit (review, checks, acceptance, head, authority, repository and work_unit are consulted); repair only on CHANGES REQUIRED for the current HEAD (review, head); wait-review only when no verdict binds the current HEAD or a required check is pending, missing or UNKNOWN (head, review, checks as present); stop-decision-required only when an input is CONFLICT, the verdict is DECISION REQUIRED, or boundary names a reserved boundary that applies here: the authority fact is in because and carries that boundary token with a target equal to the repository or work unit id (authority, repository, work_unit consulted), and the boundary-evidence record for that token holds on the fact it names, which is in because. boundary is none in every other case; a boundary token with no boundary-evidence record has no derivation in this version.
+rule	R16	Every invalidator is a token in one of the invalidator grammars and appears once per fact; provenance is a pointer in the provenance grammar. Neither carries prose, so freshness and drill-down are machine-normalized.

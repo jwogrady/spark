@@ -31,6 +31,14 @@ assert_eq "nine required + one derived class" "9 1" "$(rec class | cut -f3 | sor
 assert_eq "three envelope facets" "3" "$(rec facet | wc -l | tr -d ' ')"
 assert_eq "exactly one canonical key per class" "$(rec class | cut -f2 | sort | tr '\n' ' ')" "$(rec key | cut -f2 | sort | tr '\n' ' ')"
 assert_eq "every canonical key is prefixed by its class" "" "$(rec key | awk -F'\t' 'index($3, $2 ".") != 1')"
+assert_eq "eight invalidator grammars" "8" "$(rec invalidator | wc -l | tr -d ' ')"
+assert_eq "two envelope object shapes (source, detail)" "detail source" "$(rec shape | cut -f2 | sort | tr '\n' ' ' | sed 's/ $//')"
+while IFS=$'\t' read -r _ kind rx _; do
+  if printf 'probe' | grep -qE "$rx" >/dev/null 2>&1; then rc=0; else rc=$?; fi
+  [ "$rc" -le 1 ] && ok || bad "invalidator regex for $kind compiles"
+done <<EOF
+$(rec invalidator)
+EOF
 assert_eq "one derivable reserved boundary in v1" "1" "$(rec boundary-evidence | wc -l | tr -d ' ')"
 for b in $(rec boundary-evidence | cut -f2); do printf '%s' "$b" | grep -qE "$(rec identifier | awk -F'\t' '$2=="boundary"{print $3}')" && ok || bad "boundary-evidence $b is in the closed boundary vocabulary"; done
 for k in $(rec boundary-evidence | cut -f3); do rec key | cut -f3 | grep -qx "$k" && ok || bad "boundary-evidence names canonical key $k"; done
@@ -39,9 +47,9 @@ assert_eq "ESTABLISHED is the only status that may carry a value" "ESTABLISHED" 
 assert_eq "twelve envelope fields" "12" "$(rec field | wc -l | tr -d ' ')"
 assert_eq "value is optional in the envelope (present only when ESTABLISHED)" "optional" "$(rec field | awk -F'\t' '$2=="value"{print $3}')"
 assert_eq "five source types" "5" "$(rec source | wc -l | tr -d ' ')"
-assert_eq "fifteen rules" "15" "$(rec rule | wc -l | tr -d ' ')"
+assert_eq "sixteen rules" "16" "$(rec rule | wc -l | tr -d ' ')"
 assert_eq "one source-version grammar per source type" "$(rec source | cut -f2 | sort | tr '\n' ' ')" "$(rec source-version | cut -f2 | sort | tr '\n' ' ')"
-assert_eq "eighteen identifier kinds" "18" "$(rec identifier | wc -l | tr -d ' ')"
+assert_eq "nineteen identifier kinds" "19" "$(rec identifier | wc -l | tr -d ' ')"
 for k in issue-state check-state scope boundary decision-record derived-version; do rec identifier | cut -f2 | grep -qx "$k" && ok || bad "closed vocabulary $k declared"; done
 assert_eq "one source-identity grammar per source type" "$(rec source | cut -f2 | sort | tr '\n' ' ')" "$(rec source-identity | cut -f2 | sort | tr '\n' ' ')"
 while IFS=$'\t' read -r _ kind rx _; do
@@ -73,10 +81,53 @@ for k in $(rec identifier | cut -f2); do grep -q "^| $k |" "$DOC" && ok || bad "
 for k in $(rec source-identity | cut -f2); do grep -q "^| \`$k\` |" "$DOC" && ok || bad "doc source table names $k"; done
 for r in $(rec rule | cut -f2); do grep -q "^- \*\*$r\*\*" "$DOC" && ok || bad "doc states rule $r"; done
 grep -q 'preferences/fact-model.tsv' "$DOC" && ok || bad "doc names its machine-readable authority"
+for k in $(rec invalidator | cut -f2); do grep -q "^| \`$k\` | " "$DOC" && ok || bad "doc invalidator table names $k"; done
+for k in $(rec shape | cut -f2); do grep -q "^| \`$k\` | \`" "$DOC" && ok || bad "doc shape table names $k"; done
+# text parity (python3 present): class shapes and descriptions, field requiredness and descriptions, identifier
+# canonical forms, invalidator forms, envelope shapes and every rule statement are the TSV's text, verbatim
+if command -v python3 >/dev/null 2>&1; then
+  while IFS= read -r line; do
+    case "$line" in OK*) ok ;; *) bad "parity: $line" ;; esac
+  done <<EOF
+$(python3 - "$TSV" "$DOC" <<'PY'
+import re, sys
+tsv, doc = open(sys.argv[1]).read(), open(sys.argv[2]).read()
+rows = [l.split("\t") for l in tsv.split("\n") if l.strip() and not l.startswith("#")]
+def norm(x): return re.sub(r"\s+", " ", x.replace("\\|", "|").replace("`", "")).strip()
+def cells(line): return [c.strip() for c in line.strip().strip("|").split(" | ")]
+def table(header):
+    i = doc.index(header); body = doc[doc.index("\n", doc.index("\n", i) + 1) + 1:]
+    return [cells(l) for l in body.split("\n\n")[0].split("\n") if l.startswith("|")]
+def say(okk, what): print(("OK " if okk else "BAD ") + what)
+keyof = {r[1]: r[2] for r in rows if r[0] == "key"}
+cls = {norm(c[0]): c for c in table("| Class | Canonical key |")}
+for r in (r for r in rows if r[0] == "class"):
+    c = cls.get(r[1]); say(c is not None and [norm(x) for x in c[1:]] == [keyof[r[1]], r[2], norm(r[3]), norm(r[4])], f"class {r[1]} row is the TSV's key, requiredness, shape and description")
+flds = {norm(c[0]): c for c in table("| Field | Required |")}
+for r in (r for r in rows if r[0] == "field"):
+    c = flds.get(r[1]); say(c is not None and [norm(x) for x in c[1:]] == [r[2], norm(r[4])], f"field {r[1]} row is the TSV's requiredness and description")
+ident = {c[0]: c for c in table("| Kind | Canonical form |")}
+for r in (r for r in rows if r[0] == "identifier"):
+    c = ident.get(r[1]); say(c is not None and norm(c[1]) == norm(r[3]), f"identifier {r[1]} canonical form is the TSV's")
+inv = {norm(c[0]): c for c in table("| Kind | Token form and meaning |")}
+for r in (r for r in rows if r[0] == "invalidator"):
+    c = inv.get(r[1]); say(c is not None and norm(c[1]) == norm(r[3]), f"invalidator {r[1]} form is the TSV's")
+shp = {norm(c[0]): c for c in table("| Object | Shape |")}
+for r in (r for r in rows if r[0] == "shape"):
+    c = shp.get(r[1]); say(c is not None and norm(c[1]) == norm(r[2]), f"envelope shape {r[1]} is the TSV's")
+rules_md = doc[doc.index("## Rules"):doc.index("## Versioning")]
+found = {m.group(1): norm(m.group(2)) for m in re.finditer(r"^- \*\*(R\d+)\*\* (.*?)(?=^- \*\*R|\Z)", rules_md, flags=re.S | re.M)}
+for r in (r for r in rows if r[0] == "rule"):
+    say(found.get(r[1]) == norm(r[2]), f"rule {r[1]} statement is the TSV's, verbatim")
+say(len(found) == len([r for r in rows if r[0] == "rule"]), "the page states no rule the TSV lacks")
+PY
+)
+EOF
+fi
 grep -qE '^| `next_action` \| `next_action.governed` \| derived' "$DOC" && ok || bad "doc marks next_action as derived"
-assert_eq "seven examples on the page" "7" "$(grep -c '^### Example [1-7] — ' "$DOC")"
-assert_eq "exactly one example is a complete snapshot" "1" "$(grep -c '^### Example [1-7] — .*(complete snapshot)$' "$DOC")"
-assert_eq "the other six are marked as fragments" "6" "$(grep -c '^### Example [1-7] — .*(fragment)$' "$DOC")"
+assert_eq "eight examples on the page" "8" "$(grep -c '^### Example [1-8] — ' "$DOC")"
+assert_eq "exactly one example is a complete snapshot" "1" "$(grep -c '^### Example [1-8] — .*(complete snapshot)$' "$DOC")"
+assert_eq "the other seven are marked as fragments" "7" "$(grep -c '^### Example [1-8] — .*(fragment)$' "$DOC")"
 # shipped docs carry no bare issue-number references (doctor's tier boundary); a canonical work-unit id
 # such as github.com/acme/widgets#42 has a name immediately before the '#', so it is not a bare reference
 if grep -qE '(^|[^A-Za-z0-9/])#[0-9]+' "$DOC"; then bad "doc contains a bare issue reference"; else ok; fi
@@ -100,30 +151,82 @@ sid = {r[1]: re.compile(r[2]) for r in rows if r[0] == "source-identity"}
 sver = {r[1]: re.compile(r[2]) for r in rows if r[0] == "source-version"}
 canon = {r[1]: r[2] for r in rows if r[0] == "key"}                       # class -> its one canonical key (R1)
 evidence = {r[1]: (r[2], r[3], r[4]) for r in rows if r[0] == "boundary-evidence"}   # boundary -> (fact key, field, condition)
-# exact value shapes (R14): the declared keys and nothing else, recursively
-SHAPES = {"work_unit": {"kind", "id"}, "repository": {"id", "default_branch"}, "placement": {"milestone", "release", "gate"},
-          "graph": {"parent", "children", "blocked_by"}, "authority": {"grants", "human_boundaries"}, "acceptance": {"contract", "head", "items"},
-          "head": {"head", "base_ref", "base", "current"}, "review": {"verdict", "head", "reviewer", "record"},
-          "checks": {"head", "required", "results"}, "next_action": {"action", "because", "boundary"}}
-NESTED = {"graph.parent": {"id", "state"}, "graph.children[]": {"id", "state"}, "graph.blocked_by[]": {"id", "state"},
-          "authority.grants[]": {"decision", "target", "scopes"}, "authority.human_boundaries[]": {"decision", "target", "boundary"},
-          "acceptance.items[]": {"id", "state"}, "checks.results[]": {"name", "state"}}
-def exact(obj, keys, where):
-    if not isinstance(obj, dict): fail(f"{where} must be an object")
-    if set(obj) != keys: fail(f"{where} keys {sorted(obj)} != declared {sorted(keys)} (R14)")
-def shape(c, v):
-    exact(v, SHAPES[c], f"{c}.value")
-    for k, sub in NESTED.items():
-        cls, path = k.split(".", 1)
-        if cls != c: continue
-        if path.endswith("[]"):
-            items = v[path[:-2]]
-            if not isinstance(items, list): fail(f"{k} must be a list")
-            for it in items: exact(it, sub, k)
+# Shapes are READ from the authority, never restated here: the class value-shape column and the
+# envelope `shape` records share one grammar — {k: shape} exact object, [shape] list, a|b alternatives,
+# <kind> an identifier (pseudo-kinds: <text> one non-empty line, <locator> a canonical locator or
+# source identity, <source-type> a declared source type), bare word = literal (true/false = booleans).
+invalidator_rx = {r[1]: re.compile(r[2]) for r in rows if r[0] == "invalidator"}
+def parse_shape(text):
+    toks = re.findall(r"\{|\}|\[|\]|:|,|\||<[a-z-]+>|[A-Za-z_][A-Za-z0-9_]*", text)
+    if "".join(toks) != re.sub(r"\s+", "", text): raise ValueError(f"shape grammar: unparsed characters in {text!r}")
+    pos = [0]
+    def peek(): return toks[pos[0]] if pos[0] < len(toks) else None
+    def take(t=None):
+        tok = peek()
+        if tok is None or (t is not None and tok != t): raise ValueError(f"shape grammar: expected {t or 'a token'} at {pos[0]} in {text!r}")
+        pos[0] += 1; return tok
+    def union():
+        alts = [atom()]
+        while peek() == "|": take(); alts.append(atom())
+        return ("union", alts) if len(alts) > 1 else alts[0]
+    def atom():
+        t = peek()
+        if t == "{":
+            take(); fields = {}
+            while True:
+                k = take(); take(":"); fields[k] = union()
+                if peek() == ",": take(); continue
+                take("}"); break
+            return ("object", fields)
+        if t == "[":
+            take(); inner = union(); take("]"); return ("list", inner)
+        if t is not None and t.startswith("<"): take(); return ("ref", t[1:-1])
+        return ("lit", take())
+    out = union()
+    if pos[0] != len(toks): raise ValueError(f"shape grammar: trailing tokens in {text!r}")
+    return out
+SHAPES = {r[1]: parse_shape(r[3]) for r in rows if r[0] == "class"}
+ENVELOPE = {r[1]: parse_shape(r[2]) for r in rows if r[0] == "shape"}
+def describe(sh):
+    k = sh[0]
+    if k == "object": return "{" + ", ".join(f"{a}: {describe(b)}" for a, b in sh[1].items()) + "}"
+    if k == "list": return "[" + describe(sh[1]) + "]"
+    if k == "union": return "|".join(describe(a) for a in sh[1])
+    if k == "ref": return f"<{sh[1]}>"
+    return sh[1]
+def matches(sh, v, where):
+    k = sh[0]
+    if k == "object":
+        if not isinstance(v, dict): fail(f"{where} must be an object")
+        if set(v) != set(sh[1]): fail(f"{where} keys {sorted(v)} != declared {sorted(sh[1])} (R14)")
+        for a, b in sh[1].items(): matches(b, v[a], f"{where}.{a}")
+    elif k == "list":
+        if not isinstance(v, list): fail(f"{where} must be a list")
+        for i, it in enumerate(v): matches(sh[1], it, f"{where}[{i}]")
+    elif k == "union":
+        for alt in sh[1]:
+            try: matches(alt, v, where); return
+            except (ValueError, KeyError, TypeError): pass
+        fail(f"{where} = {v!r} matches none of {describe(sh)} (R14)")
+    elif k == "ref":
+        kind = sh[1]
+        if kind == "text":
+            if not isinstance(v, str) or not v.strip() or "\n" in v: fail(f"{where} must be one non-empty line")
+        elif kind == "locator":
+            if not isinstance(v, str) or not locator(v): fail(f"{where} = {v!r} is not a canonical locator")
+        elif kind == "source-type":
+            if v not in sources: fail(f"{where} = {v!r} is not a declared source type")
         else:
-            if v[path] != "none": exact(v[path], sub, k)
-    for k in ("required", "because", "human_boundaries"):
-        if k in v and not isinstance(v[k], list): fail(f"{c}.{k} must be a list")
+            if kind not in ids: fail(f"shape names undeclared identifier kind <{kind}>")
+            if not isinstance(v, str) or not ids[kind].match(v): fail(f"{where} = {v!r} is not a canonical <{kind}> (R1/R14)")
+    else:
+        lit = sh[1]
+        if lit == "true":
+            if v is not True: fail(f"{where} must be the literal true")
+        elif lit == "false":
+            if v is not False: fail(f"{where} must be the literal false")
+        elif v != lit: fail(f"{where} = {v!r} is not the literal {lit}")
+def shape(c, v): matches(SHAPES[c], v, f"{c}.value")
 version = [r[1] for r in rows if r[0] == "version"][0]
 LOCATOR_KINDS = ("repository", "work-unit", "comment", "milestone", "commit")
 def locator(x):
@@ -154,15 +257,9 @@ def check_fact(f):
     if f["status"] in ("UNKNOWN", "CONFLICT") and "detail" not in f: fail(f"{f['status']} without detail")
     if "detail" in f:
         if f["status"] not in ("UNKNOWN", "CONFLICT"): fail("detail is present only on UNKNOWN or CONFLICT")
-        d = f["detail"]
-        exact(d, {"reason", "candidates"}, "detail")
-        if not isinstance(d["reason"], str) or not d["reason"].strip() or "\n" in d["reason"]: fail("detail.reason must be one non-empty line")
-        if not isinstance(d["candidates"], list): fail("detail.candidates must be a list")
-        for cand in d["candidates"]:
-            if not isinstance(cand, str) or not locator(cand): fail(f"detail candidate is not a canonical locator: {cand!r}")
+        matches(ENVELOPE["detail"], f["detail"], "detail")
     src = f["source"]
-    if set(src) != {"type", "identity", "version"}: fail("source must be {type, identity, version}")
-    if src["type"] not in sources: fail(f"unknown source type {src['type']}")
+    matches(ENVELOPE["source"], src, "source")
     if not sid[src["type"]].match(str(src["identity"])): fail(f"source.identity {src['identity']!r} is not in the {src['type']} grammar (R14)")
     if not src["version"]: fail("source.version empty")
     if not sver[src["type"]].match(str(src["version"])): fail(f"source.version {src['version']!r} is not in the {src['type']} version grammar (R14)")
@@ -176,68 +273,45 @@ def check_fact(f):
     if f.get("inputs") is not None and any(not ids["fact-key"].match(i) for i in f["inputs"]): fail("inputs must be fact keys")
     if not ISO.match(f["observed_at"]): fail("observed_at not ISO-8601 Z")
     if not isinstance(f["invalidators"], list) or not f["invalidators"]: fail("invalidators must be a non-empty list")
-    if not f["provenance"]: fail("provenance empty")
-    if f["class"] in HEAD_BOUND and f["status"] == "ESTABLISHED":
-        bound = f["value"].get("head") if isinstance(f.get("value"), dict) else None
-        if not bound: fail(f"HEAD-bound class {f['class']} must carry its HEAD in the value (R7)")
-        if [i for i in f["invalidators"] if i.startswith("head:")] != [f"head:{bound}"]: fail(f"HEAD-bound class {f['class']} must list exactly its own HEAD as its one head: invalidator (R7)")
-    elif f["class"] in HEAD_BOUND and not any(i.startswith("head:") for i in f["invalidators"]): fail(f"HEAD-bound class {f['class']} without a head: invalidator")
+    for tok in f["invalidators"]:
+        if not isinstance(tok, str) or not any(rx.match(tok) for rx in invalidator_rx.values()): fail(f"invalidator {tok!r} is in no invalidator grammar (R16)")
+    if len(set(f["invalidators"])) != len(f["invalidators"]): fail("an invalidator appears twice (R16)")
+    if not isinstance(f["provenance"], str) or not ids["provenance"].match(f["provenance"]): fail(f"provenance {f['provenance']!r} is not a pointer in the provenance grammar (R16)")
+    if f["class"] in HEAD_BOUND:
+        heads = [i for i in f["invalidators"] if i.startswith("head:")]
+        if f["status"] == "ESTABLISHED":
+            bound = f["value"].get("head") if isinstance(f.get("value"), dict) else None
+            if not bound: fail(f"HEAD-bound class {f['class']} must carry its HEAD in the value (R7)")
+            if heads != [f"head:{bound}"]: fail(f"HEAD-bound class {f['class']} must list exactly its own HEAD as its one head: invalidator (R7)")
+        elif f["status"] in ("UNKNOWN", "CONFLICT"):
+            if len(heads) != 1: fail(f"{f['status']} in HEAD-bound class {f['class']} must list exactly one head: invalidator, the HEAD it was observed against (R7)")
+        else:
+            if heads: fail(f"NOT_APPLICABLE {f['class']} has no HEAD to be stale against and lists no head: invalidator (R7)")
     if f["status"] == "CONFLICT" and len(f["detail"].get("candidates", [])) < 2: fail("CONFLICT must name at least two candidates")
     v = f.get("value")
     if v is None: return
     c = f["class"]
     shape(c, v)
-    def wu(x):
-        if not ids["work-unit"].match(x): fail(f"work-unit id not canonical: {x}")
-    def sha(x):
-        if not ids["commit"].match(x): fail(f"commit not canonical: {x}")
-    if c == "work_unit": wu(v["id"]); v["kind"] in ("issue", "pull_request") or fail("bad kind")
-    if c == "repository": ids["repository"].match(v["id"]) or fail("repository id not canonical"); ids["ref"].match(v["default_branch"]) or fail("bad ref")
-    if c == "placement":
-        v["milestone"] == "none" or ids["milestone"].match(v["milestone"]) or fail("milestone id not canonical")
-        v["release"] == "none" or ids["release"].match(v["release"]) or fail("release not canonical")
-        v["gate"] == "none" or wu(v["gate"])
+    if c == "acceptance":
+        item_ids = [it["id"] for it in v["items"]]
+        if len(set(item_ids)) != len(item_ids): fail("acceptance item ids must be unique within the fact (R14)")
     if c == "graph":
-        def rel(x):
-            if not isinstance(x, dict) or set(x) != {"id", "state"}: fail("relationship must be {id, state}")
-            wu(x["id"]); ids["issue-state"].match(x["state"]) or fail(f"relationship state outside vocabulary: {x['state']}")
-        v["parent"] == "none" or rel(v["parent"])
-        for x in v["children"] + v["blocked_by"]: rel(x)
         for name in ("children", "blocked_by"):
             got = [x["id"] for x in v[name]]
             if len(set(got)) != len(got): fail(f"graph.{name} names a work unit twice (R14)")
     if c == "authority":
         for g in v["grants"]:
-            ids["decision-record"].match(g["decision"]) or fail("grant decision is not a durable decision record (R5)")
-            ids["repository"].match(g["target"]) or ids["work-unit"].match(g["target"]) or fail("grant target must be a canonical repository or work unit (R14)")
-            g["scopes"] and all(ids["scope"].match(s) for s in g["scopes"]) or fail("grant scopes must be non-empty closed tokens (R13)")
-        for b in v["human_boundaries"]:
-            ids["decision-record"].match(b["decision"]) or fail("boundary decision is not a durable decision record (R5)")
-            ids["repository"].match(b["target"]) or ids["work-unit"].match(b["target"]) or fail("boundary target must be a canonical repository or work unit (R14)")
-            ids["boundary"].match(b["boundary"]) or fail("boundary outside the closed vocabulary (R13)")
+            if not g["scopes"]: fail("grant scopes must be non-empty (R13)")
         if f["source"]["type"] != "human-decision": fail("authority must come from a human-decision source")
+        if "inferred" in f: fail("authority can never be inferred")
         for rec in v["grants"] + v["human_boundaries"]:
             if rec["decision"] != f["source"]["identity"]: fail(f"authority record names decision {rec['decision']} but the fact's source is {f['source']['identity']}: one authority fact carries one decision record (R5)")
-        if "inferred" in f: fail("authority can never be inferred")
-    if c == "acceptance":
-        wu(v["contract"]); sha(v["head"])
-        for it in v["items"]:
-            it["state"] in ("MET", "NOT_MET", "UNKNOWN") or fail("bad acceptance state")
-            if not isinstance(it["id"], str) or not ids["item-id"].match(it["id"]): fail(f"acceptance item id is not a scalar item-id: {it['id']!r} (R14)")
-        item_ids = [it["id"] for it in v["items"]]
-        if len(set(item_ids)) != len(item_ids): fail("acceptance item ids must be unique within the fact (R14)")
-    if c == "head": sha(v["head"]); sha(v["base"]); ids["ref"].match(v["base_ref"]) or fail("bad base_ref"); isinstance(v["current"], bool) or fail("current must be boolean")
-    if c == "review": ids["verdict"].match(v["verdict"]) or fail("verdict outside vocabulary"); sha(v["head"]); ids["login"].match(v["reviewer"]) or fail("reviewer not login:"); ids["comment"].match(v["record"]) or fail("record not a comment id")
     if c == "checks":
-        sha(v["head"]); isinstance(v["required"], list) or fail("required must be a list")
         names = [r["name"] for r in v["results"]]
         sorted(names) == sorted(v["required"]) or fail("checks results must cover every required check exactly once (R12)")
         len(set(names)) == len(names) or fail("duplicate check result (R12)")
-        all(ids["check-state"].match(r["state"]) for r in v["results"]) or fail("check state outside vocabulary (R12)")
     if c == "next_action":
-        ids["action"].match(v["action"]) or fail("action outside vocabulary")
         set(v["because"]) <= set(f.get("inputs", [])) or fail("because must be a subset of inputs")
-        v["boundary"] == "none" or ids["boundary"].match(v["boundary"]) or fail("next_action.boundary outside the closed boundary vocabulary")
         if v["boundary"] != "none" and v["action"] != "stop-decision-required": fail("only stop-decision-required rests on a reserved boundary (R15)")
 
 REQUIRED = {c for c, req in classes.items() if req == "required"}
@@ -325,11 +399,11 @@ if mode == "doc":
     for kind, facts in exs:
         for f in facts: check_fact(f); n += 1
         check_set(facts, kind == "complete snapshot")
-    kinds = {"UNKNOWN": 0, "CONFLICT": 0}
+    kinds = {"UNKNOWN": 0, "CONFLICT": 0, "NOT_APPLICABLE": 0}
     for _, facts in exs:
         for f in facts:
             if f["status"] in kinds: kinds[f["status"]] += 1
-    print(f"snapshots={len(exs)} complete={sum(1 for k,_ in exs if k=='complete snapshot')} facts={n} unknown={kinds['UNKNOWN']} conflict={kinds['CONFLICT']}")
+    print(f"snapshots={len(exs)} complete={sum(1 for k,_ in exs if k=='complete snapshot')} facts={n} unknown={kinds['UNKNOWN']} conflict={kinds['CONFLICT']} not_applicable={kinds['NOT_APPLICABLE']}")
 elif mode == "set":
     # snapshot-level control: stdin = {"complete": bool, "facts": [...]}
     d = json.load(sys.stdin)
@@ -343,8 +417,8 @@ else:
     except (ValueError, KeyError, TypeError) as e: print(f"rejected: {e}"); sys.exit(1)
 PY
 if out="$(python3 "$VAL" "$TSV" "$DOC" doc 2>&1)"; then ok; else bad "every example on the page validates: $out"; fi
-case "$out" in *"snapshots=7 complete=1 "*) ok ;; *) bad "seven examples parsed, one complete snapshot: $out" ;; esac
-case "$out" in *"unknown=1 conflict=1"*) ok ;; *) bad "examples include exactly one UNKNOWN and one CONFLICT fact: $out" ;; esac
+case "$out" in *"snapshots=8 complete=1 "*) ok ;; *) bad "eight examples parsed, one complete snapshot: $out" ;; esac
+case "$out" in *"unknown=1 conflict=1 not_applicable=2"*) ok ;; *) bad "examples include exactly one UNKNOWN, one CONFLICT and two NOT_APPLICABLE facts: $out" ;; esac
 
 # ======================== mutation controls: the validator discriminates ========================
 base='{"schema_version":"1","key":"review.independent","class":"review","status":"ESTABLISHED","value":{"verdict":"PASS","head":"0123456789abcdef0123456789abcdef01234567","reviewer":"login:github-actions[bot]","record":"github.com/acme/widgets#42/comment/9100"},"source":{"type":"github-api","identity":"github.com/acme/widgets#42/comment/9100","version":"2026-09-06T11:58:00Z"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["head:0123456789abcdef0123456789abcdef01234567"],"provenance":"https://github.com/acme/widgets/pull/42#issuecomment-9100"}'
@@ -380,6 +454,27 @@ accepts "$(printf '%s' "$derived" | python3 -c 'import json,sys; f=json.load(sys
 accepts "$(printf '%s' "$derived" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["source"]["version"]="1"; print(json.dumps(f))')" && bad "a derived version that omits its inputs' versions must be rejected (R4)" || ok
 accepts "$(printf '%s' "$derived" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["source"]["version"]="1;checks.required@x"; print(json.dumps(f))')" && bad "a derived version naming a key that is not an input must be rejected (R4)" || ok
 accepts "$(mut 'f["invalidators"]=["head:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]')" && bad "a review whose head: invalidator names a different HEAD than its value must be rejected (R7)" || ok
+accepts "$(mut 'f["invalidators"].append("the reviewer changes their mind")')" && bad "a prose invalidator must be rejected (R16)" || ok
+accepts "$(mut 'f["invalidators"].append({"kind":"head"})')" && bad "an object invalidator must be rejected (R16)" || ok
+accepts "$(mut 'f["invalidators"]=f["invalidators"]*2')" && bad "a repeated invalidator must be rejected (R16)" || ok
+accepts "$(mut 'f["invalidators"].append("head:0123456")')" && bad "an abbreviated head: invalidator must be rejected (R1/R16)" || ok
+accepts "$(mut 'f["provenance"]="the maintainer approved this in chat"')" && bad "prose provenance must be rejected (R16)" || ok
+accepts "$(mut 'f["provenance"]={"url":"https://github.com/acme/widgets/pull/42"}')" && bad "an object provenance must be rejected (R16)" || ok
+# R7 by status: UNKNOWN binds to the one HEAD it was observed against; NOT_APPLICABLE binds to none
+accepts "$(mut 'f["status"]="UNKNOWN"; del f["value"]; f["detail"]={"reason":"403","candidates":[]}')" && ok || bad "control: an UNKNOWN review observed against one HEAD is accepted (R7)"
+accepts "$(mut 'f["status"]="UNKNOWN"; del f["value"]; f["detail"]={"reason":"403","candidates":[]}; f["invalidators"]=["pull_request:github.com/acme/widgets#42"]')" && bad "an UNKNOWN HEAD-bound fact with no observed HEAD must be rejected (R7)" || ok
+accepts "$(mut 'f["status"]="UNKNOWN"; del f["value"]; f["detail"]={"reason":"403","candidates":[]}; f["invalidators"].append("head:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")')" && bad "an UNKNOWN HEAD-bound fact naming two HEADs is ambiguous and must be rejected (R7)" || ok
+accepts "$(mut 'f["status"]="NOT_APPLICABLE"; del f["value"]; f["invalidators"]=["issue:github.com/acme/widgets#41"]')" && ok || bad "control: a NOT_APPLICABLE review invalidated by its issue is accepted (R7)"
+accepts "$(mut 'f["status"]="NOT_APPLICABLE"; del f["value"]')" && bad "a NOT_APPLICABLE HEAD-bound fact naming a HEAD must be rejected — there is none to be stale against (R7)" || ok
+# the TSV is the schema authority: mutate the AUTHORITY and the same fact must fail — proof the validator reads shapes from it
+mtsv="$WORK/mutant.tsv"
+sed 's/^class\treview\trequired\t{verdict: <verdict>, head: <commit>, reviewer: <login>, record: <comment>}/class\treview\trequired\t{verdict: <verdict>, head: <commit>, reviewer: <login>, record: <comment>, rationale: <text>}/' "$TSV" > "$mtsv"
+grep -q 'rationale: <text>' "$mtsv" && ok || bad "control: the mutant authority carries the extra key"
+if printf '%s' "$base" | python3 "$VAL" "$mtsv" "$DOC" one >/dev/null 2>&1; then bad "the validator must read value shapes from the authority: a shape with an extra key rejects the old fact" ; else ok; fi
+sed 's/^class\treview\trequired\t{verdict: <verdict>, head: <commit>, reviewer: <login>, record: <comment>}/class\treview\trequired\t{verdict: <verdict>, head: <commit>, reviewer: <text>, record: <comment>}/' "$TSV" > "$mtsv"
+if printf '%s' "$base" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["value"]["reviewer"]="whoever ran the lane"; print(json.dumps(f))' | python3 "$VAL" "$mtsv" "$DOC" one >/dev/null 2>&1; then ok; else bad "control: loosening the authority's shape to <text> is honoured by the validator (it reads the TSV)"; fi
+sed 's/^identifier\tlogin\t[^\t]*\t/identifier\tlogin\t^login:[a-z]+$\t/' "$TSV" > "$mtsv"
+if printf '%s' "$base" | python3 "$VAL" "$mtsv" "$DOC" one >/dev/null 2>&1; then bad "the validator must read identifier grammars from the authority: a narrowed login grammar rejects github-actions[bot]"; else ok; fi
 accepts "$(mut 'f["source"]["version"]="latest"')" && bad "a github-api source version outside its grammar must be rejected (R14)" || ok
 # exact value shapes, recursively (R14): prose keys nested inside values
 accepts "$(mut 'f["value"]["conclusion"]="looks fine"')" && bad "an extra key in a review value must be rejected (R14)" || ok
