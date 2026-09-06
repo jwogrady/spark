@@ -213,7 +213,9 @@ behavioral suite checks the two never drift.
   exact shape {reason, candidates} with canonical locators as candidates;
   acceptance item ids are scalar item-ids, unique within the fact; a work unit
   appears at most once per graph list. Every envelope field has the type its
-  field record declares.
+  field record declares. Where a source identity embeds the version observed —
+  the commit in <repository>@<commit>, <repository>@<commit>:<path>, or the id
+  in a comment locator — source.version equals it.
 - **R15** next_action is derived, never asserted, and every fact its derivation
   consulted is in its inputs (so R4 re-versions it when any of them changes):
   merge only when the review is PASS on the current HEAD, every required check

@@ -58,6 +58,19 @@ while IFS=$'\t' read -r _ kind rx _; do
 done <<EOF
 $(rec source-identity)
 EOF
+# the validator is Python: every grammar the TSV declares must compile there as well as in grep -E, and a POSIX
+# class such as [[:space:]] (which Python reads as a character set) is rejected outright
+python3 - "$TSV" <<'PY' | while IFS= read -r line; do case "$line" in OK*) ok ;; *) bad "$line" ;; esac; done
+import re, sys
+for l in open(sys.argv[1]):
+    if l.startswith("#") or not l.strip(): continue
+    r = l.rstrip("\n").split("\t")
+    if r[0] in ("identifier", "source-identity", "source-version", "invalidator"):
+        try:
+            re.compile(r[2]); ok = "[[:" not in r[2]
+        except re.error: ok = False
+        print(("OK " if ok else "BAD ") + f"{r[0]} {r[1]} grammar compiles in Python without POSIX classes")
+PY
 for c in work_unit repository placement graph authority acceptance head review checks next_action; do
   rec class | cut -f2 | grep -qx "$c" && ok || bad "class $c declared"
 done
@@ -267,6 +280,12 @@ def check_fact(f):
     if not sid[src["type"]].match(str(src["identity"])): fail(f"source.identity {src['identity']!r} is not in the {src['type']} grammar (R14)")
     if not src["version"]: fail("source.version empty")
     if not sver[src["type"]].match(str(src["version"])): fail(f"source.version {src['version']!r} is not in the {src['type']} version grammar (R14)")
+    # where the identity embeds the observed version, the two must agree (R14)
+    if src["type"] in ("git", "repository-file", "human-decision"):
+        m = re.search(r"@([0-9a-f]{40})(?::|$)", src["identity"])
+        if m and src["version"] != m.group(1): fail(f"source.version {src['version']} must equal the commit its identity names, {m.group(1)} (R14)")
+        m = re.search(r"/comment/([1-9][0-9]*)$", src["identity"])
+        if m and src["version"] != m.group(1): fail(f"source.version {src['version']} must equal the comment id its identity names, {m.group(1)} (R14)")
     if src["type"] == "derived":
         if not f.get("inputs"): fail("derived fact without inputs")
         if not ids["derived-version"].match(src["version"]): fail("derived source.version is not a derived-version (R4)")
@@ -519,6 +538,16 @@ accepts "$(amut 'f["inferred"]=False')" && bad "inferred: false on authority mus
 accepts "$(amut 'f["source"]["identity"]="role:owner"')" && bad "a human-decision source whose identity is a role must be rejected (R5/R14)" || ok
 accepts "$(amut 'f["source"]["version"]="banana"')" && bad "a human-decision source version outside its grammar must be rejected (R14)" || ok
 accepts "$(amut 'f["source"]["identity"]="the maintainer approved this in chat"')" && bad "a human-decision source whose identity is a summary must be rejected (R5/R14)" || ok
+accepts "$(amut 'f["source"]["version"]="9002"')" && bad "a human-decision comment .../comment/9001 claiming version 9002 must be rejected (R14)" || ok
+# git and repository-file sources: the commit in the identity IS the version observed
+rf='{"schema_version":"1","key":"acceptance.contract","class":"acceptance","status":"ESTABLISHED","value":{"contract":"github.com/acme/widgets#41","head":"0123456789abcdef0123456789abcdef01234567","items":[{"id":"a1","state":"MET"}]},"source":{"type":"repository-file","identity":"github.com/acme/widgets@0123456789abcdef0123456789abcdef01234567:docs/acceptance/41.md","version":"0123456789abcdef0123456789abcdef01234567"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["head:0123456789abcdef0123456789abcdef01234567","ref:github.com/acme/widgets/master"],"provenance":"https://github.com/acme/widgets/blob/0123456789abcdef0123456789abcdef01234567/docs/acceptance/41.md"}'
+accepts "$rf" && ok || bad "control: a repository-file source with a path identity is accepted (the grammar is Python-compatible)"
+rmut() { printf '%s' "$rf" | python3 -c "import json,sys; f=json.load(sys.stdin); exec(sys.argv[1]); print(json.dumps(f))" "$1"; }
+accepts "$(rmut 'f["source"]["version"]="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"')" && bad "a repository-file read pinned to commit A claiming version B must be rejected (R14)" || ok
+accepts "$(rmut 'f["source"]["identity"]="github.com/acme/widgets@0123456789abcdef0123456789abcdef01234567:docs/with space.md"')" && bad "a repository-file path with whitespace is outside the grammar" || ok
+accepts "$(rmut 'f["source"]={"type":"git","identity":"github.com/acme/widgets@0123456789abcdef0123456789abcdef01234567","version":"0123456789abcdef0123456789abcdef01234567"}')" && ok || bad "control: a git source pinned to a commit with the same version is accepted"
+accepts "$(rmut 'f["source"]={"type":"git","identity":"github.com/acme/widgets@0123456789abcdef0123456789abcdef01234567","version":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}')" && bad "a git identity at commit A claiming version B must be rejected (R14)" || ok
+accepts "$(rmut 'f["source"]={"type":"git","identity":"github.com/acme/widgets@ref/master","version":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}')" && ok || bad "control: a git ref identity records the commit it pointed at as its version"
 accepts "$(amut 'del f["value"]["grants"][0]["target"]')" && bad "a grant without an applicability target must be rejected (R14)" || ok
 accepts "$(amut 'f["value"]["grants"][0]["target"]="this repository and its forks"')" && bad "a prose grant target must be rejected (R14)" || ok
 accepts "$(amut 'f["value"]["grants"][0]["decision"]="approved by the owner"')" && bad "a grant whose decision is not a durable record must be rejected (R5)" || ok
