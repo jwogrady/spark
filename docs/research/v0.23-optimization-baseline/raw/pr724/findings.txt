@@ -1,0 +1,112 @@
+## r1 e5a8c87 CHANGES REQUIRED
+  1.1 - `plugins/spark/bin/spark:30`: `git_root` reuses `$__SPARK_MEMO/gitroot` after the working directory changes. A command that calls it outside a repository, then `cd`s into one—or moves between repositories—receives the stale first result.
+  1.2 - `plugins/spark/bin/spark:289`: `resolve_prefs` likewise caches project preferences without keying them by repository root. Subsequent resolution after a directory/repository change can return preferences from the wrong project.
+  1.3 - `tests/test-hot-path-memo.sh:27`: tests cover repeated calls from only one repository, so they do not detect this regression. Add negative fixtures that use one memo scope across two repositories and from outside-to-inside a repository.
+## r2 e2ca402 CHANGES REQUIRED
+  2.1 - `plugins/spark/bin/spark:50` and `plugins/spark/bin/spark:330`: temporary files use `"$f.$$.tmp"`. Bash subshells inherit the same `$$`, so concurrent cache misses for the same key share one temporary file. One writer can rename it while another still has it
+  2.2 - `tests/test-hot-path-memo.sh:75-106`: context tests are sequential and do not exercise concurrent subshell cache misses.
+## r3 38f7188 CHANGES REQUIRED
+  3.1 - `tests/test-hot-path-memo.sh:121-129`: each worker normally computes and prints its own complete `rendered` value. The fixture does not synchronize a cache reader with an exposed file still being written, and the small preference payload makes that race unli
+  3.2 - Add a deterministic negative fixture. For example, shim/synchronize `mv`, log each writer’s source path, and assert concurrent misses use distinct temporary paths; the test should fail when temp names use inherited `$$`. Retain the completeness assertions as
+## r4 ff7a8ce CHANGES REQUIRED
+  4.1 - `tests/test-hot-path-memo.sh:49-68` counts only `awk`, `sed`, `grep`, `cut`, `tr`, `jq`, and `git`. Memoization introduces external `mktemp`, `cat`, `mv`, and `rm` invocations at `plugins/spark/bin/spark:30-55`, `plugins/spark/bin/spark:303-335`, and `plugin
+  4.2 - Instrument all relevant process creation—preferably with system-level tracing—or explicitly measure a complete tool set including newly introduced operations. Keep a discriminating memo-off negative control and assert the actual measured dimension. If the in
+## r5 a6dfde1 CHANGES REQUIRED
+  5.1 - `plugins/spark/bin/spark:8737-8741`: the `EXIT` trap evaluates mutable, exported `$__SPARK_MEMO` at process exit. If any handler or sourced in-process code changes that variable, `rm -rf` targets the replacement path. Capture and safely quote the exact `mkte
+  5.2 - Add a regression test that mutates/unsets `__SPARK_MEMO` after initialization and proves cleanup removes only the originally created directory.
+## r6 67743e4 CHANGES REQUIRED
+  6.1 - `tests/test-hot-path-memo.sh:178-196`: the test supplies an inherited `__SPARK_MEMO` before startup; the dispatcher overwrites it before installing the trap. It never mutates or unsets `__SPARK_MEMO` after initialization, so the behavioral assertions would n
+  6.2 - `docs/ops/execution-configuration-surface.md:94-102`: `false_positive_blocks` is marked `OBSERVED` even though its count is explicitly not mechanically derivable. Under the measurement contract, the metric must be `NOT ASSESSED`; the existence of a known exa
+## r7 cecbb5c CHANGES REQUIRED
+  7.1 - `docs/ops/execution-configuration-surface.md:61-62`: “State stays derived” contradicts the derive-first contract. `.spark/state.json` retains non-derivable judgments such as `next_action` and `blockers`; mechanically current facts are derived. State that con
+  7.2 - `docs/ops/execution-configuration-surface.md:79,139`: `output token / verbosity budget` conflates separate controls. Presentation style can be `UX ONLY`, while a maximum-output/token budget is a `PERFORMANCE CONTROL` when available; here it may instead be `U
+  7.3 - `docs/ops/execution-configuration-surface.md:143-144`: assigning cross-provider routing to “v0.25+ (#701/#714)” is unsupported and conflicts with the supplied governance evidence identifying #701 as the Versioned Blueprints gate. Remove that roadmap placemen
+## r8 4c805d6 CHANGES REQUIRED
+  8.1 - `docs/ops/execution-configuration-surface.md:155-169`: identical target repository and exit status do not establish equivalent outcomes. The document provides no output/correctness comparison showing that v0.22 and v0.23 performed the same required work, par
+  8.2 - `docs/ops/execution-configuration-surface.md:149-184`: the measurements are not reproducible or pointable as written. There is no harness/raw artifact, exact v0.23 commit, fixture identity, effective configuration, or relevant runtime/resource record. Add du
+  8.3 - `docs/ops/execution-configuration-surface.md:173-179`: governance latency is called a regression despite overlapping ranges, while the adjacent triage row treats overlap as `NOT ASSESSED`. Without stronger statistical or paired-run evidence, apply the same c
+## r9 4a7b366 CHANGES REQUIRED
+  9.1 - `plugins/spark/bin/spark:30-55`: `git_root` caches solely by `$PWD`. If a directory transitions from non-repository to repository during one command (for example via `git init`), or its repository association changes, subsequent calls return the stale cached
+  9.2 - `plugins/spark/bin/spark:303-335`: `resolve_prefs` similarly caches mutable default/operator/project preference files solely by `$PWD`. A preference file created or changed after the first resolution remains invisible for the rest of the process.
+  9.3 - `tests/test-hot-path-memo.sh:88-116`: context tests cover changing directories, but not repository or preference mutation while `$PWD` remains unchanged.
+## r10 0db6fa6 CHANGES REQUIRED
+  10.1 - `docs/ops/execution-configuration-surface.md:80`: “Presentation / verbosity style” remains classified `UX ONLY`. Verbosity can change generated output volume, latency, and token cost. Limit this row to formatting/presentation, or classify response-length ver
+  10.2 - `docs/ops/execution-configuration-surface.md:184-188` and `tests/test-hot-path-memo.sh:48-75`: exact process-count and latency figures are called a “rigorous” comparison, but the committed test only proves that a selected shimmed tool count decreases. It doe
+  10.3 - `plugins/spark/bin/spark:51,331`: comments say the cache hit path “stays fork-free,” but each hit executes external `cat`. Correct the comments to match the measured implementation.
+## r11 6cc4d1f CHANGES REQUIRED
+  11.1 - `tests/bench-memo.sh:68-94`: all memo-OFF timing runs execute before all memo-ON runs. This systematically gives ON the warmed filesystem/process environment and makes the documented 69 ms → 60 ms latency result vulnerable to order bias. Alternate or randomi
+  11.2 - `tests/test-hot-path-memo.sh:178-204`: cleanup is inferred by counting every `/tmp/tmp.*` directory globally. Unrelated concurrent creation/removal can hide a leak or create a false failure, and with `set -o pipefail`, an environment with no matching path ca
+## r12 e263f60 CHANGES REQUIRED
+  12.1 - `tests/bench-memo.sh:76-82,114-138`: the “ON” configuration only sets `SPARK_MEMO_BENCH=1`, which the implementation does not consume. It does not clear an inherited `SPARK_NO_MEMO`, so both sides can run with memoization disabled. Explicitly unset or empty 
+  12.2 - `tests/bench-memo.sh:76-101`: timed, counted, and traced commands do not validate exit status or output. With `set -uo pipefail` but no `errexit`, `one_run` records elapsed time and returns success via its final `echo` even if Spark failed. The harness can t
+  12.3 - `tests/test-hot-path-memo.sh:220-224`: the post-trap mutation probe suppresses any telemetry failure with `|| true` and never proves the appended module assignment executed. If telemetry exits before loading that module, both cleanup assertions can still pas
+## r13 ebea342 CHANGES REQUIRED
+  13.1 - `tests/bench-memo.sh:49-57`: fixture construction is unchecked while the script omits `errexit`. Failures from `mktemp`, `git init`, `git add`, or `git commit` can be ignored, after which the script may benchmark a directory that is not the claimed single-co
+  13.2 - `tests/bench-memo.sh:94-103,135-140`: equal outcomes are established using stdout only; stderr is discarded. Capture and compare the complete observable result—stdout, stderr, and status—for memo ON and OFF before reporting figures.
+  13.3 - `docs/ops/execution-configuration-surface.md:185-211`: the document publishes exact samples and medians without preserving the harness output that associates them with an exact commit and runtime. The script can print those facts on a future run, but they ar
+## r14 568d6d7 CHANGES REQUIRED
+  14.1 - `plugins/spark/bin/spark:8742-8758`: every allowlisted verb creates and later removes a scratch directory, even if it never calls `git_root` or `resolve_prefs`, or calls them only once. Commands such as `help` and `version` therefore risk gaining `mktemp`/`r
+  14.2 - `tests/bench-memo.sh:29-38,158-189`: `--runs` is not validated as a positive integer. Values such as `--runs 0` can produce empty sample sets and still publish blank medians. Reject zero, negative, and non-numeric values before setup or measurement.
+## r15 b1a44d4 CHANGES REQUIRED
+  15.1 - `plugins/spark/bin/spark:8748-8758` memoization is now enabled only for `brief`, `triage`, `governance`, `doctor`, `footprint`, and `labels`.
+  15.2 - `tests/test-hot-path-memo.sh:220-234` still invokes `spark telemetry` for the post-trap mutation probe. Because `telemetry` is ineligible, no memo directory or cleanup trap is installed. The appended module code can create its marker and mutate `__SPARK_MEMO
+## r16 c90da9e CHANGES REQUIRED
+  16.1 - `tests/bench-memo.sh:126-130`: the awk expression interpolates the shell function’s `$1` (`off` or `on`) into the program. It consequently tests whether `" off "`/`" on "` appears in the parser vocabulary instead of testing each input record’s tool name, nor
+## r17 9787cf1 CHANGES REQUIRED
+  17.1 - `tests/bench-memo.sh:27-38,103-106,143-154`: `--verb` accepts any command, but the ON configuration merely removes `SPARK_NO_MEMO`. The dispatcher enables memoization only for six allowlisted verbs (`plugins/spark/bin/spark:8748-8758`). For any other verb, b
+  17.2 - `plugins/spark/bin/spark:8759-8769`: even an eligible ON run silently falls back to unmemoized execution if its internal `mktemp` fails; the harness does not verify effective memo configuration before publishing results.
+## r18 62b7746 CHANGES REQUIRED
+  18.1 - `plugins/spark/bin/spark:8745-8760`: `SPARK_MEMO_FORCE` is an unrestricted production environment switch. It enables memoization for any verb, including mutating verbs explicitly excluded because they may run `git init` or modify preferences. An inherited or
+  18.2 - `tests/bench-memo.sh:99-111,199-239`: effective state is asserted only after the warmup/capture phase. Timed, counted, and traced runs reuse the state files but are never individually checked. If `mktemp` falls back during any measured ON invocation, the har
+  18.3 - `plugins/spark/bin/spark:8761-8780`: `__SPARK_MEMO_STATE` is not initialized to `off`; an inherited `__SPARK_MEMO_STATE=on` can make a failed `mktemp` fallback report ON. Reset the effective-state variable before eligibility/setup and test the fallback case.
+## r19 688a306 CHANGES REQUIRED
+  19.1 - `tests/bench-memo.sh:151-165`: `sf="$(state_args "$want")"` executes `state_args` in a command-substitution subshell. Its `run_state` increment never reaches the parent shell, so every OFF invocation reuses `state.off.1` and every ON invocation reuses `state
+## r20 9c6665d CHANGES REQUIRED
+  20.1 - `plugins/spark/bin/spark:34-52,306-338`: the encoded absolute `$PWD` becomes a single filename component. A valid path exceeding the filesystem’s component limit causes cache writes to fail with `File name too long`; because `> "$tmp"` is processed before `2
+  20.2 - `docs/ops/execution-configuration-surface.md:184-187` and `tests/test-hot-path-memo.sh:68-73`: the document says the test asserts byte-identical output, but command substitution strips trailing newlines before comparison. The benchmark uses file-based `cmp`,
+  20.3 - `docs/ops/execution-configuration-surface.md:227-229`: “if one is wanted it needs defining first” incorrectly makes the Lord’s Prayer fixture optional and undefined. Issue #722 explicitly requires and defines it. This incremental PR need not supply it, but t
+## r21 475ff72 CHANGES REQUIRED
+  21.1 - `plugins/spark/bin/spark:47,330` now invokes external `mkdir -p` on cache misses, but `tests/bench-memo.sh:78` and `tests/test-hot-path-memo.sh:54-63` omit `mkdir` from their tool shims. The benchmark and strict-reduction regression therefore undercount memo
+  21.2 - `plugins/spark/bin/spark:34-52,316-338` mirrors the entire `$PWD` below the memo directory. This avoids a single-component `NAME_MAX` failure but is not a bounded key: a valid repository path near the filesystem’s total path limit becomes too long once the m
+## r22 e5dcf55 CHANGES REQUIRED
+  22.1 - `plugins/spark/bin/spark:43-52`: cache ownership is serialized as a newline-delimited first record and checked using `lines[0] = "$PWD"`. Newlines are valid in directory names, so such a repository can never hit its cache; memo-enabled calls repeatedly incur
+  22.2 - `tests/test-hot-path-memo.sh:337-370`: the “total-path-limit” fixture adds only about 2,040 characters. On the tested Linux environment this is well below the usual 4,096-byte `PATH_MAX`, even after the temporary prefix, so it does not exercise the mirrored-
+  22.3 - `plugins/spark/bin/spark:64-67,373-378` and `docs/ops/execution-configuration-surface.md:211-214`: comments still say cache hits fork `cat` and that `cat` is an operation introduced by the memo, but reads now use the `mapfile` builtin. The dispatcher’s embed
+## r23 4253779 CHANGES REQUIRED
+  23.1 - `tests/test-hot-path-memo.sh:384-418`: the newline-path fixture does not provide the requested memo-off comparison for either `git_root` or `resolve_prefs`. Its `R1:`/`R2:` parsing truncates the root at the embedded newline, and `ENTRIES=1` cannot prove a ca
+  23.2 - `tests/bench-memo.sh:14-16` and `docs/ops/execution-configuration-surface.md:211-214`: both still claim `cat` is an operation introduced by the memo, although cache reads now use the `mapfile` builtin. Update these evidence statements to match the exact impl
+## r24 0ef7d36 CHANGES REQUIRED
+  24.1 - `plugins/spark/bin/spark:69-72`: `r="$(git rev-parse --show-toplevel ...)"` strips all trailing newlines. If the repository root itself ends with `\n`, this removes part of the path in addition to Git’s output delimiter. The previous direct implementation pr
+  24.2 - `tests/test-hot-path-memo.sh:384-449`: the fixture uses a newline in the middle of the directory name, so it misses the trailing-newline regression. Its aggregate `git`/`jq` fork reduction also cannot prove both `git_root` and `resolve_prefs` hit independent
+  24.3 - `tests/test-hot-path-memo.sh:327-346`: comments contradict the fixture’s actual evidence, first claiming the mirrored scheme is pushed past `PATH_MAX`, then acknowledging that this cannot be established on the filesystem under test. Describe only the bounded
+## r25 fb2accf CHANGES REQUIRED
+  25.1 - `tests/bench-memo.sh:18-20,210-218,266-270`: `strace -e trace=execve` counts executed program images, not all process creation. It omits `fork`/`clone` activity where Bash runs a subshell without `exec`, so it cannot be described as a “true total.”
+  25.2 - `plugins/spark/bin/spark:69,360`: memo-enabled calls add command-substitution subshells for `$(__spark_memo_key)`. These are absent when memoization is disabled and are invisible to both the fixed-tool shims and the `execve` count. Consequently, the current 
+  25.3 - `docs/ops/execution-configuration-surface.md:215-216`: the same inaccurate “true total via execve” claim is published as evidence guidance.
+## r26 1bb345c CHANGES REQUIRED
+  26.1 - `tests/bench-memo.sh:231-237`: the `procs` metric counts every matching syscall line, including failed `clone3` attempts followed by successful `clone` fallbacks. That is process-creation syscall attempts, not processes created. Count only successful calls o
+  26.2 - `tests/test-hot-path-memo.sh:44-82`: the shim count is still described as “TOTAL external process creation” and as covering a “complete tool set,” although it only counts a fixed vocabulary and cannot see shell-only or unlisted subprocesses. Align this regre
+## r27 02d88c7 CHANGES REQUIRED
+  27.1 - `tests/bench-memo.sh:18-25,210-238`: `procs` counts every successful `clone`/`clone3`/`fork`/`vfork` event. Successful clones with `CLONE_THREAD` create threads/tasks, not processes, so “process creation” is not mechanically established. Exclude thread clone
+  27.2 - `docs/ops/execution-configuration-surface.md:211-220`: the documentation repeats the unsupported “process creation” interpretation and must use the corrected metric vocabulary.
+  27.3 - PR body: it still calls `execve` “total process creation,” reports obsolete `47 → 39` figures, says cache hits add `cat`, and cites 17 assertions. Exact HEAD uses separate syscall metrics, `mapfile` hits, and a substantially expanded suite. Update the review
+## r28 143bd9c CHANGES REQUIRED
+  28.1 - `plugins/spark/bin/spark:370-381`: `resolve_prefs` captures `git_root` with `top="$(git_root)"`, which strips trailing newlines. A repository root ending in `\n` therefore loses part of its path and the project preference tier is not read. The trailing-newli
+  28.2 - `tests/bench-memo.sh:210-225`: `count_procs` treats every matching line without `= -1` as successful. Under `strace -f`, calls can be split into `<unfinished ...>` and `<... resumed> = RESULT`; the unfinished invocation is counted despite having no known res
+  28.3 - `tests/test-hot-path-memo.sh:327-331`: the long-path commentary still says the key “mirrors the path as directories,” contradicting the current bounded-digest implementation. Update it to describe only the implementation and property actually tested.
+## r29 7da4311 CHANGES REQUIRED
+  29.1 - `plugins/spark/bin/spark:370-381`: `top="$(git_root)"` in `resolve_prefs` strips trailing newlines from a valid repository root. For a repository name ending in `\n`, the project `.spark/preferences.json` path is therefore wrong and the project preference ti
+  29.2 - `tests/bench-memo.sh:210-238`: `count_procs` still counts `<unfinished ...>` clone/fork lines as successful because they contain neither `= -1` nor necessarily `CLONE_THREAD`; the corresponding `<... resumed>` result is ignored by the matching expression. A 
+  29.3 - `tests/test-hot-path-memo.sh:327-331`: the long-path commentary still says the key “mirrors the path as directories,” contradicting the current bounded-digest implementation. Update it to describe only the property actually tested.
+## r30 8718432 CHANGES REQUIRED
+  30.1 - `tests/bench-memo.sh:240-246`: `count_execs` counts every line containing `execve(`, including failed calls such as `execve(...) = -1 ENOENT`. Those calls did not execute a program image, contrary to the published definition. This is especially relevant with
+  30.2 - `tests/bench-memo.sh:13-19`: the header still initially describes shimmed tool invocations as “process creation,” although the same section later correctly calls them a lower bound and the output labels them `tools`. Describe them consistently as selected to
+  30.3 - `docs/ops/execution-configuration-surface.md:211-220` and the PR body repeat the “program images executed” definition, so they must be reconciled with the corrected metric.
+## r31 fba8de3 CHANGES REQUIRED
+  31.1 - `tests/bench-memo.sh:210-246`: `count_procs` and `count_execs` classify every completed record not containing literal `= -1` as successful. Strace can emit indeterminate/restart results such as `= ? ERESTART*`; those did not establish a created process or ex
+  31.2 - PR body: it still reports `tests/test-hot-path-memo.sh` as **56 assertions**, while the current exact-HEAD suite has expanded to 60. Update the durable review description to match this HEAD.
+## r32 cdc04a5 PASS
+  32.1 - `tests/bench-memo.sh:210-246` now positively recognizes successful syscalls (`execve = 0`, process creation returning a positive PID), excluding failed, unfinished, thread, and indeterminate/restart records.
+  32.2 - `tests/bench-memo.sh:295-354` includes discriminating successful, failed, split, unknown/restart, and zero-result controls.
+  32.3 - `plugins/spark/bin/spark:24-113,353-415` preserves path/result bytes, validates cache ownership, and publishes entries atomically.
+  32.4 - Exact-HEAD tests, gate, doctor, and documentation checks are successful.

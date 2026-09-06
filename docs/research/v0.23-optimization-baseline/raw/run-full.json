@@ -1,0 +1,1 @@
+{"kind":"full","executions":1,"suites":91,"suites_failed":0,"assertions_passed":3799,"assertions_failed":0,"seconds":161,"slowest":[{"suite":"test-latency.sh","seconds":14},{"suite":"test-course-derivation.sh","seconds":11},{"suite":"test-hub.sh","seconds":10},{"suite":"test-governance-integration.sh","seconds":8},{"suite":"test-governance-schema.sh","seconds":6}]}

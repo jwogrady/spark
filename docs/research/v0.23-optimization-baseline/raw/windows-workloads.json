@@ -1,0 +1,26 @@
+[
+ {
+  "name": "other-pre (Sep 4-5 docs work, not a measured workload)",
+  "group": "other",
+  "start": "2026-09-04T00:00:00Z",
+  "end": "2026-09-05T15:00:00Z"
+ },
+ {
+  "name": "B: PR #724 (#722 memoization) \u2014 32 verdicts \u2192 PASS, merged",
+  "group": "B",
+  "start": "2026-09-05T15:00:00Z",
+  "end": "2026-09-05T22:35:55Z"
+ },
+ {
+  "name": "A: PR #727 (#726 merge authority) \u2014 16 verdicts, all CHANGES REQUIRED",
+  "group": "A",
+  "start": "2026-09-05T22:35:55Z",
+  "end": "2026-09-06T16:00:38Z"
+ },
+ {
+  "name": "other-post (hierarchy metadata task)",
+  "group": "other",
+  "start": "2026-09-06T16:00:38Z",
+  "end": "2026-09-06T16:30:00Z"
+ }
+]

@@ -1,0 +1,296 @@
+[
+ {
+  "name": "B r1 e5a8c87 CHANGES REQUIRED",
+  "group": "B",
+  "start": "2026-09-05T15:00:00Z",
+  "end": "2026-09-05T17:22:07Z"
+ },
+ {
+  "name": "B r2 e2ca402 CHANGES REQUIRED",
+  "group": "B",
+  "start": "2026-09-05T17:22:07Z",
+  "end": "2026-09-05T17:32:24Z"
+ },
+ {
+  "name": "B r3 38f7188 CHANGES REQUIRED",
+  "group": "B",
+  "start": "2026-09-05T17:32:24Z",
+  "end": "2026-09-05T17:41:44Z"
+ },
+ {
+  "name": "B r4 ff7a8ce CHANGES REQUIRED",
+  "group": "B",
+  "start": "2026-09-05T17:41:44Z",
+  "end": "2026-09-05T17:51:06Z"
+ },
+ {
+  "name": "B r5 a6dfde1 CHANGES REQUIRED",
+  "group": "B",
+  "start": "2026-09-05T17:51:06Z",
+  "end": "2026-09-05T17:59:53Z"
+ },
+ {
+  "name": "B r6 67743e4 CHANGES REQUIRED",
+  "group": "B",
+  "start": "2026-09-05T17:59:53Z",
+  "end": "2026-09-05T18:13:12Z"
+ },
+ {
+  "name": "B r7 cecbb5c CHANGES REQUIRED",
+  "group": "B",
+  "start": "2026-09-05T18:13:12Z",
+  "end": "2026-09-05T18:22:40Z"
+ },
+ {
+  "name": "B r8 4c805d6 CHANGES REQUIRED",
+  "group": "B",
+  "start": "2026-09-05T18:22:40Z",
+  "end": "2026-09-05T18:33:41Z"
+ },
+ {
+  "name": "B r9 4a7b366 CHANGES REQUIRED",
+  "group": "B",
+  "start": "2026-09-05T18:33:41Z",
+  "end": "2026-09-05T18:42:38Z"
+ },
+ {
+  "name": "B r10 0db6fa6 CHANGES REQUIRED",
+  "group": "B",
+  "start": "2026-09-05T18:42:38Z",
+  "end": "2026-09-05T18:54:07Z"
+ },
+ {
+  "name": "B r11 6cc4d1f CHANGES REQUIRED",
+  "group": "B",
+  "start": "2026-09-05T18:54:07Z",
+  "end": "2026-09-05T19:03:19Z"
+ },
+ {
+  "name": "B r12 e263f60 CHANGES REQUIRED",
+  "group": "B",
+  "start": "2026-09-05T19:03:19Z",
+  "end": "2026-09-05T19:13:21Z"
+ },
+ {
+  "name": "B r13 ebea342 CHANGES REQUIRED",
+  "group": "B",
+  "start": "2026-09-05T19:13:21Z",
+  "end": "2026-09-05T19:22:17Z"
+ },
+ {
+  "name": "B r14 568d6d7 CHANGES REQUIRED",
+  "group": "B",
+  "start": "2026-09-05T19:22:17Z",
+  "end": "2026-09-05T19:31:28Z"
+ },
+ {
+  "name": "B r15 b1a44d4 CHANGES REQUIRED",
+  "group": "B",
+  "start": "2026-09-05T19:31:28Z",
+  "end": "2026-09-05T19:41:13Z"
+ },
+ {
+  "name": "B r16 c90da9e CHANGES REQUIRED",
+  "group": "B",
+  "start": "2026-09-05T19:41:13Z",
+  "end": "2026-09-05T19:50:14Z"
+ },
+ {
+  "name": "B r17 9787cf1 CHANGES REQUIRED",
+  "group": "B",
+  "start": "2026-09-05T19:50:14Z",
+  "end": "2026-09-05T19:58:32Z"
+ },
+ {
+  "name": "B r18 62b7746 CHANGES REQUIRED",
+  "group": "B",
+  "start": "2026-09-05T19:58:32Z",
+  "end": "2026-09-05T20:06:50Z"
+ },
+ {
+  "name": "B r19 688a306 CHANGES REQUIRED",
+  "group": "B",
+  "start": "2026-09-05T20:06:50Z",
+  "end": "2026-09-05T20:16:03Z"
+ },
+ {
+  "name": "B r20 9c6665d CHANGES REQUIRED",
+  "group": "B",
+  "start": "2026-09-05T20:16:03Z",
+  "end": "2026-09-05T20:24:12Z"
+ },
+ {
+  "name": "B r21 475ff72 CHANGES REQUIRED",
+  "group": "B",
+  "start": "2026-09-05T20:24:12Z",
+  "end": "2026-09-05T20:34:22Z"
+ },
+ {
+  "name": "B r22 e5dcf55 CHANGES REQUIRED",
+  "group": "B",
+  "start": "2026-09-05T20:34:22Z",
+  "end": "2026-09-05T20:44:37Z"
+ },
+ {
+  "name": "B r23 4253779 CHANGES REQUIRED",
+  "group": "B",
+  "start": "2026-09-05T20:44:37Z",
+  "end": "2026-09-05T20:54:38Z"
+ },
+ {
+  "name": "B r24 0ef7d36 CHANGES REQUIRED",
+  "group": "B",
+  "start": "2026-09-05T20:54:38Z",
+  "end": "2026-09-05T21:05:08Z"
+ },
+ {
+  "name": "B r25 fb2accf CHANGES REQUIRED",
+  "group": "B",
+  "start": "2026-09-05T21:05:08Z",
+  "end": "2026-09-05T21:15:25Z"
+ },
+ {
+  "name": "B r26 1bb345c CHANGES REQUIRED",
+  "group": "B",
+  "start": "2026-09-05T21:15:25Z",
+  "end": "2026-09-05T21:25:57Z"
+ },
+ {
+  "name": "B r27 02d88c7 CHANGES REQUIRED",
+  "group": "B",
+  "start": "2026-09-05T21:25:57Z",
+  "end": "2026-09-05T21:34:52Z"
+ },
+ {
+  "name": "B r28 143bd9c CHANGES REQUIRED",
+  "group": "B",
+  "start": "2026-09-05T21:34:52Z",
+  "end": "2026-09-05T21:41:15Z"
+ },
+ {
+  "name": "B r29 7da4311 CHANGES REQUIRED",
+  "group": "B",
+  "start": "2026-09-05T21:41:15Z",
+  "end": "2026-09-05T21:50:11Z"
+ },
+ {
+  "name": "B r30 8718432 CHANGES REQUIRED",
+  "group": "B",
+  "start": "2026-09-05T21:50:11Z",
+  "end": "2026-09-05T22:01:43Z"
+ },
+ {
+  "name": "B r31 fba8de3 CHANGES REQUIRED",
+  "group": "B",
+  "start": "2026-09-05T22:01:43Z",
+  "end": "2026-09-05T22:15:28Z"
+ },
+ {
+  "name": "B r32 cdc04a5 PASS",
+  "group": "B",
+  "start": "2026-09-05T22:15:28Z",
+  "end": "2026-09-05T22:23:28Z"
+ },
+ {
+  "name": "B post-PASS \u2192 merge",
+  "group": "B",
+  "start": "2026-09-05T22:23:28Z",
+  "end": "2026-09-05T22:35:55Z"
+ },
+ {
+  "name": "A r1 f8c825d CHANGES REQUIRED",
+  "group": "A",
+  "start": "2026-09-05T22:35:55Z",
+  "end": "2026-09-05T22:55:35Z"
+ },
+ {
+  "name": "A r2 073fbd7 CHANGES REQUIRED",
+  "group": "A",
+  "start": "2026-09-05T22:55:35Z",
+  "end": "2026-09-05T23:00:52Z"
+ },
+ {
+  "name": "A r3 3735edd CHANGES REQUIRED",
+  "group": "A",
+  "start": "2026-09-05T23:00:52Z",
+  "end": "2026-09-05T23:05:26Z"
+ },
+ {
+  "name": "A r4 c1ed999 CHANGES REQUIRED",
+  "group": "A",
+  "start": "2026-09-05T23:05:26Z",
+  "end": "2026-09-05T23:15:24Z"
+ },
+ {
+  "name": "A r5 2abdd5e CHANGES REQUIRED",
+  "group": "A",
+  "start": "2026-09-05T23:15:24Z",
+  "end": "2026-09-05T23:22:50Z"
+ },
+ {
+  "name": "A r6 bc1f5ff CHANGES REQUIRED",
+  "group": "A",
+  "start": "2026-09-05T23:22:50Z",
+  "end": "2026-09-05T23:32:11Z"
+ },
+ {
+  "name": "A r7 a1f6174 CHANGES REQUIRED",
+  "group": "A",
+  "start": "2026-09-05T23:32:11Z",
+  "end": "2026-09-05T23:54:10Z"
+ },
+ {
+  "name": "A r8 eedd339 CHANGES REQUIRED",
+  "group": "A",
+  "start": "2026-09-05T23:54:10Z",
+  "end": "2026-09-06T00:19:46Z"
+ },
+ {
+  "name": "A r9 6e9206e CHANGES REQUIRED",
+  "group": "A",
+  "start": "2026-09-06T00:19:46Z",
+  "end": "2026-09-06T00:32:58Z"
+ },
+ {
+  "name": "A r10 cd3eafd CHANGES REQUIRED",
+  "group": "A",
+  "start": "2026-09-06T00:32:58Z",
+  "end": "2026-09-06T14:43:21Z"
+ },
+ {
+  "name": "A r11 549a709 CHANGES REQUIRED",
+  "group": "A",
+  "start": "2026-09-06T14:43:21Z",
+  "end": "2026-09-06T15:03:27Z"
+ },
+ {
+  "name": "A r12 f4ebacc CHANGES REQUIRED",
+  "group": "A",
+  "start": "2026-09-06T15:03:27Z",
+  "end": "2026-09-06T15:14:06Z"
+ },
+ {
+  "name": "A r13 d47d0e8 CHANGES REQUIRED",
+  "group": "A",
+  "start": "2026-09-06T15:14:06Z",
+  "end": "2026-09-06T15:27:53Z"
+ },
+ {
+  "name": "A r14 ee6cf2a CHANGES REQUIRED",
+  "group": "A",
+  "start": "2026-09-06T15:27:53Z",
+  "end": "2026-09-06T15:35:45Z"
+ },
+ {
+  "name": "A r15 34b136b CHANGES REQUIRED",
+  "group": "A",
+  "start": "2026-09-06T15:35:45Z",
+  "end": "2026-09-06T15:50:10Z"
+ },
+ {
+  "name": "A r16 e3ced28 CHANGES REQUIRED",
+  "group": "A",
+  "start": "2026-09-06T15:50:10Z",
+  "end": "2026-09-06T16:00:38Z"
+ }
+]
