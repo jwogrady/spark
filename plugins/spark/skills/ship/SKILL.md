@@ -90,9 +90,9 @@ and the changelog-records-product-not-process rule:
 - **Never cut a tag or GitHub Release without explicit user go-ahead.**
 - Do **not** merge, close, or comment on PRs/issues without explicit instruction
   — one encoded exception: a pre-authorized bounded increment may merge when
-  `spark merge-authority` returns `ROUTINE MERGE` for the exact current HEAD.
-  Fail closed; never close the parent; never a release
-  ([bounded-merge.md](references/bounded-merge.md)).
+  `spark merge-authority --pr <n>` returns `ROUTINE MERGE`. It derives every fact
+  from GitHub: name the PR, never assert the outcome. Fail closed; never close
+  the parent; never a release ([bounded-merge.md](references/bounded-merge.md)).
 
 ## Next
 

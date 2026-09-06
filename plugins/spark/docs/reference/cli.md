@@ -590,7 +590,7 @@ $ spark crossroad new-authority "a write-capable deploy key" "AGENTS.md guardrai
 DECISION REQUIRED                           # exit 3
 ```
 
-## `spark merge-authority <field=value>...`
+## `spark merge-authority --pr <number>`
 
 Classify whether a **bounded increment** may merge routinely beneath a **broader
 owning issue**. A broad outcome issue can durably authorize a small work unit
@@ -598,25 +598,16 @@ whose own acceptance completes long before the parent's does; without a model
 for that, every routine increment beneath a deliberately-incomplete parent needs
 a human stop, which is ceremony rather than governance.
 
-This is the mirror image of [`crossroad`](#spark-crossroad-kind-authority-surface),
-and the inversion is deliberate. `crossroad` fails toward `CONTINUE` because its
-defect was a *false stop*. `merge-authority` fails toward `NOT ELIGIBLE` because
-its defect would be *manufactured authority*. **Eligibility is never inferred
-from the absence of a disqualifier** — every condition must be affirmed
-positively with its exact token. Absence, whitespace, an unknown field, an
-unrecognised value, `UNKNOWN` and `NOT ASSESSED` all decline.
+**The caller supplies identity, not truth.** `--pr` names *which* pull request;
+every fact that decides the verdict is read from GitHub. This is the whole
+architecture, and it was learned the expensive way — earlier revisions accepted
+`review=pass`, `checks=green` and `stale-head=protected` as caller tokens, so
+anyone holding one valid grant could self-assert every remaining gate.
 
-| Field | Affirming value |
-| --- | --- |
-| `parent-authorizes` | the owning issue as a canonical reference — `#123` or `owner/repo#123` |
-| `authorization-record` | the **comment on that issue** granting this: `#123#issuecomment-456`, or the matching `https://github.com/owner/repo/issues/123#issuecomment-456` |
-| `child` | the bounded unit's machine identity — `#124` or `owner/repo#124` |
-| `acceptance-id` | the canonical acceptance identifier the record binds |
-| `review` | `pass` — independent, exact-HEAD, current |
-| `checks` | `green` — same exact HEAD |
-| `stale-head` | `protected` |
-| `scope` | `routine-reversible` |
-| `reserved-boundary` + `surface` | optional, **both or neither**; a named and cited human boundary routes to `DECISION REQUIRED` |
+```
+spark merge-authority --pr <number> [--repo owner/repo]
+                      [--reserved-boundary <authority> --surface <surface>]
+```
 
 | Verdict | Exit |
 | --- | --- |
@@ -627,57 +618,80 @@ unrecognised value, `UNKNOWN` and `NOT ASSESSED` all decline.
 Because `0` means `ROUTINE MERGE`, **no other path exits `0`**: a bare
 invocation returns `4`, and `--help` is the single explicit success path.
 
-### Shape is not authorization
+### Derived, never asserted
 
-A well-formed citation proves nothing on its own, so the cited comment is
-**read back from GitHub** and must carry exactly one structured record:
+| Fact | Source |
+| --- | --- |
+| repository | the bound repository, or `--repo` |
+| exact HEAD, state, draft, base, head branch | the pull request |
+| the bounded work unit | the issue the PR **closes** — governance already makes a linked PR plus a closing keyword the authoritative linkage |
+| the owning issue | the work unit's **native parent** (sub-issue relationship) |
+| the authorization | a durable grant comment on that parent |
+| the acceptance identity | whatever that grant binds |
+| acceptance is *true* | a durable attestation bound to this exact commit |
+| independent review | the exact-HEAD `spark-openai-review … verdict=PASS` marker from `github-actions[bot]` |
+| checks | the check runs for that exact commit |
+| routine/reversible scope | PR state, base branch, head branch and changed paths |
+| stale-head protection | the head re-read **after** everything above |
+
+Exactly one issue must be closed and exactly one grant must exist: two of either
+is ambiguous about what was authorized, and ambiguity declines.
+
+### The two durable records
+
+The parent carries the **grant** — what was authorized — written by an `OWNER`,
+`MEMBER` or `COLLABORATOR`:
 
 ```
 spark-authorizes child=#124 acceptance=<canonical-acceptance-id>
 ```
 
-The read-back must show the comment really belongs to the authorizing issue,
-that the record names **this** child, and that it binds **this** acceptance
-identifier. Prose that mentions the child is a coincidence of words, not a
-grant. Two records are ambiguous about what was granted. A comment carrying a
-reviewer or relay marker is machinery reporting to machinery. **Unreadable,
-missing, ambiguous, malformed, mismatched or unrelated evidence all decline** —
-evidence that cannot be opened is never resolved in favour of merging.
+The PR carries the **proof** that the authorized acceptance is now true, bound
+to the exact commit, and likewise written by someone who can govern the
+repository:
 
-A bare issue reference or bare issue URL is never an authorization record: it
-says "somewhere on this issue", which cannot be read back without guessing.
-There is deliberately no `sub-issue:` form either — a hierarchy assertion is a
-claim this verb cannot verify, and native hierarchy can become authority
-evidence only through trusted read-back, never by caller assertion.
+```
+<!-- spark-acceptance pr=<n> child=#124 head=<40-hex> contract=<id> verdict=MET -->
+```
 
-Identities are canonical: no zero, no leading zeros. `#0585` is issue 585 once
-parsed, so accepting the padded spelling would let it walk past a refusal the
-bare form triggers. `#1585` is a different issue and still authorizes.
+Both imitate the reviewer lane's marker grammar, and `head`/`contract` are the
+invalidator names [`spark evidence`](#spark-evidence-put-get-preflight-status-forget)
+already uses — evidence bound to a commit stops being fresh when it moves. Only
+`MET` affirms. The grant says what was authorized; the proof says it is
+satisfied. Neither substitutes for the other, and prose is neither.
 
-### Nothing the caller supplies may impersonate the verdict
+### Everything unproven declines
 
-Values reach the verdict text, so a newline in one could forge a
+Missing, malformed, duplicate, unreadable, stale, wrong-repository,
+wrong-child, wrong-acceptance and wrong-HEAD records all yield `NOT ELIGIBLE`.
+A PASS for one commit says nothing about another. A check that has not finished
+is not a passing check. `UNKNOWN` is never promoted to `PASS`.
+
+Identity comparison is by **full canonical identity**: `other/repo#724` never
+satisfies `jwogrady/spark#724`. Identifiers are canonical — no zero, no leading
+zeros — so `#0585` cannot alias past a refusal that `#585` triggers, while
+`#1585` remains a different issue that authorizes normally.
+
+Nothing a caller supplies may impersonate the verdict: control-bearing input is
+refused before a byte is emitted, because a newline once forged a
 `parent outcome: CLOSED and fully satisfied` line above the real disclaimer, at
-exit 0, in the classifier's own voice. **Control-bearing input is refused before
-a single byte is emitted**, and only canonical validated identities are echoed
-back. The machine contract remains "exit status plus the first line", but the
-implementation does not rely on every caller remembering that to stay safe.
+exit 0, in the classifier's own voice.
+
+### What it never does
 
 A `ROUTINE MERGE` **never closes, satisfies or implies the parent outcome** —
 every verdict says so. The parent stays open until its own acceptance is
-independently true, and release approval remains human-owned. `#585`,
-relay/orchestrator handoffs, reviewer `PASS` and comment consensus are refused
-by name: a reviewer PASS is evidence, not permission.
+independently true, and release approval remains human-owned. Release PRs, CI
+and enforcement-settings changes, drafts, non-trunk bases and unreadable state
+are outside routine bounded merge authority, and a named **and** cited reserved
+boundary routes to `DECISION REQUIRED` before any state is read.
 
 ```
-$ spark merge-authority parent-authorizes="#722" \
-    authorization-record="#722#issuecomment-456" \
-    child="#724" acceptance-id="memo-transparency-v1" \
-    review=pass checks=green stale-head=protected scope=routine-reversible
+$ spark merge-authority --pr 727
 ROUTINE MERGE                               # exit 0
-$ spark merge-authority ... acceptance-id=UNKNOWN
+$ spark merge-authority --pr 727            # PASS only for an older commit
 NOT ELIGIBLE                                # exit 4
-$ spark merge-authority ... reserved-boundary="release approval" surface="ADR-0019"
+$ spark merge-authority --pr 727 --reserved-boundary "release approval" --surface "ADR-0026"
 DECISION REQUIRED                           # exit 3
 ```
 

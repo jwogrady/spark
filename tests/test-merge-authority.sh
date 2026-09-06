@@ -9,16 +9,12 @@
 # increment beneath a broad outcome hit a human stop. That is ceremony.
 #
 # The correction must not swing into the opposite defect. xr_stop_check (#690)
-# fails toward CONTINUE because ITS defect was a false stop; this classifier
-# fails toward NOT ELIGIBLE because its defect would be manufactured merge
-# authority. So these fixtures spend most of their weight on what must NOT
-# merge, on proving a child merge never closes its parent, and on the two rules
-# successive reviews had to force into the implementation:
-#
-#   SHAPE IS NOT AUTHORIZATION — a well-formed citation proves nothing, so the
-#   record is read back from GitHub and must grant this exact unit.
-#   UNTRUSTED INPUT MUST NOT IMPERSONATE TRUSTED OUTPUT — a newline in a value
-#   forged a "parent outcome: CLOSED" line at exit 0, in the classifier's voice.
+# fails toward CONTINUE because ITS defect was a false stop; this fails toward
+# NOT ELIGIBLE because its defect would be MANUFACTURED MERGE AUTHORITY. So the
+# weight here is on what must NOT merge, and on the rule successive reviews had
+# to force in: THE CALLER SUPPLIES IDENTITY, NOT TRUTH. `review=pass`,
+# `checks=green` and `stale-head=protected` were once caller tokens, so one
+# valid grant let a caller self-assert every remaining gate.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -33,203 +29,313 @@ echo "Bounded-increment merge authority (#726)"
 
 bash -n "$here/../plugins/spark/lib/execution.sh" && ok || bad "bash -n execution.sh"
 
-# The classifier performs a TRUSTED READ-BACK through `gh`. These fixtures stub
-# `gh` on PATH rather than adding a production override switch — an env var that
-# could substitute the evidence would be a merge-authority bypass shipped for
-# the convenience of its own tests.
+# `gh` is stubbed ON PATH. There is deliberately no production env override that
+# could substitute the evidence: a switch like that would be a merge-authority
+# bypass shipped for the convenience of its own tests. The stub dispatches on
+# the request so each fact can be failed or falsified independently.
 STUB="$(mktemp -d)"
 trap 'rm -rf "$STUB"' EXIT
 mkdir -p "$STUB/bin"
 cat > "$STUB/bin/gh" <<'EOS'
 #!/usr/bin/env bash
-[ -n "${GH_FAIL:-}" ] && exit 1
-printf '%s' "${GH_REPLY:-}"
+sub="${1:-}"; shift || true
+path=""; jq=""; json=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --jq)   jq="$2"; shift 2 ;;
+    --json) json="$2"; shift 2 ;;
+    --repo) shift 2 ;;
+    -*)     shift ;;
+    *)      [ -z "$path" ] && path="$1"; shift ;;
+  esac
+done
+[ "${GH_FAIL:-}" = all ] && exit 1
+case "$sub" in
+  repo) [ "${GH_FAIL:-}" = slug ] && exit 1; printf '%s' "${GH_SLUG:-}"; exit 0 ;;
+  pr)   [ "${GH_FAIL:-}" = closing ] && exit 1; printf '%s' "${GH_CLOSING:-}"; exit 0 ;;
+esac
+case "$jq" in
+  ".default_branch")     [ "${GH_FAIL:-}" = defbranch ] && exit 1; printf '%s' "${GH_DEFBRANCH:-}" ;;
+  ".head.sha")           [ "${GH_FAIL:-}" = head ] && exit 1; printf '%s' "${GH_HEAD:-}" ;;
+  ".head.sha, .state"*)  [ "${GH_FAIL:-}" = pr ] && exit 1; printf '%s' "${GH_PR:-}" ;;
+  ".[].filename")        [ "${GH_FAIL:-}" = files ] && exit 1; printf '%s' "${GH_FILES:-}" ;;
+  *check_runs*)          [ "${GH_FAIL:-}" = checks ] && exit 1; printf '%s' "${GH_CHECKS:-}" ;;
+  ".parent_issue_url"*)  [ "${GH_FAIL:-}" = parent ] && exit 1; printf '%s' "${GH_PARENT:-}" ;;
+  *author_association*)
+      [ "${GH_FAIL:-}" = comments ] && exit 1
+      case "$path" in
+        *"/issues/${GH_PARENT_NUM:-0}/comments"*) printf '%s' "${GH_PARENT_COMMENTS:-}" ;;
+        *) printf '%s' "${GH_PR_COMMENTS:-}" ;;
+      esac ;;
+  *) exit 1 ;;
+esac
 exit 0
 EOS
 chmod +x "$STUB/bin/gh"
 export PATH="$STUB/bin:$PATH"
-export GH_REPLY GH_FAIL
-GH_FAIL=""
+export GH_SLUG GH_CLOSING GH_DEFBRANCH GH_HEAD GH_PR GH_FILES GH_CHECKS \
+       GH_PARENT GH_PARENT_NUM GH_PARENT_COMMENTS GH_PR_COMMENTS GH_FAIL
 
+SHA="0123456789abcdef0123456789abcdef01234567"
+SHA2="fedcba9876543210fedcba9876543210fedcba98"
 ACC="memo-transparency-v1"
-GOOD_REPLY="https://api.github.com/repos/jwogrady/spark/issues/722
-Approving the bounded unit.
+TAB="$(printf '\t')"
 
-spark-authorizes child=#724 acceptance=$ACC"
-GH_REPLY="$GOOD_REPLY"
+reset_world() {
+  GH_FAIL=""
+  GH_SLUG="jwogrady/spark"
+  GH_DEFBRANCH="master"
+  GH_CLOSING="724"
+  GH_PARENT_NUM="722"
+  GH_PARENT="https://api.github.com/repos/jwogrady/spark/issues/722"
+  GH_PR="$SHA
+open
+false
+master
+feat/724-memo"
+  GH_HEAD="$SHA"
+  GH_FILES="plugins/spark/bin/spark
+tests/test-hot-path-memo.sh"
+  GH_CHECKS="completed success
+completed success
+completed skipped"
+  GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}Approving the bounded unit.\\nspark-authorizes child=#724 acceptance=$ACC"
+  GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->
+OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
+}
+reset_world
 
-# verdict <want-verdict> <want-rc> <desc> <args...>
 verdict() {
   local want="$1" wrc="$2" desc="$3"; shift 3
   local out rc=0
   out="$(xr_merge_check "$@" 2>&1)" || rc=$?
   local got; got="$(printf '%s\n' "$out" | head -1)"
-  if [ "$got" != "$want" ]; then bad "$desc — want verdict '$want' got '$got'"; return 0; fi
+  if [ "$got" != "$want" ]; then bad "$desc — want '$want' got '$got'"; return 0; fi
   if [ "$rc" != "$wrc" ]; then bad "$desc — want rc $wrc got $rc"; return 0; fi
   ok
 }
+ELIGIBLE=(--pr 727)
 
-# The fully-established bounded increment, reused as the base for every control
-# below, so a control differs from eligibility by EXACTLY the field under test.
-ELIGIBLE=(
-  parent-authorizes="#722"
-  authorization-record="#722#issuecomment-5555250717"
-  child="#724"
-  acceptance-id="$ACC"
-  review=pass
-  checks=green
-  stale-head=protected
-  scope=routine-reversible
-)
+# Guard the guard: the base world must be eligible, or every control below
+# passes for the wrong reason.
+verdict "ROUTINE MERGE" 0 "the derived base world is eligible before any control changes it" "${ELIGIBLE[@]}"
+# Every stubbed read must really be performed, or its controls are vacuous.
+for ep in slug closing defbranch head pr files checks parent comments; do
+  GH_FAIL="$ep"
+  verdict "NOT ELIGIBLE" 4 "the '$ep' read is really performed" "${ELIGIBLE[@]}"
+  GH_FAIL=""
+done
 
-# Variants are built into an ARRAY, never echoed through command substitution.
-# An unquoted $(...) word-splits on whitespace, so a multi-word value would
-# arrive as bare words and be refused by the ARGUMENT PARSER — every negative
-# control would then "pass" without reaching the condition it claims to test.
-A=()
-mk_without() {
-  local drop="$1" a; A=()
-  for a in "${ELIGIBLE[@]}"; do
-    case "$a" in "$drop"=*) ;; *) A+=("$a") ;; esac
-  done
-}
-mk_instead() {
-  local field="$1" value="$2" a; A=()
-  for a in "${ELIGIBLE[@]}"; do
-    case "$a" in "$field"=*) A+=("$field=$value") ;; *) A+=("$a") ;; esac
-  done
-}
-vwithout() { local w="$1" r="$2" d="$3" f="$4"; mk_without "$f"; verdict "$w" "$r" "$d" "${A[@]}"; }
-vinstead() { local w="$1" r="$2" d="$3" f="$4" v="$5"; mk_instead "$f" "$v"; verdict "$w" "$r" "$d" "${A[@]}"; }
-
-# Guard the guard: the base set must itself be eligible, or every negative
-# control below passes for the wrong reason.
-verdict "ROUTINE MERGE" 0 "the shared base set is eligible before any control mutates it" "${ELIGIBLE[@]}"
-mk_without review
-[ "${#A[@]}" = 7 ] && ok || bad "mk_without must drop exactly one field (got ${#A[@]})"
-mk_instead review fail
-[ "${#A[@]}" = 8 ] && ok || bad "mk_instead must preserve the field count (got ${#A[@]})"
-case " ${A[*]} " in *" review=fail "*) ok ;; *) bad "mk_instead must substitute the value" ;; esac
-# The stub must actually be reached, or every read-back control is vacuous.
-GH_FAIL=1
-verdict "NOT ELIGIBLE" 4 "the gh stub is on PATH and the read-back really runs" "${ELIGIBLE[@]}"
-GH_FAIL=""
-
-# --- the #722 -> #724 case: the whole point of the issue --------------------
-verdict "ROUTINE MERGE" 0 "a fully established bounded increment merges routinely" "${ELIGIBLE[@]}"
-
-# The load-bearing guarantee: the parent is NOT closed by the child.
+# --- the verdict says what it verified --------------------------------------
 out="$(xr_merge_check "${ELIGIBLE[@]}")" || true
 case "$out" in
   *"parent outcome: NOT closed and NOT satisfied"*) ok ;;
-  *) bad "a routine merge must state that the parent outcome is neither closed nor satisfied" ;;
+  *) bad "a routine merge must state the parent is neither closed nor satisfied" ;;
 esac
 case "$out" in
   *"release approval remains human-owned"*) ok ;;
   *) bad "a routine merge must restate that release approval stays human-owned" ;;
 esac
 case "$out" in
-  *"closes the parent"*|*"parent satisfied"*|*"completes #"*)
-    bad "a routine merge verdict must not claim parent completion" ;;
+  *"closes the parent"*|*"parent satisfied"*) bad "a verdict must not claim parent completion" ;;
   *) ok ;;
 esac
-case "$out" in
-  *"comment 5555250717"*) ok ;;
-  *) bad "a routine merge must name the record it read back" ;;
-esac
+case "$out" in *"$SHA"*) ok ;; *) bad "a routine merge must name the exact commit verified" ;; esac
 
-# --- SHAPE IS NOT AUTHORIZATION: the trusted read-back ----------------------
-# Each control below changes ONLY the read-back reply, isolating the read-back.
+# --- THE CALLER SUPPLIES IDENTITY, NOT TRUTH --------------------------------
+# The old self-certification tokens must be unrecognised arguments, not shortcuts.
+for forged in review=pass checks=green stale-head=protected scope=routine-reversible \
+              acceptance-true=yes --review=pass --checks=green --stale-head=protected; do
+  verdict "NOT ELIGIBLE" 4 "a forged '$forged' claim is refused as input" "${ELIGIBLE[@]}" "$forged"
+done
 
-GH_REPLY="https://api.github.com/repos/jwogrady/spark/issues/722
-Thanks, this looks reasonable to me."
-verdict "NOT ELIGIBLE" 4 "an unrelated comment on the correct parent authorizes nothing" "${ELIGIBLE[@]}"
+# --- derived: the exact-HEAD reviewer verdict -------------------------------
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA2 verdict=PASS -->
+OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
+verdict "NOT ELIGIBLE" 4 "a PASS for an older HEAD does not apply to this one" "${ELIGIBLE[@]}"
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=CHANGES REQUIRED -->
+OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
+verdict "NOT ELIGIBLE" 4 "CHANGES REQUIRED on this HEAD does not merge" "${ELIGIBLE[@]}"
+GH_PR_COMMENTS="OWNER${TAB}jwogrady${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->
+OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
+verdict "NOT ELIGIBLE" 4 "a PASS written by a human is not the reviewer's verdict" "${ELIGIBLE[@]}"
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}LGTM, looks fine to me
+OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
+verdict "NOT ELIGIBLE" 4 "reviewer prose without the structured marker is not a verdict" "${ELIGIBLE[@]}"
+reset_world
 
-GH_REPLY="https://api.github.com/repos/jwogrady/spark/issues/722
-I authorize bounded unit #724 with acceptance $ACC."
-verdict "NOT ELIGIBLE" 4 "prose naming the child and acceptance is not a record" "${ELIGIBLE[@]}"
+# --- derived: the bounded acceptance is TRUE at that exact commit -----------
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->"
+verdict "NOT ELIGIBLE" 4 "an authorized acceptance that is never proven true does not merge" "${ELIGIBLE[@]}"
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->
+OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA2 contract=$ACC verdict=MET -->"
+verdict "NOT ELIGIBLE" 4 "acceptance proof bound to another HEAD does not merge" "${ELIGIBLE[@]}"
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->
+OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=other-v1 verdict=MET -->"
+verdict "NOT ELIGIBLE" 4 "acceptance proof for another contract does not merge" "${ELIGIBLE[@]}"
+GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->
+OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=NOT-MET -->"
+verdict "NOT ELIGIBLE" 4 "an attestation that acceptance is NOT met does not merge" "${ELIGIBLE[@]}"
+REV="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->"
+GH_PR_COMMENTS="$REV
+OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#725 head=$SHA contract=$ACC verdict=MET -->"
+verdict "NOT ELIGIBLE" 4 "acceptance proof for the wrong child does not merge" "${ELIGIBLE[@]}"
+GH_PR_COMMENTS="$REV
+OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=other/repo#724 head=$SHA contract=$ACC verdict=MET -->"
+verdict "NOT ELIGIBLE" 4 "acceptance proof from another repository does not merge" "${ELIGIBLE[@]}"
+GH_PR_COMMENTS="$REV
+OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=999 child=#724 head=$SHA contract=$ACC verdict=MET -->"
+verdict "NOT ELIGIBLE" 4 "acceptance proof naming another PR does not merge" "${ELIGIBLE[@]}"
+GH_PR_COMMENTS="$REV
+OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET extra=1 -->"
+verdict "NOT ELIGIBLE" 4 "an acceptance proof with an unknown field is refused" "${ELIGIBLE[@]}"
+GH_PR_COMMENTS="$REV
+OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=met -->"
+verdict "NOT ELIGIBLE" 4 "a lowercase verdict does not affirm" "${ELIGIBLE[@]}"
+GH_PR_COMMENTS="$REV
+OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->
+OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
+verdict "NOT ELIGIBLE" 4 "two acceptance proofs are ambiguous and decline" "${ELIGIBLE[@]}"
 
-GH_REPLY="https://api.github.com/repos/jwogrady/spark/issues/722
-spark-authorizes child=#725 acceptance=$ACC"
-verdict "NOT ELIGIBLE" 4 "a record naming the wrong child authorizes nothing" "${ELIGIBLE[@]}"
+for assoc in NONE CONTRIBUTOR FIRST_TIME_CONTRIBUTOR MANNEQUIN; do
+  GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->
+$assoc${TAB}drive-by${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
+  verdict "NOT ELIGIBLE" 4 "an acceptance attested by '$assoc' does not merge" "${ELIGIBLE[@]}"
+done
+for assoc in OWNER MEMBER COLLABORATOR; do
+  GH_PR_COMMENTS="github-actions[bot]${TAB}github-actions[bot]${TAB}<!-- spark-openai-review pr=727 head=$SHA verdict=PASS -->
+$assoc${TAB}someone${TAB}<!-- spark-acceptance pr=727 child=#724 head=$SHA contract=$ACC verdict=MET -->"
+  verdict "ROUTINE MERGE" 0 "an acceptance attested by $assoc is accepted" "${ELIGIBLE[@]}"
+done
+reset_world
 
-GH_REPLY="https://api.github.com/repos/jwogrady/spark/issues/722
-spark-authorizes child=#7241 acceptance=$ACC"
+# --- derived: checks for that exact HEAD ------------------------------------
+GH_CHECKS="completed success
+completed failure"
+verdict "NOT ELIGIBLE" 4 "a required check that failed is not green" "${ELIGIBLE[@]}"
+GH_CHECKS="completed success
+in_progress none"
+verdict "NOT ELIGIBLE" 4 "a required check still pending is not green" "${ELIGIBLE[@]}"
+GH_CHECKS="queued none"
+verdict "NOT ELIGIBLE" 4 "a queued check is not green" "${ELIGIBLE[@]}"
+GH_CHECKS="completed cancelled"
+verdict "NOT ELIGIBLE" 4 "a cancelled check is not green" "${ELIGIBLE[@]}"
+GH_CHECKS=""
+verdict "NOT ELIGIBLE" 4 "absent check evidence is not green evidence" "${ELIGIBLE[@]}"
+reset_world
+
+# --- derived: stale-head protection by construction -------------------------
+GH_HEAD="$SHA2"
+verdict "NOT ELIGIBLE" 4 "HEAD moving between derivation and verdict declines" "${ELIGIBLE[@]}"
+GH_HEAD="not-a-sha"
+verdict "NOT ELIGIBLE" 4 "an unreadable current head declines" "${ELIGIBLE[@]}"
+reset_world
+
+# --- derived: the work unit and the native hierarchy ------------------------
+GH_CLOSING=""
+verdict "NOT ELIGIBLE" 4 "a PR closing no issue has no bounded work unit" "${ELIGIBLE[@]}"
+GH_CLOSING="724
+725"
+verdict "NOT ELIGIBLE" 4 "a PR closing two issues is ambiguous about its work unit" "${ELIGIBLE[@]}"
+# Ambiguity must decline on its own, not merely because the extra issue happens
+# to lack a grant: here the LAST closed issue is the fully-authorized one, so a
+# "take the last" implementation would merge.
+GH_CLOSING="723
+724"
+verdict "NOT ELIGIBLE" 4 "two closed issues decline even when the last one is authorized" "${ELIGIBLE[@]}"
+reset_world
+GH_PARENT=""
+verdict "NOT ELIGIBLE" 4 "a work unit with no native parent has no owning issue" "${ELIGIBLE[@]}"
+GH_PARENT="https://api.github.com/repos/jwogrady/spark/issues/not-a-number"
+verdict "NOT ELIGIBLE" 4 "an unreadable native parent declines" "${ELIGIBLE[@]}"
+reset_world
+
+# --- the grant, read back from the parent -----------------------------------
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}Thanks, this looks reasonable to me."
+verdict "NOT ELIGIBLE" 4 "an unrelated comment on the parent authorizes nothing" "${ELIGIBLE[@]}"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}I authorize bounded unit #724 with acceptance $ACC."
+verdict "NOT ELIGIBLE" 4 "prose naming the child and acceptance is not a grant" "${ELIGIBLE[@]}"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=#725 acceptance=$ACC"
+verdict "NOT ELIGIBLE" 4 "a grant for the wrong child does not authorize this one" "${ELIGIBLE[@]}"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=#7241 acceptance=$ACC"
 verdict "NOT ELIGIBLE" 4 "#7241 does not satisfy a grant to #724" "${ELIGIBLE[@]}"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=other/repo#724 acceptance=$ACC"
+verdict "NOT ELIGIBLE" 4 "the same number in another repository is a different work unit" "${ELIGIBLE[@]}"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=#724 acceptance=$ACC
+OWNER${TAB}jwogrady${TAB}spark-authorizes child=#724 acceptance=other-v1"
+verdict "NOT ELIGIBLE" 4 "two grants for the same child are ambiguous and decline" "${ELIGIBLE[@]}"
+# Two IDENTICAL grants are still ambiguous: a "take the last" implementation
+# would sail through this, so the control must not rely on them differing.
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=#724 acceptance=$ACC
+OWNER${TAB}jwogrady${TAB}spark-authorizes child=#724 acceptance=$ACC"
+verdict "NOT ELIGIBLE" 4 "two identical grants are still ambiguous and decline" "${ELIGIBLE[@]}"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=#0724 acceptance=$ACC"
+verdict "NOT ELIGIBLE" 4 "a zero-padded child in the grant is refused" "${ELIGIBLE[@]}"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=#724 acceptance="
+verdict "NOT ELIGIBLE" 4 "a grant binding no acceptance is refused" "${ELIGIBLE[@]}"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=#724 acceptance=$ACC extra=1"
+verdict "NOT ELIGIBLE" 4 "a grant with an unknown field is refused" "${ELIGIBLE[@]}"
+for assoc in NONE CONTRIBUTOR FIRST_TIME_CONTRIBUTOR MANNEQUIN owner Owner; do
+  GH_PARENT_COMMENTS="$assoc${TAB}drive-by${TAB}spark-authorizes child=#724 acceptance=$ACC"
+  verdict "NOT ELIGIBLE" 4 "a grant written by '$assoc' is not authority" "${ELIGIBLE[@]}"
+done
+# A machine report carrying a grant line is still a report.
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}<!-- spark-openai-review pr=1 head=x verdict=PASS -->\\nspark-authorizes child=#724 acceptance=$ACC"
+verdict "NOT ELIGIBLE" 4 "a reviewer surface carrying a grant line is not a grant" "${ELIGIBLE[@]}"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}<!-- spark-acceptance pr=1 head=x contract=y verdict=MET -->\\nspark-authorizes child=#724 acceptance=$ACC"
+verdict "NOT ELIGIBLE" 4 "an acceptance attestation carrying a grant line is not a grant" "${ELIGIBLE[@]}"
+reset_world
 
-GH_REPLY="https://api.github.com/repos/jwogrady/spark/issues/722
-spark-authorizes child=#724 acceptance=something-else"
-verdict "NOT ELIGIBLE" 4 "a record binding another acceptance authorizes nothing" "${ELIGIBLE[@]}"
+# --- derived: is this the routine repository merge operation at all? --------
+GH_PR="$SHA
+closed
+false
+master
+feat/724-memo"
+verdict "NOT ELIGIBLE" 4 "a closed pull request is not a routine merge candidate" "${ELIGIBLE[@]}"
+GH_PR="$SHA
+open
+true
+master
+feat/724-memo"
+verdict "NOT ELIGIBLE" 4 "a draft pull request is not a routine merge candidate" "${ELIGIBLE[@]}"
+GH_PR="$SHA
+open
+false
+some-other-branch
+feat/724-memo"
+verdict "NOT ELIGIBLE" 4 "a PR not targeting the trunk is not the routine operation" "${ELIGIBLE[@]}"
+GH_PR="$SHA
+open
+false
+master
+release-please--branches--master"
+verdict "NOT ELIGIBLE" 4 "a release PR is never a routine bounded merge" "${ELIGIBLE[@]}"
+reset_world
+GH_FILES="plugins/spark/bin/spark
+.github/workflows/openai-review.yml"
+verdict "NOT ELIGIBLE" 4 "changing CI is not routine reversible work" "${ELIGIBLE[@]}"
+GH_FILES="plugins/spark/settings/trunk-ruleset.json"
+verdict "NOT ELIGIBLE" 4 "changing enforcement settings is not routine reversible work" "${ELIGIBLE[@]}"
+reset_world
 
-# Ambiguity declines: two grants leave it unclear what was granted.
-GH_REPLY="https://api.github.com/repos/jwogrady/spark/issues/722
-spark-authorizes child=#724 acceptance=$ACC
-spark-authorizes child=#725 acceptance=$ACC"
-verdict "NOT ELIGIBLE" 4 "two authorization records are ambiguous and decline" "${ELIGIBLE[@]}"
-GH_REPLY="https://api.github.com/repos/jwogrady/spark/issues/722
-spark-authorizes child=#724 acceptance=$ACC
-spark-authorizes child=#724 acceptance=$ACC"
-verdict "NOT ELIGIBLE" 4 "even two identical records are ambiguous and decline" "${ELIGIBLE[@]}"
-
-# Malformed records decline rather than being read generously.
-while IFS= read -r bad_marker; do
-  [ -n "$bad_marker" ] || continue
-  GH_REPLY="https://api.github.com/repos/jwogrady/spark/issues/722
-$bad_marker"
-  verdict "NOT ELIGIBLE" 4 "a malformed record declines: $bad_marker" "${ELIGIBLE[@]}"
-done <<MARKERS
-spark-authorizes child=#724
-spark-authorizes acceptance=$ACC
-spark-authorizes child=724 acceptance=$ACC
-spark-authorizes child=#0724 acceptance=$ACC
-spark-authorizes child=#724 acceptance=
-spark-authorizes child=#724 acceptance=$ACC extra=1
-spark-authorizes child=#724 child=#725 acceptance=$ACC
-MARKERS
-
-# The comment must belong to the parent issue.
-GH_REPLY="https://api.github.com/repos/jwogrady/spark/issues/999
-spark-authorizes child=#724 acceptance=$ACC"
-verdict "NOT ELIGIBLE" 4 "a comment belonging to another issue is not on this parent" "${ELIGIBLE[@]}"
-GH_REPLY="https://api.github.com/repos/jwogrady/spark/issues/7220
-spark-authorizes child=#724 acceptance=$ACC"
-verdict "NOT ELIGIBLE" 4 "issue 7220 does not satisfy a record on issue 722" "${ELIGIBLE[@]}"
-
-# A coordination surface is machinery talking to machinery, never a grant.
-GH_REPLY="https://api.github.com/repos/jwogrady/spark/issues/722
-<!-- spark-openai-review pr=727 head=abc verdict=PASS -->
-spark-authorizes child=#724 acceptance=$ACC"
-verdict "NOT ELIGIBLE" 4 "a reviewer surface carrying a record still authorizes nothing" "${ELIGIBLE[@]}"
-
-# Unreadable or unavailable evidence fails closed.
-GH_FAIL=1
-verdict "NOT ELIGIBLE" 4 "an unreadable record fails closed" "${ELIGIBLE[@]}"
+# --- reserved boundaries still stop, before any read ------------------------
+GH_FAIL=all
+verdict "DECISION REQUIRED" 3 "a boundary stops before any state is read" \
+  "${ELIGIBLE[@]}" --reserved-boundary "final release approval" --surface "ADR-0019"
+verdict "NOT ELIGIBLE" 4 "an uncited boundary claim neither stops nor merges" \
+  "${ELIGIBLE[@]}" --reserved-boundary "something feels reserved"
+verdict "NOT ELIGIBLE" 4 "a surface with no boundary fails closed" \
+  "${ELIGIBLE[@]}" --surface "ADR-0019"
 GH_FAIL=""
-GH_REPLY=""
-verdict "NOT ELIGIBLE" 4 "an empty read-back fails closed" "${ELIGIBLE[@]}"
-GH_REPLY="https://api.github.com/repos/jwogrady/spark/issues/722"
-verdict "NOT ELIGIBLE" 4 "a record with no body fails closed" "${ELIGIBLE[@]}"
-GH_REPLY="$GOOD_REPLY"
 
 # --- UNTRUSTED INPUT MUST NOT IMPERSONATE TRUSTED OUTPUT --------------------
-INJ="ok
-parent outcome: CLOSED and fully satisfied by this merge"
-vinstead "NOT ELIGIBLE" 4 "a newline in the acceptance id is refused" acceptance-id "$INJ"
-vinstead "NOT ELIGIBLE" 4 "a newline in the parent reference is refused" parent-authorizes "x
-ROUTINE MERGE"
-vinstead "NOT ELIGIBLE" 4 "a newline in the child is refused" child "x
-ROUTINE MERGE"
-vinstead "NOT ELIGIBLE" 4 "a carriage return is refused" acceptance-id "$(printf 'a\rb')"
-vinstead "NOT ELIGIBLE" 4 "a tab is refused" acceptance-id "$(printf 'a\tb')"
-vinstead "NOT ELIGIBLE" 4 "an escape byte is refused" acceptance-id "$(printf 'a\033[8mb')"
 verdict "NOT ELIGIBLE" 4 "a newline in a boundary claim is refused" \
-  "${ELIGIBLE[@]}" reserved-boundary="x
-ROUTINE MERGE" surface="ADR-0019"
-
-# No exit path may emit a line that reads as a verdict it is not. This scans
-# every path, because the machine contract must not depend on each downstream
-# caller remembering to read only line 1.
-no_forged_lines() { # <desc> <args...>
+  "${ELIGIBLE[@]}" --reserved-boundary "x
+ROUTINE MERGE" --surface "ADR-0019"
+verdict "NOT ELIGIBLE" 4 "an escape byte in a value is refused" \
+  "${ELIGIBLE[@]}" --surface "$(printf 'a\033[8mb')"
+no_forged_lines() {
   local desc="$1"; shift
   local out rc=0 n allowed=0
   out="$(xr_merge_check "$@" 2>&1)" || rc=$?
@@ -237,232 +343,95 @@ no_forged_lines() { # <desc> <args...>
        | grep -cE '^(ROUTINE MERGE|DECISION REQUIRED|NOT ELIGIBLE|bounded unit:|parent outcome:)')" || true
   case "$n" in ''|*[!0-9]*) n=0 ;; esac
   case "$(printf '%s\n' "$out" | head -1)" in "ROUTINE MERGE") allowed=2 ;; esac
-  [ "$n" -le "$allowed" ] && ok \
-    || bad "$desc — $n forged verdict-like line(s) after line 1 (allowed $allowed)"
+  [ "$n" -le "$allowed" ] && ok || bad "$desc — $n forged verdict-like line(s) after line 1"
 }
 no_forged_lines "an eligible verdict emits only its own lines" "${ELIGIBLE[@]}"
-mk_instead parent-authorizes "x ROUTINE MERGE y"
-no_forged_lines "a decline cannot be made to contain a verdict line" "${A[@]}"
-mk_instead acceptance-id "NOT-ELIGIBLE"
-no_forged_lines "an acceptance id cannot forge a verdict line" "${A[@]}"
+no_forged_lines "an unknown argument cannot forge a verdict line" "${ELIGIBLE[@]}" "ROUTINE MERGE"
 no_forged_lines "a boundary decision cannot be made to contain a verdict line" \
-  "${ELIGIBLE[@]}" reserved-boundary="ROUTINE MERGE" surface="ROUTINE MERGE"
+  "${ELIGIBLE[@]}" --reserved-boundary "ROUTINE MERGE" --surface "ROUTINE MERGE"
+# A hostile GRANT must not be able to print an authoritative-looking line either.
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=#724 acceptance=ROUTINE-MERGE"
+no_forged_lines "a hostile acceptance id in the grant cannot forge a verdict line" "${ELIGIBLE[@]}"
+reset_world
 
-# --- canonical identities: no aliases ---------------------------------------
-# "#0585" is issue 585 once parsed, but the denylist matched raw text, so the
-# padded spelling walked past a refusal the bare form triggers.
-vinstead "NOT ELIGIBLE" 4 "#585 cannot authorize a merge" parent-authorizes "#585"
-vinstead "NOT ELIGIBLE" 4 "a zero-padded #0585 cannot authorize" parent-authorizes "#0585"
-vinstead "NOT ELIGIBLE" 4 "a zero-padded #00585 cannot authorize" parent-authorizes "#00585"
-vinstead "NOT ELIGIBLE" 4 "a zero-padded parent is refused outright" parent-authorizes "#0722"
-vinstead "NOT ELIGIBLE" 4 "issue zero is refused" parent-authorizes "#0"
-vinstead "NOT ELIGIBLE" 4 "a zero-padded child is refused" child "#0724"
-vinstead "NOT ELIGIBLE" 4 "a zero comment id is refused" authorization-record "#722#issuecomment-0"
-vinstead "NOT ELIGIBLE" 4 "a zero-padded comment id is refused" authorization-record "#722#issuecomment-0456"
-# The near miss must still work: #1585 is a different issue, not an alias.
-mk_instead parent-authorizes "#1585"
-GH_REPLY="https://api.github.com/repos/jwogrady/spark/issues/1585
-spark-authorizes child=#724 acceptance=$ACC"
-verdict "ROUTINE MERGE" 0 "an issue number containing 585 as a substring still authorizes" \
-  "${A[@]/authorization-record=*/authorization-record=#1585#issuecomment-1}"
-GH_REPLY="$GOOD_REPLY"
-
-# --- the qualified parent is cited by its matching permalink ----------------
-mk_instead parent-authorizes "jwogrady/spark#722"
-QUAL=("${A[@]}")
-verdict "ROUTINE MERGE" 0 "a qualified parent is cited by its matching permalink" \
-  "${QUAL[@]/authorization-record=*/authorization-record=https://github.com/jwogrady/spark/issues/722#issuecomment-5555250717}"
-while IFS= read -r bad_url; do
-  [ -n "$bad_url" ] || continue
-  verdict "NOT ELIGIBLE" 4 "a qualified parent refuses: $bad_url" \
-    "${QUAL[@]/authorization-record=*/authorization-record=$bad_url}"
-done <<'URLS'
-https://github.com/jwogrady/spark/issues/722
-https://github.com/jwogrady/other/issues/722#issuecomment-1
-https://github.com/someone/spark/issues/722#issuecomment-1
-https://github.com/jwogrady/spark/issues/999#issuecomment-1
-https://github.com/jwogrady/spark/pull/722#issuecomment-1
-https://notgithub.com/1
-https://github.com.evil.example/jwogrady/spark/issues/722#issuecomment-1
-http://github.com/jwogrady/spark/issues/722#issuecomment-1
-https://github.com/jwogrady/spark/blob/master/README.md
-#722#issuecomment-5555250717
-URLS
-
-# --- a bare issue reference or URL is never an authorization record ---------
-vwithout "NOT ELIGIBLE" 4 "no authorization record does not merge" authorization-record
-vinstead "NOT ELIGIBLE" 4 "a bare parent reference is not a record" authorization-record "#722"
-vinstead "NOT ELIGIBLE" 4 "a bare issue URL is not a record" \
-  authorization-record "https://github.com/jwogrady/spark/issues/722"
-vinstead "NOT ELIGIBLE" 4 "prose is not a record" authorization-record "#722 authorizes this"
-vinstead "NOT ELIGIBLE" 4 "a hierarchy assertion is not a record" authorization-record "sub-issue:#724"
-vinstead "NOT ELIGIBLE" 4 "a comment on another issue is not a record on this parent" \
-  authorization-record "#999#issuecomment-1"
-vinstead "NOT ELIGIBLE" 4 "trailing prose after a record is refused" \
-  authorization-record "#722#issuecomment-1 approved"
-vinstead "NOT ELIGIBLE" 4 "a non-numeric comment id is refused" \
-  authorization-record "#722#issuecomment-abc"
-vinstead "NOT ELIGIBLE" 4 "a record with no comment id is refused" \
-  authorization-record "#722#issuecomment-"
-
-# --- the parent and child need canonical machine identities -----------------
-vwithout "NOT ELIGIBLE" 4 "no parent authorization does not merge" parent-authorizes
-vinstead "NOT ELIGIBLE" 4 "prose in parent-authorizes is refused" parent-authorizes "#722 authorizes this"
-vinstead "NOT ELIGIBLE" 4 "a leading space before the reference is refused" parent-authorizes " #722"
-vinstead "NOT ELIGIBLE" 4 "a trailing space after the reference is refused" parent-authorizes "#722 "
-vinstead "NOT ELIGIBLE" 4 "a reference with no # is refused" parent-authorizes "722"
-vinstead "NOT ELIGIBLE" 4 "more than one # is refused" parent-authorizes "anything#still#722"
-vinstead "NOT ELIGIBLE" 4 "a missing owner is refused" parent-authorizes "/repo#722"
-vinstead "NOT ELIGIBLE" 4 "a missing repo is refused" parent-authorizes "owner/#722"
-vinstead "NOT ELIGIBLE" 4 "a three-component path is refused" parent-authorizes "owner/repo/extra#722"
-vwithout "NOT ELIGIBLE" 4 "a missing child identity does not merge" child
-vinstead "NOT ELIGIBLE" 4 "free text is not a child identity" child "the memoization work"
-vinstead "NOT ELIGIBLE" 4 "a non-numeric child is refused" child "#abc"
-
-# --- the acceptance identity must be canonical and bound --------------------
-vwithout "NOT ELIGIBLE" 4 "a missing acceptance id does not merge" acceptance-id
-vinstead "NOT ELIGIBLE" 4 "punctuation alone is not an acceptance id" acceptance-id "."
-vinstead "NOT ELIGIBLE" 4 "whitespace is not an acceptance id" acceptance-id "   "
-vinstead "NOT ELIGIBLE" 4 "prose is not an acceptance id" acceptance-id "we agreed it was fine"
-vinstead "NOT ELIGIBLE" 4 "an acceptance id the record does not bind is refused" acceptance-id "other-v1"
-
-# --- the evidence conditions each stand alone -------------------------------
-vinstead "NOT ELIGIBLE" 4 "a failing review does not merge" review fail
-vinstead "NOT ELIGIBLE" 4 "an absent review does not merge" review ""
-vinstead "NOT ELIGIBLE" 4 "CHANGES REQUIRED does not merge" review "CHANGES REQUIRED"
-vinstead "NOT ELIGIBLE" 4 "UNKNOWN review does not merge" review UNKNOWN
-vinstead "NOT ELIGIBLE" 4 "NOT-ASSESSED review does not merge" review "NOT ASSESSED"
-vinstead "NOT ELIGIBLE" 4 "red checks do not merge" checks red
-vinstead "NOT ELIGIBLE" 4 "pending checks do not merge" checks pending
-vwithout "NOT ELIGIBLE" 4 "absent checks do not merge" checks
-vinstead "NOT ELIGIBLE" 4 "an unprotected stale head does not merge" stale-head stale
-vwithout "NOT ELIGIBLE" 4 "absent stale-head protection does not merge" stale-head
-vinstead "NOT ELIGIBLE" 4 "a release act is not routine scope" scope release
-vinstead "NOT ELIGIBLE" 4 "an irreversible action is not routine scope" scope irreversible
-vwithout "NOT ELIGIBLE" 4 "absent scope does not merge" scope
-
-# --- coordination surfaces cannot manufacture authority ---------------------
-vinstead "NOT ELIGIBLE" 4 "a relay identity cannot authorize" parent-authorizes "relay/spark#722"
-vinstead "NOT ELIGIBLE" 4 "a reviewer identity cannot authorize" parent-authorizes "reviewer/spark#722"
-vinstead "NOT ELIGIBLE" 4 "a consensus identity cannot authorize" child "consensus/spark#724"
-
-# --- reserved boundaries still stop -----------------------------------------
-verdict "DECISION REQUIRED" 3 "a named+cited reserved boundary stops even when all else is green" \
-  "${ELIGIBLE[@]}" reserved-boundary="final release approval" surface="ADR-0019"
-verdict "DECISION REQUIRED" 3 "a new authority grant stops" \
-  "${ELIGIBLE[@]}" reserved-boundary="a write-capable deploy key" surface="AGENTS.md guardrails"
-verdict "NOT ELIGIBLE" 4 "a supplied but blank boundary fails closed" \
-  "${ELIGIBLE[@]}" reserved-boundary="   "
-verdict "NOT ELIGIBLE" 4 "an explicitly empty boundary fails closed" \
-  "${ELIGIBLE[@]}" reserved-boundary=""
-verdict "NOT ELIGIBLE" 4 "a surface with no boundary fails closed" \
-  "${ELIGIBLE[@]}" surface="ADR-0019"
-verdict "NOT ELIGIBLE" 4 "an uncited boundary claim neither stops nor merges" \
-  "${ELIGIBLE[@]}" reserved-boundary="something feels reserved"
-verdict "ROUTINE MERGE" 0 "omitting both boundary fields leaves eligibility intact" "${ELIGIBLE[@]}"
-# A reserved boundary outranks a perfectly good read-back.
-GH_FAIL=1
-verdict "DECISION REQUIRED" 3 "a boundary stops before the record is even consulted" \
-  "${ELIGIBLE[@]}" reserved-boundary="release approval" surface="ADR-0026"
-GH_FAIL=""
-
-# --- input discipline: unknown, duplicate and bare arguments fail closed ----
-verdict "NOT ELIGIBLE" 4 "an underscore typo in a field name is refused" \
-  "${ELIGIBLE[@]}" acceptance_id=x
-verdict "NOT ELIGIBLE" 4 "an unknown field is refused" "${ELIGIBLE[@]}" merge=yes
-verdict "NOT ELIGIBLE" 4 "a bare positional word is refused" "${ELIGIBLE[@]}" yes
+# --- canonical identities ----------------------------------------------------
+verdict "NOT ELIGIBLE" 4 "a zero-padded pr is refused" --pr "#0727"
+verdict "NOT ELIGIBLE" 4 "pr zero is refused" --pr "#0"
+verdict "NOT ELIGIBLE" 4 "prose is not a pr identity" --pr "the memo PR"
+verdict "NOT ELIGIBLE" 4 "a missing --pr value is refused" --pr
 verdict "NOT ELIGIBLE" 4 "no arguments at all is refused"
-verdict "NOT ELIGIBLE" 4 "a repeated review field is refused" "${ELIGIBLE[@]}" review=pass
-verdict "NOT ELIGIBLE" 4 "a failing value cannot be overwritten by a passing one" \
-  "${ELIGIBLE[@]/review=pass/review=fail}" review=pass
-verdict "NOT ELIGIBLE" 4 "a repeated acceptance id is refused" "${ELIGIBLE[@]}" acceptance-id="$ACC"
-verdict "NOT ELIGIBLE" 4 "a second boundary value cannot erase the first" \
-  "${ELIGIBLE[@]}" reserved-boundary="release approval" surface="ADR-0019" reserved-boundary=""
-dupout="$(xr_merge_check "${ELIGIBLE[@]}" review=pass 2>&1)" || true
-case "$dupout" in
-  *"repeated field"*review*) ok ;;
-  *) bad "a duplicate decline must name the repeated field" ;;
-esac
-
-# --- declines must be actionable --------------------------------------------
-mk_without child
-case "$(xr_merge_check "${A[@]}" 2>&1)" in
-  *"child:"*) ok ;;
-  *) bad "a decline must name the missing field" ;;
-esac
-mk_instead review fail
-case "$(xr_merge_check "${A[@]}" 2>&1)" in
-  *"review=pass"*) ok ;;
-  *) bad "a decline must name the token it expected" ;;
-esac
-multi="$(xr_merge_check parent-authorizes="#722" child="#724" 2>&1)" || true
-for want in acceptance-id review=pass checks=green stale-head=protected scope=routine-reversible; do
-  case "$multi" in
-    *"$want"*) ok ;;
-    *) bad "a decline must report every unestablished condition, missing '$want'" ;;
-  esac
-done
-
-# --- the denylist survives a hostile IFS ------------------------------------
-# Held as an array precisely so a sourced caller cannot collapse it to one token.
-# Several hostile separators, including ones that would shred the token list
-# if it were expanded unquoted: "5" splits 585, "-" splits review-pass, and a
-# newline is the classic surprise.
-# The #585 set must be CONSISTENT — its own record, its own read-back — or the
-# case declines on the record binding and the denylist is never reached. An
-# earlier version of this fixture had exactly that flaw: it looked like a
-# denylist test and was really a binding test.
-DENY=(
-  parent-authorizes="#585"
-  authorization-record="#585#issuecomment-1"
-  child="#724"
-  acceptance-id="$ACC"
-  review=pass checks=green stale-head=protected scope=routine-reversible
-)
-GH_REPLY="https://api.github.com/repos/jwogrady/spark/issues/585
-spark-authorizes child=#724 acceptance=$ACC"
-# Everything else about this set is impeccable; only the identity is refused.
-verdict "NOT ELIGIBLE" 4 "a consistent #585 set is still refused by the denylist" "${DENY[@]}"
-for hostile in '-' '5' '8' 'a' "$(printf '\n')" ' '; do
+verdict "NOT ELIGIBLE" 4 "a repeated --pr is refused" --pr 727 --pr 727
+verdict "NOT ELIGIBLE" 4 "a malformed --repo is refused" --pr 727 --repo "not-a-slug"
+# #1585 remains a valid near-miss rather than being confused with #585.
+GH_PARENT_NUM="1585"
+GH_PARENT="https://api.github.com/repos/jwogrady/spark/issues/1585"
+GH_PARENT_COMMENTS="OWNER${TAB}jwogrady${TAB}spark-authorizes child=#724 acceptance=$ACC"
+verdict "ROUTINE MERGE" 0 "a parent numbered 1585 still authorizes" "${ELIGIBLE[@]}"
+# ...while #585 itself is refused by the denylist.
+GH_PARENT_NUM="585"
+GH_PARENT="https://api.github.com/repos/jwogrady/spark/issues/585"
+verdict "NOT ELIGIBLE" 4 "#585 cannot be the authorizing parent" "${ELIGIBLE[@]}"
+for hostile in '-' '5' '8' 'a' ' '; do
   ifs_rc=0
-  ( IFS="$hostile"; xr_merge_check "${DENY[@]}" >/dev/null 2>&1 ) || ifs_rc=$?
+  ( IFS="$hostile"; xr_merge_check "${ELIGIBLE[@]}" >/dev/null 2>&1 ) || ifs_rc=$?
   [ "$ifs_rc" = 4 ] && ok \
-    || bad "the denylist must hold when the caller has reassigned IFS to '$hostile' (rc $ifs_rc)"
+    || bad "the denylist must hold when the caller reassigned IFS to '$hostile' (rc $ifs_rc)"
 done
-GH_REPLY="$GOOD_REPLY"
+reset_world
 
-# --- the CLI wrapper agrees with the function -------------------------------
+# --- the pure decision core is fail-closed on its own -----------------------
+# It never sees caller strings; these exercise it directly with normalized facts.
+FACTS=(slug=jwogrady/spark pr=727 head="$SHA" head-now="$SHA"
+       child=jwogrady/spark#724 parent=jwogrady/spark#722
+       grant-child=jwogrady/spark#724 acceptance="$ACC"
+       review=yes acceptance-met=yes checks=green scope=routine-reversible)
+dec() {
+  local want="$1" desc="$2"; shift 2
+  local out rc=0; out="$(xm_decide "$@" 2>&1)" || rc=$?
+  case "$(printf '%s\n' "$out" | head -1)" in
+    "$want") ok ;;
+    *) bad "$desc — want '$want' got '$(printf '%s\n' "$out" | head -1)'" ;;
+  esac
+}
+dec "ROUTINE MERGE" "the core accepts a complete normalized fact set" "${FACTS[@]}"
+dec "NOT ELIGIBLE" "the core refuses an unknown fact" "${FACTS[@]}" bogus=1
+for drop in review acceptance-met checks scope; do
+  dec "NOT ELIGIBLE" "the core refuses when '$drop' is not affirmed" \
+    "${FACTS[@]/$drop=*/$drop=no}"
+done
+dec "NOT ELIGIBLE" "the core refuses a moved head" "${FACTS[@]/head-now=*/head-now=$SHA2}"
+dec "NOT ELIGIBLE" "the core refuses a cross-repository grant" \
+  "${FACTS[@]/grant-child=*/grant-child=other/repo#724}"
+dec "DECISION REQUIRED" "the core routes a named+cited boundary" \
+  "${FACTS[@]}" reserved-boundary=release surface=ADR-0026
+
+# --- the CLI and the dispatcher agree ---------------------------------------
 rc=0; out="$(cmd_merge_authority "${ELIGIBLE[@]}" 2>&1)" || rc=$?
 [ "$rc" = 0 ] && ok || bad "cmd_merge_authority must exit 0 on a routine merge (got $rc)"
 case "$out" in "ROUTINE MERGE"*) ok ;; *) bad "cmd_merge_authority must echo the verdict" ;; esac
-mk_instead review fail
-rc=0; cmd_merge_authority "${A[@]}" >/dev/null 2>&1 || rc=$?
+GH_CHECKS="completed failure"
+rc=0; cmd_merge_authority "${ELIGIBLE[@]}" >/dev/null 2>&1 || rc=$?
 [ "$rc" = 4 ] && ok || bad "cmd_merge_authority must exit 4 when not eligible (got $rc)"
-rc=0; cmd_merge_authority "${ELIGIBLE[@]}" reserved-boundary="release" surface="ADR-0019" >/dev/null 2>&1 || rc=$?
+reset_world
+rc=0; cmd_merge_authority "${ELIGIBLE[@]}" --reserved-boundary release --surface ADR-0026 >/dev/null 2>&1 || rc=$?
 [ "$rc" = 3 ] && ok || bad "cmd_merge_authority must exit 3 at a reserved boundary (got $rc)"
 rc=0; out="$(cmd_merge_authority --help 2>&1)" || rc=$?
 [ "$rc" = 0 ] && ok || bad "help must exit 0 (got $rc)"
-case "$out" in *"ROUTINE MERGE"*"("*) ok ;; *) bad "help must document the verdicts" ;; esac
+case "$out" in *"DERIVED, never asserted"*) ok ;; *) bad "help must say which facts are derived" ;; esac
 case "$(printf '%s\n' "$out" | head -1)" in
   "ROUTINE MERGE") bad "help must not emit a verdict as its first line" ;;
   *) ok ;;
 esac
-# A bare invocation must NOT share its exit code with ROUTINE MERGE.
 rc=0; out="$(cmd_merge_authority 2>&1)" || rc=$?
-[ "$rc" = 4 ] && ok || bad "a bare invocation must exit 4, never 0 — 0 means ROUTINE MERGE (got $rc)"
+[ "$rc" = 4 ] && ok || bad "a bare invocation must exit 4, never 0 (got $rc)"
 case "$(printf '%s\n' "$out" | head -1)" in
-  "NOT ELIGIBLE") ok ;;
-  *) bad "a bare invocation must declare NOT ELIGIBLE, not print usage as if nothing were wrong" ;;
+  "NOT ELIGIBLE") ok ;; *) bad "a bare invocation must declare NOT ELIGIBLE" ;;
 esac
 
-# --- the verb is reachable through the dispatcher ---------------------------
 spark_bin="$here/../plugins/spark/bin/spark"
 rc=0; out="$("$spark_bin" merge-authority "${ELIGIBLE[@]}" 2>&1)" || rc=$?
-[ "$rc" = 0 ] && ok || bad "the merge-authority verb must route through the dispatcher (rc $rc)"
+[ "$rc" = 0 ] && ok || bad "the verb must route through the dispatcher (rc $rc)"
 case "$out" in "ROUTINE MERGE"*) ok ;; *) bad "the verb must emit the verdict" ;; esac
-mk_instead checks red
-rc=0; "$spark_bin" merge-authority "${A[@]}" >/dev/null 2>&1 || rc=$?
-[ "$rc" = 4 ] && ok || bad "the verb must propagate the NOT ELIGIBLE exit code (got $rc)"
 rc=0; "$spark_bin" merge-authority >/dev/null 2>&1 || rc=$?
 [ "$rc" = 4 ] && ok || bad "the bare verb must exit 4, never 0 (got $rc)"
 
