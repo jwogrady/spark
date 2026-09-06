@@ -3404,10 +3404,20 @@ di_grade() {
 # di_repo_nwo — owner/name for this repo, and the runtime's ONE read of it. gh
 # expands {owner}/{repo} for REST paths only; a GraphQL document receives them
 # verbatim, so they have to be resolved before the query rather than
-# interpolated into it. Fails (non-zero, empty) when gh cannot answer; every
-# caller decides for itself whether that is fatal or "not assessed" — the read
-# never substitutes a guess.
-di_repo_nwo() { gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null; }
+# interpolated into it. Buffered and validated: the answer is printed only when
+# gh succeeded AND returned one owner/name — output beside a failure, an empty
+# success, or anything that is not owner/name is a failed read (non-zero, empty).
+# Every caller decides for itself whether that is fatal or "not assessed"; the
+# read never substitutes a guess.
+di_repo_nwo() {
+  local nwo
+  nwo="$(gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null)" || return 1
+  case "$nwo" in
+    *[!A-Za-z0-9_./-]*|''|*/*/*|/*|*/) return 1 ;;
+    */*) printf '%s\n' "$nwo" ;;
+    *) return 1 ;;
+  esac
+}
 
 # gh_blocked_by <issue> — every blocker GitHub's native dependency graph records
 # for <issue>, one row per blocker: "<number>\t<state>\t<owner/name>". This is the
@@ -3421,12 +3431,21 @@ di_repo_nwo() { gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/nul
 # emitted only after every page was read, so a failure on a later page cannot
 # leave a partial list on stdout that reads as the whole graph. Fails (non-zero,
 # no rows) when the graph could not be read: a failed probe is never "no
-# prerequisite".
+# prerequisite". Every row is VALIDATED before anything is emitted: the number
+# is a positive integer and the state is in the closed vocabulary (open|closed);
+# a row GitHub shaped any other way fails the whole read, so a consumer that
+# keeps only "open" blockers can never read a malformed row as "not blocking".
+# The repository may be empty (GitHub omitted it); consumers treat that as
+# unknown, never as "local".
 gh_blocked_by() {
   local rows
   rows="$(gh api --paginate "repos/{owner}/{repo}/issues/$1/dependencies/blocked_by" \
     --jq '.[] | "\(.number)\t\(.state // "")\t\(.repository.full_name // "")"' 2>/dev/null)" || return 1
-  [ -z "$rows" ] || printf '%s\n' "$rows"
+  [ -n "$rows" ] || return 0
+  printf '%s\n' "$rows" | awk -F'\t' '
+    NF != 3 || $1 !~ /^[1-9][0-9]*$/ || ($2 != "open" && $2 != "closed") || $3 ~ /[^A-Za-z0-9_.\/-]/ { bad = 1 }
+    END { exit bad ? 1 : 0 }' || return 1
+  printf '%s\n' "$rows"
 }
 
 # di_split_linked <rows> <kind> — the numbers of one kind from di_linked_prs's

@@ -571,8 +571,11 @@ if [ "${1:-}" = "issue" ]; then
   if [ -n "$jqx" ]; then printf '%s' "$ISSUES" | jq -r "$jqx"; else printf '%s' "$ISSUES"; fi
   exit 0
 fi
+# The dependency graph is read through the shared reader, which validates every
+# row (number, state, repository) before emitting it: "no blockers" is an empty
+# answer, never a pre-shaped count that assumed one consumer's jq.
 for a in "$@"; do
-  case "$a" in *dependencies*) printf '0\n'; exit 0 ;; esac
+  case "$a" in *dependencies*) exit 0 ;; esac
 done
 exit 0
 AGEOF

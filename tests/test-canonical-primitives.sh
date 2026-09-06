@@ -32,7 +32,9 @@ cat > "$STUB/gh" <<'GH'
 printf '%s\n' "$*" >> "$CALLS"
 case "$*" in
   "auth status"*) exit 0 ;;
-  "repo view --json nameWithOwner"*) [ -f "$SC/nwo" ] || exit 1; cat "$SC/nwo" ;;
+  "repo view --json nameWithOwner"*)
+    [ -f "$SC/nwo.partial" ] && { cat "$SC/nwo.partial"; exit 1; }
+    [ -f "$SC/nwo" ] || exit 1; cat "$SC/nwo" ;;
   *"dependencies/blocked_by"*)
     n="$(printf '%s' "$*" | sed -E 's|.*/issues/([0-9]+)/dependencies/blocked_by.*|\1|')"
     # ".partial": a first page answered, then a later page failed — rows on
@@ -68,6 +70,24 @@ rc=0; out="$(gh_blocked_by 8)" || rc=$?
 [ "$rc" -ne 0 ] && ok || bad "an unreadable graph fails the read (exit non-zero), never 'no prerequisite'"
 assert_eq "and emits no rows to mistake for evidence" "" "$out"
 
+# malformed rows: the primitive validates shape and vocabulary before emitting anything, so a consumer
+# that keeps only "open" blockers can never read a malformed row as "not blocking"
+for row in '12\tOPEN\to/self' '12\t\to/self' '12\tdraft\to/self' 'twelve\topen\to/self' '0\topen\to/self' '12\topen' '12\topen\to/self\textra' '12\topen\tnot a repo'; do
+  reset; printf '13\topen\to/self\n%b\n' "$row" > "$SC/blocked_by.7"
+  rc=0; out="$(gh_blocked_by 7)" || rc=$?
+  [ "$rc" -ne 0 ] && ok || bad "a malformed blocker row ($row) fails the whole read"
+  assert_eq "and nothing is emitted, not even the well-formed sibling row" "" "$out"
+done
+reset; printf '12\topen\t\n' > "$SC/blocked_by.7"
+out="$(gh_blocked_by 7)" && ok || bad "control: an empty repository column (GitHub omitted it) is a valid row consumers treat as unknown"
+assert_eq "and is emitted as read" "$(printf '12\topen\t')" "$out"
+for row in 'abc' '0' '-1' '1 2'; do
+  reset; printf '101\n%s\n' "$row" > "$SC/sub_issues.100"
+  rc=0; out="$(plan_sub_issues 100)" || rc=$?
+  [ "$rc" -ne 0 ] && ok || bad "a malformed sub-issue row ($row) fails the whole read"
+  assert_eq "and nothing is emitted" "" "$out"
+done
+
 reset
 printf '12\topen\to/self\n' > "$SC/blocked_by.9.partial"
 rc=0; out="$(gh_blocked_by 9)" || rc=$?
@@ -83,6 +103,20 @@ reset
 rc=0; out="$(di_repo_nwo)" || rc=$?
 [ "$rc" -ne 0 ] && ok || bad "an unanswered identity fails the read rather than guessing"
 assert_eq "and prints nothing" "" "$out"
+reset; printf 'o/self\n' > "$SC/nwo.partial"
+rc=0; out="$(di_repo_nwo)" || rc=$?
+[ "$rc" -ne 0 ] && ok || bad "output beside a failure is a failed identity read"
+assert_eq "and the leaked text is not printed" "" "$out"
+reset; : > "$SC/nwo"
+rc=0; out="$(di_repo_nwo)" || rc=$?
+[ "$rc" -ne 0 ] && ok || bad "a successful but EMPTY answer is a failed identity read, never an identity"
+assert_eq "and prints nothing" "" "$out"
+reset; printf 'not a repository at all\n' > "$SC/nwo"
+rc=0; out="$(di_repo_nwo)" || rc=$?
+[ "$rc" -ne 0 ] && ok || bad "an answer that is not owner/name is a failed identity read"
+reset; printf 'a/b/c\n' > "$SC/nwo"
+rc=0; out="$(di_repo_nwo)" || rc=$?
+[ "$rc" -ne 0 ] && ok || bad "three path segments are not an owner/name"
 
 reset
 printf '101\n999\n102\n' > "$SC/sub_issues.100"

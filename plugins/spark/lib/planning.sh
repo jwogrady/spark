@@ -246,7 +246,10 @@ plan_body_matches() {
 plan_sub_issues() {
   local rows
   rows="$(gh api --paginate "repos/{owner}/{repo}/issues/$1/sub_issues" --jq '.[].number' 2>/dev/null)" || return 1
-  [ -z "$rows" ] || printf '%s\n' "$rows"
+  [ -n "$rows" ] || return 0
+  # Every row must be a positive issue number; anything else fails the whole read.
+  printf '%s\n' "$rows" | awk '$0 !~ /^[1-9][0-9]*$/ { bad = 1 } END { exit bad ? 1 : 0 }' || return 1
+  printf '%s\n' "$rows"
 }
 
 plan_relation_rows() {

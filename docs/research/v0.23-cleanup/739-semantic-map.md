@@ -62,14 +62,19 @@ The loop now projects the issues to probe with `awk` (field-exact) before iterat
 
 - `gh_blocked_by <issue>` — paginated and **buffered** (rows are emitted only after every
   page was read, so a failure on a later page never leaves a partial list on stdout); one
-  row per blocker `number\tstate\towner/name`; a field GitHub did not supply is empty,
-  never invented; **non-zero exit and no rows** when the graph could not be read. No consumer may read a failed probe as "no
+  row per blocker `number\tstate\towner/name`, **validated before anything is emitted**: the
+  number is a positive integer and the state is `open` or `closed`, or the whole read fails,
+  so a consumer keeping only open blockers can never read a malformed row as "not
+  blocking"; the repository may be empty (GitHub omitted it) and consumers treat that as
+  unknown, never local; **non-zero exit and no rows** when the graph could not be read. No consumer may read a failed probe as "no
   prerequisite": validate emits `dependency ? all … probe failed`, next records `?`,
   verify emits `dependency ? #n … could not be read`.
-- `plan_sub_issues <parent>` — paginated and buffered; numbers in GitHub's own order;
-  non-zero exit and no rows when unreadable (verify reports `?`, never "not wired").
-- `di_repo_nwo` — the owner/name exactly as GitHub spells it; non-zero exit and empty
-  output when gh cannot answer. Callers state their own fallback at the call site
+- `plan_sub_issues <parent>` — paginated and buffered; positive issue numbers in GitHub's
+  own order, or the whole read fails; non-zero exit and no rows when unreadable (verify
+  reports `?`, never "not wired").
+- `di_repo_nwo` — the owner/name exactly as GitHub spells it, buffered and validated:
+  output beside a failure, an empty success, or anything that is not `owner/name` is a
+  failed read; non-zero exit and empty output when gh cannot answer. Callers state their own fallback at the call site
   (`|| repo_nwo=""` where "unknown" is survivable, `|| return 1` where it is not).
 
 ## Removed implementations → surviving tests
@@ -77,7 +82,7 @@ The loop now projects the issues to probe with `awk` (field-exact) before iterat
 | Removed | Behaviour / invariant | Proven by |
 |---|---|---|
 | `bin/spark:4535` inline blocked-by read (validate) | open + same-repo edges; foreign numbers never fuse; failed probe → `?`; unknown own identity keeps the edge | `tests/test-canonical-primitives.sh` (six stubbed scenarios over `gov_collect`); `tests/test-governance-engine.sh` (cycle detection over edges) |
-| `bin/spark:8693` inline open-count (next) | count of open blockers, any repository; unreadable → `?` | `tests/test-canonical-primitives.sh` (projection); `tests/test-next-governance-gate.sh` (selection with the endpoint stubbed) |
+| `bin/spark:8693` inline open-count (next) | count of open blockers, any repository; unreadable or malformed → `?` | `tests/test-canonical-primitives.sh` (projection, malformed rows); `tests/test-next-governance-gate.sh` (selection with the endpoint stubbed); `tests/test-course-derivation.sh`, `tests/test-member-identity.sh` and `tests/test-release-gate-role.sh` — whose stubs had answered the endpoint with a pre-shaped count `0` that assumed the old consumer's jq, wrong-layer mocks the validated reader exposed; they now answer with no rows |
 | `planning.sh:298` inline blocked-by read (verify) | the declared blocker by number and repository; foreign same-numbered issue → `~`; unknown repository or unreadable identity → `?`; unreadable graph → `?` | `tests/test-plan-verify-coverage.sh` (`unread:blockedby`, `no-dependency`, `foreign-number`, `unknown-repo`, `unread:identity`, wired) |
 | `planning.sh:277`, `:328` inline sub-issue reads | hierarchy and relative order; unreadable → `?` | `tests/test-plan-verify-coverage.sh` (`unread:subissues`, `no-hierarchy`, `bad-order`, the unmentioned `999` child) |
 | `bin/spark:3144`, `:5398` inline identity reads | labels gate counts via `search/issues` only with an identity; milestone snapshot fails without one | `tests/test-labels*.sh`, `tests/test-course*.sh`, `tests/test-next*.sh` (green after the change) |
