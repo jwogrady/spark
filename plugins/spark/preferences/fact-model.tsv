@@ -17,6 +17,7 @@
 #
 #   version     <int>
 #   class       <name>        <required>     <value-shape>       <description>
+#   key         <class>       <canonical fact key>               (exactly one per class)
 #   facet       <name>        <envelope-field(s)>                <description>
 #   field       <name>        <required>     <type>              <description>
 #   status      <token>       <value-allowed>                    <description>
@@ -24,6 +25,7 @@
 #   source      <type>        <version-identity>                 <description>
 #   source-identity <type>    <regex>                            <canonical identity form for that source type>
 #   source-version  <type>    <regex>                            <version-identity grammar for that source type>
+#   boundary-evidence <boundary> <fact-key>  <value-field>  <condition>  <description>
 #   rule        <id>          <statement>
 #
 #   required       required | optional | derived
@@ -56,7 +58,20 @@ class	acceptance	required	{contract: <work-unit>, head: <commit>, items: [{id: <
 class	head	required	{head: <commit>, base_ref: <ref>, base: <commit>, current: true|false}	Exact HEAD, base and staleness of the work unit's change
 class	review	required	{verdict: <verdict>, head: <commit>, reviewer: <login>, record: <comment>}	Independent review verdict bound to an exact HEAD
 class	checks	required	{head: <commit>, required: [<text>], results: [{name: <text>, state: <check-state>}]}	Required-check state on the exact HEAD: exactly one result per required name, each in the closed check-state vocabulary
-class	next_action	derived	{action: <action>, because: [<fact-key>]}	The next governed action where it is mechanically derivable
+class	next_action	derived	{action: <action>, because: [<fact-key>], boundary: <boundary>|none}	The next governed action where it is mechanically derivable
+
+# --- Canonical fact keys: exactly one key per class, so a derived fact's inputs
+# and a consumer's invalidation always address the same identity (R1) -------
+key	work_unit	work_unit.identity
+key	repository	repository.identity
+key	placement	placement.current
+key	graph	graph.native
+key	authority	authority.standing
+key	acceptance	acceptance.contract
+key	head	head.exact
+key	review	review.independent
+key	checks	checks.required
+key	next_action	next_action.governed
 
 # --- Facets carried by the envelope rather than as separate facts ----------
 facet	provenance	source, provenance	Source identity and the pointer that lets an auditor drill down
@@ -65,7 +80,7 @@ facet	certainty	status, detail	UNKNOWN / CONFLICT / NOT_APPLICABLE are explicit 
 
 # --- Envelope fields: every fact carries exactly this shape ------------------
 field	schema_version	required	string	The schema version the fact conforms to (this file's `version`)
-field	key	required	string	Fact key `<class>.<name>`; one representation per operative fact
+field	key	required	string	The class's one canonical fact key (the key records); one representation per operative fact, so inputs and invalidators address a stable identity
 field	class	required	string	One of the class names above
 field	status	required	string	One of the status tokens below
 field	value	optional	any	Present only when status is ESTABLISHED; its shape is the class's value-shape
@@ -74,7 +89,7 @@ field	observed_at	required	string	ISO-8601 UTC instant the source was read
 field	invalidators	required	list	Canonical invalidator tokens; a change to any one makes the fact stale
 field	provenance	required	string	Pointer to the authoritative record (URL or canonical locator); never the record itself
 field	inputs	optional	list	Fact keys this fact was derived from; required when source.type is derived
-field	inferred	optional	boolean	true only for a legitimately inferred fact; an inferred fact is never authority
+field	inferred	optional	boolean	The literal true, present only on a legitimately inferred fact (any other value is rejected); an inferred fact is never authority
 field	detail	optional	object	Machine-shaped explanation for UNKNOWN or CONFLICT: {reason: <text>, candidates: [<canonical locator>]}
 
 # --- Status vocabulary: closed; nothing outside it is a fact ----------------
@@ -94,7 +109,7 @@ identifier	release	^v[0-9]+\.[0-9]+\.[0-9]+$	A release tag as published
 identifier	login	^login:[A-Za-z0-9-]+(\[bot\])?$	An actor identity; naming an actor never confers authority
 identifier	verdict	^(PASS|CHANGES REQUIRED|DECISION REQUIRED|NOT ASSESSED)$	The independent reviewer's closed vocabulary
 identifier	action	^(wait-review|repair|merge|stop-decision-required)$	The closed next-action vocabulary: only actions whose derivation rule (R15) this version defines; a new action is a new version
-identifier	fact-key	^[a-z_]+\.[a-z_]+$	<class>.<name>
+identifier	fact-key	^(work_unit\.identity|repository\.identity|placement\.current|graph\.native|authority\.standing|acceptance\.contract|head\.exact|review\.independent|checks\.required|next_action\.governed)$	the class's one canonical key (the key records)
 identifier	issue-state	^(open|closed)$	Current state of a related work unit; a blocked_by entry is satisfied exactly when closed
 identifier	check-state	^(success|failure|pending|missing)$	Normalized state of one required check on the exact HEAD: missing = required but no run observed
 identifier	scope	^(merge:routine|close:issue|metadata:labels|metadata:hierarchy|evidence:publish|branch:push)$	What a standing grant permits; the closed scope vocabulary
@@ -123,8 +138,13 @@ source-version	repository-file	^[0-9a-f]{40}$	The commit id the file was read at
 source-version	human-decision	^([1-9][0-9]*|[0-9a-f]{40})$	The comment id or commit id that records the decision
 source-version	derived	^[1-9][0-9]*(;[a-z_]+\.[a-z_]+@[^; ]+)+$	The derived-version (schema version, then <input key>@<input source.version> for every input, sorted)
 
+# --- Reserved boundaries this version can derive a stop from -----------------
+# condition: not-none — the named value field is anything but the token none.
+# A boundary token absent here cannot be derived as the reason for a stop in v1.
+boundary-evidence	placement:release	placement.current	release	not-none	The work unit is placed in a release, so a routine merge would change what that release ships
+
 # --- Rules the shape enforces ------------------------------------------------
-rule	R1	Canonical identifiers have one representation; labels, abbreviations and pretty names are projections.
+rule	R1	Canonical identifiers have one representation; labels, abbreviations and pretty names are projections. Each class has exactly one canonical fact key, so derived inputs and invalidation address a stable identity.
 rule	R2	Raw issue or comment bodies, timelines and explanatory prose are not fact values; a fact points at them through provenance.
 rule	R3	A fact states what is established now; provenance states why and how. The two are separate fields, never merged.
 rule	R4	A derived fact lists the keys of every fact that decided it and records each input's source.version in its own source.version, so a change to any input changes and invalidates the conclusion.
@@ -138,4 +158,4 @@ rule	R11	A snapshot carries every required class exactly once; a smaller set is 
 rule	R12	A checks fact carries exactly one result per required check name, each in the closed check-state vocabulary; merge is derivable only when every result is success.
 rule	R13	Authority scopes and human boundaries are closed tokens carried in source-backed, targeted records; explanatory wording is provenance, never a value a consumer must interpret.
 rule	R14	Every value has an exact shape: only the declared keys, recursively; source.identity and source.version each match the grammar of their source type; a grant names the repository or work unit it applies to.
-rule	R15	next_action is derived, never asserted, and every fact its derivation consulted is in its inputs (so R4 re-versions it when any of them changes): merge only when the review is PASS on the current HEAD, every required check is success on it, every acceptance item is MET on it, the HEAD is current, and a grant with scope merge:routine targets the repository or work unit (review, checks, acceptance, head, authority, repository and work_unit are consulted); repair only on CHANGES REQUIRED for the current HEAD (review, head); wait-review only when no verdict binds the current HEAD or a required check is pending, missing or UNKNOWN (head, review, checks as present); stop-decision-required only when an input is CONFLICT, the verdict is DECISION REQUIRED, or the reason names the authority fact's reserved boundaries (the inputs, review and authority as present).
+rule	R15	next_action is derived, never asserted, and every fact its derivation consulted is in its inputs (so R4 re-versions it when any of them changes): merge only when the review is PASS on the current HEAD, every required check is success on it, every acceptance item is MET on it, the HEAD is current, and a grant with scope merge:routine targets the repository or work unit (review, checks, acceptance, head, authority, repository and work_unit are consulted); repair only on CHANGES REQUIRED for the current HEAD (review, head); wait-review only when no verdict binds the current HEAD or a required check is pending, missing or UNKNOWN (head, review, checks as present); stop-decision-required only when an input is CONFLICT, the verdict is DECISION REQUIRED, or boundary names a reserved boundary that applies here: the authority fact is in because and carries that boundary token with a target equal to the repository or work unit id (authority, repository, work_unit consulted), and the boundary-evidence record for that token holds on the fact it names, which is in because. boundary is none in every other case; a boundary token with no boundary-evidence record has no derivation in this version.

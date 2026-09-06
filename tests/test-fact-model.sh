@@ -29,6 +29,11 @@ assert_eq "schema version is 1" "1" "$(rec version | cut -f2)"
 assert_eq "ten fact classes" "10" "$(rec class | wc -l | tr -d ' ')"
 assert_eq "nine required + one derived class" "9 1" "$(rec class | cut -f3 | sort | uniq -c | awk '{print $1}' | sort -rn | tr '\n' ' ' | sed 's/ $//')"
 assert_eq "three envelope facets" "3" "$(rec facet | wc -l | tr -d ' ')"
+assert_eq "exactly one canonical key per class" "$(rec class | cut -f2 | sort | tr '\n' ' ')" "$(rec key | cut -f2 | sort | tr '\n' ' ')"
+assert_eq "every canonical key is prefixed by its class" "" "$(rec key | awk -F'\t' 'index($3, $2 ".") != 1')"
+assert_eq "one derivable reserved boundary in v1" "1" "$(rec boundary-evidence | wc -l | tr -d ' ')"
+for b in $(rec boundary-evidence | cut -f2); do printf '%s' "$b" | grep -qE "$(rec identifier | awk -F'\t' '$2=="boundary"{print $3}')" && ok || bad "boundary-evidence $b is in the closed boundary vocabulary"; done
+for k in $(rec boundary-evidence | cut -f3); do rec key | cut -f3 | grep -qx "$k" && ok || bad "boundary-evidence names canonical key $k"; done
 assert_eq "four status tokens" "4" "$(rec status | wc -l | tr -d ' ')"
 assert_eq "ESTABLISHED is the only status that may carry a value" "ESTABLISHED" "$(rec status | awk -F'\t' '$3=="yes"{print $2}')"
 assert_eq "twelve envelope fields" "12" "$(rec field | wc -l | tr -d ' ')"
@@ -60,11 +65,15 @@ EOF
 for c in $(rec class | cut -f2); do grep -q "^| \`$c\` |" "$DOC" && ok || bad "doc table names class $c"; done
 for s in $(rec status | cut -f2); do grep -q "^| \`$s\` |" "$DOC" && ok || bad "doc table names status $s"; done
 for f in $(rec field | cut -f2); do grep -q "^| \`$f\` |" "$DOC" && ok || bad "doc envelope table names field $f"; done
+while IFS=$'\t' read -r _ c k; do grep -q "^| \`$c\` | \`$k\` |" "$DOC" && ok || bad "doc class table shows canonical key $k"; done <<EOF
+$(rec key)
+EOF
+for b in $(rec boundary-evidence | cut -f2); do grep -q "^| \`$b\` | \`$(rec boundary-evidence | awk -F'\t' -v b="$b" '$2==b{print $3}')\` |" "$DOC" && ok || bad "doc boundary table names $b with its evidence fact"; done
 for k in $(rec identifier | cut -f2); do grep -q "^| $k |" "$DOC" && ok || bad "doc identifier table names $k"; done
 for k in $(rec source-identity | cut -f2); do grep -q "^| \`$k\` |" "$DOC" && ok || bad "doc source table names $k"; done
 for r in $(rec rule | cut -f2); do grep -q "^- \*\*$r\*\*" "$DOC" && ok || bad "doc states rule $r"; done
 grep -q 'preferences/fact-model.tsv' "$DOC" && ok || bad "doc names its machine-readable authority"
-grep -qE '^| `next_action` \| derived' "$DOC" && ok || bad "doc marks next_action as derived"
+grep -qE '^| `next_action` \| `next_action.governed` \| derived' "$DOC" && ok || bad "doc marks next_action as derived"
 assert_eq "seven examples on the page" "7" "$(grep -c '^### Example [1-7] — ' "$DOC")"
 assert_eq "exactly one example is a complete snapshot" "1" "$(grep -c '^### Example [1-7] — .*(complete snapshot)$' "$DOC")"
 assert_eq "the other six are marked as fragments" "6" "$(grep -c '^### Example [1-7] — .*(fragment)$' "$DOC")"
@@ -89,11 +98,13 @@ ids = {r[1]: re.compile(r[2]) for r in rows if r[0] == "identifier"}
 sources = {r[1] for r in rows if r[0] == "source"}
 sid = {r[1]: re.compile(r[2]) for r in rows if r[0] == "source-identity"}
 sver = {r[1]: re.compile(r[2]) for r in rows if r[0] == "source-version"}
+canon = {r[1]: r[2] for r in rows if r[0] == "key"}                       # class -> its one canonical key (R1)
+evidence = {r[1]: (r[2], r[3], r[4]) for r in rows if r[0] == "boundary-evidence"}   # boundary -> (fact key, field, condition)
 # exact value shapes (R14): the declared keys and nothing else, recursively
 SHAPES = {"work_unit": {"kind", "id"}, "repository": {"id", "default_branch"}, "placement": {"milestone", "release", "gate"},
           "graph": {"parent", "children", "blocked_by"}, "authority": {"grants", "human_boundaries"}, "acceptance": {"contract", "head", "items"},
           "head": {"head", "base_ref", "base", "current"}, "review": {"verdict", "head", "reviewer", "record"},
-          "checks": {"head", "required", "results"}, "next_action": {"action", "because"}}
+          "checks": {"head", "required", "results"}, "next_action": {"action", "because", "boundary"}}
 NESTED = {"graph.parent": {"id", "state"}, "graph.children[]": {"id", "state"}, "graph.blocked_by[]": {"id", "state"},
           "authority.grants[]": {"decision", "target", "scopes"}, "authority.human_boundaries[]": {"decision", "target", "boundary"},
           "acceptance.items[]": {"id", "state"}, "checks.results[]": {"name", "state"}}
@@ -131,6 +142,8 @@ def check_fact(f):
     if not ids["fact-key"].match(f["key"]): fail(f"key not canonical: {f['key']}")
     if f["class"] not in classes: fail(f"unknown class {f['class']}")
     if f["key"].split(".")[0] != f["class"]: fail("key prefix must equal class")
+    if f["key"] != canon[f["class"]]: fail(f"key {f['key']} is not the canonical key {canon[f['class']]} of class {f['class']} (R1)")
+    if "inferred" in f and f["inferred"] is not True: fail("inferred must be the literal true when present")
     if f["status"] not in statuses: fail(f"unknown status {f['status']}")
     if "value" in f and f["value"] is None: fail("value: null is not a representation of absence; omit the field")
     if statuses[f["status"]] == "no" and "value" in f: fail(f"{f['status']} fact carries a value")
@@ -189,7 +202,7 @@ def check_fact(f):
             ids["repository"].match(b["target"]) or ids["work-unit"].match(b["target"]) or fail("boundary target must be a canonical repository or work unit (R14)")
             ids["boundary"].match(b["boundary"]) or fail("boundary outside the closed vocabulary (R13)")
         if f["source"]["type"] != "human-decision": fail("authority must come from a human-decision source")
-        if f.get("inferred"): fail("authority can never be inferred")
+        if "inferred" in f: fail("authority can never be inferred")
     if c == "acceptance":
         wu(v["contract"]); sha(v["head"])
         for it in v["items"]: it["state"] in ("MET", "NOT_MET", "UNKNOWN") or fail("bad acceptance state")
@@ -204,6 +217,8 @@ def check_fact(f):
     if c == "next_action":
         ids["action"].match(v["action"]) or fail("action outside vocabulary")
         set(v["because"]) <= set(f.get("inputs", [])) or fail("because must be a subset of inputs")
+        v["boundary"] == "none" or ids["boundary"].match(v["boundary"]) or fail("next_action.boundary outside the closed boundary vocabulary")
+        if v["boundary"] != "none" and v["action"] != "stop-decision-required": fail("only stop-decision-required rests on a reserved boundary (R15)")
 
 REQUIRED = {c for c, req in classes.items() if req == "required"}
 def check_set(facts, complete):
@@ -249,11 +264,24 @@ def check_set(facts, complete):
             pending = (chk is not None and chk["status"] == "UNKNOWN") or (est(chk) and any(r["state"] in ("pending", "missing") for r in chk["value"]["results"]))
             if not (no_verdict or pending): fail("wait-review requires no verdict on the current HEAD or a pending/missing/UNKNOWN required check (R15)")
         elif act == "stop-decision-required":
-            rev, auth = get("review"), get("authority")
+            rev = get("review")
             conflict = any(keys[k]["status"] == "CONFLICT" for k in f["inputs"])
             decision = est(rev) and rev["value"]["verdict"] == "DECISION REQUIRED"
-            boundary = est(auth) and auth["key"] in f["value"]["because"] and auth["value"]["human_boundaries"]
-            if not (conflict or decision or boundary): fail("stop-decision-required requires a CONFLICT input, a DECISION REQUIRED verdict, or a reserved boundary named as the reason (R15)")
+            b = f["value"]["boundary"]; by_boundary = False
+            if b != "none":
+                # the boundary must be reserved for THIS repository or work unit, and its evidence must hold here
+                auth, repo, wu = get("authority"), get("repository"), get("work_unit")
+                targets = {x["value"]["id"] for x in (repo, wu) if est(x)}
+                if not targets: fail("a stop on a reserved boundary needs the repository or work unit it targets (R15)")
+                if not (est(auth) and auth["key"] in f["value"]["because"] and any(hb["boundary"] == b and hb["target"] in targets for hb in auth["value"]["human_boundaries"])):
+                    fail(f"boundary {b} is not reserved for this repository or work unit by the authority fact named in because (R15)")
+                if b not in evidence: fail(f"boundary {b} has no boundary-evidence record: no derivation in this version (R15)")
+                ekey, field, cond = evidence[b]
+                ev = get(ekey.split(".")[0])
+                if not (est(ev) and ev["key"] == ekey and ev["key"] in f["value"]["because"]): fail(f"boundary {b} needs its evidence fact {ekey} ESTABLISHED and in because (R15)")
+                if cond == "not-none" and ev["value"][field] == "none": fail(f"boundary {b} does not apply: {ekey}.{field} is none (R15)")
+                by_boundary = True
+            if not (conflict or decision or by_boundary): fail("stop-decision-required requires a CONFLICT input, a DECISION REQUIRED verdict, or an applicable reserved boundary (R15)")
         else:
             fail(f"action {act} has no derivation rule in this version (R15)")
         missing = used - set(f["inputs"])
@@ -306,6 +334,11 @@ mut() { printf '%s' "$base" | python3 -c "import json,sys; f=json.load(sys.stdin
 accepts "$(mut 'f["status"]="UNKNOWN"; f["detail"]={"reason":"x","candidates":[]}')" && bad "UNKNOWN with a value must be rejected (R6)" || ok
 accepts "$(mut 'f["status"]="UNKNOWN"; del f["value"]')" && bad "UNKNOWN without detail must be rejected" || ok
 accepts "$(mut 'f["value"]["record"]="#42"')" && bad "a bare #42 must not pass as an identity (R1)" || ok
+accepts "$(mut 'f["key"]="review.cached"')" && bad "a key other than the class's canonical key must be rejected (R1)" || ok
+accepts "$(mut 'f["key"]="review.foo"')" && bad "an arbitrary <class>.<name> key must be rejected (R1)" || ok
+accepts "$(mut 'f["inferred"]=False')" && bad "inferred: false must be rejected (only the literal true is a representation)" || ok
+accepts "$(mut 'f["inferred"]="true"')" && bad "inferred: \"true\" (a string) must be rejected" || ok
+accepts "$(mut 'f["inferred"]=True')" && ok || bad "control: inferred: true on a non-authority fact is accepted"
 accepts "$(mut 'f["value"]["head"]="0123456"')" && bad "an abbreviated commit must be rejected (R1)" || ok
 accepts "$(mut 'f["invalidators"]=["comment:github.com/acme/widgets#42/comment/9100"]')" && bad "a HEAD-bound fact without a head: invalidator must be rejected (R7)" || ok
 accepts "$(mut 'f["value"]["verdict"]="APPROVED"')" && bad "a verdict outside the closed vocabulary must be rejected" || ok
@@ -313,7 +346,7 @@ accepts "$(mut 'f["schema_version"]="2"')" && bad "an unknown schema_version mus
 accepts "$(mut 'f["body"]="the whole comment text"')" && bad "a raw prose field must be rejected (R2)" || ok
 accepts "$(mut 'f["status"]="CONFLICT"; del f["value"]; f["detail"]={"reason":"x","candidates":["github.com/acme/widgets#42/comment/9100"]}')" && bad "a CONFLICT naming one candidate must be rejected (R8)" || ok
 accepts "$(mut 'f["value"]=None')" && bad "value: null must not stand in for absence (R6)" || ok
-derived='{"schema_version":"1","key":"next_action.governed","class":"next_action","status":"ESTABLISHED","value":{"action":"merge","because":["review.independent"]},"source":{"type":"derived","identity":"fact-model/1","version":"1;review.independent@2026-09-06T11:58:00Z"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["head:0123456789abcdef0123456789abcdef01234567"],"provenance":"preferences/fact-model.tsv","inputs":["review.independent"]}'
+derived='{"schema_version":"1","key":"next_action.governed","class":"next_action","status":"ESTABLISHED","value":{"action":"merge","because":["review.independent"],"boundary":"none"},"source":{"type":"derived","identity":"fact-model/1","version":"1;review.independent@2026-09-06T11:58:00Z"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["head:0123456789abcdef0123456789abcdef01234567"],"provenance":"preferences/fact-model.tsv","inputs":["review.independent"]}'
 accepts "$derived" && ok || bad "control: a derived fact with inputs is accepted"
 accepts "$(printf '%s' "$derived" | python3 -c 'import json,sys; f=json.load(sys.stdin); del f["inputs"]; print(json.dumps(f))')" && bad "a derived fact without inputs must be rejected (R4)" || ok
 accepts "$(printf '%s' "$derived" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["source"]["identity"]="fact-model"; print(json.dumps(f))')" && bad "a derived source identity outside its grammar must be rejected (R14)" || ok
@@ -334,6 +367,8 @@ auth='{"schema_version":"1","key":"authority.standing","class":"authority","stat
 accepts "$auth" && ok || bad "control: a canonical authority fact is accepted"
 amut() { printf '%s' "$auth" | python3 -c "import json,sys; f=json.load(sys.stdin); exec(sys.argv[1]); print(json.dumps(f))" "$1"; }
 accepts "$(amut 'f["source"]["type"]="github-api"')" && bad "authority from a non-human-decision source must be rejected (R5)" || ok
+accepts "$(amut 'f["inferred"]=True')" && bad "an inferred authority fact must be rejected (R5)" || ok
+accepts "$(amut 'f["inferred"]=False')" && bad "inferred: false on authority must be rejected (never a representation)" || ok
 accepts "$(amut 'f["source"]["identity"]="role:owner"')" && bad "a human-decision source whose identity is a role must be rejected (R5/R14)" || ok
 accepts "$(amut 'f["source"]["version"]="banana"')" && bad "a human-decision source version outside its grammar must be rejected (R14)" || ok
 accepts "$(amut 'f["source"]["identity"]="the maintainer approved this in chat"')" && bad "a human-decision source whose identity is a summary must be rejected (R5/R14)" || ok
@@ -377,6 +412,25 @@ sets "$(printf '{"complete": true, "facts": %s}' "$(smut 'nx=[f for f in s if f[
 sets "$(printf '{"complete": true, "facts": %s}' "$(smut 'nx=[f for f in s if f["class"]=="authority"][0]; nx["value"]["grants"][0]["target"]="github.com/acme/program"')")" && bad "merge with a grant targeting another repository must be rejected (R15)" || ok
 sets "$(printf '{"complete": true, "facts": %s}' "$(smut 'nx=[f for f in s if f["class"]=="next_action"][0]; nx["inputs"]=[i for i in nx["inputs"] if i!="repository.identity"]; nx["source"]["version"]=";".join(p for p in nx["source"]["version"].split(";") if not p.startswith("repository.identity@"))')")" && bad "a merge derivation that omits a consulted fact (repository) from its inputs must be rejected (R4/R15)" || ok
 accepts "$(printf '%s' "$derived" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["value"]["action"]="close"; print(json.dumps(f))')" && bad "an action outside the v1 vocabulary (close) must be rejected" || ok
+accepts "$(printf '%s' "$derived" | python3 -c 'import json,sys; f=json.load(sys.stdin); del f["value"]["boundary"]; print(json.dumps(f))')" && bad "a next_action without the boundary field must be rejected (R14)" || ok
+accepts "$(printf '%s' "$derived" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["value"]["boundary"]="placement:release"; print(json.dumps(f))')" && bad "a merge resting on a reserved boundary must be rejected (R15)" || ok
+accepts "$(printf '%s' "$derived" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["value"]["boundary"]="release placement"; print(json.dumps(f))')" && bad "a prose boundary on next_action must be rejected (R13)" || ok
+# reserved-boundary controls (R15): the page's Example 6 stops on placement:release; each applicability condition broken in turn must be rejected
+ex6="$(python3 - "$DOC" <<'PY'
+import json, re, sys
+t = open(sys.argv[1]).read()
+m = re.search(r"^### Example 6 — [^\n]*\(fragment\)\n.*?```json\n(.*?)\n```", t, flags=re.S | re.M)
+print(json.dumps(json.loads(m.group(1))))
+PY
+)"
+xmut() { printf '%s' "$ex6" | python3 -c "import json,sys; s=json.load(sys.stdin); exec(sys.argv[1]); print(json.dumps(s))" "$1"; }
+sets "$(printf '{"complete": false, "facts": %s}' "$ex6")" && ok || bad "control: the page's reserved-boundary fragment is accepted"
+sets "$(printf '{"complete": false, "facts": %s}' "$(xmut 'a=[f for f in s if f["class"]=="authority"][0]; [b.__setitem__("target","github.com/acme/program") for b in a["value"]["human_boundaries"]]')")" && bad "a boundary reserved for another repository must not stop this work unit (R15)" || ok
+sets "$(printf '{"complete": false, "facts": %s}' "$(xmut 'p=[f for f in s if f["class"]=="placement"][0]; p["value"]["release"]="none"')")" && bad "placement:release must not apply when the work unit is in no release (R15)" || ok
+sets "$(printf '{"complete": false, "facts": %s}' "$(xmut 'n=[f for f in s if f["class"]=="next_action"][0]; n["value"]["boundary"]="settings:repository"')")" && bad "a boundary with no evidence record has no derivation in v1 and must be rejected (R15)" || ok
+sets "$(printf '{"complete": false, "facts": %s}' "$(xmut 'n=[f for f in s if f["class"]=="next_action"][0]; n["value"]["boundary"]="none"')")" && bad "a stop with no boundary, no CONFLICT and no DECISION REQUIRED must be rejected (R15)" || ok
+sets "$(printf '{"complete": false, "facts": %s}' "$(xmut 'n=[f for f in s if f["class"]=="next_action"][0]; a=[f for f in s if f["class"]=="authority"][0]; a["value"]["human_boundaries"]=[b for b in a["value"]["human_boundaries"] if b["boundary"]!="placement:release"]')")" && bad "a boundary the authority fact does not reserve must be rejected (R15)" || ok
+sets "$(printf '{"complete": false, "facts": %s}' "$(xmut 's[:]=[f for f in s if f["class"] not in ("repository","work_unit")]; n=[f for f in s if f["class"]=="next_action"][0]; n["inputs"]=[i for i in n["inputs"] if i not in ("repository.identity","work_unit.identity")]; n["value"]["because"]=[i for i in n["value"]["because"] if i not in ("repository.identity","work_unit.identity")]; n["source"]["version"]=";".join(p for p in n["source"]["version"].split(";") if not (p.startswith("repository.identity@") or p.startswith("work_unit.identity@")))')")" && bad "a boundary stop without the repository or work unit it targets must be rejected (R15)" || ok
 sets "$(printf '{"complete": true, "facts": %s}' "$(printf '%s' "$full" | python3 -c 'import json,sys; s=json.load(sys.stdin); print(json.dumps([f for f in s if f["class"]!="authority"]))')")" && bad "a snapshot lacking a required class must be rejected (R11)" || ok
 sets "$(printf '{"complete": false, "facts": %s}' "$(printf '%s' "$full" | python3 -c 'import json,sys; s=json.load(sys.stdin); print(json.dumps(s+[s[0]]))')")" && bad "a set repeating a class must be rejected (R11)" || ok
 sets "$(printf '{"complete": false, "facts": %s}' "$(printf '%s' "$full" | python3 -c 'import json,sys; s=json.load(sys.stdin); print(json.dumps([f for f in s if f["class"] not in ("authority","next_action")]))')")" && ok || bad "control: a subset with no dangling derived inputs is a valid fragment when not claimed complete"

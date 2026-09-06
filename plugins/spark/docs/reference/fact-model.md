@@ -28,18 +28,22 @@ which are computed from other facts and name their inputs. Anything smaller is
 a **fragment**: useful to show one situation, never consumed as a snapshot
 (R11).
 
-| Class | Required | Value shape when ESTABLISHED | What it answers |
-|---|---|---|---|
-| `work_unit` | required | `{kind: issue\|pull_request, id: <work-unit>}` | Which task is being executed |
-| `repository` | required | `{id: <repository>, default_branch: <ref>}` | Which repository owns it |
-| `placement` | required | `{milestone: <milestone>\|none, release: <release>\|none, gate: <work-unit>\|none}` | Where it sits in release, milestone and gate |
-| `graph` | required | `{parent: {id: <work-unit>, state: <issue-state>}\|none, children: [{id, state}], blocked_by: [{id, state}]}` | Its native parent, children and dependencies, each with its current state; a blocker is satisfied exactly when its state is `closed` |
-| `authority` | required | `{grants: [{decision: <decision-record>, target: <repository>\|<work-unit>, scopes: [<scope>]}], human_boundaries: [{decision: <decision-record>, target: <repository>\|<work-unit>, boundary: <boundary>}]}` | Each grant and each reserved boundary names its durable decision record, the repository or work unit it applies to, and a closed token; the wording lives behind `provenance` |
-| `acceptance` | required | `{contract: <work-unit>, head: <commit>, items: [{id, state: MET\|NOT_MET\|UNKNOWN}]}` | Which acceptance contract governs and how far it is satisfied, as judged on an exact HEAD |
-| `head` | required | `{head: <commit>, base_ref: <ref>, base: <commit>, current: true\|false}` | The exact HEAD and base, and whether the HEAD is still current |
-| `review` | required | `{verdict: <verdict>, head: <commit>, reviewer: <login>, record: <comment>}` | The independent verdict, bound to the HEAD it judged |
-| `checks` | required | `{head: <commit>, required: [<text>], results: [{name, state: <check-state>}]}` | Required-check state on that exact HEAD: exactly one result per required name (R12); `merge` is derivable only when every state is `success` |
-| `next_action` | derived | `{action: <action>, because: [<fact-key>]}` | The next governed action, where it follows mechanically |
+| Class | Canonical key | Required | Value shape when ESTABLISHED | What it answers |
+|---|---|---|---|---|
+| `work_unit` | `work_unit.identity` | required | `{kind: issue\|pull_request, id: <work-unit>}` | Which task is being executed |
+| `repository` | `repository.identity` | required | `{id: <repository>, default_branch: <ref>}` | Which repository owns it |
+| `placement` | `placement.current` | required | `{milestone: <milestone>\|none, release: <release>\|none, gate: <work-unit>\|none}` | Where it sits in release, milestone and gate |
+| `graph` | `graph.native` | required | `{parent: {id: <work-unit>, state: <issue-state>}\|none, children: [{id, state}], blocked_by: [{id, state}]}` | Its native parent, children and dependencies, each with its current state; a blocker is satisfied exactly when its state is `closed` |
+| `authority` | `authority.standing` | required | `{grants: [{decision: <decision-record>, target: <repository>\|<work-unit>, scopes: [<scope>]}], human_boundaries: [{decision: <decision-record>, target: <repository>\|<work-unit>, boundary: <boundary>}]}` | Each grant and each reserved boundary names its durable decision record, the repository or work unit it applies to, and a closed token; the wording lives behind `provenance` |
+| `acceptance` | `acceptance.contract` | required | `{contract: <work-unit>, head: <commit>, items: [{id, state: MET\|NOT_MET\|UNKNOWN}]}` | Which acceptance contract governs and how far it is satisfied, as judged on an exact HEAD |
+| `head` | `head.exact` | required | `{head: <commit>, base_ref: <ref>, base: <commit>, current: true\|false}` | The exact HEAD and base, and whether the HEAD is still current |
+| `review` | `review.independent` | required | `{verdict: <verdict>, head: <commit>, reviewer: <login>, record: <comment>}` | The independent verdict, bound to the HEAD it judged |
+| `checks` | `checks.required` | required | `{head: <commit>, required: [<text>], results: [{name, state: <check-state>}]}` | Required-check state on that exact HEAD: exactly one result per required name (R12); `merge` is derivable only when every state is `success` |
+| `next_action` | `next_action.governed` | derived | `{action: <action>, because: [<fact-key>], boundary: <boundary>\|none}` | The next governed action, where it follows mechanically |
+
+Each class has exactly one canonical key. `review.cached`, `review.foo` or a
+second `review.*` key is not a fact of the model: a derived fact's `inputs` and
+a consumer's invalidation must address one stable identity per class (R1).
 
 Three further concerns are **facets of the envelope**, not separate facts:
 provenance (`source`, `provenance`), freshness (`source.version`,
@@ -52,7 +56,7 @@ Every fact, whatever its class, has exactly this shape:
 | Field | Required | Meaning |
 |---|---|---|
 | `schema_version` | required | The schema version the fact conforms to (`"1"`) |
-| `key` | required | `<class>.<name>` — one representation per operative fact |
+| `key` | required | the class's one canonical key (class table) — one representation per operative fact |
 | `class` | required | One of the class names above |
 | `status` | required | One of the four status tokens below |
 | `value` | only when ESTABLISHED | The class's value shape |
@@ -61,7 +65,7 @@ Every fact, whatever its class, has exactly this shape:
 | `invalidators` | required | Canonical tokens; a change to any one makes the fact stale |
 | `provenance` | required | A pointer to the authoritative record, never the record itself |
 | `inputs` | when derived | The keys of the facts this one was computed from |
-| `inferred` | optional | `true` only for a legitimately inferred fact; an inferred fact is never authority |
+| `inferred` | optional | the literal `true`, present only on a legitimately inferred fact — `false`, `"true"` or any other value is rejected; an inferred fact is never authority |
 | `detail` | optional | Machine-shaped explanation for UNKNOWN or CONFLICT: `{reason, candidates}` |
 
 Optional means *absent*. A missing `value` is the statement "no value is
@@ -98,13 +102,26 @@ or bind.
 | login | `login:<name>` | `login:github-actions[bot]` — naming an actor never confers authority |
 | verdict | the reviewer's closed vocabulary | `PASS`, `CHANGES REQUIRED`, `DECISION REQUIRED`, `NOT ASSESSED` |
 | action | the closed next-action vocabulary — only actions this version can derive (R15); a new action is a new version | `wait-review`, `repair`, `merge`, `stop-decision-required` |
-| fact-key | `<class>.<name>` | `review.independent` |
+| fact-key | the class's one canonical key (class table) | `review.independent` |
 | issue-state | current state of a related work unit | `open`, `closed` |
 | check-state | normalized state of one required check | `success`, `failure`, `pending`, `missing` (required but no run observed) |
 | scope | what a standing grant permits | `merge:routine`, `close:issue`, `metadata:labels`, `metadata:hierarchy`, `evidence:publish`, `branch:push` |
 | boundary | what a human reserves | `release:approve`, `authority:grant`, `settings:repository`, `action:destructive`, `placement:release`, `semantics:product` |
 | decision-record | a durable human decision: a comment locator or `<repository>@<commit>` | `github.com/acme/widgets#7/comment/9001` |
 | derived-version | `<schema version>;<input key>@<input source.version>;…`, one entry per input, sorted by key | `1;head.exact@4f3d…;review.independent@2026-09-06T11:58:00Z` |
+
+## Reserved boundaries the model can derive a stop from
+
+`next_action.boundary` names the reserved boundary a `stop-decision-required`
+rests on, or `none`. Naming one is not enough: the authority fact must carry
+that token with a target equal to the repository or work unit id, and the
+evidence below must hold on the fact it names. A boundary token without a row
+here has no derivation in this version — a stop on it needs a DECISION REQUIRED
+verdict or a CONFLICT input, otherwise `next_action` is UNKNOWN.
+
+| Boundary | Evidence fact | Field | Condition | Why it applies |
+|---|---|---|---|---|
+| `placement:release` | `placement.current` | `release` | not `none` | the work unit is placed in a release, so a routine merge would change what that release ships |
 
 ## Sources: identity grammar and version identity
 
@@ -123,7 +140,8 @@ of the source type; a role name, a label, a summary, or a word such as
 ## Rules
 
 - **R1** Canonical identifiers have one representation; labels, abbreviations
-  and pretty names are projections.
+  and pretty names are projections. Each class has exactly one canonical fact
+  key, so derived inputs and invalidation address a stable identity.
 - **R2** Raw issue or comment bodies, timelines and explanatory prose are not
   fact values; a fact points at them through `provenance`.
 - **R3** A fact states what is established now; provenance states why and how.
@@ -170,10 +188,14 @@ of the source type; a role name, a label, a summary, or a word such as
   HEAD (`review`, `head`); `wait-review` only when no verdict binds the current
   HEAD or a required check is pending, missing or UNKNOWN (`head`, `review`,
   `checks` as present); `stop-decision-required` only when an input is
-  CONFLICT, the verdict is DECISION REQUIRED, or the reason names the
-  authority fact's reserved boundaries (the inputs, `review` and `authority` as
-  present). The behavioral suite checks these conditions and the input coverage
-  against every example.
+  CONFLICT, the verdict is DECISION REQUIRED, or `boundary` names a reserved
+  boundary that applies here: the authority fact is in `because` and carries
+  that token with a target equal to the repository or work unit id (`authority`,
+  `repository`, `work_unit`), and the boundary's evidence row holds on the fact
+  it names, which is in `because`. `boundary` is `none` in every other case,
+  and a token with no evidence row has no derivation in this version. The
+  behavioral suite checks these conditions and the input coverage against every
+  example.
 
 ## Versioning
 
@@ -215,7 +237,7 @@ action follows mechanically from named inputs.
    "source": {"type": "github-api", "identity": "github.com/acme/widgets", "version": "2026-09-01T08:00:00Z"},
    "observed_at": "2026-09-06T12:00:05Z", "invalidators": ["repository:github.com/acme/widgets"],
    "provenance": "https://github.com/acme/widgets"},
-  {"schema_version": "1", "key": "placement.release", "class": "placement", "status": "ESTABLISHED",
+  {"schema_version": "1", "key": "placement.current", "class": "placement", "status": "ESTABLISHED",
    "value": {"milestone": "github.com/acme/widgets/milestone/7", "release": "none", "gate": "github.com/acme/widgets#40"},
    "source": {"type": "github-api", "identity": "github.com/acme/widgets#41", "version": "2026-09-05T18:00:00Z"},
    "observed_at": "2026-09-06T12:00:05Z", "invalidators": ["issue:github.com/acme/widgets#41", "milestone:github.com/acme/widgets/milestone/7"],
@@ -252,7 +274,7 @@ action follows mechanically from named inputs.
    "observed_at": "2026-09-06T12:00:05Z", "invalidators": ["head:0123456789abcdef0123456789abcdef01234567", "ruleset:github.com/acme/widgets"],
    "provenance": "https://github.com/acme/widgets/commit/0123456789abcdef0123456789abcdef01234567/checks"},
   {"schema_version": "1", "key": "next_action.governed", "class": "next_action", "status": "ESTABLISHED",
-   "value": {"action": "merge", "because": ["review.independent", "checks.required", "head.exact", "authority.standing", "acceptance.contract"]},
+   "value": {"action": "merge", "because": ["review.independent", "checks.required", "head.exact", "authority.standing", "acceptance.contract"], "boundary": "none"},
    "source": {"type": "derived", "identity": "fact-model/1", "version": "1;acceptance.contract@2026-09-05T18:00:00Z;authority.standing@9001;checks.required@0123456789abcdef0123456789abcdef01234567;head.exact@0123456789abcdef0123456789abcdef01234567;repository.identity@2026-09-01T08:00:00Z;review.independent@2026-09-06T11:58:00Z;work_unit.identity@2026-09-06T12:00:00Z"},
    "observed_at": "2026-09-06T12:00:05Z", "invalidators": ["head:0123456789abcdef0123456789abcdef01234567"],
    "provenance": "preferences/fact-model.tsv",
@@ -288,7 +310,7 @@ observed on. Nothing here can be reused for another HEAD.
    "observed_at": "2026-09-06T13:00:00Z", "invalidators": ["issue:github.com/acme/widgets#41", "head:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
    "provenance": "https://github.com/acme/widgets/issues/41"},
   {"schema_version": "1", "key": "next_action.governed", "class": "next_action", "status": "ESTABLISHED",
-   "value": {"action": "repair", "because": ["review.independent"]},
+   "value": {"action": "repair", "because": ["review.independent"], "boundary": "none"},
    "source": {"type": "derived", "identity": "fact-model/1", "version": "1;checks.required@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;head.exact@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;review.independent@2026-09-06T12:59:00Z"},
    "observed_at": "2026-09-06T13:00:00Z", "invalidators": ["head:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
    "provenance": "preferences/fact-model.tsv", "inputs": ["review.independent", "checks.required", "head.exact"]}
@@ -321,7 +343,7 @@ no HEAD invalidator and remain established.
    "observed_at": "2026-09-06T14:00:00Z", "invalidators": ["head:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "comment:github.com/acme/widgets#42/comment/9200"],
    "provenance": "https://github.com/acme/widgets/pull/42#issuecomment-9200"},
   {"schema_version": "1", "key": "next_action.governed", "class": "next_action", "status": "ESTABLISHED",
-   "value": {"action": "wait-review", "because": ["head.exact", "review.independent"]},
+   "value": {"action": "wait-review", "because": ["head.exact", "review.independent"], "boundary": "none"},
    "source": {"type": "derived", "identity": "fact-model/1", "version": "1;head.exact@cccccccccccccccccccccccccccccccccccccccc;review.independent@2026-09-06T12:59:00Z"},
    "observed_at": "2026-09-06T14:00:00Z", "invalidators": ["head:cccccccccccccccccccccccccccccccccccccccc"],
    "provenance": "preferences/fact-model.tsv", "inputs": ["head.exact", "review.independent"]}
@@ -343,7 +365,7 @@ the newer or the more plausible one.
    "provenance": "https://github.com/acme/widgets/pull/42",
    "detail": {"reason": "two trusted verdict records for the same HEAD disagree", "candidates": ["github.com/acme/widgets#42/comment/9300", "github.com/acme/widgets#42/comment/9301"]}},
   {"schema_version": "1", "key": "next_action.governed", "class": "next_action", "status": "ESTABLISHED",
-   "value": {"action": "stop-decision-required", "because": ["review.independent"]},
+   "value": {"action": "stop-decision-required", "because": ["review.independent"], "boundary": "none"},
    "source": {"type": "derived", "identity": "fact-model/1", "version": "1;review.independent@dddddddddddddddddddddddddddddddddddddddd"},
    "observed_at": "2026-09-06T15:00:00Z", "invalidators": ["head:dddddddddddddddddddddddddddddddddddddddd"],
    "provenance": "preferences/fact-model.tsv", "inputs": ["review.independent"]}
@@ -381,31 +403,45 @@ its target and confer nothing here, without anyone reading the decision record.
 
 ### Example 6 — a reserved human boundary (fragment)
 
-Every mechanical condition holds, but the change touches release placement,
-which the standing grant reserves for a human. The authority fact says so from
-its durable record, and the derived action stops; nothing infers permission
-from the actor's role or from the fact that the merge is technically possible.
-Each reserved boundary is itself a record — which decision reserved it, and for
-which repository — so a boundary recorded elsewhere reserves nothing here.
+Every mechanical condition holds, but the work unit is placed in release
+`v1.2.0`, and the standing decision reserves release placement for a human. The
+derived action stops and names the boundary it rests on; nothing infers
+permission from the actor's role or from the fact that the merge is technically
+possible. Naming a boundary is not enough: the authority fact must carry that
+token with a target equal to this repository or work unit — so a boundary
+recorded for another repository reserves nothing here — and the boundary's
+evidence row must hold on the fact it names (`placement.current.release` is not
+`none`). The `repository` and `work_unit` facts are therefore inputs of the
+derivation, and it re-versions if any of them changes.
 
 ```json
 [
+  {"schema_version": "1", "key": "work_unit.identity", "class": "work_unit", "status": "ESTABLISHED",
+   "value": {"kind": "pull_request", "id": "github.com/acme/widgets#43"},
+   "source": {"type": "github-api", "identity": "github.com/acme/widgets#43", "version": "2026-09-06T16:50:00Z"},
+   "observed_at": "2026-09-06T17:00:00Z", "invalidators": ["pull_request:github.com/acme/widgets#43"],
+   "provenance": "https://github.com/acme/widgets/pull/43"},
+  {"schema_version": "1", "key": "repository.identity", "class": "repository", "status": "ESTABLISHED",
+   "value": {"id": "github.com/acme/widgets", "default_branch": "master"},
+   "source": {"type": "github-api", "identity": "github.com/acme/widgets", "version": "2026-09-01T08:00:00Z"},
+   "observed_at": "2026-09-06T17:00:00Z", "invalidators": ["repository:github.com/acme/widgets"],
+   "provenance": "https://github.com/acme/widgets"},
   {"schema_version": "1", "key": "authority.standing", "class": "authority", "status": "ESTABLISHED",
-   "value": {"grants": [{"decision": "github.com/acme/widgets#7/comment/9001", "target": "github.com/acme/widgets", "scopes": ["merge:routine"]}],
-             "human_boundaries": [{"decision": "github.com/acme/widgets#7/comment/9001", "target": "github.com/acme/widgets", "boundary": "placement:release"}, {"decision": "github.com/acme/widgets#7/comment/9001", "target": "github.com/acme/widgets", "boundary": "release:approve"}, {"decision": "github.com/acme/widgets#7/comment/9001", "target": "github.com/acme/widgets", "boundary": "settings:repository"}]},
+   "value": {"grants": [{"decision": "github.com/acme/widgets#7/comment/9001", "target": "github.com/acme/widgets", "scopes": ["merge:routine"]}], "human_boundaries": [{"decision": "github.com/acme/widgets#7/comment/9001", "target": "github.com/acme/widgets", "boundary": "placement:release"}, {"decision": "github.com/acme/widgets#7/comment/9001", "target": "github.com/acme/widgets", "boundary": "release:approve"}, {"decision": "github.com/acme/widgets#7/comment/9001", "target": "github.com/acme/widgets", "boundary": "settings:repository"}]},
    "source": {"type": "human-decision", "identity": "github.com/acme/widgets#7/comment/9001", "version": "9001"},
    "observed_at": "2026-09-06T17:00:00Z", "invalidators": ["comment:github.com/acme/widgets#7/comment/9001"],
    "provenance": "https://github.com/acme/widgets/issues/7#issuecomment-9001"},
-  {"schema_version": "1", "key": "placement.release", "class": "placement", "status": "ESTABLISHED",
-   "value": {"milestone": "none", "release": "none", "gate": "none"},
+  {"schema_version": "1", "key": "placement.current", "class": "placement", "status": "ESTABLISHED",
+   "value": {"milestone": "github.com/acme/widgets/milestone/8", "release": "v1.2.0", "gate": "none"},
    "source": {"type": "github-api", "identity": "github.com/acme/widgets#43", "version": "2026-09-06T16:50:00Z"},
-   "observed_at": "2026-09-06T17:00:00Z", "invalidators": ["issue:github.com/acme/widgets#43"],
-   "provenance": "https://github.com/acme/widgets/issues/43"},
+   "observed_at": "2026-09-06T17:00:00Z", "invalidators": ["pull_request:github.com/acme/widgets#43", "milestone:github.com/acme/widgets/milestone/8"],
+   "provenance": "https://github.com/acme/widgets/pull/43"},
   {"schema_version": "1", "key": "next_action.governed", "class": "next_action", "status": "ESTABLISHED",
-   "value": {"action": "stop-decision-required", "because": ["authority.standing", "placement.release"]},
-   "source": {"type": "derived", "identity": "fact-model/1", "version": "1;authority.standing@9001;placement.release@2026-09-06T16:50:00Z"},
-   "observed_at": "2026-09-06T17:00:00Z", "invalidators": ["comment:github.com/acme/widgets#7/comment/9001", "issue:github.com/acme/widgets#43"],
-   "provenance": "preferences/fact-model.tsv", "inputs": ["authority.standing", "placement.release"]}
+   "value": {"action": "stop-decision-required", "because": ["authority.standing", "placement.current", "repository.identity", "work_unit.identity"], "boundary": "placement:release"},
+   "source": {"type": "derived", "identity": "fact-model/1", "version": "1;authority.standing@9001;placement.current@2026-09-06T16:50:00Z;repository.identity@2026-09-01T08:00:00Z;work_unit.identity@2026-09-06T16:50:00Z"},
+   "observed_at": "2026-09-06T17:00:00Z", "invalidators": ["comment:github.com/acme/widgets#7/comment/9001", "pull_request:github.com/acme/widgets#43", "milestone:github.com/acme/widgets/milestone/8", "repository:github.com/acme/widgets"],
+   "provenance": "preferences/fact-model.tsv",
+   "inputs": ["authority.standing", "placement.current", "repository.identity", "work_unit.identity"]}
 ]
 ```
 
@@ -424,7 +460,7 @@ merging.
    "provenance": "https://github.com/acme/widgets/commit/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee/checks",
    "detail": {"reason": "check-runs endpoint returned HTTP 403 for the observing identity", "candidates": []}},
   {"schema_version": "1", "key": "next_action.governed", "class": "next_action", "status": "ESTABLISHED",
-   "value": {"action": "wait-review", "because": ["checks.required"]},
+   "value": {"action": "wait-review", "because": ["checks.required"], "boundary": "none"},
    "source": {"type": "derived", "identity": "fact-model/1", "version": "1;checks.required@eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"},
    "observed_at": "2026-09-06T18:00:00Z", "invalidators": ["head:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"],
    "provenance": "preferences/fact-model.tsv", "inputs": ["checks.required"]}
