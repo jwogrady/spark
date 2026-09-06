@@ -120,6 +120,35 @@ is a projection and is never used to compare or bind.
 | derived-version | <schema version>;<input key>@<input source.version>;… — one entry per input, sorted by key | `1;head.exact@4f3d…;review.independent@2026-09-06T11:58:00Z` |
 | decision-record | A durable human decision: a <comment> locator or <repository>@<commit>; never a role, label or summary | `github.com/acme/widgets#7/comment/9001` |
 
+## Constraints
+
+A grammar alone cannot exclude every non-canonical spelling (`.git`, `refs/`, `..`,
+`@{`, a `.lock` suffix, a `.` path component). Those exclusions are **constraint
+records**: extended regular expressions with no lookaround, scoped to an identifier
+kind, to every invalidator, or to one source type's identity. A value is canonical only
+when it matches its grammar *and* none of its constraints (R1). They are data, so a
+consumer applies them rather than reconstructing them from prose.
+
+| Scope | Forbidden (ERE) | Meaning |
+|---|---|---|
+| `repository` | `\.git$` | the name never carries the clone URL's .git suffix |
+| `work-unit` | `\.git#` | the repository name inside a work-unit locator never carries .git |
+| `comment` | `\.git#` | the repository name inside a comment locator never carries .git |
+| `milestone` | `\.git/` | the repository name inside a milestone locator never carries .git |
+| `decision-record` | `\.git(#\|@)` | the repository name inside a decision record never carries .git |
+| `ref` | `^refs/` | a ref is the branch name, never the refs/ path |
+| `ref` | `\.\.` | no .. anywhere in a ref |
+| `ref` | `@\{` | no @{ (reflog syntax) in a ref |
+| `ref` | `\.lock$` | a ref never ends in .lock |
+| `ref` | `\.$` | a ref never ends in a dot |
+| `provenance` | `(^\|/)\.\.?(/\|$)` | a path is normalized: no . or .. components |
+| `source-identity/repository-file` | `(:\|/)\.\.?(/\|$)` | the path after the commit is normalized: no . or .. components |
+| `source-identity/git` | `\.git(@\|$)` | the repository name never carries .git |
+| `source-identity/github-api` | `\.git(#\|/\|$)` | the repository name never carries .git |
+| `source-identity/repository-file` | `\.git@` | the repository name never carries .git |
+| `source-identity/human-decision` | `\.git(#\|@)` | the repository name never carries .git |
+| `invalidator` | `\.git(#\|/\|$)` | the repository name inside any invalidator never carries .git |
+
 ## Invalidators
 
 `invalidators` names what makes a fact stale, as closed tokens — one grammar per kind,
@@ -171,8 +200,10 @@ behavioral suite checks the two never drift.
 
 - **R1** Canonical identifiers have one representation; labels, abbreviations
   and pretty names are projections. Each class has exactly one canonical fact
-  key, so derived inputs and invalidation address a stable identity. A
-  repository name never carries the .git suffix of its clone URL.
+  key, so derived inputs and invalidation address a stable identity. A value is
+  canonical only when it matches its grammar and none of the constraint records
+  for its scope; the constraints are data, so no consumer reconstructs them from
+  prose.
 - **R2** Raw issue or comment bodies, timelines and explanatory prose are not
   fact values; a fact points at them through provenance.
 - **R3** A fact states what is established now; provenance states why and how.
@@ -236,14 +267,15 @@ behavioral suite checks the two never drift.
   boundary-evidence fact are consulted); repair only on CHANGES REQUIRED for the
   current HEAD (review, head); wait-review only when no verdict binds the
   current HEAD or a required check is pending, missing or UNKNOWN (head, review,
-  checks as present); stop-decision-required only when an input is CONFLICT, the
-  verdict is DECISION REQUIRED, or boundary names a reserved boundary that
-  applies here: the authority fact is in because and carries that boundary token
-  with a target equal to the repository or work unit id (authority, repository,
-  work_unit consulted), and the boundary-evidence record for that token holds on
-  the fact it names, which is in because. boundary is none in every other case;
-  a boundary token with no boundary-evidence record has no derivation in this
-  version.
+  checks as present); stop-decision-required only when a fact in the set is
+  CONFLICT (every CONFLICT fact is consulted and nothing else), the verdict is
+  DECISION REQUIRED (review consulted), or boundary names a reserved boundary
+  that applies here: the authority fact is in because and carries that boundary
+  token with a target equal to the repository or work unit id (authority,
+  repository, work_unit consulted), and the boundary-evidence record for that
+  token holds on the fact it names, which is in because. boundary is none in
+  every other case; a boundary token with no boundary-evidence record has no
+  derivation in this version.
 - **R16** Every invalidator is a token in one of the invalidator grammars and
   appears once per fact; provenance is a pointer in the provenance grammar.
   Neither carries prose, so freshness and drill-down are machine-normalized.

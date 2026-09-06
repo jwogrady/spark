@@ -32,6 +32,14 @@ assert_eq "three envelope facets" "3" "$(rec facet | wc -l | tr -d ' ')"
 assert_eq "exactly one canonical key per class" "$(rec class | cut -f2 | sort | tr '\n' ' ')" "$(rec key | cut -f2 | sort | tr '\n' ' ')"
 assert_eq "every canonical key is prefixed by its class" "" "$(rec key | awk -F'\t' 'index($3, $2 ".") != 1')"
 assert_eq "eight invalidator grammars" "8" "$(rec invalidator | wc -l | tr -d ' ')"
+assert_eq "17 constraint records" "17" "$(rec constraint | wc -l | tr -d ' ')"
+while IFS=$'\t' read -r _ scope rx _; do
+  if printf 'probe' | grep -qE "$rx" >/dev/null 2>&1; then rc=0; else rc=$?; fi
+  [ "$rc" -le 1 ] && ok || bad "constraint regex for $scope compiles as an ERE (no lookaround, so any consumer can apply it)"
+  case "$scope" in invalidator|source-identity/*) ok ;; *) rec identifier | cut -f2 | grep -qx "$scope" && ok || bad "constraint scope $scope names a declared identifier kind" ;; esac
+done <<EOF
+$(rec constraint)
+EOF
 assert_eq "two envelope object shapes (source, detail)" "detail source" "$(rec shape | cut -f2 | sort | tr '\n' ' ' | sed 's/ $//')"
 while IFS=$'\t' read -r _ kind rx _; do
   if printf 'probe' | grep -qE "$rx" >/dev/null 2>&1; then rc=0; else rc=$?; fi
@@ -65,7 +73,7 @@ import re, sys
 for l in open(sys.argv[1]):
     if l.startswith("#") or not l.strip(): continue
     r = l.rstrip("\n").split("\t")
-    if r[0] in ("identifier", "source-identity", "source-version", "invalidator"):
+    if r[0] in ("identifier", "source-identity", "source-version", "invalidator", "constraint"):
         try:
             re.compile(r[2]); ok = "[[:" not in r[2]
         except re.error: ok = False
@@ -96,6 +104,7 @@ for r in $(rec rule | cut -f2); do grep -q "^- \*\*$r\*\*" "$DOC" && ok || bad "
 grep -q 'preferences/fact-model.tsv' "$DOC" && ok || bad "doc names its machine-readable authority"
 for k in $(rec invalidator | cut -f2); do grep -q "^| \`$k\` | " "$DOC" && ok || bad "doc invalidator table names $k"; done
 for k in $(rec shape | cut -f2); do grep -q "^| \`$k\` | \`" "$DOC" && ok || bad "doc shape table names $k"; done
+assert_eq "doc constraint table has one row per constraint record" "$(rec constraint | wc -l | tr -d ' ')" "$(awk '/^## Constraints/,/^## Invalidators/' "$DOC" | grep -c '^| `')"
 # text parity (python3 present): class shapes and descriptions, field requiredness and descriptions, identifier
 # canonical forms, invalidator forms, envelope shapes and every rule statement are the TSV's text, verbatim
 if command -v python3 >/dev/null 2>&1; then
@@ -171,6 +180,13 @@ evidence = {r[1]: (r[2], r[3], r[4]) for r in rows if r[0] == "boundary-evidence
 # <kind> an identifier (pseudo-kinds: <text> one non-empty line, <locator> a canonical locator or
 # source identity, <source-type> a declared source type), bare word = literal (true/false = booleans).
 invalidator_rx = {r[1]: re.compile(r[2]) for r in rows if r[0] == "invalidator"}
+constraints = {}
+for r in rows:
+    if r[0] == "constraint": constraints.setdefault(r[1], []).append((re.compile(r[2]), r[3]))
+def constrained(scope, v, where):
+    """a value is canonical only when none of its scope's constraint records match (R1)"""
+    for rx, meaning in constraints.get(scope, []):
+        if rx.search(v): fail(f"{where} = {v!r} is not canonical: {meaning} (R1)")
 def parse_shape(text):
     toks = re.findall(r"\{|\}|\[|\]|:|,|\||<[a-z-]+>|[A-Za-z_][A-Za-z0-9_]*", text)
     if "".join(toks) != re.sub(r"\s+", "", text): raise ValueError(f"shape grammar: unparsed characters in {text!r}")
@@ -234,8 +250,7 @@ def matches(sh, v, where):
         else:
             if kind not in ids: fail(f"shape names undeclared identifier kind <{kind}>")
             if not isinstance(v, str) or not ids[kind].fullmatch(v): fail(f"{where} = {v!r} is not a canonical <{kind}> (R1/R14)")
-            if kind == "ref" and (v.startswith("refs/") or v.endswith(".lock") or v.endswith(".") or ".." in v or "@{" in v): fail(f"{where} = {v!r}: a ref is one branch name — no refs/, .., @{{, trailing . or .lock (R1)")
-            if kind in ("repository", "work-unit", "comment", "milestone", "decision-record") and re.search(r"\.git(#|/|@|$)", v): fail(f"{where} = {v!r}: a repository name never carries the .git suffix (R1)")
+            constrained(kind, v, where)
     else:
         lit = sh[1]
         if lit == "true":
@@ -285,9 +300,7 @@ def check_fact(f):
     src = f["source"]
     matches(ENVELOPE["source"], src, "source")
     if not sid[src["type"]].fullmatch(str(src["identity"])): fail(f"source.identity {src['identity']!r} is not in the {src['type']} grammar (R14)")
-    if re.search(r"\.git(#|/|@|:|$)", str(src["identity"])): fail("a repository name never carries the .git suffix (R1)")
-    if src["type"] == "repository-file" and any(seg in (".", "..") for seg in src["identity"].split(":", 1)[1].split("/")): fail("a repository-relative path is normalized: no . or .. components (R1)")
-    if not str(f["provenance"]).startswith("https://") and any(seg in (".", "..") for seg in str(f["provenance"]).split("/")): fail("a repository-relative provenance path is normalized: no . or .. components (R1)")
+    constrained(f"source-identity/{src['type']}", str(src["identity"]), "source.identity")
     if not src["version"]: fail("source.version empty")
     if not sver[src["type"]].fullmatch(str(src["version"])): fail(f"source.version {src['version']!r} is not in the {src['type']} version grammar (R14)")
     # a github-api commit version is only ever a HEAD-bound fact keyed by its own HEAD (R14): for any other class
@@ -315,9 +328,10 @@ def check_fact(f):
     if not isinstance(f["invalidators"], list) or not f["invalidators"]: fail("invalidators must be a non-empty list")
     for tok in f["invalidators"]:
         if not isinstance(tok, str) or not any(rx.fullmatch(tok) for rx in invalidator_rx.values()): fail(f"invalidator {tok!r} is in no invalidator grammar (R16)")
-        if re.search(r"\.git(#|/|$)", tok): fail(f"invalidator {tok!r}: a repository name never carries the .git suffix (R1)")
+        constrained("invalidator", tok, "invalidator")
     if len(set(f["invalidators"])) != len(f["invalidators"]): fail("an invalidator appears twice (R16)")
     if not isinstance(f["provenance"], str) or not ids["provenance"].fullmatch(f["provenance"]): fail(f"provenance {f['provenance']!r} is not a pointer in the provenance grammar (R16)")
+    constrained("provenance", f["provenance"], "provenance")
     if f["class"] in HEAD_BOUND:
         heads = [i for i in f["invalidators"] if i.startswith("head:")]
         if f["status"] == "ESTABLISHED":
@@ -462,10 +476,17 @@ def check_set(facts, complete):
             pending = (chk is not None and chk["status"] == "UNKNOWN") or (est(chk) and any(r["state"] in ("pending", "missing") for r in chk["value"]["results"]))
             if not (no_verdict or pending): fail("wait-review requires no verdict on the current HEAD or a pending/missing/UNKNOWN required check (R15)")
         elif act == "stop-decision-required":
-            rev = get("review")
-            conflict = any(keys[k]["status"] == "CONFLICT" for k in f["inputs"])
-            decision = est(rev) and rev["value"]["verdict"] == "DECISION REQUIRED"
-            b = f["value"]["boundary"]; by_boundary = False
+            # by CONFLICT: every conflicting fact in the set is consulted, and nothing else; by DECISION REQUIRED:
+            # the review; by reserved boundary: authority, repository, work unit and the boundary's evidence fact
+            conflicts = [x for x in facts if x["status"] == "CONFLICT"]
+            b = f["value"]["boundary"]; by_boundary = False; decision = False
+            if conflicts:
+                for x in conflicts: used.add(x["key"])
+                if b != "none": fail("a stop derived from a CONFLICT names no boundary (R15)")
+            else:
+                rev = get("review") if b == "none" else None
+                decision = est(rev) and rev["value"]["verdict"] == "DECISION REQUIRED"
+                if not decision and b == "none": fail("stop-decision-required requires a CONFLICT fact, a DECISION REQUIRED verdict, or an applicable reserved boundary (R15)")
             if b != "none":
                 # the boundary must be reserved for THIS repository or work unit, and its evidence must hold here
                 auth, repo, wu = get("authority"), get("repository"), get("work_unit")
@@ -479,7 +500,7 @@ def check_set(facts, complete):
                 if not (est(ev) and ev["key"] == ekey and ev["key"] in f["value"]["because"]): fail(f"boundary {b} needs its evidence fact {ekey} ESTABLISHED and in because (R15)")
                 if cond == "not-none" and ev["value"][field] == "none": fail(f"boundary {b} does not apply: {ekey}.{field} is none (R15)")
                 by_boundary = True
-            if not (conflict or decision or by_boundary): fail("stop-decision-required requires a CONFLICT input, a DECISION REQUIRED verdict, or an applicable reserved boundary (R15)")
+            if not (conflicts or decision or by_boundary): fail("stop-decision-required requires a CONFLICT fact, a DECISION REQUIRED verdict, or an applicable reserved boundary (R15)")
         else:
             fail(f"action {act} has no derivation rule in this version (R15)")
         missing = used - set(f["inputs"]); extra = set(f["inputs"]) - used
@@ -745,6 +766,12 @@ sets "$(printf '{"complete": true, "facts": %s}' "$(smut 'p=[f for f in s if f["
 conflict_stop='r=[f for f in s if f["class"]=="review"][0]; r["status"]="CONFLICT"; del r["value"]; r["detail"]={"reason":"two trusted verdicts disagree","candidates":["github.com/acme/widgets#42/comment/9100","github.com/acme/widgets#42/comment/9101"]}; r["invalidators"]=[i for i in r["invalidators"] if i.startswith("head:")]; n=[f for f in s if f["class"]=="next_action"][0]; n["value"]={"action":"stop-decision-required","because":["review.independent"],"boundary":"none"}; n["inputs"]=["review.independent"]; n["source"]["version"]="1;review.independent@"+r["source"]["version"]'
 sets "$(printf '{"complete": true, "facts": %s}' "$(smut "$conflict_stop")")" && ok || bad "control: in a complete snapshot, a stop derived from a CONFLICT lists exactly the conflicting fact as its input (R15)"
 sets "$(printf '{"complete": true, "facts": %s}' "$(smut "$conflict_stop"'; h=[f for f in s if f["class"]=="head"][0]; n["inputs"]=["head.exact","review.independent"]; n["source"]["version"]="1;head.exact@"+h["source"]["version"]+";review.independent@"+r["source"]["version"]')")" && bad "a conflict stop that lists the unrelated head as an input must be rejected — HEAD is consulted only by derivations that depend on it (R15)" || ok
+# a CONFLICT in any class — not only review — derives the stop, with exactly that fact as the input
+for cls in acceptance authority placement; do
+  conflict_other='c=[f for f in s if f["class"]=="'"$cls"'"][0]; c["status"]="CONFLICT"; del c["value"]; c["detail"]={"reason":"two authoritative reads disagree","candidates":["github.com/acme/widgets#41","github.com/acme/widgets#40"]}; n=[f for f in s if f["class"]=="next_action"][0]; n["value"]={"action":"stop-decision-required","because":[c["key"]],"boundary":"none"}; n["inputs"]=[c["key"]]; n["source"]["version"]="1;"+c["key"]+"@"+c["source"]["version"]'
+  sets "$(printf '{"complete": true, "facts": %s}' "$(smut "$conflict_other")")" && ok || bad "control: a stop derived from a CONFLICT in $cls lists exactly that fact (R15)"
+done
+sets "$(printf '{"complete": true, "facts": %s}' "$(smut 'c=[f for f in s if f["class"]=="acceptance"][0]; c["status"]="CONFLICT"; del c["value"]; c["detail"]={"reason":"x","candidates":["github.com/acme/widgets#41","github.com/acme/widgets#40"]}; r=[f for f in s if f["class"]=="review"][0]; n=[f for f in s if f["class"]=="next_action"][0]; n["value"]={"action":"stop-decision-required","because":["acceptance.contract"],"boundary":"none"}; n["inputs"]=["acceptance.contract","review.independent"]; n["source"]["version"]="1;acceptance.contract@"+c["source"]["version"]+";review.independent@"+r["source"]["version"]')")" && bad "a conflict stop listing the non-conflicting review as an input must be rejected (R15)" || ok
 sets "$(printf '{"complete": true, "facts": %s}' "$(smut 'g=[f for f in s if f["class"]=="graph"][0]; g["status"]="UNKNOWN"; del g["value"]; g["detail"]={"reason":"403","candidates":[]}')")" && bad "merge while the dependency graph is UNKNOWN must be rejected (R15)" || ok
 sets "$(printf '{"complete": true, "facts": %s}' "$(smut 'nx=[f for f in s if f["class"]=="next_action"][0]; nx["inputs"]=[i for i in nx["inputs"] if i!="graph.native"]; nx["source"]["version"]=";".join(p for p in nx["source"]["version"].split(";") if not p.startswith("graph.native@"))')")" && bad "a merge derivation that omits the consulted graph from its inputs must be rejected (R4/R15)" || ok
 # repair needs a CURRENT head: the page's Example 2 derives repair; make its HEAD stale and it must be rejected
