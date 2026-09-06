@@ -1,0 +1,110 @@
+### runtime ms_open_count_of (plugins/spark/bin/spark:5493)
+indirect (prefix construction / quoted string, anywhere tracked except docs/research/v0.23-cleanup):
+git log -S (commits that added/removed the string):
+  4baea20 2026-08-29 fix: read milestone work from the hierarchy, not the open-issue count
+git log -G (commits whose diff mentions the name):
+  4baea20 2026-08-29 fix: read milestone work from the hierarchy, not the open-issue count
+per-revision whole-tree references (non-comment, non-definition lines) at each of those commits:
+  4baea20: 0 reference line(s) outside definition and comments
+
+### runtime leaves_of (plugins/spark/bin/spark:5499)
+indirect (prefix construction / quoted string, anywhere tracked except docs/research/v0.23-cleanup):
+git log -S (commits that added/removed the string):
+  4baea20 2026-08-29 fix: read milestone work from the hierarchy, not the open-issue count
+git log -G (commits whose diff mentions the name):
+  4baea20 2026-08-29 fix: read milestone work from the hierarchy, not the open-issue count
+per-revision whole-tree references (non-comment, non-definition lines) at each of those commits:
+  4baea20: 0 reference line(s) outside definition and comments
+
+### runtime fp_over_budget (plugins/spark/bin/spark:7637)
+indirect (prefix construction / quoted string, anywhere tracked except docs/research/v0.23-cleanup):
+git log -S (commits that added/removed the string):
+  ef1a204 2026-07-21 fix: report latency as not-measured without an ms-resolution clock
+  e335532 2026-07-21 feat: measure and budget hot-path latency
+git log -G (commits whose diff mentions the name):
+  ef1a204 2026-07-21 fix: report latency as not-measured without an ms-resolution clock
+  e335532 2026-07-21 feat: measure and budget hot-path latency
+per-revision whole-tree references (non-comment, non-definition lines) at each of those commits:
+  e335532: 6 reference line(s) outside definition and comments
+  ef1a204: 0 reference line(s) outside definition and comments
+
+### runtime bg_dir (plugins/spark/lib/execution.sh:642)
+indirect (prefix construction / quoted string, anywhere tracked except docs/research/v0.23-cleanup):
+  plugins/spark/bin/spark:1501:    elif [ ! -d "$tmpl_dir" ]; then
+  plugins/spark/bin/spark:1511:      for tmpl in "$tmpl_dir"/*.yml; do
+  plugins/spark/bin/spark:2363:  if [ "$docs_dir" -eq 1 ] && [ "$readme" -eq 1 ]; then docs="docs/ + README"
+  plugins/spark/bin/spark:2364:  elif [ "$docs_dir" -eq 1 ]; then docs="docs/"
+  plugins/spark/bin/spark:2378:  [ "$docs_dir" -eq 1 ] && content=1
+  tests/run.sh:141:    log="$log_dir/$SPARK_RUN_ID.executions"
+  tests/run.sh:142:    if ! mkdir -p "$log_dir" 2>/dev/null ||
+  tests/test-hot-path-memo.sh:28:prefs_memo1="$( cd "$repo" && export __SPARK_MEMO="$memo_dir"; . "$SPARK"; resolve_prefs )"
+  tests/test-hot-path-memo.sh:29:prefs_memo2="$( cd "$repo" && export __SPARK_MEMO="$memo_dir"; . "$SPARK"; resolve_prefs )"  # reads the cache
+  tests/test-hot-path-memo.sh:30:rm -rf "$memo_dir"
+git log -S (commits that added/removed the string):
+  d86e78d 2026-08-30 refactor(runtime): extract the execution domain into a shell module
+  22a9f75 2026-08-30 feat(budget): bound autonomous runs by declared convergence
+git log -G (commits whose diff mentions the name):
+  d86e78d 2026-08-30 refactor(runtime): extract the execution domain into a shell module
+  22a9f75 2026-08-30 feat(budget): bound autonomous runs by declared convergence
+per-revision whole-tree references (non-comment, non-definition lines) at each of those commits:
+  22a9f75: 0 reference line(s) outside definition and comments
+  d86e78d: 0 reference line(s) outside definition and comments
+
+### runtime bg_get (plugins/spark/lib/execution.sh:645)
+indirect (prefix construction / quoted string, anywhere tracked except docs/research/v0.23-cleanup):
+git log -S (commits that added/removed the string):
+  d86e78d 2026-08-30 refactor(runtime): extract the execution domain into a shell module
+  22a9f75 2026-08-30 feat(budget): bound autonomous runs by declared convergence
+git log -G (commits whose diff mentions the name):
+  d86e78d 2026-08-30 refactor(runtime): extract the execution domain into a shell module
+  22a9f75 2026-08-30 feat(budget): bound autonomous runs by declared convergence
+per-revision whole-tree references (non-comment, non-definition lines) at each of those commits:
+  22a9f75: 0 reference line(s) outside definition and comments
+  d86e78d: 0 reference line(s) outside definition and comments
+
+### runtime route_class_desc (plugins/spark/lib/execution.sh:1389)
+indirect (prefix construction / quoted string, anywhere tracked except docs/research/v0.23-cleanup):
+git log -S (commits that added/removed the string):
+  d86e78d 2026-08-30 refactor(runtime): extract the execution domain into a shell module
+  0b84a82 2026-08-30 feat(route): pick the cheapest adequate class, escalate deliberately
+git log -G (commits whose diff mentions the name):
+  d86e78d 2026-08-30 refactor(runtime): extract the execution domain into a shell module
+  0b84a82 2026-08-30 feat(route): pick the cheapest adequate class, escalate deliberately
+per-revision whole-tree references (non-comment, non-definition lines) at each of those commits:
+  0b84a82: 0 reference line(s) outside definition and comments
+  d86e78d: 0 reference line(s) outside definition and comments
+
+### runtime ci_dir (plugins/spark/lib/execution.sh:1732)
+indirect (prefix construction / quoted string, anywhere tracked except docs/research/v0.23-cleanup):
+  plugins/spark/bin/spark:1501:    elif [ ! -d "$tmpl_dir" ]; then
+  plugins/spark/bin/spark:1511:      for tmpl in "$tmpl_dir"/*.yml; do
+  plugins/spark/bin/spark:2363:  if [ "$docs_dir" -eq 1 ] && [ "$readme" -eq 1 ]; then docs="docs/ + README"
+  plugins/spark/bin/spark:2364:  elif [ "$docs_dir" -eq 1 ]; then docs="docs/"
+  plugins/spark/bin/spark:2378:  [ "$docs_dir" -eq 1 ] && content=1
+  tests/run.sh:141:    log="$log_dir/$SPARK_RUN_ID.executions"
+  tests/run.sh:142:    if ! mkdir -p "$log_dir" 2>/dev/null ||
+  tests/test-hot-path-memo.sh:28:prefs_memo1="$( cd "$repo" && export __SPARK_MEMO="$memo_dir"; . "$SPARK"; resolve_prefs )"
+  tests/test-hot-path-memo.sh:29:prefs_memo2="$( cd "$repo" && export __SPARK_MEMO="$memo_dir"; . "$SPARK"; resolve_prefs )"  # reads the cache
+  tests/test-hot-path-memo.sh:30:rm -rf "$memo_dir"
+git log -S (commits that added/removed the string):
+  d86e78d 2026-08-30 refactor(runtime): extract the execution domain into a shell module
+  96702b4 2026-08-30 feat(ci): hand off at the CI boundary instead of polling
+git log -G (commits whose diff mentions the name):
+  d86e78d 2026-08-30 refactor(runtime): extract the execution domain into a shell module
+  96702b4 2026-08-30 feat(ci): hand off at the CI boundary instead of polling
+per-revision whole-tree references (non-comment, non-definition lines) at each of those commits:
+  96702b4: 0 reference line(s) outside definition and comments
+  d86e78d: 0 reference line(s) outside definition and comments
+
+### runtime ci_get (plugins/spark/lib/execution.sh:1735)
+indirect (prefix construction / quoted string, anywhere tracked except docs/research/v0.23-cleanup):
+git log -S (commits that added/removed the string):
+  d86e78d 2026-08-30 refactor(runtime): extract the execution domain into a shell module
+  96702b4 2026-08-30 feat(ci): hand off at the CI boundary instead of polling
+git log -G (commits whose diff mentions the name):
+  d86e78d 2026-08-30 refactor(runtime): extract the execution domain into a shell module
+  96702b4 2026-08-30 feat(ci): hand off at the CI boundary instead of polling
+per-revision whole-tree references (non-comment, non-definition lines) at each of those commits:
+  96702b4: 0 reference line(s) outside definition and comments
+  d86e78d: 0 reference line(s) outside definition and comments
+

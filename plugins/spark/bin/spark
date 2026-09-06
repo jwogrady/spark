@@ -5488,18 +5488,6 @@ ms_inventory_of() {
     END { for (t in seen) printf "%s\t%d\t%s\n", t, c[t], (t in g ? g[t] : "") }'
 }
 
-# ms_open_count_of <snapshot> <title> — GitHub'"'"'s raw open-issue count, kept as a
-# separate fact so a caller can tell "no work left" from "nothing here at all".
-ms_open_count_of() {
-  printf '%s\n' "$1" | awk -F'\t' -v t="$2" '$1 == "ms" && $2 == t { print $3; found = 1 }
-                                             END { if (!found) print "" }'
-}
-
-# leaves_of <snapshot> <title> — the actionable open issues, one per line.
-leaves_of() {
-  printf '%s\n' "$1" | awk -F'\t' -v t="$2" '$1 == "leaf" && $2 == t { print $3 }'
-}
-
 # containers_of <snapshot> <title> — every open issue in the milestone that
 # carries sub-issues, one per line.
 #
@@ -7631,10 +7619,6 @@ fp_hot_guard()  { printf '%s' '{"tool_input":{"command":"ls -la"}}' | bash "$SPA
 fp_hot_brief()  { "$SPARK_ROOT/bin/spark" brief --short; }
 fp_hot_doctor() { "$SPARK_ROOT/bin/spark" doctor; }
 fp_hot_governance() { "$SPARK_ROOT/bin/spark" governance validate; }
-
-# fp_over_budget <ms> <budget> — pure comparison, factored out so the enforcement
-# rule is unit-testable without a stopwatch. Over budget → return 0 (true).
-fp_over_budget() { [ "$1" -gt "$2" ]; }
 
 # fp_latency <as_json> — measure the three hot paths (median of 3), compare to
 # the LATENCY_*_MS budgets, print human or JSON, and return 1 if any is over.
