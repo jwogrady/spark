@@ -226,6 +226,14 @@ multi-PR scenario now carries two merged nodes, the "no merged PR" scenario an e
 list. The one remaining `printf` is a sentinel that must never be reached. No scenario,
 assertion or expected exit code changes.
 
+**Defect found and fixed while doing this.** The first cut of this packet wrote two heredoc
+openers with literal backslashes (`<<\'STUB\'`), so those suites never terminated their
+heredoc, ran zero assertions and exited 0 — and `tests/run.sh` counted them as passed:
+the full run reported 3,726 assertions with every suite "green". The runner now fails any
+suite that prints no `N passed, M failed` line (silence is not evidence), the heredocs are
+terminated, and the per-suite proof below is the strict one: the chain refuses to ship on
+any difference.
+
 | Existing test/case | Invariant proved | Surviving test/case | Same/stronger discrimination? | Validation |
 |---|---|---|---|---|
 | ten inline codify-prereqs stubs with pre-shaped answers | the preflight's READY / BLOCKED / NOT ASSESSED verdicts across 15 end-to-end scenarios | the same ten stubs written with `stub_gh`, answering GitHub's JSON through the skill script's own jq | **Stronger** — `.full_name`, the blocked-by row jq (`.number`, `.repository_url // ""`), `.body`, `.state` and the closing-reference jq (`select(.merged) \| .mergeCommit.oid // empty`) now execute on every scenario; a jq regression in the preflight fails here | suite assertions unchanged; per-suite counts identical |
@@ -239,9 +247,10 @@ assertion or expected exit code changes.
 | production jq programs newly exercised | — | 5 (`.full_name`, blocked-by row, `.body`, `.state`, closing references) |
 | stubs written through `stub_gh` | 0 | 12 (ten in codify-prereqs, one each in the packet-2 suites) |
 | `chmod +x`/shebang restatements removed | — | 12 |
-| assertions, full run | 3908 passed, 0 failed | 3726 passed, 0 failed |
+| suites the runner would pass while printing no summary line | any (a silent suite counted as passed) | 0 — `tests/run.sh` now fails a suite with no `N passed, M failed` line |
+| assertions, full run | 3908 passed, 0 failed | 3908 passed, 0 failed |
 | per-suite pass/fail lines | 92 | 92, **all identical** |
-| full-suite wall clock | 160s | 152s |
+| full-suite wall clock | 160s | 166s |
 
 The remaining ~24 suites with their own shim scaffolding (baseline B3) keep it for now: their
 stub *bodies* are not pre-shaped in the same way, so adopting `stub_gh` there is a mechanical

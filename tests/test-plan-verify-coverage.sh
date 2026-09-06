@@ -63,7 +63,7 @@ stub="$work/stub"; mkdir -p "$stub"
 # exercised rather than assumed; pre-shaped rows would agree with any jq. Each
 # answer exits with jq's own status, as gh does: a rejected program is a failed
 # call, never a silent success.
-stub_gh "$stub/gh" <<\'STUB\'
+stub_gh "$stub/gh" <<'STUB'
 sc="${SC:-ok}"
 args="$*"
 case "$1 $2" in
