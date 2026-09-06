@@ -14,8 +14,7 @@ runner="$root/.github/scripts/release-notes-runner.sh"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 pass=0 fail=0
-ok()  { pass=$((pass + 1)); }
-bad() { fail=$((fail + 1)); echo "  ✖ $1"; }
+. "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 
 bash -n "$runner" && ok || bad "bash -n release-notes-runner.sh"
 
@@ -336,5 +335,4 @@ tsv_line="$(cd "$fixture" && notes_component_commits_tsv "jwogrady/spark" "core"
 [ "$(printf '%s' "$tsv_line" | awk -F'\t' '{print NF}')" = "4" ] \
   && ok || bad "F7: tab-in-subject must yield exactly 4 TSV columns (got: $tsv_line)"
 
-echo "  $pass passed, $fail failed"
-[ "$fail" -eq 0 ]
+finish

@@ -22,11 +22,6 @@ set -euo pipefail
 sandbox_init
 . "$SPARK"   # triage_rows / gov_judgment_rows / repo_* (source-guarded)
 
-assert_eq() {
-  local desc="$1" want="$2" got="$3"
-  if [ "$got" = "$want" ]; then ok; else bad "$desc — want '$want', got '$got'"; fi
-}
-
 # row <rows> <surface> <id> -> status ; det <...> -> detail
 row() { printf '%s\n' "$1" | awk -F'\t' -v s="$2" -v i="$3" '$1 == s && $3 == i { print $2; exit }'; }
 det() { printf '%s\n' "$1" | awk -F'\t' -v s="$2" -v i="$3" '$1 == s && $3 == i { print $4; exit }'; }

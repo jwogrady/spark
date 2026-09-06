@@ -28,11 +28,6 @@ sandbox_init
 
 repo="$WORK/r"; make_repo "$repo"; mkdir -p "$repo/.spark"
 
-assert_eq() {
-  local desc="$1" want="$2" got="$3"
-  if [ "$got" = "$want" ]; then ok; else bad "$desc — want '$want', got '$got'"; fi
-}
-
 # ---------------------------------------------------------------- the stub
 # Deterministic live metadata: gate #10 carrying child #11, #11 labelled
 # feature,P1,docs-impact:none, no open blockers. Exactly the issue's fixture.

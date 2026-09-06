@@ -14,8 +14,7 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$here/../plugins/spark/lib/execution.sh"
 
 pass=0; fail=0
-ok()  { pass=$((pass + 1)); }
-bad() { fail=$((fail + 1)); echo "  ✖ $1"; }
+. "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 
 echo "Crossroad classification (#690)"
 
@@ -108,5 +107,4 @@ case "$(xr_stop_check new-authority "x" "y" 2>&1)" in
   *) bad "the stop verdict must present the surface as a claim to confirm, not verified fact" ;;
 esac
 
-echo "  $pass passed, $fail failed"
-[ "$fail" -eq 0 ]
+finish

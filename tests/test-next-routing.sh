@@ -17,8 +17,6 @@ script="$here/../plugins/spark/bin/spark"
 . "$script"
 
 pass=0; fail=0
-ok()  { pass=$((pass + 1)); }
-bad() { fail=$((fail + 1)); echo "  ✖ $1"; }
 
 TAXO="feature bug documentation chore tech-debt research infrastructure"
 
@@ -174,5 +172,4 @@ custom_taxonomy_routes() {
 }
 custom_taxonomy_routes
 
-echo "  $pass passed, $fail failed"
-[ "$fail" -eq 0 ]
+finish

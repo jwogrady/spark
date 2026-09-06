@@ -16,10 +16,6 @@ repo="$WORK/repo"
 make_repo "$repo"
 cd "$repo"
 
-assert_eq() {
-  local desc="$1" want="$2" got="$3"
-  if [ "$got" = "$want" ]; then ok; else bad "$desc — want '$want', got '$got'"; fi
-}
 lacks() { case "$3" in *"$2"*) bad "$1 — output contains '$2'" ;; *) ok ;; esac; }
 
 # A recording gh: every invocation's arguments land in $CALLS; answers come from

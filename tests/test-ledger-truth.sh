@@ -25,11 +25,6 @@ sandbox_init
 CHECK="$repo_root/.github/scripts/ledger-truth-check.sh"
 w="$WORK/w"; mkdir -p "$w"
 
-assert_eq() {
-  local desc="$1" want="$2" got="$3"
-  if [ "$got" = "$want" ]; then ok; else bad "$desc — want '$want', got '$got'"; fi
-}
-
 # A minimal but structurally complete pair of documents. Kept small so each
 # fixture changes exactly one thing.
 # The suite rows need a tests/ directory of the FIXTURE's own, and a baseline the

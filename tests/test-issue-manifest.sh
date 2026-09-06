@@ -11,8 +11,7 @@ script="$root/plugins/spark/skills/plan/scripts/issue-manifest.sh"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 pass=0 fail=0
-ok()  { pass=$((pass + 1)); }
-bad() { fail=$((fail + 1)); echo "  ✖ $1"; }
+. "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 
 bash -n "$script" && ok || bad "bash -n issue-manifest.sh"
 
@@ -250,5 +249,4 @@ rc=0; out="$(cd "$slate" && PATH="$dupbin:$PATH" bash "$script" --state "$work/d
   && ok || bad "duplicate milestone titles must fail as ambiguous ($rc: $out)"
 case "$out" in *"created 0"*) ok ;; *) bad "ambiguous milestone must create nothing ($out)" ;; esac
 
-echo "  $pass passed, $fail failed"
-[ "$fail" -eq 0 ]
+finish

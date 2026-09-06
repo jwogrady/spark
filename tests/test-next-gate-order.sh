@@ -35,16 +35,9 @@ script="$here/../plugins/spark/bin/spark"
 . "$script"
 
 pass=0; fail=0
-ok()  { pass=$((pass + 1)); }
-bad() { fail=$((fail + 1)); echo "  ✖ $1"; }
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
-
-assert_eq() {
-  local desc="$1" want="$2" got="$3"
-  if [ "$got" = "$want" ]; then ok; else bad "$desc — want '$want', got '$got'"; fi
-}
 
 # --- snapshot fixtures -------------------------------------------------------
 #

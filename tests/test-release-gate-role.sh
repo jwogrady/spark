@@ -19,10 +19,6 @@ set -euo pipefail
 sandbox_init
 . "$SPARK"
 
-assert_eq() {
-  local desc="$1" want="$2" got="$3"
-  if [ "$got" = "$want" ]; then ok; else bad "$desc — want '$want', got '$got'"; fi
-}
 assert_lacks() {
   local desc="$1" needle="$2" haystack="$3"
   case "$haystack" in

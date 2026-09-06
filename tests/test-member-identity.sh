@@ -18,10 +18,6 @@ set -euo pipefail
 sandbox_init
 . "$SPARK"
 
-assert_eq() {
-  local desc="$1" want="$2" got="$3"
-  if [ "$got" = "$want" ]; then ok; else bad "$desc — want '$want', got '$got'"; fi
-}
 repo_root_dir="$(cd "$(dirname "$0")/.." && pwd)"
 
 # A model with multi-word members in two families: one cardinality-limited, one

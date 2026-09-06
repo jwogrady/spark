@@ -99,6 +99,13 @@ assert_contains() {
   esac
 }
 
+# assert_eq <desc> <want> <got> — exact equality. Twenty-three suites carried this
+# body byte-for-byte; one definition keeps the failure message identical everywhere.
+assert_eq() {
+  local desc="$1" want="$2" got="$3"
+  if [ "$got" = "$want" ]; then ok; else bad "$desc — want '$want', got '$got'"; fi
+}
+
 finish() {
   echo "  $pass passed, $fail failed"
   [ "$fail" -eq 0 ]

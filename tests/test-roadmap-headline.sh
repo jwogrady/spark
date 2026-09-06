@@ -24,11 +24,6 @@ sandbox_init
 CHECK="$WORK/plugin/skills/plan/scripts/roadmap-check.sh"
 w="$WORK/w"; mkdir -p "$w"
 
-assert_eq() {
-  local desc="$1" want="$2" got="$3"
-  if [ "$got" = "$want" ]; then ok; else bad "$desc — want '$want', got '$got'"; fi
-}
-
 # run_check <line...> — build a roadmap and run the check.
 #
 # Every fixture carries one unshipped section so the "names a next release" check

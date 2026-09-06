@@ -11,8 +11,7 @@ lib="$root/evaluations/lib/eval.sh"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 pass=0 fail=0
-ok()  { pass=$((pass + 1)); }
-bad() { fail=$((fail + 1)); echo "  ✖ $1"; }
+. "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 
 bash -n "$lib" && ok || bad "bash -n eval.sh"
 
@@ -245,5 +244,4 @@ if [ "$rc" -ne 0 ]; then bad "snapshot score exited $rc ($out)"; else
   case "$out" in *"1/2 "*) ok ;; *) bad "score must publish the SNAPSHOT metric (1/2), not the mutated original ($out)" ;; esac
 fi
 
-echo "  $pass passed, $fail failed"
-[ "$fail" -eq 0 ]
+finish
