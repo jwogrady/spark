@@ -220,7 +220,9 @@ for a in "$@"; do
     # hierarchy rule then correctly refused to offer as work.
     */issues/900/sub_issues*) printf '901\n'; exit 0 ;;
     */issues/901/sub_issues*) exit 0 ;;
-    *dependencies*) printf '0\n'; exit 0 ;;
+    # No blockers is an EMPTY answer from the shared, validated reader — never a
+    # pre-shaped count that assumed one consumer's jq.
+    *dependencies*) exit 0 ;;
   esac
 done
 exit 0

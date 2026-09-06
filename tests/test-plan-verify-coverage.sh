@@ -63,6 +63,7 @@ sc="${SC:-ok}"
 args="$*"
 case "$1 $2" in
   "auth status") exit 0 ;;
+  "repo view") [ "$sc" = "unread:identity" ] && exit 1; printf 'acme/widgets\n'; exit 0 ;;
 esac
 GH_JQ=""; __prev=""
 for __a in "$@"; do [ "$__prev" = "--jq" ] && GH_JQ="$__a"; __prev="$__a"; done
@@ -124,7 +125,12 @@ if [ "$1" = "api" ]; then
     *"/issues/101/dependencies/blocked_by"*)
       [ "$sc" = "unread:blockedby" ] && exit 1
       [ "$sc" = "no-dependency" ] && exit 0
-      printf '%s\n' 100; exit 0 ;;
+      # Rows in the shared reader's shape: number, state, owning repository. A
+      # foreign repository's #100 must never satisfy an edge declared between
+      # two local issues, and a blocker whose repository is unknown is `?`.
+      [ "$sc" = "foreign-number" ] && { printf '100\topen\tother/elsewhere\n'; exit 0; }
+      [ "$sc" = "unknown-repo" ] && { printf '100\topen\t\n'; exit 0; }
+      printf '100\topen\tacme/widgets\n'; exit 0 ;;
   esac
   exit 1
 fi
@@ -181,15 +187,18 @@ drift no-ms-record   "a declared milestone that does not exist" "no milestone ti
 drift bad-ms-desc    "a milestone whose description drifted"   "description is"
 drift no-hierarchy   "a sub-issue link that was never wired"   "NOT a sub-issue"
 drift no-dependency  "a blocked-by edge that was never wired"  "NOT blocked by"
+drift foreign-number "a foreign repository's issue with the same number as the declared blocker" "NOT blocked by"
 drift bad-order      "sub-issues in the wrong declared order"  "order"
 
 # ============ unreadable is NOT ASSESSED, never PASS =======================
 na unread:milestones "the milestone list unreadable"
 na unread:subissues  "sub-issues unreadable"
 na unread:blockedby  "blocked-by unreadable"
+na unread:identity   "the repository identity unreadable (no blocker can be matched)"
+na unknown-repo      "a same-numbered blocker whose repository is unknown"
 na unread:body       "an issue body unreadable"
 na unread:issue      "an issue itself unreadable"
-for sc in unread:milestones unread:subissues unread:blockedby unread:body unread:issue; do
+for sc in unread:milestones unread:subissues unread:blockedby unread:body unread:issue unread:identity unknown-repo; do
   V "$sc"
   case "$(verdict)" in
     PASS) bad "$sc reported PASS for state it could not read" ;;

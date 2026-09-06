@@ -237,9 +237,24 @@ plan_body_matches() {
 # milestone, a parent/child hierarchy, a blocked-by edge and an explicit delivery
 # order, have every one of them absent from GitHub, and still be certified as
 # matching the artifact — because nothing looked (#517).
+# plan_sub_issues <parent> — the parent's sub-issue numbers in GitHub's own
+# order, paginated so a large family is never read as its first page, and
+# buffered so a failure on a later page never leaves a partial list on stdout.
+# The one reader for both the hierarchy and the order check below; fails
+# (non-zero, no rows) when the list could not be read, and the caller reports
+# `?`, never "not wired".
+plan_sub_issues() {
+  local rows
+  rows="$(gh api --paginate "repos/{owner}/{repo}/issues/$1/sub_issues" --jq '.[].number' 2>/dev/null)" || return 1
+  [ -n "$rows" ] || return 0
+  # Every row must be a positive issue number; anything else fails the whole read.
+  printf '%s\n' "$rows" | awk '$0 !~ /^[1-9][0-9]*$/ { bad = 1 } END { exit bad ? 1 : 0 }' || return 1
+  printf '%s\n' "$rows"
+}
+
 plan_relation_rows() {
   local artifact="$1" state="$2"
-  local key title desc a b c live num pnum cnum found kids reason
+  local key title desc a b c live num pnum cnum found kids reason hit
 
   # --- milestone records ---------------------------------------------------
   local ms_live ms_ok=1
@@ -274,8 +289,7 @@ plan_relation_rows() {
         printf 'hierarchy\t?\t%s/%s\tone side is not a known issue number, so the link cannot be checked\n' "$a" "$b"
         continue
       fi
-      if ! kids="$(gh api "repos/{owner}/{repo}/issues/$pnum/sub_issues" --paginate \
-                     --jq '.[].number' 2>/dev/null)"; then
+      if ! kids="$(plan_sub_issues "$pnum")"; then
         printf 'hierarchy\t?\t#%s\tsub-issues could not be read — never assumed wired\n' "$pnum"
         continue
       fi
@@ -287,6 +301,12 @@ plan_relation_rows() {
     done
 
   # --- hard dependencies ---------------------------------------------------
+  # The artifact declares an edge between two LOCAL issues, so a blocker counts
+  # only when its number AND its repository are the declared one's: a foreign
+  # #5 is not the local #5, whatever its state. Own identity is read once; if it
+  # cannot be, or a blocker's repository is unknown, the edge is `?`, never `=`.
+  local me=""
+  me="$(di_repo_nwo)" || me=""
   awk -F'\t' '/^[[:space:]]*(#|$)/ { next } $1 == "blockedby" { print $2 "\t" $3 }' "$artifact" \
   | while IFS=$'\t' read -r a b; do
       [ -n "$a" ] && [ -n "$b" ] || continue
@@ -295,16 +315,21 @@ plan_relation_rows() {
         printf 'dependency\t?\t%s/%s\tone side is not a known issue number, so the edge cannot be checked\n' "$a" "$b"
         continue
       fi
-      if ! found="$(gh api "repos/{owner}/{repo}/issues/$num/dependencies/blocked_by" --paginate \
-                      --jq '.[].number' 2>/dev/null)"; then
+      if [ -z "$me" ]; then
+        printf 'dependency\t?\t#%s\tthe repository identity could not be read, so no blocker can be matched to it\n' "$num"
+        continue
+      fi
+      if ! found="$(gh_blocked_by "$num")"; then
         printf 'dependency\t?\t#%s\tblocked-by could not be read — never assumed wired\n' "$num"
         continue
       fi
-      if printf '%s\n' "$found" | grep -Fxq "$cnum"; then
-        printf 'dependency\t=\t#%s\tis blocked by #%s, as the artifact asks\n' "$num" "$cnum"
-      else
-        printf 'dependency\t~\t#%s\tis NOT blocked by #%s\n' "$num" "$cnum"
-      fi
+      hit="$(printf '%s\n' "$found" | awk -F'\t' -v n="$cnum" -v me="$me" \
+        'NF && $1 == n { print ($3 == me ? "same" : ($3 == "" ? "unknown" : "foreign")) }' | LC_ALL=C sort -u | paste -sd, -)"
+      case ",$hit," in
+        *,same,*)    printf 'dependency\t=\t#%s\tis blocked by #%s, as the artifact asks\n' "$num" "$cnum" ;;
+        *,unknown,*) printf 'dependency\t?\t#%s\ta blocker numbered %s exists but its repository could not be determined — never assumed local\n' "$num" "$cnum" ;;
+        *)           printf 'dependency\t~\t#%s\tis NOT blocked by #%s\n' "$num" "$cnum" ;;
+      esac
     done
 
   # --- preferred order ----------------------------------------------------
@@ -325,8 +350,7 @@ plan_relation_rows() {
       printf 'order\t?\t%s\tthe parent is not a known issue number, so order cannot be checked\n' "$a"
       continue
     fi
-    if ! kids="$(gh api "repos/{owner}/{repo}/issues/$pnum/sub_issues" --paginate \
-                   --jq '.[].number' 2>/dev/null)"; then
+    if ! kids="$(plan_sub_issues "$pnum")"; then
       printf 'order\t?\t#%s\tsub-issue order could not be read — never assumed correct\n' "$pnum"
       continue
     fi

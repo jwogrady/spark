@@ -347,9 +347,11 @@ for a in "$@"; do
     exit 0
   fi
 done
+# No blockers is an EMPTY answer from the shared, validated dependency reader —
+# never a pre-shaped count that assumed one consumer's jq.
 for a in "$@"; do
   case "$a" in
-    *dependencies*) printf '0\n'; exit 0 ;;
+    *dependencies*) exit 0 ;;
   esac
 done
 exit 0
