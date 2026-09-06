@@ -13,6 +13,7 @@ removed here; no deletion target is set.
 | Released governor / release / milestone / gate | Spark v0.22.0 / v0.23 "Never automate inefficiency" / milestone 20 / #480 (RED) |
 | Freeze observation (UTC) / freeze comment | 2026-09-06T16:24:54Z / #737 comment 5560565620 (`raw/freeze-comment-737.md`) |
 | Ordering | The #728/#729 native sub-issue normalization preceded the freeze (metadata only). No #738–#745 work has begun. |
+| Governance metadata (after the freeze, metadata only) | On 2026-09-06 the human decision in #677 comment 5561077604 was applied: #737 carries `chore` + `docs-impact:none` (P1, milestone 20 preserved) and #729 is a native sub-issue of #480 with #737–#745 under it. This changes no measured number; the frozen tree is unaffected. |
 
 ## 1. Instrumentation versus measured system
 
