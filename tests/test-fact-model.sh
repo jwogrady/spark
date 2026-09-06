@@ -34,9 +34,16 @@ assert_eq "ESTABLISHED is the only status that may carry a value" "ESTABLISHED" 
 assert_eq "twelve envelope fields" "12" "$(rec field | wc -l | tr -d ' ')"
 assert_eq "value is optional in the envelope (present only when ESTABLISHED)" "optional" "$(rec field | awk -F'\t' '$2=="value"{print $3}')"
 assert_eq "five source types" "5" "$(rec source | wc -l | tr -d ' ')"
-assert_eq "thirteen rules" "13" "$(rec rule | wc -l | tr -d ' ')"
-assert_eq "fifteen identifier kinds" "15" "$(rec identifier | wc -l | tr -d ' ')"
-for k in issue-state check-state scope boundary; do rec identifier | cut -f2 | grep -qx "$k" && ok || bad "closed vocabulary $k declared"; done
+assert_eq "fourteen rules" "14" "$(rec rule | wc -l | tr -d ' ')"
+assert_eq "sixteen identifier kinds" "16" "$(rec identifier | wc -l | tr -d ' ')"
+for k in issue-state check-state scope boundary decision-record; do rec identifier | cut -f2 | grep -qx "$k" && ok || bad "closed vocabulary $k declared"; done
+assert_eq "one source-identity grammar per source type" "$(rec source | cut -f2 | sort | tr '\n' ' ')" "$(rec source-identity | cut -f2 | sort | tr '\n' ' ')"
+while IFS=$'\t' read -r _ kind rx _; do
+  if printf 'probe' | grep -qE "$rx" >/dev/null 2>&1; then rc=0; else rc=$?; fi
+  [ "$rc" -le 1 ] && ok || bad "source-identity regex for $kind compiles"
+done <<EOF
+$(rec source-identity)
+EOF
 for c in work_unit repository placement graph authority acceptance head review checks next_action; do
   rec class | cut -f2 | grep -qx "$c" && ok || bad "class $c declared"
 done
@@ -53,6 +60,7 @@ for c in $(rec class | cut -f2); do grep -q "^| \`$c\` |" "$DOC" && ok || bad "d
 for s in $(rec status | cut -f2); do grep -q "^| \`$s\` |" "$DOC" && ok || bad "doc table names status $s"; done
 for f in $(rec field | cut -f2); do grep -q "^| \`$f\` |" "$DOC" && ok || bad "doc envelope table names field $f"; done
 for k in $(rec identifier | cut -f2); do grep -q "^| $k |" "$DOC" && ok || bad "doc identifier table names $k"; done
+for k in $(rec source-identity | cut -f2); do grep -q "^| \`$k\` |" "$DOC" && ok || bad "doc source table names $k"; done
 for r in $(rec rule | cut -f2); do grep -q "^- \*\*$r\*\*" "$DOC" && ok || bad "doc states rule $r"; done
 grep -q 'preferences/fact-model.tsv' "$DOC" && ok || bad "doc names its machine-readable authority"
 grep -qE '^| `next_action` \| derived' "$DOC" && ok || bad "doc marks next_action as derived"
@@ -78,6 +86,30 @@ statuses = {r[1]: r[2] for r in rows if r[0] == "status"}
 fields = {r[1]: r[2] for r in rows if r[0] == "field"}
 ids = {r[1]: re.compile(r[2]) for r in rows if r[0] == "identifier"}
 sources = {r[1] for r in rows if r[0] == "source"}
+sid = {r[1]: re.compile(r[2]) for r in rows if r[0] == "source-identity"}
+# exact value shapes (R14): the declared keys and nothing else, recursively
+SHAPES = {"work_unit": {"kind", "id"}, "repository": {"id", "default_branch"}, "placement": {"milestone", "release", "gate"},
+          "graph": {"parent", "children", "blocked_by"}, "authority": {"grants", "human_boundaries"}, "acceptance": {"contract", "items"},
+          "head": {"head", "base_ref", "base", "current"}, "review": {"verdict", "head", "reviewer", "record"},
+          "checks": {"head", "required", "results"}, "next_action": {"action", "because"}}
+NESTED = {"graph.parent": {"id", "state"}, "graph.children[]": {"id", "state"}, "graph.blocked_by[]": {"id", "state"},
+          "authority.grants[]": {"decision", "target", "scopes"}, "acceptance.items[]": {"id", "state"}, "checks.results[]": {"name", "state"}}
+def exact(obj, keys, where):
+    if not isinstance(obj, dict): fail(f"{where} must be an object")
+    if set(obj) != keys: fail(f"{where} keys {sorted(obj)} != declared {sorted(keys)} (R14)")
+def shape(c, v):
+    exact(v, SHAPES[c], f"{c}.value")
+    for k, sub in NESTED.items():
+        cls, path = k.split(".", 1)
+        if cls != c: continue
+        if path.endswith("[]"):
+            items = v[path[:-2]]
+            if not isinstance(items, list): fail(f"{k} must be a list")
+            for it in items: exact(it, sub, k)
+        else:
+            if v[path] != "none": exact(v[path], sub, k)
+    for k in ("required", "because", "human_boundaries"):
+        if k in v and not isinstance(v[k], list): fail(f"{c}.{k} must be a list")
 version = [r[1] for r in rows if r[0] == "version"][0]
 HEAD_BOUND = {"head", "review", "checks", "acceptance"}
 FORBIDDEN_KEYS = {"body", "comments", "timeline", "prose", "summary", "history"}
@@ -104,6 +136,7 @@ def check_fact(f):
     src = f["source"]
     if set(src) != {"type", "identity", "version"}: fail("source must be {type, identity, version}")
     if src["type"] not in sources: fail(f"unknown source type {src['type']}")
+    if not sid[src["type"]].match(str(src["identity"])): fail(f"source.identity {src['identity']!r} is not in the {src['type']} grammar (R14)")
     if not src["version"]: fail("source.version empty")
     if src["type"] == "derived" and not f.get("inputs"): fail("derived fact without inputs")
     if f.get("inputs") is not None and any(not ids["fact-key"].match(i) for i in f["inputs"]): fail("inputs must be fact keys")
@@ -115,6 +148,7 @@ def check_fact(f):
     v = f.get("value")
     if v is None: return
     c = f["class"]
+    shape(c, v)
     def wu(x):
         if not ids["work-unit"].match(x): fail(f"work-unit id not canonical: {x}")
     def sha(x):
@@ -133,8 +167,8 @@ def check_fact(f):
         for x in v["children"] + v["blocked_by"]: rel(x)
     if c == "authority":
         for g in v["grants"]:
-            set(g) == {"decision", "scopes"} or fail("grant must be {decision, scopes}")
-            ids["comment"].match(g["decision"]) or ids["work-unit"].match(g["decision"]) or fail("grant decision not a canonical record")
+            ids["decision-record"].match(g["decision"]) or fail("grant decision is not a durable decision record (R5)")
+            ids["repository"].match(g["target"]) or ids["work-unit"].match(g["target"]) or fail("grant target must be a canonical repository or work unit (R14)")
             g["scopes"] and all(ids["scope"].match(s) for s in g["scopes"]) or fail("grant scopes must be non-empty closed tokens (R13)")
         all(ids["boundary"].match(b) for b in v["human_boundaries"]) or fail("human boundaries must be closed tokens (R13)")
         if f["source"]["type"] != "human-decision": fail("authority must come from a human-decision source")
@@ -218,13 +252,27 @@ accepts "$(mut 'f["schema_version"]="2"')" && bad "an unknown schema_version mus
 accepts "$(mut 'f["body"]="the whole comment text"')" && bad "a raw prose field must be rejected (R2)" || ok
 accepts "$(mut 'f["status"]="CONFLICT"; del f["value"]; f["detail"]={"reason":"x","candidates":["github.com/acme/widgets#42/comment/9100"]}')" && bad "a CONFLICT naming one candidate must be rejected (R8)" || ok
 accepts "$(mut 'f["value"]=None')" && bad "value: null must not stand in for absence (R6)" || ok
-derived='{"schema_version":"1","key":"next_action.governed","class":"next_action","status":"ESTABLISHED","value":{"action":"merge","because":["review.independent"]},"source":{"type":"derived","identity":"fact-model","version":"1"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["head:0123456789abcdef0123456789abcdef01234567"],"provenance":"preferences/fact-model.tsv","inputs":["review.independent"]}'
+derived='{"schema_version":"1","key":"next_action.governed","class":"next_action","status":"ESTABLISHED","value":{"action":"merge","because":["review.independent"]},"source":{"type":"derived","identity":"fact-model/1","version":"1"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["head:0123456789abcdef0123456789abcdef01234567"],"provenance":"preferences/fact-model.tsv","inputs":["review.independent"]}'
 accepts "$derived" && ok || bad "control: a derived fact with inputs is accepted"
 accepts "$(printf '%s' "$derived" | python3 -c 'import json,sys; f=json.load(sys.stdin); del f["inputs"]; print(json.dumps(f))')" && bad "a derived fact without inputs must be rejected (R4)" || ok
-auth='{"schema_version":"1","key":"authority.standing","class":"authority","status":"ESTABLISHED","value":{"grants":[{"decision":"github.com/acme/widgets#7/comment/9001","scopes":["merge:routine"]}],"human_boundaries":["release:approve"]},"source":{"type":"human-decision","identity":"github.com/acme/widgets#7/comment/9001","version":"9001"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["comment:github.com/acme/widgets#7/comment/9001"],"provenance":"https://github.com/acme/widgets/issues/7"}'
+accepts "$(printf '%s' "$derived" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["source"]["identity"]="fact-model"; print(json.dumps(f))')" && bad "a derived source identity outside its grammar must be rejected (R14)" || ok
+# exact value shapes, recursively (R14): prose keys nested inside values
+accepts "$(mut 'f["value"]["conclusion"]="looks fine"')" && bad "an extra key in a review value must be rejected (R14)" || ok
+wu='{"schema_version":"1","key":"work_unit.identity","class":"work_unit","status":"ESTABLISHED","value":{"kind":"pull_request","id":"github.com/acme/widgets#42"},"source":{"type":"github-api","identity":"github.com/acme/widgets#42","version":"2026-09-06T12:00:00Z"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["pull_request:github.com/acme/widgets#42"],"provenance":"https://github.com/acme/widgets/pull/42"}'
+accepts "$wu" && ok || bad "control: a canonical work_unit fact is accepted"
+accepts "$(printf '%s' "$wu" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["value"]["body"]="the PR description"; print(json.dumps(f))')" && bad "work_unit.value.body must be rejected (R2/R14)" || ok
+acc='{"schema_version":"1","key":"acceptance.contract","class":"acceptance","status":"ESTABLISHED","value":{"contract":"github.com/acme/widgets#41","items":[{"id":"a1","state":"MET"}]},"source":{"type":"github-api","identity":"github.com/acme/widgets#41","version":"2026-09-05T18:00:00Z"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["issue:github.com/acme/widgets#41","head:0123456789abcdef0123456789abcdef01234567"],"provenance":"https://github.com/acme/widgets/issues/41"}'
+accepts "$acc" && ok || bad "control: a canonical acceptance fact is accepted"
+accepts "$(printf '%s' "$acc" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["value"]["items"][0]["summary"]="done, I think"; print(json.dumps(f))')" && bad "acceptance.items[].summary must be rejected (R2/R14)" || ok
+auth='{"schema_version":"1","key":"authority.standing","class":"authority","status":"ESTABLISHED","value":{"grants":[{"decision":"github.com/acme/widgets#7/comment/9001","target":"github.com/acme/widgets","scopes":["merge:routine"]}],"human_boundaries":["release:approve"]},"source":{"type":"human-decision","identity":"github.com/acme/widgets#7/comment/9001","version":"9001"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["comment:github.com/acme/widgets#7/comment/9001"],"provenance":"https://github.com/acme/widgets/issues/7"}'
 accepts "$auth" && ok || bad "control: a canonical authority fact is accepted"
 amut() { printf '%s' "$auth" | python3 -c "import json,sys; f=json.load(sys.stdin); exec(sys.argv[1]); print(json.dumps(f))" "$1"; }
 accepts "$(amut 'f["source"]["type"]="github-api"')" && bad "authority from a non-human-decision source must be rejected (R5)" || ok
+accepts "$(amut 'f["source"]["identity"]="role:owner"')" && bad "a human-decision source whose identity is a role must be rejected (R5/R14)" || ok
+accepts "$(amut 'f["source"]["identity"]="the maintainer approved this in chat"')" && bad "a human-decision source whose identity is a summary must be rejected (R5/R14)" || ok
+accepts "$(amut 'del f["value"]["grants"][0]["target"]')" && bad "a grant without an applicability target must be rejected (R14)" || ok
+accepts "$(amut 'f["value"]["grants"][0]["target"]="this repository and its forks"')" && bad "a prose grant target must be rejected (R14)" || ok
+accepts "$(amut 'f["value"]["grants"][0]["decision"]="approved by the owner"')" && bad "a grant whose decision is not a durable record must be rejected (R5)" || ok
 accepts "$(amut 'f["value"]["grants"][0]["scopes"]=["routine merge of a green PR"]')" && bad "a prose scope must be rejected (R13)" || ok
 accepts "$(amut 'f["value"]["human_boundaries"]=["release approval"]')" && bad "a prose boundary must be rejected (R13)" || ok
 accepts "$(amut 'f["value"]["grants"][0]["scopes"]=[]')" && bad "a grant with no scopes must be rejected (R13)" || ok
@@ -233,6 +281,7 @@ cmut() { printf '%s' "$chk" | python3 -c "import json,sys; f=json.load(sys.stdin
 accepts "$chk" && ok || bad "control: a covered checks fact is accepted"
 accepts "$(cmut 'f["value"]["results"]=f["value"]["results"][:1]')" && bad "a required check with no result must be rejected (R12)" || ok
 accepts "$(cmut 'f["value"]["results"][1]["state"]="green"')" && bad "a check state outside the vocabulary must be rejected (R12)" || ok
+accepts "$(cmut 'f["value"]["results"][1]["conclusion"]="success"')" && bad "checks.results[].conclusion (an undeclared nested key) must be rejected (R14)" || ok
 accepts "$(cmut 'f["value"]["results"].append({"name":"tests","state":"failure"})')" && bad "a duplicate check result must be rejected (R12)" || ok
 gr='{"schema_version":"1","key":"graph.native","class":"graph","status":"ESTABLISHED","value":{"parent":{"id":"github.com/acme/widgets#40","state":"open"},"children":[],"blocked_by":[{"id":"github.com/acme/widgets#39","state":"closed"}]},"source":{"type":"github-api","identity":"github.com/acme/widgets#41","version":"x"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["issue:github.com/acme/widgets#41"],"provenance":"https://github.com/acme/widgets/issues/41"}'
 gmut() { printf '%s' "$gr" | python3 -c "import json,sys; f=json.load(sys.stdin); exec(sys.argv[1]); print(json.dumps(f))" "$1"; }

@@ -64,8 +64,12 @@ fixtures.**
   `.spark/state.json`; the state file keeps its two judgment values.
 - Everything a consumer must act on is a closed token, not prose: authority
   scopes and human boundaries, check states, relationship states, verdicts and
-  next actions. A snapshot is the complete set of required classes exactly
-  once; anything smaller is a fragment and is never consumed as a snapshot.
+  next actions. Every value has an exact shape, recursively; a source's
+  identity follows the grammar of its type (a human decision is a comment or
+  commit locator, never a role or summary); a grant names the repository or
+  work unit it applies to. A snapshot is the complete set of required classes
+  exactly once; anything smaller is a fragment and is never consumed as a
+  snapshot.
 - The model is classified Experimental. Its `version` is the schema version
   every fact carries; a consumer that meets an unknown version treats the fact
   as UNKNOWN and never reinterprets fields. Under one version only ignorable

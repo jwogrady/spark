@@ -22,6 +22,7 @@
 #   status      <token>       <value-allowed>                    <description>
 #   identifier  <kind>        <regex>                            <canonical form>
 #   source      <type>        <version-identity>                 <description>
+#   source-identity <type>    <regex>                            <canonical identity form for that source type>
 #   rule        <id>          <statement>
 #
 #   required       required | optional | derived
@@ -50,7 +51,7 @@ class	work_unit	required	{kind: issue|pull_request, id: <work-unit>}	Canonical i
 class	repository	required	{id: <repository>, default_branch: <ref>}	Canonical identity of the repository the work unit belongs to
 class	placement	required	{milestone: <milestone>|none, release: <release>|none, gate: <work-unit>|none}	Release / milestone / gate placement
 class	graph	required	{parent: {id: <work-unit>, state: <issue-state>}|none, children: [{id: <work-unit>, state: <issue-state>}], blocked_by: [{id: <work-unit>, state: <issue-state>}]}	Native parent / child / dependency relationships, each with its current state (a blocker is satisfied when its state is closed)
-class	authority	required	{grants: [{decision: <comment>|<work-unit>, scopes: [<scope>]}], human_boundaries: [<boundary>]}	Standing authority (closed scope tokens) and the boundaries reserved for a human (closed boundary tokens); wording lives behind provenance
+class	authority	required	{grants: [{decision: <decision-record>, target: <repository>|<work-unit>, scopes: [<scope>]}], human_boundaries: [<boundary>]}	Standing authority: each grant names its durable decision record, the repository or work unit it applies to, and closed scope tokens; boundaries are closed tokens; wording lives behind provenance
 class	acceptance	required	{contract: <work-unit>, items: [{id: <text>, state: MET|NOT_MET|UNKNOWN}]}	Acceptance contract identity and current satisfaction
 class	head	required	{head: <commit>, base_ref: <ref>, base: <commit>, current: true|false}	Exact HEAD, base and staleness of the work unit's change
 class	review	required	{verdict: <verdict>, head: <commit>, reviewer: <login>, record: <comment>}	Independent review verdict bound to an exact HEAD
@@ -98,6 +99,7 @@ identifier	issue-state	^(open|closed)$	Current state of a related work unit; a b
 identifier	check-state	^(success|failure|pending|missing)$	Normalized state of one required check on the exact HEAD: missing = required but no run observed
 identifier	scope	^(merge:routine|close:issue|metadata:labels|metadata:hierarchy|evidence:publish|branch:push)$	What a standing grant permits; the closed scope vocabulary
 identifier	boundary	^(release:approve|authority:grant|settings:repository|action:destructive|placement:release|semantics:product)$	What a human reserves; the closed boundary vocabulary
+identifier	decision-record	^([a-z0-9.-]+/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#[1-9][0-9]*/comment/[1-9][0-9]*|[a-z0-9.-]+/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40})$	A durable human decision: a <comment> locator or <repository>@<commit>; never a role, label or summary
 
 # --- Source types and the version identity each must observe ----------------
 source	github-api	node updated_at, etag, or the observed head/id the record is keyed by	A GitHub REST or GraphQL read
@@ -105,6 +107,13 @@ source	git	the commit id or ref target observed	A read of the local or remote gi
 source	repository-file	the commit id the file was read at	A committed file in the repository tree
 source	human-decision	the comment id or commit id that records the decision	A durable, source-backed human decision; never a role, label or summary
 source	derived	the schema version plus the input facts' versions	A conclusion computed from other facts (requires inputs)
+
+# --- Source identity grammar: source.identity is validated per source type ----
+source-identity	github-api	^[a-z0-9.-]+/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(#[1-9][0-9]*(/comment/[1-9][0-9]*)?|/milestone/[1-9][0-9]*)?$	A <repository>, <work-unit>, <comment> or <milestone> locator — the GitHub node that was read
+source-identity	git	^[a-z0-9.-]+/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@([0-9a-f]{40}|ref/[A-Za-z0-9_./-]+)$	<repository>@<commit> or <repository>@ref/<ref>
+source-identity	repository-file	^[a-z0-9.-]+/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}:[^[:space:]]+$	<repository>@<commit>:<path>
+source-identity	human-decision	^([a-z0-9.-]+/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#[1-9][0-9]*/comment/[1-9][0-9]*|[a-z0-9.-]+/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40})$	The <decision-record> itself
+source-identity	derived	^fact-model/[1-9][0-9]*$	fact-model/<schema version>
 
 # --- Rules the shape enforces ------------------------------------------------
 rule	R1	Canonical identifiers have one representation; labels, abbreviations and pretty names are projections.
@@ -120,3 +129,4 @@ rule	R10	Nothing here is written to .spark/state.json; mutable GitHub execution 
 rule	R11	A snapshot carries every required class exactly once; a smaller set is a fragment and is never consumed as a snapshot.
 rule	R12	A checks fact carries exactly one result per required check name, each in the closed check-state vocabulary; merge is derivable only when every result is success.
 rule	R13	Authority scopes and human boundaries are closed tokens; explanatory wording is provenance, never a value a consumer must interpret.
+rule	R14	Every value has an exact shape: only the declared keys, recursively; source.identity matches the grammar of its source type; a grant names the repository or work unit it applies to.
