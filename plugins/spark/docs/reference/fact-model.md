@@ -105,7 +105,7 @@ is a projection and is never used to compare or bind.
 | comment | <work-unit>/comment/<comment id> | `github.com/acme/widgets#42/comment/9001` |
 | milestone | <repository>/milestone/<number> | `github.com/acme/widgets/milestone/7` |
 | commit | Full 40-hex lower-case object id; abbreviations are projections | `4f3d…` (40 characters) |
-| ref | A git ref name without the refs/heads/ prefix | `master` |
+| ref | A branch name without the refs/heads/ prefix: slash-separated components, none empty, none starting with a dot, no .., never ending in .lock; refs/… and any other spelling of the same branch are projections | `master` |
 | release | A release tag as published | `v0.22.0` |
 | login | An actor identity; naming an actor never confers authority | `login:github-actions[bot]` — naming an actor never confers authority |
 | verdict | The independent reviewer's closed vocabulary | `PASS`, `CHANGES REQUIRED`, `DECISION REQUIRED`, `NOT ASSESSED` |
@@ -247,16 +247,19 @@ behavioral suite checks the two never drift.
   Neither carries prose, so freshness and drill-down are machine-normalized.
 - **R17** A fact's source identity is the node its value describes: work_unit
   and repository name their own id; review names its record and lists it as a
-  comment: invalidator; acceptance read from GitHub names its contract;
-  placement and graph name the work-unit node they were read from — within one
-  set, the work unit itself or the issue it implements, never an unrelated node
-  — and list it as an issue: or pull_request: invalidator; head read from GitHub
-  names a work unit and checks name a repository — within one set, the work
-  unit's own node and the repository's. A graph lists every parent, child and
-  blocker whose state it represents as an issue: or pull_request: invalidator;
-  head lists its base as ref:<repository>/<base_ref>; checks list
-  ruleset:<repository> for the repository whose rulesets require them. inputs
-  and because list each key once.
+  comment: invalidator; acceptance read from GitHub names its contract, and
+  within one set that contract is the work unit itself or the issue it
+  implements; the work unit belongs to the set's repository; placement and graph
+  name the work-unit node they were read from — within one set, the work unit
+  itself or the issue it implements, never an unrelated node — and list it as an
+  issue: or pull_request: invalidator; head read from GitHub names a work unit
+  and checks name a repository — within one set, the work unit's own node and
+  the repository's; a NOT_APPLICABLE HEAD-bound fact names the work unit it was
+  read from and lists it as an issue: or pull_request: invalidator. A graph
+  lists every parent, child and blocker whose state it represents as an issue:
+  or pull_request: invalidator; head lists its base as
+  ref:<repository>/<base_ref>; checks list ruleset:<repository> for the
+  repository whose rulesets require them. inputs and because list each key once.
 
 ## Versioning
 
