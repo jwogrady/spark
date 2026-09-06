@@ -32,7 +32,7 @@ assert_eq "three envelope facets" "3" "$(rec facet | wc -l | tr -d ' ')"
 assert_eq "exactly one canonical key per class" "$(rec class | cut -f2 | sort | tr '\n' ' ')" "$(rec key | cut -f2 | sort | tr '\n' ' ')"
 assert_eq "every canonical key is prefixed by its class" "" "$(rec key | awk -F'\t' 'index($3, $2 ".") != 1')"
 assert_eq "eight invalidator grammars" "8" "$(rec invalidator | wc -l | tr -d ' ')"
-assert_eq "17 constraint records" "17" "$(rec constraint | wc -l | tr -d ' ')"
+assert_eq "18 constraint records" "18" "$(rec constraint | wc -l | tr -d ' ')"
 while IFS=$'\t' read -r _ scope rx _; do
   if printf 'probe' | grep -qE "$rx" >/dev/null 2>&1; then rc=0; else rc=$?; fi
   [ "$rc" -le 1 ] && ok || bad "constraint regex for $scope compiles as an ERE (no lookaround, so any consumer can apply it)"
@@ -261,8 +261,12 @@ def matches(sh, v, where):
 def shape(c, v): matches(SHAPES[c], v, f"{c}.value")
 version = [r[1] for r in rows if r[0] == "version"][0]
 LOCATOR_KINDS = ("repository", "work-unit", "comment", "milestone", "commit")
+def clean(scope, x):
+    """True when no constraint record for the scope matches (R1)"""
+    return not any(rx.search(x) for rx, _ in constraints.get(scope, []))
 def locator(x):
-    return any(ids[k].fullmatch(x) for k in LOCATOR_KINDS) or any(rx.fullmatch(x) for rx in sid.values())
+    """a canonical locator: in some identifier or source-identity grammar AND free of that grammar's constraints"""
+    return any(ids[k].fullmatch(x) and clean(k, x) for k in LOCATOR_KINDS) or any(rx.fullmatch(x) and clean(f"source-identity/{t}", x) for t, rx in sid.items())
 HEAD_BOUND = {"head", "review", "checks", "acceptance"}
 def wu_token(kind, wid): return f"{'pull_request' if kind == 'pull_request' else 'issue'}:{wid}"
 def one_wu_token(f, wid, what):
@@ -361,6 +365,7 @@ def check_fact(f):
         for g in v["grants"]:
             if not g["scopes"]: fail("grant scopes must be non-empty (R13)")
         if f["source"]["type"] != "human-decision": fail("authority must come from a human-decision source")
+        if "/comment/" in f["source"]["identity"] and f"comment:{f['source']['identity']}" not in f["invalidators"]: fail("an authority recorded in a comment lists that comment as a comment: invalidator, so an edited decision goes stale (R17)")
         if "inferred" in f: fail("authority can never be inferred")
         for rec in v["grants"] + v["human_boundaries"]:
             if rec["decision"] != f["source"]["identity"]: fail(f"authority record names decision {rec['decision']} but the fact's source is {f['source']['identity']}: one authority fact carries one decision record (R5)")
@@ -562,6 +567,8 @@ accepts "$(mut 'f["status"]="UNKNOWN"; del f["value"]; f["detail"]={"reason":"x"
 accepts "$(mut 'f["status"]="UNKNOWN"; del f["value"]; f["detail"]={"reason":"x","candidates":[],"body":"the raw comment"}')" && bad "a detail carrying an extra (prose) key must be rejected (R2/R14)" || ok
 accepts "$(mut 'f["status"]="UNKNOWN"; del f["value"]; f["detail"]={"reason":"","candidates":[]}')" && bad "an empty detail.reason must be rejected (R14)" || ok
 accepts "$(mut 'f["status"]="UNKNOWN"; del f["value"]; f["detail"]={"reason":"x","candidates":["the comment the bot left yesterday"]}')" && bad "a prose candidate must be rejected (R14)" || ok
+accepts "$(mut 'f["status"]="UNKNOWN"; del f["value"]; f["detail"]={"reason":"x","candidates":["github.com/acme/widgets.git#42"]}')" && bad "a candidate in a grammar but caught by its constraint (.git) must be rejected (R1/R14)" || ok
+accepts "$(mut 'f["status"]="UNKNOWN"; del f["value"]; f["detail"]={"reason":"x","candidates":["github.com/acme/widgets#42","github.com/acme/widgets@0123456789abcdef0123456789abcdef01234567:docs/a.md"]}')" && ok || bad "control: canonical work-unit and repository-file locators are valid candidates"
 accepts "$(mut 'f["detail"]={"reason":"x","candidates":[]}')" && bad "detail on an ESTABLISHED fact must be rejected" || ok
 accepts "$(mut 'f["value"]["record"]="#42"')" && bad "a bare #42 must not pass as an identity (R1)" || ok
 accepts "$(mut 'f["key"]="review.cached"')" && bad "a key other than the class's canonical key must be rejected (R1)" || ok
@@ -662,6 +669,7 @@ auth='{"schema_version":"1","key":"authority.standing","class":"authority","stat
 accepts "$auth" && ok || bad "control: a canonical authority fact is accepted"
 amut() { printf '%s' "$auth" | python3 -c "import json,sys; f=json.load(sys.stdin); exec(sys.argv[1]); print(json.dumps(f))" "$1"; }
 accepts "$(amut 'f["source"]["type"]="github-api"')" && bad "authority from a non-human-decision source must be rejected (R5)" || ok
+accepts "$(amut 'f["invalidators"]=["repository:github.com/acme/widgets"]')" && bad "an authority recorded in a comment that does not list that comment as an invalidator must be rejected — an edited decision would never go stale (R17)" || ok
 accepts "$(amut 'f["value"]["grants"][0]["decision"]="github.com/acme/widgets#7/comment/9002"')" && bad "a grant naming a decision the fact's source does not back must be rejected (R5)" || ok
 accepts "$(amut 'f["value"]["human_boundaries"][0]["decision"]="github.com/acme/widgets#8/comment/9100"')" && bad "a boundary naming a decision the fact's source does not back must be rejected (R5)" || ok
 accepts "$(amut 'f["inferred"]=True')" && bad "an inferred authority fact must be rejected (R5)" || ok
@@ -716,7 +724,7 @@ accepts "$(gmut 'f["invalidators"]=[i for i in f["invalidators"] if not i.endswi
 # head: the base ref is a freshness dependency the value implies
 hd0='{"schema_version":"1","key":"head.exact","class":"head","status":"ESTABLISHED","value":{"head":"0123456789abcdef0123456789abcdef01234567","base_ref":"master","base":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","current":true},"source":{"type":"github-api","identity":"github.com/acme/widgets#42","version":"0123456789abcdef0123456789abcdef01234567"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["head:0123456789abcdef0123456789abcdef01234567","ref:github.com/acme/widgets/master"],"provenance":"https://github.com/acme/widgets/pull/42/commits"}'
 # ref grammar: one spelling of a branch; refs/heads/…, empty or dotted components, .. and .lock are rejected
-for r in 'refs/heads/master' '/' 'foo//bar' 'foo..bar' 'master.lock' '.hidden' 'feat/' '/feat' 'a/.b' 'a b' 'a~b' 'a^b' 'a:b' 'a?b' 'a*b' 'a[b' 'a\\b' 'a@{b}' 'trail.'; do
+for r in 'refs/heads/master' '/' 'foo//bar' 'foo..bar' 'master.lock' '.hidden' 'feat/' '/feat' 'a/.b' 'a b' 'a~b' 'a^b' 'a:b' 'a?b' 'a*b' 'a[b' 'a\\b' 'a@{b}' 'trail.' '@' "$(printf 'a\001b')" "$(printf 'a\177b')"; do
   accepts "$(printf '%s' "$hd0" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["value"]["base_ref"]=sys.argv[1]; f["invalidators"][1]="ref:github.com/acme/widgets/"+sys.argv[1]; print(json.dumps(f))' "$r")" && bad "ref spelling '$r' must be rejected — one canonical branch name (R1)" || ok
 done
 accepts "$(printf '%s' "$hd0" | python3 -c 'import json,sys; f=json.load(sys.stdin); f["value"]["base_ref"]="release/v1.2.x"; f["invalidators"][1]="ref:github.com/acme/widgets/release/v1.2.x"; print(json.dumps(f))')" && ok || bad "control: a dotted, slashed branch name is a valid ref"

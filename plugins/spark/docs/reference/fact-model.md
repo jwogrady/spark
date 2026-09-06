@@ -105,7 +105,7 @@ is a projection and is never used to compare or bind.
 | comment | <work-unit>/comment/<comment id> | `github.com/acme/widgets#42/comment/9001` |
 | milestone | <repository>/milestone/<number> | `github.com/acme/widgets/milestone/7` |
 | commit | Full 40-hex lower-case object id; abbreviations are projections | `4f3d…` (40 characters) |
-| ref | A branch name over Git's full ref domain, without the refs/heads/ prefix: slash-separated components, none empty or dot-led, no whitespace, ~ ^ : ? * [ or backslash, no .. or @{, never ending in / . or .lock; refs/… and any other spelling of the same branch are projections | `master`, `release/v1.2.x`, `feat/x+y` |
+| ref | A branch name over Git's full ref domain, without the refs/heads/ prefix: slash-separated components, none empty or dot-led, no whitespace or ASCII control characters, no ~ ^ : ? * [ or backslash, no .. or @{, never the single name @, never ending in / . or .lock; refs/… and any other spelling of the same branch are projections | `master`, `release/v1.2.x`, `feat/x+y` |
 | release | A release tag as published | `v0.22.0` |
 | login | An actor identity; naming an actor never confers authority | `login:github-actions[bot]` — naming an actor never confers authority |
 | verdict | The independent reviewer's closed vocabulary | `PASS`, `CHANGES REQUIRED`, `DECISION REQUIRED`, `NOT ASSESSED` |
@@ -141,6 +141,7 @@ consumer applies them rather than reconstructing them from prose.
 | `ref` | `@\{` | no @{ (reflog syntax) in a ref |
 | `ref` | `\.lock$` | a ref never ends in .lock |
 | `ref` | `\.$` | a ref never ends in a dot |
+| `ref` | `^@$` | the single name @ is not a branch (Git reserves it for HEAD) |
 | `provenance` | `(^\|/)\.\.?(/\|$)` | a path is normalized: no . or .. components |
 | `source-identity/repository-file` | `(:\|/)\.\.?(/\|$)` | the path after the commit is normalized: no . or .. components |
 | `source-identity/git` | `\.git(@\|$)` | the repository name never carries .git |
@@ -242,17 +243,17 @@ behavioral suite checks the two never drift.
 - **R14** Every value has an exact shape: only the declared keys, recursively;
   source.identity and source.version each match the grammar of their source
   type; a grant names the repository or work unit it applies to. detail has the
-  exact shape {reason, candidates} with canonical locators as candidates;
-  acceptance item ids are scalar item-ids, unique within the fact; a work unit
-  appears at most once per graph list. Every envelope field has the type its
-  field record declares. Where a source identity embeds the commit observed —
-  <repository>@<commit> or <repository>@<commit>:<path> — source.version equals
-  it; a decision recorded in a comment is versioned by that comment's
-  updated_at, never by its id. A github-api version that is a commit is allowed
-  only on a HEAD-bound class and is that fact's HEAD; a derived identity's
-  schema version equals the fact's schema_version and its derived-version
-  prefix. Every grammar is matched against the whole string, and whitespace of
-  any kind is outside every locator.
+  exact shape {reason, candidates} with canonical locators as candidates — each
+  in a grammar and free of that grammar's constraints; acceptance item ids are
+  scalar item-ids, unique within the fact; a work unit appears at most once per
+  graph list. Every envelope field has the type its field record declares. Where
+  a source identity embeds the commit observed — <repository>@<commit> or
+  <repository>@<commit>:<path> — source.version equals it; a decision recorded
+  in a comment is versioned by that comment's updated_at, never by its id. A
+  github-api version that is a commit is allowed only on a HEAD-bound class and
+  is that fact's HEAD; a derived identity's schema version equals the fact's
+  schema_version and its derived-version prefix. Every grammar is matched
+  against the whole string, and whitespace of any kind is outside every locator.
 - **R15** next_action is derived, never asserted, and its inputs are exactly the
   facts its derivation consulted — nothing omitted, nothing extra — so R4
   re-versions it when any of them changes and one conclusion has one
@@ -281,20 +282,22 @@ behavioral suite checks the two never drift.
   Neither carries prose, so freshness and drill-down are machine-normalized.
 - **R17** A fact's source identity is the node its value describes: work_unit
   and repository name their own id; review names its record and lists it as a
-  comment: invalidator; acceptance read from GitHub names its contract, lists it
-  as an invalidator, and within one set that contract is the work unit itself or
-  the issue it implements; the work unit belongs to the set's repository;
-  placement and graph name the work-unit node they were read from — within one
-  set, the work unit itself or the issue it implements, never an unrelated node
-  — and list it as an invalidator; head read from GitHub names a work unit and
-  checks name a repository — within one set, the work unit's own node and the
-  repository's; a NOT_APPLICABLE HEAD-bound fact names the work unit it was read
-  from and lists it as an invalidator. A work-unit invalidator has one canonical
-  form — issue: for an issue, pull_request: for a pull request — and never both.
-  A graph lists every parent, child and blocker whose state it represents as an
-  invalidator of that relationship's kind; head lists its base as
-  ref:<repository>/<base_ref>; checks list ruleset:<repository> for the
-  repository whose rulesets require them. inputs and because list each key once.
+  comment: invalidator; an authority recorded in a comment lists that comment as
+  a comment: invalidator, so an edited decision goes stale; acceptance read from
+  GitHub names its contract, lists it as an invalidator, and within one set that
+  contract is the work unit itself or the issue it implements; the work unit
+  belongs to the set's repository; placement and graph name the work-unit node
+  they were read from — within one set, the work unit itself or the issue it
+  implements, never an unrelated node — and list it as an invalidator; head read
+  from GitHub names a work unit and checks name a repository — within one set,
+  the work unit's own node and the repository's; a NOT_APPLICABLE HEAD-bound
+  fact names the work unit it was read from and lists it as an invalidator. A
+  work-unit invalidator has one canonical form — issue: for an issue,
+  pull_request: for a pull request — and never both. A graph lists every parent,
+  child and blocker whose state it represents as an invalidator of that
+  relationship's kind; head lists its base as ref:<repository>/<base_ref>;
+  checks list ruleset:<repository> for the repository whose rulesets require
+  them. inputs and because list each key once.
 
 ## Versioning
 
