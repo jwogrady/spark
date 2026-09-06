@@ -72,11 +72,12 @@ fixtures.**
   snapshot.
 - The model is classified Experimental. Its `version` is the schema version
   every fact carries; a consumer that meets an unknown version treats the fact
-  as UNKNOWN and never reinterprets fields. Under one version only ignorable
-  additions are allowed (an optional envelope field, a derived class); a new
-  required class or field, or any change to a closed vocabulary, is a new
-  version, so an older consumer can never accept a snapshot it cannot judge
-  complete.
+  as UNKNOWN and never reinterprets fields. Nothing is added or changed under an
+  existing version — any new field, class or vocabulary member is a new version
+  — so a consumer rejects what it does not know and an older consumer can never
+  accept a snapshot it cannot judge complete. A derived fact's version records
+  every input's version, so a derivation over different inputs is a different
+  fact.
 
 Why this shape: the baseline showed the cost is in *re-establishing* facts, so
 the contract must make a fact self-describing enough to be reused safely — what

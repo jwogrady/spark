@@ -31,13 +31,12 @@
 # EVOLUTION. `version` is the schema version every fact carries as
 # `schema_version`. A consumer that reads a fact whose schema_version it does
 # not know MUST treat the fact as UNKNOWN, never reinterpret field meaning.
-# Under the SAME version the only permitted change is an addition a consumer
-# can ignore without changing any conclusion: a new OPTIONAL envelope field,
-# or a new `derived` class. Adding a required class or a required field,
-# changing the meaning, type or requiredness of an existing field, renaming a
-# class, altering a status token, or changing any closed vocabulary is a NEW
-# version — an older consumer would otherwise accept a snapshot it cannot
-# judge complete.
+# Nothing is added, removed or changed under an existing version: any new
+# field, class, status token or vocabulary member, and any change to the
+# meaning, type or requiredness of an existing one, is a NEW version. A
+# consumer therefore rejects every field and class it does not know for the
+# version it reads (R9 applies to the whole fact), and an older consumer can
+# never accept a snapshot it cannot judge complete.
 #
 # SNAPSHOT versus FRAGMENT. A snapshot is the complete set: every `required`
 # class exactly once (plus derived classes). Anything smaller is a fragment —
@@ -51,8 +50,8 @@ class	work_unit	required	{kind: issue|pull_request, id: <work-unit>}	Canonical i
 class	repository	required	{id: <repository>, default_branch: <ref>}	Canonical identity of the repository the work unit belongs to
 class	placement	required	{milestone: <milestone>|none, release: <release>|none, gate: <work-unit>|none}	Release / milestone / gate placement
 class	graph	required	{parent: {id: <work-unit>, state: <issue-state>}|none, children: [{id: <work-unit>, state: <issue-state>}], blocked_by: [{id: <work-unit>, state: <issue-state>}]}	Native parent / child / dependency relationships, each with its current state (a blocker is satisfied when its state is closed)
-class	authority	required	{grants: [{decision: <decision-record>, target: <repository>|<work-unit>, scopes: [<scope>]}], human_boundaries: [<boundary>]}	Standing authority: each grant names its durable decision record, the repository or work unit it applies to, and closed scope tokens; boundaries are closed tokens; wording lives behind provenance
-class	acceptance	required	{contract: <work-unit>, items: [{id: <text>, state: MET|NOT_MET|UNKNOWN}]}	Acceptance contract identity and current satisfaction
+class	authority	required	{grants: [{decision: <decision-record>, target: <repository>|<work-unit>, scopes: [<scope>]}], human_boundaries: [{decision: <decision-record>, target: <repository>|<work-unit>, boundary: <boundary>}]}	Standing authority: each grant and each reserved boundary names its durable decision record, the repository or work unit it applies to, and a closed token; wording lives behind provenance
+class	acceptance	required	{contract: <work-unit>, head: <commit>, items: [{id: <text>, state: MET|NOT_MET|UNKNOWN}]}	Acceptance contract identity and its satisfaction as judged on an exact HEAD
 class	head	required	{head: <commit>, base_ref: <ref>, base: <commit>, current: true|false}	Exact HEAD, base and staleness of the work unit's change
 class	review	required	{verdict: <verdict>, head: <commit>, reviewer: <login>, record: <comment>}	Independent review verdict bound to an exact HEAD
 class	checks	required	{head: <commit>, required: [<text>], results: [{name: <text>, state: <check-state>}]}	Required-check state on the exact HEAD: exactly one result per required name, each in the closed check-state vocabulary
@@ -99,6 +98,7 @@ identifier	issue-state	^(open|closed)$	Current state of a related work unit; a b
 identifier	check-state	^(success|failure|pending|missing)$	Normalized state of one required check on the exact HEAD: missing = required but no run observed
 identifier	scope	^(merge:routine|close:issue|metadata:labels|metadata:hierarchy|evidence:publish|branch:push)$	What a standing grant permits; the closed scope vocabulary
 identifier	boundary	^(release:approve|authority:grant|settings:repository|action:destructive|placement:release|semantics:product)$	What a human reserves; the closed boundary vocabulary
+identifier	derived-version	^[1-9][0-9]*(;[a-z_]+\.[a-z_]+@[^; ]+)+$	<schema version>;<input key>@<input source.version>;… — one entry per input, sorted by key
 identifier	decision-record	^([a-z0-9.-]+/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#[1-9][0-9]*/comment/[1-9][0-9]*|[a-z0-9.-]+/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40})$	A durable human decision: a <comment> locator or <repository>@<commit>; never a role, label or summary
 
 # --- Source types and the version identity each must observe ----------------
@@ -106,7 +106,7 @@ source	github-api	node updated_at, etag, or the observed head/id the record is k
 source	git	the commit id or ref target observed	A read of the local or remote git object store
 source	repository-file	the commit id the file was read at	A committed file in the repository tree
 source	human-decision	the comment id or commit id that records the decision	A durable, source-backed human decision; never a role, label or summary
-source	derived	the schema version plus the input facts' versions	A conclusion computed from other facts (requires inputs)
+source	derived	<derived-version>: the schema version, then <input key>@<that input's source.version> for every input, sorted by key	A conclusion computed from other facts (requires inputs); the version changes whenever any input's version does
 
 # --- Source identity grammar: source.identity is validated per source type ----
 source-identity	github-api	^[a-z0-9.-]+/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(#[1-9][0-9]*(/comment/[1-9][0-9]*)?|/milestone/[1-9][0-9]*)?$	A <repository>, <work-unit>, <comment> or <milestone> locator — the GitHub node that was read
@@ -119,14 +119,14 @@ source-identity	derived	^fact-model/[1-9][0-9]*$	fact-model/<schema version>
 rule	R1	Canonical identifiers have one representation; labels, abbreviations and pretty names are projections.
 rule	R2	Raw issue or comment bodies, timelines and explanatory prose are not fact values; a fact points at them through provenance.
 rule	R3	A fact states what is established now; provenance states why and how. The two are separate fields, never merged.
-rule	R4	A derived fact lists the keys of every fact that decided it, so invalidating an input invalidates the conclusion.
+rule	R4	A derived fact lists the keys of every fact that decided it and records each input's source.version in its own source.version, so a change to any input changes and invalidates the conclusion.
 rule	R5	Human judgment is a human-decision source with a durable record identity; it is never inferred from capability, membership, labels or cached prose.
 rule	R6	value is present only when status is ESTABLISHED; UNKNOWN, CONFLICT and NOT_APPLICABLE carry no value and cannot collapse into false, null or empty.
-rule	R7	A fact bound to a HEAD (head, review, checks, acceptance) lists that HEAD among its invalidators and is stale the moment the HEAD changes.
+rule	R7	A fact bound to a HEAD (head, review, checks, acceptance) carries that HEAD in its value and lists exactly that HEAD as a head: invalidator; it is stale the moment the HEAD changes.
 rule	R8	Two authoritative inputs that disagree are a CONFLICT with both candidates named; no first-write, last-write or plausibility rule resolves them.
-rule	R9	A consumer that meets an unknown schema_version treats the fact as UNKNOWN; it never reinterprets fields.
+rule	R9	A consumer that meets an unknown schema_version, an unknown class or an unknown field treats the fact as UNKNOWN; it never reinterprets or ignores what it cannot judge.
 rule	R10	Nothing here is written to .spark/state.json; mutable GitHub execution truth is read from its source and carried in a snapshot, not stored as state.
 rule	R11	A snapshot carries every required class exactly once; a smaller set is a fragment and is never consumed as a snapshot.
 rule	R12	A checks fact carries exactly one result per required check name, each in the closed check-state vocabulary; merge is derivable only when every result is success.
-rule	R13	Authority scopes and human boundaries are closed tokens; explanatory wording is provenance, never a value a consumer must interpret.
+rule	R13	Authority scopes and human boundaries are closed tokens carried in source-backed, targeted records; explanatory wording is provenance, never a value a consumer must interpret.
 rule	R14	Every value has an exact shape: only the declared keys, recursively; source.identity matches the grammar of its source type; a grant names the repository or work unit it applies to.
