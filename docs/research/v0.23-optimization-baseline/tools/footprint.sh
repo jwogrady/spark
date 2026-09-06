@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
 # footprint.sh [worktree] — physical repository footprint of a worktree (run against the frozen detached worktree).
 # Method: `git ls-files` (tracked files only), bytes via wc -c, LOC via wc -l (physical newlines, no blank/comment filtering).
-# Fail-closed: any failing git/wc/find/grep that produces a required number aborts the run with a non-zero status.
-# Probes that may legitimately match nothing (a grep -c count, the "not covered" listing) are guarded explicitly.
+# Fail-closed: every required number is captured into a variable BEFORE it is printed, so a failing git, cat, wc,
+# find or awk aborts the run (set -e on the assignment) instead of being masked by a successful echo/printf.
+# The only masked statuses are measurements: grep status 1 (no match → zero count) via gc(); nothing else.
 set -euo pipefail
 cd "${1:-/home/john/code/spark/.claude/worktrees/baseline-921c982}"
-# gc <grep args…>: grep whose exit status 1 (no match) is a valid zero measurement, while any status greater than 1
-# (missing file, bad expression, I/O error) aborts the run. `grep -c` already prints 0 on status 1; `grep -l`/`-o`
-# print nothing, which downstream `wc -l` counts as 0.
 gc() { local rc=0; grep "$@" || rc=$?; [ "$rc" -le 1 ] || { echo "grep failed with status $rc: grep $*" >&2; exit "$rc"; }; }
 count() { gc -cE "$1" "${@:2}"; }
-echo "sha=$(git rev-parse HEAD)"
-echo "tracked_files=$(git ls-files | wc -l)"
-echo "tracked_bytes=$(git ls-files -z | xargs -0 cat | wc -c)"
-echo "tracked_loc=$(git ls-files -z | xargs -0 cat | wc -l)"
+emit() { printf '%s=%s\n' "$1" "$2"; }
+
+sha="$(git rev-parse HEAD)";                        emit sha "$sha"
+n="$(git ls-files | wc -l)";                        emit tracked_files "$n"
+b="$(git ls-files -z | xargs -0 cat | wc -c)";      emit tracked_bytes "$b"
+l="$(git ls-files -z | xargs -0 cat | wc -l)";      emit tracked_loc "$l"
 echo
 COVER="$(mktemp)"; trap 'rm -f "$COVER"' EXIT
 bucket() { # <name> <pathspec...>
@@ -75,33 +75,34 @@ echo "=== bucket coverage check: tracked files in no bucket ==="
 comm -23 <(git ls-files | sort) <(sort -u "$COVER")
 echo "=== bucket coverage check: tracked files in more than one bucket ==="
 sort "$COVER" | uniq -d
-echo "bucket_file_sum=$(wc -l < "$COVER")"
+s="$(wc -l < "$COVER")";                            emit bucket_file_sum "$s"
 echo
 echo "=== by extension (tracked) ==="
 git ls-files | sed -E 's/.*\.([A-Za-z0-9]+)$/\1/; t; s/.*/(noext)/' | sort | uniq -c | sort -rn
 echo
 echo "=== dispatcher ==="
 f=plugins/spark/bin/spark
-echo "dispatcher_lines=$(wc -l < $f)  dispatcher_bytes=$(wc -c < $f)"
-echo "dispatcher_functions=$(count '^[A-Za-z_][A-Za-z0-9_]*\(\)\s*\{' $f)"
-echo "dispatcher_verbs_in_VERBS_table=$(awk '/^VERBS=/{f=1;next} f&&/^[A-Z]*"?$|^"$/{f=0} f' $f | count '^[a-z][a-z-]*\|' -)"
-echo "dispatcher_cmd_functions=$(count '^cmd_[a-z_]+\(\)' $f)"
-echo "lib_cmd_functions=$(cat plugins/spark/lib/*.sh | count '^cmd_[a-z_]+\(\)' -)"
-echo "lib_modules:"; for m in plugins/spark/lib/*.sh; do printf '  %s\tlines=%s\tfunctions=%s\n' "$m" "$(wc -l < "$m")" "$(count '^[A-Za-z_][A-Za-z0-9_]*\(\)\s*\{' "$m")"; done
+dl="$(wc -l < $f)"; db="$(wc -c < $f)";             printf 'dispatcher_lines=%s  dispatcher_bytes=%s\n' "$dl" "$db"
+v="$(count '^[A-Za-z_][A-Za-z0-9_]*\(\)\s*\{' $f)"; emit dispatcher_functions "$v"
+v="$(awk '/^VERBS=/{f=1;next} f&&/^[A-Z]*"?$|^"$/{f=0} f' $f | count '^[a-z][a-z-]*\|' -)"; emit dispatcher_verbs_in_VERBS_table "$v"
+v="$(count '^cmd_[a-z_]+\(\)' $f)";                emit dispatcher_cmd_functions "$v"
+v="$(cat plugins/spark/lib/*.sh | count '^cmd_[a-z_]+\(\)' -)"; emit lib_cmd_functions "$v"
+echo "lib_modules:"
+for m in plugins/spark/lib/*.sh; do ml="$(wc -l < "$m")"; mf="$(count '^[A-Za-z_][A-Za-z0-9_]*\(\)\s*\{' "$m")"; printf '  %s\tlines=%s\tfunctions=%s\n' "$m" "$ml" "$mf"; done
 echo
 echo "=== counts ==="
-echo "adr_files=$(git ls-files docs/adr | wc -l)"
-echo "adr_superseded_or_deprecated=$(gc -liE '^\*?\*?status\*?\*?:?.*(superseded|deprecated)' docs/adr/*.md | wc -l)"
-echo "release_records=$(git ls-files docs/releases | wc -l)"
-echo "skills_core=$(ls -d plugins/spark/skills/*/ | wc -l)"
-echo "skills_companion=$(ls -d plugins/spark-*/skills/*/ | wc -l)"
-echo "test_suites=$(ls tests/test-*.sh | wc -l)"
-echo "workflows=$(git ls-files .github/workflows | wc -l)"
-echo "preferences_rows=$(cat plugins/spark/preferences/*.tsv | gc -vc '^#')"
-echo "cli_verbs_documented=$(count '^## `spark ' plugins/spark/docs/reference/cli.md)"
-echo "cli_stability_rows=$(gc -vcE '^#|^\s*$|^verb\b' plugins/spark/preferences/cli-stability.tsv)"
-echo "governance_models=$(git ls-files plugins/spark/preferences/governance-models | wc -l)"
-echo "test_lib_helpers=$(count '^[a-z_]+\(\)' tests/lib.sh)"
+v="$(git ls-files docs/adr | wc -l)";               emit adr_files "$v"
+v="$(gc -liE '^\*?\*?status\*?\*?:?.*(superseded|deprecated)' docs/adr/*.md | wc -l)"; emit adr_superseded_or_deprecated "$v"
+v="$(git ls-files docs/releases | wc -l)";          emit release_records "$v"
+v="$(ls -d plugins/spark/skills/*/ | wc -l)";       emit skills_core "$v"
+v="$(ls -d plugins/spark-*/skills/*/ | wc -l)";     emit skills_companion "$v"
+v="$(ls tests/test-*.sh | wc -l)";                  emit test_suites "$v"
+v="$(git ls-files .github/workflows | wc -l)";      emit workflows "$v"
+v="$(cat plugins/spark/preferences/*.tsv | gc -vc '^#')"; emit preferences_rows "$v"
+v="$(count '^## `spark ' plugins/spark/docs/reference/cli.md)"; emit cli_verbs_documented "$v"
+v="$(gc -vcE '^#|^\s*$|^verb\b' plugins/spark/preferences/cli-stability.tsv)"; emit cli_stability_rows "$v"
+v="$(git ls-files plugins/spark/preferences/governance-models | wc -l)"; emit governance_models "$v"
+v="$(count '^[a-z_]+\(\)' tests/lib.sh)";           emit test_lib_helpers "$v"
 echo
 echo "=== runtime dependency surface (external binaries referenced by runtime, textual) ==="
 cat plugins/spark/bin/spark plugins/spark/lib/*.sh plugins/spark/scripts/hooks/* plugins/spark/hooks/*.sh | gc -oE '\b(gh|jq|python3|awk|sed|grep|curl|git|date|mktemp|sort|tr|cut|wc|find|xargs|flock|stat|strace)\b' | sort | uniq -c | sort -rn

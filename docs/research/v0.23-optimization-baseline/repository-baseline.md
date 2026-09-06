@@ -211,10 +211,12 @@ bash $BASE/tools/footprint.sh /tmp/spark-921c982            # raw/footprint.txt
 bash $BASE/tools/branches.sh [--fetch]                       # raw/branches.tsv: remote-tracking refs; --fetch refreshes and records the fetch
 ```
 
-All four wrappers fail closed: a failing git, wc, find or measurement aborts the run with a non-zero status. The
-two statuses that are measurements, not failures, are accepted explicitly and nothing else is masked: `grep`
-status 1 (no match → a zero count) and `git merge-base --is-ancestor` status 1 (not an ancestor → not merged);
-any higher status propagates.
+All four wrappers fail closed: setup and metadata collection run under `set -euo pipefail`, every required
+number is captured into a variable before it is printed (so a failing `git`, `cat`, `wc`, `find` or `awk` aborts
+instead of hiding behind a successful `echo`), and the suite/bench/structure runs report their own status as the
+wrapper's exit status. The only statuses treated as measurements rather than failures are `grep` status 1 (no
+match → a zero count) and `git merge-base --is-ancestor` status 1 (not an ancestor → not merged); any higher
+status propagates.
 The committed `raw/footprint.txt` was re-produced byte-identically by the fail-closed `footprint.sh` against the
 frozen worktree; `raw/branches.tsv` carries a provenance header naming the fetch state it was observed from.
 
