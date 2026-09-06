@@ -49,8 +49,11 @@ apart: everything under `raw/` is a mechanical capture; this file is the interpr
   them from the session record.
 - **GitHub evidence**: fetched by `tools/fetch-pr.sh` and `tools/fetch-commits.sh` (REST). The raw JSON is
   re-fetchable and is not committed; `raw/pr*/derived.compact.json` carries every derived fact, including the
-  id and URL of each reviewer comment of record. The verbatim, complete finding text is committed in the
-  companion PR as `raw/pr*/findings.txt` (`tools/dump-findings.py`).
+  id and URL of each reviewer comment of record. The verbatim, complete finding text (whole bullet blocks,
+  including continuation lines and sub-bullets) is committed in the companion PR as `raw/pr*/findings.txt`
+  (`tools/dump-findings.py`), with `findings-validation.txt` proving every block is a substring of the live
+  comment body (`tools/validate-findings.py`). `tables.md` is rendered from the committed compact projections
+  alone; every tool takes its input directory as an argument.
 
 ## 2. #730 — effective reasoning surface and context amplification
 
@@ -202,9 +205,11 @@ bash $BASE/tools/fetch-pr.sh 727 726 $BASE/raw/pr727 && bash $BASE/tools/fetch-c
 bash $BASE/tools/fetch-pr.sh 724 722 $BASE/raw/pr724 && bash $BASE/tools/fetch-commits.sh $BASE/raw/pr724
 python3 $BASE/tools/analyze-pr.py $BASE/raw/pr727 727 && python3 $BASE/tools/dump-findings.py $BASE/raw/pr727 727
 python3 $BASE/tools/analyze-pr.py $BASE/raw/pr724 724 && python3 $BASE/tools/dump-findings.py $BASE/raw/pr724 724
+python3 $BASE/tools/validate-findings.py $BASE/raw/pr727 727   # proves findings.txt against the live comment bodies
+python3 $BASE/tools/validate-findings.py $BASE/raw/pr724 724
 # writer-lane consumption (needs the session record; the two window files are committed)
+python3 $BASE/tools/make-windows.py $BASE/raw    # regenerates both window files from derived*.json
 python3 $BASE/tools/analyze-transcript.py <session.jsonl> $BASE/raw/windows-workloads.json $BASE/raw/transcript-workloads.json
-python3 $BASE/tools/make-windows.py            # regenerates the round windows from derived.json
 python3 $BASE/tools/analyze-transcript.py <session.jsonl> $BASE/raw/windows-rounds.json $BASE/raw/transcript-rounds.json
 python3 $BASE/tools/compact-transcript.py $BASE/raw
 # tables

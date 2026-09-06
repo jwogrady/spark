@@ -51,11 +51,29 @@ for cm in sorted(comments, key=lambda x: x["created_at"]):
     if cm["user"]["login"] != "github-actions[bot]":
         echo += 1; continue
     head = m.group(2); verdict = m.group(3)
-    body = cm["body"]
+    body = cm["body"].replace("\r\n", "\n")
     # findings = top-level bullets in the reviewer's own section (between the --- separators)
     segs = body.split("\n---\n")
     mid = "\n".join(segs[1:-1]) if len(segs) >= 3 else body
-    bullets = [ln for ln in mid.split("\n") if re.match(r"^- ", ln)]
+    # A finding is a whole top-level bullet BLOCK: the `- ` line plus every continuation line, indented
+    # sub-bullet and blank line inside it, up to the next top-level bullet. A blank line followed by
+    # non-indented prose ends the bullet list (that prose is the reviewer's trailer, not a finding).
+    bullets = []; cur = None; held = []   # held = blank lines kept verbatim until we know they are inside the block
+    for ln in mid.split("\n"):
+        if re.match(r"^- ", ln):
+            if cur is not None: bullets.append("\n".join(cur).rstrip())
+            cur = [ln]; held = []
+        elif cur is None:
+            continue
+        elif ln.strip() == "":
+            held.append(ln)
+        elif ln[0] in " \t":
+            cur.extend(held); cur.append(ln); held = []
+        else:
+            if held: bullets.append("\n".join(cur).rstrip()); cur = None; held = []
+            else: cur.append(ln)
+    if cur is not None: bullets.append("\n".join(cur).rstrip())
+    for b in bullets: assert b in body, "finding text must be a verbatim substring of the comment body"
     files_cited = sorted(set(f for f in FILE.findall(mid)))
     cdate = by_sha.get(head, {}).get("date")
     lat = (T(cm["created_at"]) - T(cdate)).total_seconds() if cdate else None

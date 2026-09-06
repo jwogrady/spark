@@ -44,8 +44,8 @@ aA, gA = active_seconds(d["A"]); aB, gB = active_seconds(d["B"])
 rows.append(("wall clock first commit → last verdict (s)", d["A"]["wall_first_commit_to_last_verdict_s"], d["B"]["wall_first_commit_to_last_verdict_s"], "commit author date → verdict comment created_at"))
 rows.append(("of which idle gaps >30 min (s)", gA, gB, "inter-verdict intervals > 1800s"))
 rows.append(("active wall clock (s)", aA, aB, "wall minus idle gaps"))
-for g in ("A", "B"):
-    lat = sorted(x for x in d[g]["push_to_verdict_s"] if x is not None); d[g]["_lat"] = lat
+for g in ("A", "B"):  # per-round rows carry the latency; the compact projection has no top-level list
+    lat = sorted(r["push_to_verdict_s"] for r in d[g]["rounds"] if r.get("push_to_verdict_s") is not None); d[g]["_lat"] = lat
 rows.append(("push → verdict latency median (s)", d["A"]["_lat"][len(d["A"]["_lat"])//2], d["B"]["_lat"][len(d["B"]["_lat"])//2], "head commit date → marker created_at"))
 for wfn in ("OpenAI Review", "validate", "milestone-gate", "docs-truth"):
     rows.append((f"CI workflow '{wfn}' runs / seconds", f"{d['A']['workflow_runs'][wfn]['runs']} / {d['A']['workflow_runs'][wfn]['seconds']}", f"{d['B']['workflow_runs'][wfn]['runs']} / {d['B']['workflow_runs'][wfn]['seconds']}", "actions/runs on the PR branch"))

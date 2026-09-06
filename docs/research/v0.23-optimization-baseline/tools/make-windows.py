@@ -1,8 +1,14 @@
 #!/usr/bin/env python3
-"""Build transcript windows from the reviewer-verdict timeline of each PR (derived.json)."""
-import json
-raw = "/home/john/.claude/jobs/046f256e/tmp/raw/"
-d727 = json.load(open(raw + "pr727/derived.json")); d724 = json.load(open(raw + "pr724/derived.json"))
+"""make-windows.py [rawdir] — build transcript windows from the reviewer-verdict timeline of each PR.
+rawdir defaults to ../raw relative to this script; reads pr727/derived*.json and pr724/derived*.json."""
+import json, os, sys
+raw = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "raw")
+def JD(p):
+    for n in ("derived.json", "derived.compact.json"):
+        f = os.path.join(raw, p, n)
+        if os.path.exists(f): return json.load(open(f))
+    raise SystemExit(f"missing {p}/derived*.json under {raw}")
+d727 = JD("pr727"); d724 = JD("pr724")
 B_START = "2026-09-05T15:00:00Z"            # after the previous (unrelated) session block ended 02:xx; before #724's first commit 17:18
 B_END = d724["merged_at"]                   # 2026-09-05T22:35:55Z
 A_START = B_END                              # #727 work began after the #724 merge (first commit 22:49:55)
@@ -21,6 +27,6 @@ rounds.append({"name": "B post-PASS → merge", "group": "B", "start": prev, "en
 prev = A_START
 for r in d727["rounds"]:
     rounds.append({"name": f"A r{r['n']} {r['head7']} {r['verdict']}", "group": "A", "start": prev, "end": r["at"]}); prev = r["at"]
-json.dump(work, open(raw + "windows-workloads.json", "w"), indent=1)
-json.dump(rounds, open(raw + "windows-rounds.json", "w"), indent=1)
+json.dump(work, open(os.path.join(raw, "windows-workloads.json"), "w"), indent=1)
+json.dump(rounds, open(os.path.join(raw, "windows-rounds.json"), "w"), indent=1)
 print(len(work), len(rounds))
