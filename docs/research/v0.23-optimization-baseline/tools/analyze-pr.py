@@ -59,9 +59,12 @@ for cm in sorted(comments, key=lambda x: x["created_at"]):
     files_cited = sorted(set(f for f in FILE.findall(mid)))
     cdate = by_sha.get(head, {}).get("date")
     lat = (T(cm["created_at"]) - T(cdate)).total_seconds() if cdate else None
+    # The immutable source of record for every finding is the GitHub comment itself (id + url below);
+    # the bullet text is written in full, never truncated, to findings.txt by dump-findings.py.
     rounds.append({"n": len(rounds) + 1, "head7": head[:7], "head": head, "verdict": verdict, "at": cm["created_at"],
+                   "comment_id": cm["id"], "comment_url": cm["html_url"], "comment_login": cm["user"]["login"],
                    "commit_at": cdate, "push_to_verdict_s": lat, "findings": len(bullets),
-                   "finding_text": [b[:400] for b in bullets], "files_cited": files_cited, "body_chars": len(body)})
+                   "finding_text": bullets, "files_cited": files_cited, "body_chars": len(body)})
 
 # author (writer) top-level comments per round window
 author = [c for c in comments if c["user"]["login"] != "github-actions[bot]"]
@@ -106,6 +109,12 @@ out = {
   "rounds": rounds, "commit_list": cl,
 }
 json.dump(out, open(os.path.join(raw, "derived.json"), "w"), indent=1, default=list)
+# Compact projection for committing: finding text lives in findings.txt, per-commit file lists are
+# aggregated in files_touched; everything else is kept verbatim.
+compact = dict(out)
+compact["rounds"] = [{k: v for k, v in r.items() if k != "finding_text"} for r in rounds]
+compact.pop("commit_list", None); compact.pop("push_to_verdict_s", None)  # per-round rows carry both
+json.dump(compact, open(os.path.join(raw, "derived.compact.json"), "w"), indent=0, default=list)
 
 print(f"# PR #{pr}  state={out['state']} merged_at={out['merged_at']}  head={out['head'][:7]}")
 print(f"commits={out['commits']} types={out['commit_types']} +{out['additions']}/-{out['deletions']} distinct_files={out['distinct_files_touched']}")

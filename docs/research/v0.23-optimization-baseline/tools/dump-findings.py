@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
-import json, sys
-for pr in ("727", "724"):
-    d = json.load(open(f"/home/john/.claude/jobs/046f256e/tmp/raw/pr{pr}/derived.json"))
-    with open(f"/home/john/.claude/jobs/046f256e/tmp/raw/pr{pr}/findings.txt", "w") as f:
-        for r in d["rounds"]:
-            f.write(f"## r{r['n']} {r['head7']} {r['verdict']}\n")
-            for i, t in enumerate(r["finding_text"], 1):
-                f.write(f"  {r['n']}.{i} {t[:260].replace(chr(10),' ')}\n")
+"""dump-findings.py <rawdir> <pr> — write every reviewer finding bullet IN FULL (no truncation) with the
+immutable source of record (GitHub comment id + url) per round. Finding ids are <round>.<bullet>."""
+import json, sys, os
+raw, pr = sys.argv[1], sys.argv[2]
+d = json.load(open(os.path.join(raw, "derived.json")))
+with open(os.path.join(raw, "findings.txt"), "w") as f:
+    f.write(f"# PR #{pr} reviewer findings — source of record: the GitHub comments below (trusted login github-actions[bot]).\n")
+    f.write("# Bullets are copied verbatim and complete; sub-bullets of a finding are part of that finding's text.\n\n")
+    for r in d["rounds"]:
+        f.write(f"## r{r['n']} head={r['head']} verdict={r['verdict']} comment_id={r['comment_id']} at={r['at']}\n")
+        for i, t in enumerate(r["finding_text"], 1):
+            f.write(f"{r['n']}.{i} {t}\n")
+        f.write("\n")
 print("ok")

@@ -1,0 +1,880 @@
+{
+"source": "c172f4f1-c726-4abb-86b7-659b9bc69898.jsonl",
+"windows": [
+{
+"tok_input": 366,
+"tok_cache_create": 509710,
+"tok_cache_read": 27504982,
+"tok_output": 141045,
+"tool_calls": 173,
+"result_bytes": 128662,
+"bash_calls": 117,
+"bash_bytes": 90529,
+"bash:gh": 54,
+"gh_invocations_lower_bound": 78,
+"gh_stable_fact_fetches": 9,
+"gh_other_fetches": 56,
+"read_calls": 24,
+"read_bytes": 32707,
+"read_repo_calls": 11,
+"read_repo_bytes": 24025,
+"edit_calls": 12,
+"bash:test:targeted": 4,
+"bash:test:full": 5,
+"bash:git:fetch": 8,
+"bash:shell:other": 10,
+"read_task_output_calls": 13,
+"read_task_output_bytes": 8682,
+"bash:git:mutate": 6,
+"bash:git:push": 5,
+"gh_head_dependent_fetches": 13,
+"bash:shell:read": 8,
+"shell_read_bytes": 7357,
+"bash:git:read": 9,
+"bash:script": 7,
+"gh_from_scripts_lower_bound": 11,
+"bash:doctor": 1,
+"name": "other-pre (Sep 4-5 docs work, not a measured workload)",
+"group": "other",
+"start": "2026-09-04T00:00:00Z",
+"end": "2026-09-05T15:00:00Z",
+"first_activity": "2026-09-04T16:08:46.817Z",
+"last_activity": "2026-09-05T02:58:17.291Z",
+"api_requests": 183,
+"read_unique_files": 20,
+"read_repeated": 10,
+"gh_unique_endpoints": 35,
+"gh_repeated_endpoints": 43,
+"edit_unique_files": 2,
+"tools": {
+"Bash": 117,
+"Read": 24,
+"Edit": 12,
+"Write": 20
+},
+"bash_kinds": {
+"gh": 54,
+"test:targeted": 4,
+"test:full": 5,
+"git:fetch": 8,
+"shell:other": 10,
+"git:mutate": 6,
+"git:push": 5,
+"shell:read": 8,
+"git:read": 9,
+"script": 7,
+"doctor": 1
+},
+"top_reads": [
+[
+"docs/releases/v0.23-usage-evidence.md",
+8
+],
+[
+"/tmp/claude-1000/-home-john/046f256e-f3d0-4677-818e-6dd091b54524/tasks/b6x3153ev.output",
+2
+],
+[
+"(sh) .github/scripts/docs-truth.sh",
+2
+],
+[
+"ROADMAP.md",
+2
+],
+[
+"/tmp/claude-1000/-home-john/046f256e-f3d0-4677-818e-6dd091b54524/tasks/b8bmpf18e.output",
+1
+],
+[
+"/tmp/claude-1000/-home-john/046f256e-f3d0-4677-818e-6dd091b54524/tasks/b7ngcf7u0.output",
+1
+],
+[
+"/tmp/claude-1000/-home-john/046f256e-f3d0-4677-818e-6dd091b54524/tasks/bfzk65wnd.output",
+1
+],
+[
+"/tmp/claude-1000/-home-john/046f256e-f3d0-4677-818e-6dd091b54524/tasks/b90tmcq96.output",
+1
+],
+[
+"/tmp/claude-1000/-home-john/046f256e-f3d0-4677-818e-6dd091b54524/tasks/bajowxzph.output",
+1
+],
+[
+"/tmp/claude-1000/-home-john/046f256e-f3d0-4677-818e-6dd091b54524/tasks/bad5ige36.output",
+1
+]
+],
+"top_endpoints": [
+[
+"api:repos/{repo}/issues/718/comments",
+8
+],
+[
+"api:repos/{repo}/issues/comments/$latest",
+7
+],
+[
+"api:repos/{repo}/issues/677/comments",
+6
+],
+[
+"gh:pr view 718",
+5
+],
+[
+"gh:pr checks 718",
+4
+],
+[
+"gh:pr comment 718",
+3
+],
+[
+"gh:issue comment 677",
+3
+],
+[
+"gh:pr comment 721",
+3
+],
+[
+"api:repos/{repo}/issues/721/comments",
+3
+],
+[
+"gh:issue view 709",
+2
+],
+[
+"gh:pr list",
+2
+],
+[
+"gh:issue view 480",
+2
+]
+],
+"stable_fact_fetches_by_kind": {
+"authority/parent/placement issue": 7,
+"milestone": 2
+},
+"head_dependent_by_kind": {
+"PR conversation": 13
+},
+"edits": {
+"docs/releases/v0.23-usage-evidence.md": 10,
+"ROADMAP.md": 2
+}
+},
+{
+"tok_input": 1982,
+"tok_cache_create": 1481103,
+"tok_cache_read": 581032586,
+"tok_output": 476609,
+"tool_calls": 884,
+"result_bytes": 332602,
+"bash_calls": 548,
+"bash_bytes": 258021,
+"bash:gh": 116,
+"gh_invocations_lower_bound": 152,
+"gh_stable_fact_fetches": 18,
+"bash:script": 38,
+"gh_from_scripts_lower_bound": 17,
+"gh_other_fetches": 77,
+"bash:git:fetch": 8,
+"read_calls": 148,
+"read_bytes": 39145,
+"read_task_output_calls": 140,
+"read_task_output_bytes": 22937,
+"bash:shell:read": 84,
+"shell_read_bytes": 38136,
+"bash:git:read": 6,
+"read_repo_calls": 6,
+"read_repo_bytes": 11938,
+"bash:git:mutate": 8,
+"edit_calls": 115,
+"bash:test:targeted": 103,
+"bash:test:full": 48,
+"bash:shell:other": 75,
+"bash:git:push": 21,
+"gh_head_dependent_fetches": 57,
+"bash:syntax-check": 21,
+"bash:doctor": 20,
+"edit_outside_repo": 2,
+"name": "B: PR #724 (#722 memoization) \u2014 32 verdicts \u2192 PASS, merged",
+"group": "B",
+"start": "2026-09-05T15:00:00Z",
+"end": "2026-09-05T22:35:55Z",
+"first_activity": "2026-09-05T15:33:53.775Z",
+"last_activity": "2026-09-05T22:32:22.950Z",
+"api_requests": 991,
+"read_unique_files": 101,
+"read_repeated": 79,
+"gh_unique_endpoints": 39,
+"gh_repeated_endpoints": 113,
+"edit_unique_files": 5,
+"tools": {
+"Bash": 548,
+"Read": 148,
+"Write": 74,
+"Edit": 113,
+"AskUserQuestion": 1
+},
+"bash_kinds": {
+"gh": 116,
+"script": 38,
+"git:fetch": 8,
+"shell:read": 84,
+"git:read": 6,
+"git:mutate": 8,
+"test:targeted": 103,
+"test:full": 48,
+"shell:other": 75,
+"git:push": 21,
+"syntax-check": 21,
+"doctor": 20
+},
+"top_reads": [
+[
+"(sh) tests/bench-memo.sh",
+18
+],
+[
+"(sh) plugins/spark/bin/spark",
+12
+],
+[
+"/tmp/claude-1000/-home-john/046f256e-f3d0-4677-818e-6dd091b54524/tasks/baxtt504p.output",
+6
+],
+[
+"/tmp/claude-1000/-home-john/046f256e-f3d0-4677-818e-6dd091b54524/tasks/bcz2y9n9g.output",
+4
+],
+[
+"/tmp/claude-1000/-home-john/046f256e-f3d0-4677-818e-6dd091b54524/tasks/btf3m8ta8.output",
+4
+],
+[
+"/tmp/claude-1000/-home-john/046f256e-f3d0-4677-818e-6dd091b54524/tasks/bh9z6r9u8.output",
+4
+],
+[
+"/tmp/claude-1000/-home-john/046f256e-f3d0-4677-818e-6dd091b54524/tasks/brm49i2hg.output",
+3
+],
+[
+"/tmp/claude-1000/-home-john/046f256e-f3d0-4677-818e-6dd091b54524/tasks/bf8coydlz.output",
+3
+],
+[
+"docs/ops/execution-configuration-surface.md",
+3
+],
+[
+"/tmp/claude-1000/-home-john/046f256e-f3d0-4677-818e-6dd091b54524/tasks/buxor08lh.output",
+3
+]
+],
+"top_endpoints": [
+[
+"api:repos/{repo}/issues/724/comments",
+51
+],
+[
+"gh:pr comment 724",
+14
+],
+[
+"gh:pr checks 724",
+13
+],
+[
+"gh:pr view 724",
+7
+],
+[
+"api:repos/{repo}/issues/$n",
+6
+],
+[
+"api:repos/{repo}/milestones/20",
+5
+],
+[
+"api:repos/{repo}/issues/677/comments",
+4
+],
+[
+"api:repos/{repo}/issues/480/sub_issues",
+4
+],
+[
+"gh:issue view 722",
+4
+],
+[
+"api:repos/{repo}/milestones/21",
+3
+],
+[
+"gh:issue comment 677",
+3
+],
+[
+"api:repos/{repo}/issues/723/comments",
+3
+]
+],
+"stable_fact_fetches_by_kind": {
+"authority/parent/placement issue": 10,
+"milestone": 8
+},
+"head_dependent_by_kind": {
+"PR conversation": 55,
+"checks/runs for a head": 2
+},
+"edits": {
+"docs/releases/v0.23.md": 2,
+"plugins/spark/bin/spark": 28,
+"tests/test-hot-path-memo.sh": 34,
+"docs/ops/execution-configuration-surface.md": 26,
+"tests/bench-memo.sh": 25
+}
+},
+{
+"tok_input": 1116,
+"tok_cache_create": 836258,
+"tok_cache_read": 167893724,
+"tok_output": 559072,
+"tool_calls": 529,
+"result_bytes": 290841,
+"bash_calls": 342,
+"bash_bytes": 241162,
+"bash:gh": 76,
+"gh_invocations_lower_bound": 110,
+"gh_other_fetches": 64,
+"subagents": 3,
+"bash:git:mutate": 9,
+"read_calls": 16,
+"read_bytes": 15813,
+"read_repo_calls": 5,
+"read_repo_bytes": 11023,
+"bash:shell:read": 64,
+"shell_read_bytes": 67741,
+"edit_calls": 89,
+"bash:syntax-check": 16,
+"bash:shell:other": 20,
+"bash:script": 18,
+"bash:test:targeted": 109,
+"bash:doctor": 10,
+"bash:git:fetch": 3,
+"bash:git:push": 16,
+"gh_head_dependent_fetches": 34,
+"gh_from_scripts_lower_bound": 12,
+"gh_stable_fact_fetches": 12,
+"read_task_output_calls": 11,
+"read_task_output_bytes": 4790,
+"bash:git:read": 1,
+"name": "A: PR #727 (#726 merge authority) \u2014 16 verdicts, all CHANGES REQUIRED",
+"group": "A",
+"start": "2026-09-05T22:35:55Z",
+"end": "2026-09-06T16:00:38Z",
+"first_activity": "2026-09-05T22:37:44.964Z",
+"last_activity": "2026-09-06T16:00:36.082Z",
+"api_requests": 558,
+"read_unique_files": 24,
+"read_repeated": 35,
+"gh_unique_endpoints": 34,
+"gh_repeated_endpoints": 76,
+"edit_unique_files": 11,
+"tools": {
+"Bash": 342,
+"Agent": 3,
+"Read": 16,
+"Edit": 84,
+"Write": 84
+},
+"bash_kinds": {
+"gh": 76,
+"git:mutate": 9,
+"shell:read": 64,
+"syntax-check": 16,
+"shell:other": 20,
+"script": 18,
+"test:targeted": 109,
+"doctor": 10,
+"git:fetch": 3,
+"git:push": 16,
+"git:read": 1
+},
+"top_reads": [
+[
+"(sh) plugins/spark/lib/execution.sh",
+15
+],
+[
+"(sh) plugins/spark/skills/ship/SKILL.md",
+8
+],
+[
+"/tmp/claude-1000/-home-john/046f256e-f3d0-4677-818e-6dd091b54524/tasks/bzfvj81lh.output",
+5
+],
+[
+"(sh) plugins/spark/docs/reference/cli.md",
+4
+],
+[
+"plugins/spark/lib/execution.sh",
+2
+],
+[
+"(sh) docs/adr/0019-human-directed-product-model.md",
+2
+],
+[
+"(sh) plugins/spark/bin/spark",
+2
+],
+[
+"plugins/spark/skills/ship/SKILL.md",
+2
+],
+[
+"(sh) plugins/spark/skills/ship/references/bounded-merge.md",
+2
+],
+[
+"/tmp/claude-1000/-home-john/046f256e-f3d0-4677-818e-6dd091b54524/tasks/bdoenrrdv.output",
+2
+]
+],
+"top_endpoints": [
+[
+"gh:pr view 727",
+21
+],
+[
+"api:repos/{repo}/issues/727/comments",
+19
+],
+[
+"gh:pr comment 727",
+11
+],
+[
+"gh:pr edit 727",
+8
+],
+[
+"gh:issue view 726",
+7
+],
+[
+"api:graphql",
+5
+],
+[
+"api:repos/{repo}/issues/481/sub_issues",
+4
+],
+[
+"api:repos/{repo}/commits/{sha}/check-runs",
+4
+],
+[
+"api:repos/$R/issues/481/sub_issues",
+3
+],
+[
+"api:repos/{repo}/commits/3735edd/check-runs",
+2
+],
+[
+"api:repos/{repo}/issues/726",
+2
+],
+[
+"api:repos/$R/issues/726",
+2
+]
+],
+"stable_fact_fetches_by_kind": {
+"authority/parent/placement issue": 12
+},
+"head_dependent_by_kind": {
+"checks/runs for a head": 13,
+"PR conversation": 21
+},
+"edits": {
+"plugins/spark/lib/execution.sh": 45,
+"plugins/spark/bin/spark": 2,
+"tests/test-merge-authority.sh": 12,
+"tests/test-runtime-modules.sh": 1,
+"plugins/spark/docs/reference/cli.md": 7,
+"plugins/spark/docs/explanation/sdlc-doctrine.md": 2,
+"docs/adr/0032-bounded-increment-merge-authority.md": 5,
+"docs/adr/0027-delivery-model.md": 1,
+"docs/adr/0019-human-directed-product-model.md": 1,
+"plugins/spark/skills/ship/references/bounded-merge.md": 5,
+"plugins/spark/skills/ship/SKILL.md": 8
+}
+},
+{
+"tok_input": 564,
+"tok_cache_create": 134315,
+"tok_cache_read": 10239619,
+"tok_output": 39424,
+"tool_calls": 54,
+"result_bytes": 67297,
+"bash_calls": 34,
+"bash_bytes": 54623,
+"bash:test:targeted": 1,
+"bash:shell:other": 4,
+"bash:git:read": 3,
+"bash:gh": 8,
+"gh_invocations_lower_bound": 75,
+"gh_other_fetches": 60,
+"gh_stable_fact_fetches": 11,
+"bash:script": 9,
+"gh_from_scripts_lower_bound": 57,
+"gh_head_dependent_fetches": 4,
+"bash:shell:read": 7,
+"shell_read_bytes": 16663,
+"bash:git:mutate": 1,
+"read_calls": 2,
+"read_bytes": 7483,
+"subagents": 3,
+"bash:test:full": 1,
+"name": "other-post (hierarchy metadata task)",
+"group": "other",
+"start": "2026-09-06T16:00:38Z",
+"end": "2026-09-06T16:30:00Z",
+"first_activity": "2026-09-06T16:01:03.431Z",
+"last_activity": "2026-09-06T16:29:43.922Z",
+"api_requests": 42,
+"read_unique_files": 3,
+"read_repeated": 0,
+"gh_unique_endpoints": 18,
+"gh_repeated_endpoints": 57,
+"edit_unique_files": 0,
+"tools": {
+"Bash": 34,
+"ToolSearch": 1,
+"TaskStop": 1,
+"Write": 13,
+"Read": 2,
+"Agent": 3
+},
+"bash_kinds": {
+"test:targeted": 1,
+"shell:other": 4,
+"git:read": 3,
+"gh": 8,
+"script": 9,
+"shell:read": 7,
+"git:mutate": 1,
+"test:full": 1
+},
+"top_reads": [
+[
+"/home/john/.claude/jobs/046f256e/tmp/issue730.md",
+1
+],
+[
+"/home/john/.claude/jobs/046f256e/tmp/issue737.md",
+1
+],
+[
+"(sh) tests/bench.sh",
+1
+]
+],
+"top_endpoints": [
+[
+"gh:other",
+46
+],
+[
+"api:repos/{repo}/issues/$n",
+4
+],
+[
+"api:repos/{repo}/issues/728/sub_issues",
+3
+],
+[
+"api:repos/{repo}/issues/729/sub_issues",
+3
+],
+[
+"api:repos/{repo}/issues/480/sub_issues",
+3
+],
+[
+"api:repos/{repo}/issues/$1/sub_issues",
+2
+],
+[
+"api:repos/{repo}/pulls/727",
+2
+],
+[
+"api:repos/{repo}/issues",
+2
+],
+[
+"api:repos/{repo}/issues/$n/sub_issues",
+1
+],
+[
+"api:repos/{repo}/issues/726",
+1
+],
+[
+"api:repos/{repo}/branches/master",
+1
+],
+[
+"api:repos/{repo}/issues/$n/comments",
+1
+]
+],
+"stable_fact_fetches_by_kind": {
+"authority/parent/placement issue": 10,
+"trunk protection/ruleset": 1
+},
+"head_dependent_by_kind": {
+"PR record": 2,
+"PR conversation": 2
+},
+"edits": {}
+}
+],
+"file_touches_all": [
+[
+"plugins/spark/lib/execution.sh",
+62
+],
+[
+"plugins/spark/bin/spark",
+47
+],
+[
+"tests/bench-memo.sh",
+43
+],
+[
+"tests/test-hot-path-memo.sh",
+34
+],
+[
+"docs/ops/execution-configuration-surface.md",
+31
+],
+[
+"docs/releases/v0.23-usage-evidence.md",
+18
+],
+[
+"plugins/spark/skills/ship/SKILL.md",
+18
+],
+[
+"tests/test-merge-authority.sh",
+12
+],
+[
+"plugins/spark/docs/reference/cli.md",
+11
+],
+[
+"plugins/spark/skills/ship/references/bounded-merge.md",
+7
+],
+[
+"docs/adr/0032-bounded-increment-merge-authority.md",
+6
+],
+[
+"ROADMAP.md",
+5
+],
+[
+".github/scripts/docs-truth.sh",
+4
+],
+[
+"docs/releases/v0.23.md",
+3
+],
+[
+"docs/adr/0019-human-directed-product-model.md",
+3
+],
+[
+"plugins/spark/docs/explanation/sdlc-doctrine.md",
+3
+],
+[
+"tests/bench.sh",
+2
+],
+[
+"docs/adr/0027-delivery-model.md",
+2
+],
+[
+"plugins/spark/docs/reference/stability.md",
+2
+],
+[
+".github/workflows/docs-truth.yml",
+1
+],
+[
+"plugins/spark/lib/repository.sh",
+1
+],
+[
+"tests/test-runtime-modules.sh",
+1
+],
+[
+"docs/adr/0030-governance-model-representation.md",
+1
+],
+[
+".github/scripts/openai-review/lib.sh",
+1
+],
+[
+"tests/_dbg-prelude.sh",
+1
+],
+[
+"plugins/spark/preferences/cli-stability.tsv",
+1
+]
+],
+"file_touches_by_group": {
+"other": [
+[
+"docs/releases/v0.23-usage-evidence.md",
+18
+],
+[
+"ROADMAP.md",
+5
+],
+[
+".github/scripts/docs-truth.sh",
+3
+],
+[
+"tests/bench.sh",
+2
+],
+[
+".github/workflows/docs-truth.yml",
+1
+],
+[
+"plugins/spark/bin/spark",
+1
+]
+],
+"B": [
+[
+"tests/bench-memo.sh",
+43
+],
+[
+"plugins/spark/bin/spark",
+41
+],
+[
+"tests/test-hot-path-memo.sh",
+34
+],
+[
+"docs/ops/execution-configuration-surface.md",
+31
+],
+[
+"docs/releases/v0.23.md",
+3
+],
+[
+"plugins/spark/lib/repository.sh",
+1
+]
+],
+"A": [
+[
+"plugins/spark/lib/execution.sh",
+62
+],
+[
+"plugins/spark/skills/ship/SKILL.md",
+18
+],
+[
+"tests/test-merge-authority.sh",
+12
+],
+[
+"plugins/spark/docs/reference/cli.md",
+11
+],
+[
+"plugins/spark/skills/ship/references/bounded-merge.md",
+7
+],
+[
+"docs/adr/0032-bounded-increment-merge-authority.md",
+6
+],
+[
+"plugins/spark/bin/spark",
+5
+],
+[
+"docs/adr/0019-human-directed-product-model.md",
+3
+],
+[
+"plugins/spark/docs/explanation/sdlc-doctrine.md",
+3
+],
+[
+"docs/adr/0027-delivery-model.md",
+2
+],
+[
+"plugins/spark/docs/reference/stability.md",
+2
+],
+[
+"tests/test-runtime-modules.sh",
+1
+],
+[
+"docs/adr/0030-governance-model-representation.md",
+1
+],
+[
+".github/scripts/openai-review/lib.sh",
+1
+],
+[
+"tests/_dbg-prelude.sh",
+1
+]
+]
+}
+}

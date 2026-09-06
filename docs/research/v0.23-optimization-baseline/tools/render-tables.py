@@ -5,9 +5,17 @@ from datetime import datetime, timezone
 raw = sys.argv[1]
 T = lambda s: datetime.strptime(s, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
 def J(p): return json.load(open(os.path.join(raw, p)))
-d = {"A": J("pr727/derived.json"), "B": J("pr724/derived.json")}
-tw = {w["group"]: w for w in J("transcript-workloads.json")["windows"] if w["group"] in ("A", "B")}
-tr = J("transcript-rounds.json")["windows"]
+def JD(p):  # prefer the full derivation when present, else the committed compact projection
+    return J(p + "/derived.json") if os.path.exists(os.path.join(raw, p, "derived.json")) else J(p + "/derived.compact.json")
+d = {"A": JD("pr727"), "B": JD("pr724")}
+TW = J("transcript-workloads.json") if os.path.exists(os.path.join(raw, "transcript-workloads.json")) else J("transcript-workloads.compact.json")
+tw = {w["group"]: w for w in TW["windows"] if w["group"] in ("A", "B")}
+# per-round counters: the committed TSV projection (or the full JSON when present)
+if os.path.exists(os.path.join(raw, "transcript-rounds.tsv")):
+    _rows = list(csv.DictReader(open(os.path.join(raw, "transcript-rounds.tsv")), delimiter="\t"))
+    tr = [{k: (int(v) if v.lstrip("-").isdigit() else v) for k, v in r.items()} for r in _rows]
+else:
+    tr = J("transcript-rounds.json")["windows"]
 cls = list(csv.DictReader(open(os.path.join(raw, "findings-classification.tsv")), delimiter="\t"))
 fmt = lambda n: f"{n:,}" if isinstance(n, (int, float)) else str(n)
 
@@ -101,9 +109,16 @@ for g, pr in (("A", 727), ("B", 724)):
     out.append(f"\nHEAD-independent fetches by kind: {tw[g]['stable_fact_fetches_by_kind']}; HEAD-dependent by kind: {tw[g]['head_dependent_by_kind']}")
 
 out.append("\n## T6 — Repository files touched by the writer lane (Read + Edit/Write + shell-read mentions)\n")
-tb = J("transcript-workloads.json")["file_touches_by_group"]
+tb = TW["file_touches_by_group"]
 for g, pr in (("A", 727), ("B", 724)):
     out.append(f"- PR #{pr}: " + "; ".join(f"`{p}` ×{n}" for p, n in tb.get(g, [])[:8]))
-out.append("- Aug 30–31 session (different work, same lane): " + "; ".join(f"`{p}` ×{n}" for p, n in J("transcript-aug.json")["file_touches_all"][:10]))
+for cand in ("transcript-aug.json", "transcript-aug.compact.json"):
+    if os.path.exists(os.path.join(raw, cand)):
+        out.append("- Aug 30–31 session (different work, same lane): " + "; ".join(f"`{p}` ×{n}" for p, n in J(cand)["file_touches_all"][:10])); break
+else:
+    out.append("- Aug 30–31 session: see `raw/transcript-aug.compact.json` in the repository-baseline bundle (#737).")
+out.append("\n## T7 — Reviewer comments of record (immutable source for the classification)\n")
+for g, pr in (("A", 727), ("B", 724)):
+    out.append(f"- PR #{pr}: " + ", ".join(f"r{r['n']} [{r['comment_id']}]({r['comment_url']})" for r in d[g]["rounds"]))
 open(os.path.join(raw, "baseline-tables.md"), "w").write("\n".join(out) + "\n")
 print("\n".join(out))
