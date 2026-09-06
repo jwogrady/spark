@@ -122,10 +122,10 @@ Relayed attempts (marker posted by `jwogrady`, inside the trusted-round windows 
 
 ## T3 — Reviewer finding classification (hand-classified from every marked attempt's blocking findings; PASS evidentiary bullets excluded)
 
+Percentages are rounded to the nearest whole percent, ties rounded up (floor(x + 0.5)); the README uses the same rule.
+
 | category | meaning | A: #727 | B: #724 |
 |---|---|---:|---:|
-Percentages are rounded to the nearest whole percent; the README uses the same rule.
-
 | IMPL | genuinely new implementation defect | 15 (30%) | 9 (11%) |
 | REPR | representation / transport boundary defect | 17 (34%) | 6 (7%) |
 | DUP | duplicated-semantic drift (two surfaces disagree) | 7 (14%) | 19 (23%) |

@@ -152,7 +152,8 @@ Source of record: every marked reviewer comment listed in `tables.md` T7 (commen
 `raw/pr727/findings.txt` and `raw/pr724/findings.txt` in the companion bundle. One row per blocking finding in
 `raw/findings-classification.tsv` (finding id = attempt.item; relayed attempts carry ids like `26r.1`), classified
 by hand; the 4 evidentiary bullets of B's PASS comment are excluded. Percentages are rounded to the nearest
-whole percent (the same rule `tools/render-tables.py` applies in `tables.md` T3):
+whole percent with ties rounded up, floor(x + 0.5), the same rule `tools/render-tables.py` applies in
+`tables.md` T3:
 
 | category | A: #727 (50) | B: #724 (81 = 76 trusted + 5 relayed) |
 |---|---:|---:|

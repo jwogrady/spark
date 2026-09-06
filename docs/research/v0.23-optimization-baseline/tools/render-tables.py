@@ -92,6 +92,7 @@ for g, pr in (("A", 727), ("B", 724)):
                    "; ".join(f"r{r['n']} on {r['head7']} at {r['at']} — {r['verdict']}, {r['findings']} finding(s), kind {r['kind']} (comment {r['comment_id']})" for r in relayed))
 
 out.append("\n## T3 — Reviewer finding classification (hand-classified from every marked attempt's blocking findings; PASS evidentiary bullets excluded)\n")
+out.append("Percentages are rounded to the nearest whole percent, ties rounded up (floor(x + 0.5)); the README uses the same rule.\n")
 cats = {"IMPL": "genuinely new implementation defect", "REPR": "representation / transport boundary defect", "DUP": "duplicated-semantic drift (two surfaces disagree)",
         "STALE": "stale / reconstructed-state defect", "TEST": "test-harness / fixture / instrument defect", "GOV": "governance / specification / evidence-contract ambiguity"}
 out.append("| category | meaning | A: #727 | B: #724 |")
@@ -100,8 +101,7 @@ cnt = {g: collections.Counter() for g in ("727", "724")}; rep = {g: 0 for g in (
 for row in cls:
     cnt[row["pr"]][row["category"]] += 1
     if row["repeat_of"]: rep[row["pr"]] += 1
-pct = lambda n, tot: int(round(100.0 * n / max(1, tot)))   # rounding rule: nearest whole percent (half up)
-out.append("Percentages are rounded to the nearest whole percent; the README uses the same rule.\n")
+pct = lambda n, tot: int(100.0 * n / max(1, tot) + 0.5)   # half-up rounding for non-negative values (Python's round() is ties-to-even)
 for c, m in cats.items():
     out.append(f"| {c} | {m} | {cnt['727'][c]} ({pct(cnt['727'][c], sum(cnt['727'].values()))}%) | {cnt['724'][c]} ({pct(cnt['724'][c], sum(cnt['724'].values()))}%) |")
 out.append(f"| **total classified** | | {sum(cnt['727'].values())} | {sum(cnt['724'].values())} |")
