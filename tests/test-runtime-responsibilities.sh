@@ -68,4 +68,17 @@ for fn in intent_liveness di_trunk json_escape; do
   [ "${n:-0}" -ge 2 ] && ok || bad "$fn is defined but not called"
 done
 
+# --- the generator is runnable, and the committed map is what it produces
+GEN="$ROOT/docs/research/v0.23-cleanup/tools/build-responsibilities.py"
+[ -x "$GEN" ] && ok || bad "the map's generator is committed and executable"
+[ -f "$ROOT/docs/research/v0.23-cleanup/tools/classification.py" ] && ok || bad "the generator's classification module is committed under an importable name"
+gen_out="$(mktemp -d)"
+if (cd "$ROOT" && python3 "$GEN" "$ROOT" --map-only "--out=$gen_out" >/dev/null 2>&1); then
+  assert_eq "the committed map is what the generator produces" "" \
+    "$(diff "$MAP" "$gen_out/docs/research/v0.23-cleanup/743-responsibilities.tsv" | head -5 | tr '\n' ' ')"
+else
+  bad "the map's generator does not run"
+fi
+rm -rf "$gen_out"
+
 finish "runtime responsibilities (#743)"
