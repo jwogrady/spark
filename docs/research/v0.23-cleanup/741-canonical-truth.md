@@ -122,16 +122,16 @@ audit's own rounds (C), windows pinned in `741-transcript-reads.json` beside thi
 
 | Measure | A (#727 repair, baseline §2.3) | B (#724 repair, baseline §2.3) | D (#732 contract) | C (#741 audit) |
 |---|---|---|---|---|
-| tool calls in the window | 558 API requests | — | 184 | 65 |
+| tool calls in the window | 558 API requests | — | 184 | 95 |
 | Read-tool calls | top read path 5× | top eight paths were task output | 2 | 2 |
-| shell reads (sed/grep/cat) of repository files | — | — | 55 | 10 |
-| distinct repository paths read | — | — | 2 | 7 |
-| repeated repository path reads | — | — | 0 | 4 |
-| gh invocations (lower bound) | `gh pr view 727` 21×, comments 19× | `issues/724/comments` 51× | 87 | 20 |
-| touches of `plugins/spark/docs/reference/cli.md` | 11 | — | 0 (whole after-side) | 0 (whole after-side) |
-| touches of `plugins/spark/skills/ship/SKILL.md` | 18 | — | 2 (whole after-side) | 2 (whole after-side) |
-| touches of `plugins/spark/lib/execution.sh` | 62 | — | 0 (whole after-side) | 0 (whole after-side) |
-| touches of `AGENTS.md` | — | — | 0 (whole after-side) | 0 (whole after-side) |
+| shell reads (sed/grep/cat) of repository files | — | — | 55 | 13 |
+| distinct repository paths read | — | — | 2 | 10 |
+| repeated repository path reads | — | — | 0 | 5 |
+| gh invocations (lower bound) | `gh pr view 727` 21×, comments 19× | `issues/724/comments` 51× | 87 | 23 |
+| touches of `plugins/spark/docs/reference/cli.md` | 11 | — | 0 | 1 |
+| touches of `plugins/spark/skills/ship/SKILL.md` | 18 | — | 0 | 3 |
+| touches of `plugins/spark/lib/execution.sh` | 62 | — | 0 | 1 |
+| touches of `AGENTS.md` | — | — | 0 | 1 |
 
 The two after-windows read the governed prose surfaces a handful of times because the evidence was captured
 once (one sweep, kept as findings) and the rounds ran from scripts; the baseline's repeated reads were the
