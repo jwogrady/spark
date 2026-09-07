@@ -105,7 +105,7 @@ is a projection and is never used to compare or bind.
 | comment | <work-unit>/comment/<comment id> | `github.com/acme/widgets#42/comment/9001` |
 | milestone | <repository>/milestone/<number> | `github.com/acme/widgets/milestone/7` |
 | commit | Full 40-hex lower-case object id; abbreviations are projections | `4f3d…` (40 characters) |
-| ref | A branch name over Git's full ref domain, without the refs/heads/ prefix: slash-separated components, none empty or dot-led, no whitespace or ASCII control characters, no ~ ^ : ? * [ or backslash, no .. or @{, never the single name @, never ending in / . or .lock; refs/… and any other spelling of the same branch are projections | `master`, `release/v1.2.x`, `feat/x+y` |
+| ref | A branch name over Git's full ref domain, without the refs/heads/ prefix: slash-separated components, none empty or dot-led, no whitespace or ASCII control characters, no ~ ^ : ? * [ or backslash, no .. or @{, never the single name @, no component ending in .lock, never ending in / or .; refs/… and any other spelling of the same branch are projections | `master`, `release/v1.2.x`, `feat/x+y` |
 | release | A release tag as published | `v0.22.0` |
 | login | An actor identity; naming an actor never confers authority | `login:github-actions[bot]` — naming an actor never confers authority |
 | verdict | The independent reviewer's closed vocabulary | `PASS`, `CHANGES REQUIRED`, `DECISION REQUIRED`, `NOT ASSESSED` |
@@ -139,7 +139,7 @@ consumer applies them rather than reconstructing them from prose.
 | `ref` | `^refs/` | a ref is the branch name, never the refs/ path |
 | `ref` | `\.\.` | no .. anywhere in a ref |
 | `ref` | `@\{` | no @{ (reflog syntax) in a ref |
-| `ref` | `\.lock$` | a ref never ends in .lock |
+| `ref` | `\.lock(/\|$)` | no component of a ref ends in .lock (Git reserves the suffix for lock files) |
 | `ref` | `\.$` | a ref never ends in a dot |
 | `ref` | `^@$` | the single name @ is not a branch (Git reserves it for HEAD) |
 | `provenance` | `(^\|/)\.\.?(/\|$)` | a path is normalized: no . or .. components |
@@ -151,13 +151,13 @@ consumer applies them rather than reconstructing them from prose.
 | `invalidator` | `\.git(#\|/\|$)` | the repository name inside any invalidator never carries .git |
 | `invalidator/ref` | `\.\.` | the embedded ref has no .. |
 | `invalidator/ref` | `@\{` | the embedded ref has no @{ |
-| `invalidator/ref` | `\.lock$` | the embedded ref never ends in .lock |
+| `invalidator/ref` | `\.lock(/\|$)` | no component of the embedded ref ends in .lock |
 | `invalidator/ref` | `\.$` | the embedded ref never ends in a dot |
 | `invalidator/ref` | `/@$` | the embedded ref is never the single name @ |
 | `invalidator/ref` | `^ref:[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+/refs/` | the embedded ref is the branch name, never the refs/ path |
 | `source-identity/git` | `@ref/.*\.\.` | the embedded ref has no .. |
 | `source-identity/git` | `@ref/.*@\{` | the embedded ref has no @{ |
-| `source-identity/git` | `@ref/.*\.lock$` | the embedded ref never ends in .lock |
+| `source-identity/git` | `@ref/.*\.lock(/\|$)` | no component of the embedded ref ends in .lock |
 | `source-identity/git` | `@ref/.*\.$` | the embedded ref never ends in a dot |
 | `source-identity/git` | `@ref/@$` | the embedded ref is never the single name @ |
 | `source-identity/git` | `@ref/refs/` | the embedded ref is the branch name, never the refs/ path |

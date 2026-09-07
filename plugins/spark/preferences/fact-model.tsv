@@ -113,7 +113,7 @@ identifier	work-unit	^[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+#[1-9][0-9]*$	<reposi
 identifier	comment	^[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+#[1-9][0-9]*/comment/[1-9][0-9]*$	<work-unit>/comment/<comment id>
 identifier	milestone	^[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+/milestone/[1-9][0-9]*$	<repository>/milestone/<number>
 identifier	commit	^[0-9a-f]{40}$	Full 40-hex lower-case object id; abbreviations are projections
-identifier	ref	^[^\s~^:?*\[\\/.\x00-\x1f\x7f][^\s~^:?*\[\\/\x00-\x1f\x7f]*(/[^\s~^:?*\[\\/.\x00-\x1f\x7f][^\s~^:?*\[\\/\x00-\x1f\x7f]*)*$	A branch name over Git's full ref domain, without the refs/heads/ prefix: slash-separated components, none empty or dot-led, no whitespace or ASCII control characters, no ~ ^ : ? * [ or backslash, no .. or @{, never the single name @, never ending in / . or .lock; refs/… and any other spelling of the same branch are projections
+identifier	ref	^[^\s~^:?*\[\\/.\x00-\x1f\x7f][^\s~^:?*\[\\/\x00-\x1f\x7f]*(/[^\s~^:?*\[\\/.\x00-\x1f\x7f][^\s~^:?*\[\\/\x00-\x1f\x7f]*)*$	A branch name over Git's full ref domain, without the refs/heads/ prefix: slash-separated components, none empty or dot-led, no whitespace or ASCII control characters, no ~ ^ : ? * [ or backslash, no .. or @{, never the single name @, no component ending in .lock, never ending in / or .; refs/… and any other spelling of the same branch are projections
 identifier	release	^v[0-9]+\.[0-9]+\.[0-9]+$	A release tag as published
 identifier	login	^login:[A-Za-z0-9-]+(\[bot\])?$	An actor identity; naming an actor never confers authority
 identifier	verdict	^(PASS|CHANGES REQUIRED|DECISION REQUIRED|NOT ASSESSED)$	The independent reviewer's closed vocabulary
@@ -149,7 +149,7 @@ constraint	decision-record	\.git(#|@)	the repository name inside a decision reco
 constraint	ref	^refs/	a ref is the branch name, never the refs/ path
 constraint	ref	\.\.	no .. anywhere in a ref
 constraint	ref	@\{	no @{ (reflog syntax) in a ref
-constraint	ref	\.lock$	a ref never ends in .lock
+constraint	ref	\.lock(/|$)	no component of a ref ends in .lock (Git reserves the suffix for lock files)
 constraint	ref	\.$	a ref never ends in a dot
 constraint	ref	^@$	the single name @ is not a branch (Git reserves it for HEAD)
 constraint	provenance	(^|/)\.\.?(/|$)	a path is normalized: no . or .. components
@@ -161,13 +161,13 @@ constraint	source-identity/human-decision	\.git(#|@)	the repository name never c
 constraint	invalidator	\.git(#|/|$)	the repository name inside any invalidator never carries .git
 constraint	invalidator/ref	\.\.	the embedded ref has no ..
 constraint	invalidator/ref	@\{	the embedded ref has no @{
-constraint	invalidator/ref	\.lock$	the embedded ref never ends in .lock
+constraint	invalidator/ref	\.lock(/|$)	no component of the embedded ref ends in .lock
 constraint	invalidator/ref	\.$	the embedded ref never ends in a dot
 constraint	invalidator/ref	/@$	the embedded ref is never the single name @
 constraint	invalidator/ref	^ref:[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+/refs/	the embedded ref is the branch name, never the refs/ path
 constraint	source-identity/git	@ref/.*\.\.	the embedded ref has no ..
 constraint	source-identity/git	@ref/.*@\{	the embedded ref has no @{
-constraint	source-identity/git	@ref/.*\.lock$	the embedded ref never ends in .lock
+constraint	source-identity/git	@ref/.*\.lock(/|$)	no component of the embedded ref ends in .lock
 constraint	source-identity/git	@ref/.*\.$	the embedded ref never ends in a dot
 constraint	source-identity/git	@ref/@$	the embedded ref is never the single name @
 constraint	source-identity/git	@ref/refs/	the embedded ref is the branch name, never the refs/ path

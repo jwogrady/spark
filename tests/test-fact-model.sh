@@ -731,7 +731,7 @@ acc rf 'f["source"]={"type":"git","identity":"github.com/acme/widgets@0123456789
 rej rf 'f["source"]={"type":"git","identity":"github.com/acme/widgets@0123456789abcdef0123456789abcdef01234567","version":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}' "a git identity at commit A claiming version B must be rejected (R14)"
 acc rf 'f["source"]={"type":"git","identity":"github.com/acme/widgets@ref/master","version":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}' "control: a git ref identity records the commit it pointed at as its version"
 acc rf 'f["source"]={"type":"git","identity":"github.com/acme/widgets@ref/release/v1.2.x","version":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}' "control: a dotted, slashed branch embedded in a git identity is accepted"
-for r in 'refs/heads/master' 'foo..bar' 'a@{b}' 'master.lock' 'trail.' '@'; do
+for r in 'refs/heads/master' 'foo..bar' 'a@{b}' 'master.lock' 'foo.lock/bar' 'trail.' '@'; do
   accepts "$(rmut 'f["source"]={"type":"git","identity":"github.com/acme/widgets@ref/"+sys.argv[2],"version":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}' "$r")" && bad "a non-canonical ref ($r) embedded in a git identity must be rejected (R1)" || ok
   accepts "$(m "$hd0" 'f["invalidators"][1]="ref:github.com/acme/widgets/"+sys.argv[2]' "$r")" && bad "a non-canonical ref ($r) embedded in a ref: invalidator must be rejected (R1)" || ok
 done
@@ -765,7 +765,7 @@ rej gr 'f["invalidators"]=[i for i in f["invalidators"] if not i.endswith("#39")
 rej gr 'f["invalidators"]=[i for i in f["invalidators"] if not i.endswith("#40")]' "a graph representing parent #40 without listing it must be rejected (R17)"
 # head: the base ref is a freshness dependency the value implies
 # ref grammar: one spelling of a branch; refs/heads/…, empty or dotted components, .. and .lock are rejected
-for r in 'refs/heads/master' '/' 'foo//bar' 'foo..bar' 'master.lock' '.hidden' 'feat/' '/feat' 'a/.b' 'a b' 'a~b' 'a^b' 'a:b' 'a?b' 'a*b' 'a[b' 'a\\b' 'a@{b}' 'trail.' '@' "$(printf 'a\001b')" "$(printf 'a\177b')"; do
+for r in 'refs/heads/master' '/' 'foo//bar' 'foo..bar' 'master.lock' '.hidden' 'feat/' '/feat' 'a/.b' 'a b' 'a~b' 'a^b' 'a:b' 'a?b' 'a*b' 'a[b' 'a\\b' 'a@{b}' 'trail.' '@' 'foo.lock/bar' "$(printf 'a\001b')" "$(printf 'a\177b')"; do
   accepts "$(m "$hd0" 'f["value"]["base_ref"]=sys.argv[2]; f["invalidators"][1]="ref:github.com/acme/widgets/"+sys.argv[2]' "$r")" && bad "ref spelling '$r' must be rejected — one canonical branch name (R1)" || ok
 done
 acc hd0 'f["value"]["base_ref"]="release/v1.2.x"; f["invalidators"][1]="ref:github.com/acme/widgets/release/v1.2.x"' "control: a dotted, slashed branch name is a valid ref"
