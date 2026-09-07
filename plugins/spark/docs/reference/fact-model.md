@@ -47,8 +47,12 @@ second `review.*` key is not a fact of the model: a derived fact's `inputs` and
 a consumer's invalidation must address one stable identity per class (R1).
 
 Three further concerns are **facets of the envelope**, not separate facts:
-provenance (`source`, `provenance`), freshness (`source.version`,
-`observed_at`, `invalidators`) and certainty (`status`, `detail`).
+
+| Facet | Fields | Meaning |
+|---|---|---|
+| `provenance` | `source`, `provenance` | Source identity and the pointer that lets an auditor drill down |
+| `freshness` | `source.version`, `observed_at`, `invalidators` | What was observed, when, and what makes the fact stale |
+| `certainty` | `status`, `detail` | UNKNOWN / CONFLICT / NOT_APPLICABLE are explicit statuses, never empty values |
 
 ## The envelope
 
@@ -136,7 +140,7 @@ is a projection and is never used to compare or bind.
 | action | The closed next-action vocabulary: only actions whose derivation rule (R15) this version defines; a new action is a new version | `wait-review`, `repair`, `merge`, `stop-decision-required` |
 | item-id | A scalar acceptance item id: one token, no whitespace, unique within its fact | `a1`, `acceptance/3` |
 | provenance | A pointer: an https URL, or a normalized repository-relative path (slash-separated components, none empty, none . or .., no leading slash); never the record itself | `https://github.com/acme/widgets/pull/42#issuecomment-9100`, `preferences/fact-model.tsv` |
-| timestamp | An ISO-8601 UTC instant at second precision with Z suffix, in calendar range (month 01–12, day 01–31, hour 00–23, minute and second 00–59) and a real calendar date (the validator parses it); the type of observed_at and the form every timestamp-bearing source version takes | `2026-09-06T12:00:05Z` |
+| timestamp | An ISO-8601 UTC instant at second precision with Z suffix whose grammar encodes the calendar itself — 31-day and 30-day months, February to the 28th and the 29th only in a leap year (divisible by 4, or by 400 among century years), hours 00–23, minutes and seconds 00–59 — so a consumer needs nothing beyond the regex; the type of observed_at and the one form every timestamp-bearing source version takes | `2026-09-06T12:00:05Z` |
 | schema-version | A schema version: a positive integer; the type of schema_version | `1` |
 | fact-key | the class's one canonical key (the key records) | `review.independent` |
 | issue-state | Current state of a related work unit; a blocked_by entry is satisfied exactly when closed | `open`, `closed` |
@@ -355,7 +359,9 @@ behavioral suite checks the two never drift.
   envelope field whose type is an identifier kind is a string in that grammar,
   so no field's canonical form lives only in prose. A timestamp anywhere in a
   fact — observed_at, a GitHub node's updated_at, a decision comment's
-  updated_at — is one grammar and a real calendar instant.
+  updated_at — is the one timestamp grammar, whose regex encodes the calendar
+  itself (month lengths and leap years), so an impossible instant is outside the
+  schema with no validator beyond the regex.
 
 ## Versioning
 
