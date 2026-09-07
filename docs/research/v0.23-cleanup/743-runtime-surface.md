@@ -38,6 +38,38 @@ stated rather than smoothed over.
 Module count is unchanged at three. The runtime holds 239 functions and 9,943 body lines, against
 237 and 9,955 before: +2 functions, -12 body lines.
 
+Function bodies are not the whole runtime — top-level dispatch, globals and comments live outside them — so the
+actual line count is reported too:
+
+| File | Lines before | after | delta |
+|---|---|---|---|
+| `plugins/spark/bin/spark` | 8,938 | 8,958 | +20 |
+| `plugins/spark/lib/execution.sh` | 2,182 | 2,180 | -2 |
+| `plugins/spark/lib/planning.sh` | 825 | 825 | +0 |
+| `plugins/spark/lib/repository.sh` | 221 | 221 | +0 |
+
+**12,166 lines before, 12,184 after (+18)**, against
+9,955 and 9,943 body lines. The file grows while the bodies shrink because each new primitive is
+documented where it lives, at the top level, outside any body.
+
+**Argument parsing, measured rather than assigned.** The map is exclusive — one responsibility per function — and
+that misrepresents parsing, which no function owns: it sits at the head of every verb. Counting the lines of each
+body that touch a positional parameter, `shift`, a usage string or a long option gives the responsibility a size
+without inventing an owner. It is a line-level heuristic, not a parser:
+
+| File | Parse lines before | after |
+|---|---|---|
+| `plugins/spark/bin/spark` | 531 | 531 |
+| `plugins/spark/lib/execution.sh` | 202 | 200 |
+| `plugins/spark/lib/planning.sh` | 62 | 62 |
+| `plugins/spark/lib/repository.sh` | 21 | 21 |
+
+190 functions carried parse lines before and 191 do now, in
+816
+and 814
+lines respectively. That is why extracting a shared parser is rejected below: the lines are per-verb strings and
+flags, and a shared parser would either normalize what users see or take it all as parameters.
+
 Two buckets hold 150 of 239 functions and
 8,491 of 9,943 body lines. That
 concentration is the issue's premise, and it is also the trap: for `cmd_doctor`, `cmd_next` and `cmd_labels` the
@@ -78,9 +110,17 @@ bodies — #739's rule, applied to what #739 left behind.
   `js` is untouched: it *strips* quotes and backslashes rather than escaping them, and merging them would silently
   change `spark doctor --requirements --json`.
 
-**Change fanout.** A change to how the runtime reads an issue's state touched two bodies before and touches one
-now; the remote-trunk idiom, two and now one; JSON escaping, three and now one. The consumer columns in the two
-maps carry those numbers per function, computed the same way on both sides, so the comparison is like with like.
+**Change fanout, across surfaces.** Reader bodies are one measure; the surfaces a change to each fact would
+have to reach are another. Each row counts the files naming that fact's idiom at each commit, read the same way on
+both sides with `git grep -l`, so a zero is a measured zero:
+
+| Fact | Runtime files before | after | Test files before | after | Doc files before | after |
+|---|---|---|---|---|---|---|
+| the liveness of the issues a recorded intent names | 1 | 1 | 0 | 0 | 0 | 0 |
+| the remote trunk ref | 1 | 1 | 0 | 1 | 0 | 2 |
+| a JSON string body | 2 | 1 | 1 | 1 | 0 | 0 |
+
+In reader bodies the same three facts go two to one, two to one and three to one. Runtime files fell for a JSON string body, which is the escaper moving out of the module it was copied into. Test and doc files rose for the remote trunk ref: this unit's own suite asserts the idiom and its map and manifest name it, which is what a measurement of surfaces is supposed to show rather than hide. No shipped documentation needed an edit: the suites that own the affected verbs exercise them by behaviour, not by naming the idiom.
 
 ## What was rejected, and why
 

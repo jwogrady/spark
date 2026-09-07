@@ -24,7 +24,7 @@ for which in after before; do
   case "$which" in after) src=rows ;; before) src=rows_before ;; esac
   assert_eq "$which: every responsibility is in the closed vocabulary" "" \
     "$($src | cut -f3 | grep -vE '^(argument-parsing|routing-dispatch|source-collection|canonicalization|domain-semantics|evidence-authority|formatting-reporting|compatibility-fallback)$' | sort -u | tr '\n' ' ')"
-  assert_eq "$which: every row has seven fields" "" "$($src | awk -F'\t' 'NF != 7 {print $1}' | tr '\n' ' ')"
+  assert_eq "$which: every row has eight fields" "" "$($src | awk -F'\t' 'NF != 8 {print $1}' | tr '\n' ' ')"
   assert_eq "$which: no function is classified twice" "" "$($src | cut -f1 | sort | uniq -d | tr '\n' ' ')"
   assert_eq "$which: every file named is a runtime file" "" \
     "$($src | cut -f2 | sort -u | grep -vE '^plugins/spark/(bin/spark|lib/(execution|planning|repository)\.sh)$' | tr '\n' ' ')"
@@ -91,7 +91,7 @@ assert_eq "resume does not resolve the ref itself" "0" \
   "$(awk '/^cmd_resume\(\) \{/, /^\}/' "$SPARK" | grep -v '^ *#' | grep -c 'refs/remotes/origin/HEAD')"
 
 # --- the map proves the canonicalization across the module boundary, which a dispatcher-only graph could not
-je="$(rows | awk -F'\t' '$1 == "json_escape" {print $6}')"
+je="$(rows | awk -F'\t' '$1 == "json_escape" {print $7}')"
 for consumer in cmd_state cmd_telemetry cmd_budget; do
   case "$je" in
     *"$consumer"*) ok ;;
@@ -102,8 +102,18 @@ grep -q 'json_escape' "$EXEC" && ok || bad "the execution module calls the canon
 
 # --- the primitives are used, not merely defined
 for fn in intent_liveness di_trunk json_escape; do
-  n="$(rows | awk -F'\t' -v f="$fn" '$1 == f {print $5}')"
+  n="$(rows | awk -F'\t' -v f="$fn" '$1 == f {print $6}')"
   [ "${n:-0}" -ge 2 ] && ok || bad "$fn is defined but has fewer than two consumers"
+done
+
+# --- argument parsing is measured, not assigned: the column exists and the manifest's table is the map's
+assert_eq "parse lines are non-negative integers" "" \
+  "$(rows | awk -F'\t' '$5 !~ /^[0-9]+$/ {print $1}' | tr '\n' ' ')"
+[ "$(rows | awk -F'\t' '{s+=$5} END {print s+0}')" -gt 0 ] && ok || bad "no function carries a parse line, which cannot be true"
+for f in $FILES; do
+  pa="$(rows | awk -F'\t' -v f="$f" '$2 == f {s+=$5} END {printf "%d", s}' | sed ':a;s/\B[0-9]\{3\}\>/,&/;ta')"
+  pb="$(rows_before | awk -F'\t' -v f="$f" '$2 == f {s+=$5} END {printf "%d", s}' | sed ':a;s/\B[0-9]\{3\}\>/,&/;ta')"
+  grep -qF -- "| \`$f\` | $pb | $pa |" "$MAN" && ok || bad "the manifest's parse row for $f is not the maps' ($pb/$pa)"
 done
 
 # --- the generator is runnable, and both committed maps are what it produces
