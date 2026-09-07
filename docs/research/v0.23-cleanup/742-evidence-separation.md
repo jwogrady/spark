@@ -2,7 +2,7 @@
 
 **Model.** `current fact → provenance/index pointer → historical evidence on demand`, never
 `historical evidence → agent reconstruction → current fact`. The pointer is `docs/ops/evidence-index.tsv`:
-every evidence artifact of the repository — 126 files, 918,181 bytes, 15,340 lines under
+every evidence artifact of the repository — 126 files, 919,022 bytes, 15,350 lines under
 `docs/research`, `docs/releases`, `docs/governance`, the three evidence pages under `docs/ops`, `evaluations`
 and `.spark` — is one row or one family member, with a retention class, an explicit *operative now* answer,
 the release/HEAD/work unit it concerned, the fact it supported, who loads or cites it today, and why it is
@@ -21,8 +21,8 @@ are computed from the index and re-checked by the suite.
 
 | Class | Files | Bytes | Lines |
 |---|---|---|---|
-| `active-current` | 33 | 107,983 | 1,882 |
-| `historical-retained` | 68 | 402,826 | 6,723 |
+| `active-current` | 33 | 108,496 | 1,887 |
+| `historical-retained` | 68 | 403,154 | 6,728 |
 | `do-not-delete` | 25 | 407,372 | 6,735 |
 
 No artifact is classified `redundant`. Two identical blobs exist (`evaluations/orchestration/rates.tsv` and
@@ -40,7 +40,7 @@ reasoning path, and every deletion candidate failed the "independent retention v
 | `docs/ops` | 3 | 138,568 | 2,550 |
 | `docs/releases` | 13 | 103,829 | 1,849 |
 | `docs/research` | 2 | 7,056 | 101 |
-| `docs/research/v0.23-cleanup` | 14 | 171,558 | 2,351 |
+| `docs/research/v0.23-cleanup` | 14 | 172,399 | 2,361 |
 | `docs/research/v0.23-optimization-baseline` | 46 | 385,106 | 6,360 |
 | `evaluations` | 43 | 79,685 | 1,606 |
 
@@ -61,7 +61,7 @@ link counts here. From the index's readers column:
 | `evaluations/lib/*;evaluations/evidence-index.tsv;evaluations/orchestration/run.sh;evaluations/orchestration/rates.tsv;evaluations/skill-routing/run.sh;evaluations/skill-routing/rates.tsv` | `active-current` | yes | `tests/test-eval-lib.sh`; `tests/test-skill-descriptions.sh` |
 | `.spark/state.json;.spark/preferences.json` | `do-not-delete` | yes | `plugins/spark/bin/spark`; `plugins/spark/docs/README.md`; `plugins/spark/docs/how-to/get-started.md`; `plugins/spark/docs/how-to/resume.md`; `plugins/spark/docs/reference/cli.md`; `plugins/spark/docs/reference/compatibility.md`; `plugins/spark/docs/reference/engineering-preferences.md`; `plugins/spark/docs/reference/fact-freshness.md`; `plugins/spark/docs/reference/fact-model.md`; `plugins/spark/docs/reference/hooks.md`; `plugins/spark/docs/reference/project-standards.md`; `plugins/spark/docs/reference/stability.md`; `plugins/spark/docs/reference/state.md`; `plugins/spark/docs/tutorials/adopt-an-existing-repo.md`; `plugins/spark/docs/tutorials/scaffold-a-new-project.md`; `plugins/spark/preferences/fact-model.tsv`; `plugins/spark/preferences/templates/standards/conventions.md`; `plugins/spark/preferences/templates/standards/engineering-standards.md`; `plugins/spark/skills/bootstrap/SKILL.md`; `plugins/spark/skills/bootstrap/references/profiles.md`; `plugins/spark/skills/codify/SKILL.md`; `plugins/spark/skills/ideate/SKILL.md`; `plugins/spark/skills/knowledge/references/operator-knowledge.md`; `plugins/spark/skills/onboard/SKILL.md`; `plugins/spark/skills/plan/SKILL.md`; `plugins/spark/skills/ship/SKILL.md`; `plugins/spark/skills/validate/SKILL.md`; `tests/bench-memo.sh`; `tests/test-apply-permissions.sh`; `tests/test-brief-resume.sh`; `tests/test-course-derivation.sh`; `tests/test-doctor-standards-boundary.sh`; `tests/test-first-run.sh`; `tests/test-governance-contract.sh`; `tests/test-governance-integration.sh`; `tests/test-governance-schema.sh`; `tests/test-hot-path-memo.sh`; `tests/test-hub.sh`; `tests/test-labels.sh`; `tests/test-merge-strategy.sh`; `tests/test-orient.sh`; `tests/test-preferences.sh`; `tests/test-reconcile-apply.sh`; `tests/test-reconcile-slate.sh`; `tests/test-setup-profiles.sh`; `tests/test-state.sh`; `tests/test-triage-truth.sh` |
 
-**23 files, 244,492 bytes** of the 126-file, 918,181-byte corpus are referenced by code,
+**23 files, 244,492 bytes** of the 126-file, 919,022-byte corpus are referenced by code,
 tests or CI (26 % by bytes). The suite holds this list to the tree: a shipped surface that
 starts naming a non-operative artifact fails until the index lists it.
 
@@ -87,7 +87,9 @@ What the verbs opened:
 | `profiles` | 0 | 0 | 0 | 0 | 0 | 0 |
 | `list-skills` | 0 | 0 | 0 | 0 | 0 | 0 |
 
-`spark doctor` opens 50 indexed corpus artifacts, **36 non-operative evidence files** among them; the session path opens 2 corpus files — `.spark/preferences.json`, `.spark/state.json` — and nothing else under the evidence roots.
+`spark doctor` opens **49** indexed corpus artifacts, **35** of them non-operative. The session path opens **2** corpus files, both the runtime's own committed state. Across the six read-only verbs, **36** non-operative evidence files are opened by default.
+
+The session path's files are `.spark/preferences.json`, `.spark/state.json`, and it opens nothing else under the evidence roots.
 
 The two sides of that line are different acts. The session-orientation path — `brief`, `footprint`,
 `preferences`, `profiles`, `list-skills` — opens no evidence file at all: it reads the two committed state files
@@ -133,11 +135,14 @@ committed state — classified `do-not-delete`, read by design — and every oth
 | `docs/research/v0.23-cleanup/739-semantic-map.md` | `historical-retained` | 1 |
 | `docs/research/v0.23-cleanup/740-test-consolidation.md` | `historical-retained` | 1 |
 
-The suite recomputes every figure in both tables from the capture and the index and fails if this page states a
-different one, so a change in what the default verbs read cannot land silently. It also asserts the separation
-claim directly: no verb other than `doctor` may open a file under the evidence roots except the two `.spark`
-state files. Set `SPARK_OBSERVE_READS=1` on a machine with `strace` and the suite re-observes HEAD itself and
-fails on any drift from the committed rows.
+The suite recomputes every figure in both tables *and the sentence above* from the capture and the index, and
+fails if this page states a different one. It asserts the separation claim directly — no verb other than
+`doctor` may open a file under the evidence roots except the two `.spark` state files — and it binds the capture
+to HEAD three ways: the observed commit must be in HEAD's history, `plugins/` must be byte-identical between
+them, and the corpus's set of paths must be unchanged, so no verb can open a file that did not exist when the
+capture was taken. On any machine with `strace` the suite additionally re-observes HEAD itself and requires the
+committed rows back, unbroken; `SPARK_SKIP_OBSERVE=1` is the documented escape for a sandbox that forbids
+`ptrace`, and the suite prints that it skipped rather than passing quietly.
 
 ## Two leaks: non-operative evidence on the active path
 

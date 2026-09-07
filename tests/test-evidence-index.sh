@@ -97,6 +97,19 @@ TOOL="docs/research/v0.23-cleanup/tools/evidence-reads.sh"
 [ -x "$ROOT/$TOOL" ] && ok || bad "the capture's tool is committed and executable"
 cap_sha="$(sed -nE 's/^# observed default reads — clean checkout of ([0-9a-f]{40}) — strace.*/\1/p' "$CAP" | head -1)"
 [ -n "$cap_sha" ] && ok || bad "the capture's header names the observed commit and the tracer"
+# The capture is an observation of one commit; it may stand for HEAD only when HEAD cannot read differently.
+# That needs three facts, each checked: the observed commit is in HEAD's history; the runtime that does the
+# reading is byte-identical between them; and the corpus's set of paths is identical, so no verb can open a file
+# that did not exist when the capture was taken (content may differ — a validator reads the file either way).
+ROOTS_LS="docs/research docs/releases docs/governance docs/ops evaluations .spark"
+if [ -n "$cap_sha" ]; then
+  (cd "$ROOT" && git merge-base --is-ancestor "$cap_sha" HEAD) && ok || bad "the capture's commit $cap_sha is not in HEAD's history"
+  assert_eq "the runtime is unchanged between the capture's commit and HEAD" "" \
+    "$(cd "$ROOT" && git diff --name-only "$cap_sha" HEAD -- plugins | tr '\n' ' ' | sed 's/ $//')"
+  assert_eq "the corpus's paths are unchanged between the capture's commit and HEAD" \
+    "$(cd "$ROOT" && git ls-tree -r --name-only "$cap_sha" -- $ROOTS_LS | sort)" \
+    "$(cd "$ROOT" && git ls-tree -r --name-only HEAD -- $ROOTS_LS | sort)"
+fi
 grep -q '^# git index verified warm before tracing' "$CAP" && ok || bad "the capture does not state that the index was refreshed (a cold checkout attributes git's re-hashing to the verb)"
 for v in doctor brief footprint preferences profiles list-skills; do
   grep -qxF "# $v exit 0" "$CAP" && ok || bad "the capture does not record verb $v exiting 0 (an incomplete run is not a capture)"
@@ -151,15 +164,24 @@ for v in doctor brief footprint preferences profiles list-skills; do
   ' "$CLSMAP" "$CAP")"
   grep -qxF -- "$row" "$MAN" && ok || bad "the manifest's observed row for $v is not the capture's: expected $row"
 done
-# the non-operative history the validator reads, as the page states it
-nonop="$(awk -F'\t' 'NR == FNR { cls[$1] = $2; next } $2 == "file" && (cls[$3] == "historical-retained" || cls[$3] == "do-not-delete") { seen[$3] = 1 } END { print length(seen) }' "$CLSMAP" "$CAP")"
-grep -qF -- "**$nonop non-operative evidence files**" "$MAN" && ok || bad "the manifest does not state the validator's non-operative read count $nonop"
+# the page's prose figures, each computed from the capture and the index — one sentence, four numbers
+doc_n="$(awk -F'\t' 'NR == FNR { cls[$1] = $2; next } $1 == "doctor" && $2 == "file" && $3 in cls { n++ } END { print n+0 }' "$CLSMAP" "$CAP")"
+doc_nonop="$(awk -F'\t' 'NR == FNR { cls[$1] = $2; next } $1 == "doctor" && $2 == "file" && (cls[$3] == "historical-retained" || cls[$3] == "do-not-delete") { n++ } END { print n+0 }' "$CLSMAP" "$CAP")"
 sess="$(awk -F'\t' 'NR == FNR { cls[$1] = $2; next } $2 == "file" && $1 != "doctor" && $3 in cls { seen[$3] = 1 } END { print length(seen) }' "$CLSMAP" "$CAP")"
-grep -qF -- "the session path opens $sess corpus files" "$MAN" && ok || bad "the manifest does not state the session path's corpus reads ($sess)"
-# opt-in re-observation: on a machine with strace, re-observe HEAD itself and compare row for row
-if [ "${SPARK_OBSERVE_READS:-0}" = 1 ] && command -v strace >/dev/null 2>&1; then
+nonop="$(awk -F'\t' 'NR == FNR { cls[$1] = $2; next } $2 == "file" && (cls[$3] == "historical-retained" || cls[$3] == "do-not-delete") { seen[$3] = 1 } END { print length(seen) }' "$CLSMAP" "$CAP")"
+claim="\`spark doctor\` opens **$doc_n** indexed corpus artifacts, **$doc_nonop** of them non-operative. The session path opens **$sess** corpus files, both the runtime's own committed state. Across the six read-only verbs, **$nonop** non-operative evidence files are opened by default."
+grep -qF -- "$claim" "$MAN" && ok || bad "the manifest's observed-read sentence is not the capture's: expected $claim"
+# Re-observation is required wherever it is possible: a machine with a tracer re-runs the tool at HEAD and the
+# committed rows must come back identical. SPARK_SKIP_OBSERVE=1 exists for sandboxes that forbid ptrace, and the
+# suite says so out loud rather than passing silently.
+if ! command -v strace >/dev/null 2>&1; then
+  echo "  · re-observation skipped: no strace on this machine (the capture's structural checks still ran)"
+elif [ "${SPARK_SKIP_OBSERVE:-0}" = 1 ]; then
+  echo "  · re-observation skipped by SPARK_SKIP_OBSERVE=1 (the capture's structural checks still ran)"
+else
   fresh="$(mktemp)"
   (cd "$ROOT" && bash "$TOOL" HEAD) > "$fresh" 2>/dev/null || bad "re-observation of HEAD failed"
+  [ -s "$fresh" ] && ok || bad "re-observation of HEAD produced no capture"
   assert_eq "re-observing HEAD reproduces the committed rows" "$(grep -v '^#' "$CAP" | sort)" "$(grep -v '^#' "$fresh" | sort)"
   rm -f "$fresh"
 fi

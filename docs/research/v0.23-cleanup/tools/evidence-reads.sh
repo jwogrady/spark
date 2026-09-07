@@ -11,8 +11,8 @@
 #   * a cold index — after a fresh checkout every file's stat data is unknown to git, and entries written in the
 #     same second as the index are "racily clean", so the next `git status` re-hashes the whole tree. Measured
 #     here, that alone attributed 144 extra evidence-file reads to `spark brief`, nondeterministically. The tool
-#     therefore warms the index and then *verifies* it by tracing a bare `git status`: until that opens nothing
-#     under the evidence roots, no verb is measured.
+#     therefore warms the index and then *verifies* it by tracing a bare `git status`: until that probe succeeds,
+#     produces a trace, and opens no file under the evidence roots, no verb is measured.
 # A directory open (traversal, as when a footprint is counted) is recorded as such and never counted as a file read.
 #
 # Output (TSV to stdout): header comments naming the observed commit, the tracer, the roots and each verb's exit
@@ -40,7 +40,12 @@ for attempt in 1 2 3; do
   git status --porcelain >/dev/null
   sleep 1.2
   git update-index --really-refresh >/dev/null 2>&1 || true
-  strace -f -qq -e trace=openat -o "$trace" git status --porcelain >/dev/null 2>&1 || true
+  : > "$trace"
+  rc=0
+  strace -f -qq -e trace=openat -o "$trace" git status --porcelain >/dev/null 2>&1 || rc=$?
+  # a failed probe proves nothing: an empty or missing trace must never read as "opened no evidence file"
+  [ "$rc" -eq 0 ] || { echo "the warm-index probe exited $rc" >&2; exit 2; }
+  [ -s "$trace" ] || { echo "the warm-index probe produced no trace" >&2; exit 2; }
   if [ "$(evidence_file_opens "$trace")" -eq 0 ]; then warm=1; break; fi
 done
 [ "$warm" -eq 1 ] || { echo "the observed checkout's index stays cold: git itself is reading the corpus" >&2; exit 2; }
