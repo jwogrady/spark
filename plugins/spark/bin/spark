@@ -312,6 +312,17 @@ prefs_operator_path() {
 # here so apply-permissions and doctor read the same authority (#277): a preset
 # with no shipped baseline, or a baseline with no preset, cannot slip through.
 PERMISSION_PRESETS="delivery conservative"
+# The governed merge strategy (#763): true merge commits by default; squash and rebase when a repository selects them.
+# Each keeps the exact-HEAD/provenance guarantee its shape allows — the reference vocabulary states them once.
+MERGE_STRATEGIES="merge squash rebase"
+merge_strategy_guarantee() { # merge_strategy_guarantee <strategy> — one line, or return 1 for a value outside the vocabulary
+  case "$1" in
+    merge)  printf '%s' "true merge commits: the branch's governed commits reach trunk unchanged; title pull requests plainly" ;;
+    squash) printf '%s' "squash: the pull request title is the conventional subject of the one commit trunk receives, and that commit carries the governor trailer" ;;
+    rebase) printf '%s' "rebase: every governed commit reaches trunk unchanged, none rewritten without its trailer; title pull requests plainly" ;;
+    *) return 1 ;;
+  esac
+}
 permission_baseline() { # permission_baseline <preset> — echo path, or return 1
   case "$1" in
     delivery)     printf '%s' "$SPARK_ROOT/settings/permission-baseline.json" ;;
@@ -1669,6 +1680,20 @@ EOF
         [ "$std_ok" -eq 1 ] && green "  ✓ $std_doc — $std_count machine-backed fact(s) resolve and match .spark/preferences.json"
       done
     fi
+  fi
+
+  # Merge strategy (#763): the resolved preference is one of the closed vocabulary, whatever tier set it, so a
+  # value no strategy's guarantee covers fails here rather than at the pull request.
+  echo
+  echo "Merge strategy (merge.strategy):"
+  local ms_val ms_why
+  ms_val="$(pref_get merge.strategy 2>/dev/null || true)"
+  if [ -z "$ms_val" ]; then
+    red "  ✗ merge.strategy does not resolve (the shipped default is 'merge'; set it in .spark/preferences.json)"; errors=$((errors+1))
+  elif ms_why="$(merge_strategy_guarantee "$ms_val")"; then
+    green "  ✓ merge.strategy=$ms_val — $ms_why"
+  else
+    red "  ✗ merge.strategy '$ms_val' is not one of: $MERGE_STRATEGIES (each keeps a stated exact-HEAD/provenance guarantee; see reference/engineering-preferences.md)"; errors=$((errors+1))
   fi
 
   # Memory-hub pointer (ADR-0028, #375). Project-scoped: absence is the normal

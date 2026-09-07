@@ -104,8 +104,9 @@ commit — that series is what step-by-step Conventional Commits through
 branch was built to preserve.
 
 **Decided 2026-09-07 (owner, on PR #762).** True merge commits are Spark's
-*default governed merge strategy*. The strategy is to become an explicit
-repository/operator preference rather than a convention only: squash and rebase
+*default governed merge strategy*. The strategy is the `merge.strategy`
+preference (#763; shipped default `merge`, so this repository sets nothing), not
+a convention only: squash and rebase
 are not prohibited, and when one is selected Spark must preserve the equivalent
 exact-HEAD and provenance guarantees that strategy allows (a squash commit
 carries the conventional subject and the governor trailer; a rebase keeps every

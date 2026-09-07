@@ -37,7 +37,7 @@ identically.
    git push -u origin <branch>
    ```
 5. **Open the PR** into the default branch. **Title it to match how PRs land
-   here** — plainly for merge commits, conventionally for squash merges; the
+   here** — `merge.strategy` (`spark prefs`; `merge` by default): plainly for `merge` and `rebase`, conventionally for `squash`; the
    wrong one doubles or drops the entry ([release-please.md](references/release-please.md)). Body should cover:
    - **What** changed and **why** (link the issue: `Closes #12`).
    - How it was verified (tests run, app exercised) — use the evidence classes

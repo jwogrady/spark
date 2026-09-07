@@ -131,10 +131,11 @@ worse failure than duplication, because nothing looks wrong.
 
 Neither case is a repository setting you can fix; both defaults are valid and
 the API permits no combination that avoids the problem (see this repo's
-`docs/ops/release-merge-convention.md` for the refusal). Check which
-strategy the repo uses before titling — `gh api repos/{owner}/{repo} --jq
-'{allow_merge_commit,allow_squash_merge}'` — and when both are allowed, title
-for the one the project actually uses.
+`docs/ops/release-merge-convention.md` for the refusal). The strategy
+is the `merge.strategy` preference (`merge` by default; `squash` or `rebase`
+when the repository selects them) — read it, never guess it from GitHub's
+allowed-methods setting, which only says what is permitted. A rebase keeps the
+branch commits as they are, so its pull request is titled plainly like a merge.
 
 ## Ownership
 

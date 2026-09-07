@@ -33,6 +33,9 @@ is documented in the Spark reference `project-standards.md`.
   cannot justify its own PR, it is an acceptance criterion on the parent.
 - Name branches by type, with the issue number when
   practical: `feat/42-password-reset`, `fix/…`, `docs/…`, `chore/…`.
+- Merge strategy `{{merge.strategy}}`: title the pull request for it — plainly for
+  `merge` and `rebase`, conventionally for `squash` — and keep the strategy's
+  exact-HEAD and provenance guarantee. <!-- spark:pref merge.strategy={{merge.strategy}} -->
 - When issue B depends on issue A, start B only from a base that already
   contains A's merged result — merge A's PR first, then branch from the fresh
   trunk. Declare the dependency on the issue (`Blocked by #A`).

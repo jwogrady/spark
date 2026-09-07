@@ -118,6 +118,20 @@ operator guidance Spark does not check or enforce.
 - **GitHub Flow** — `branch.model`. Trunk protection is hook-enforced (see the
   table above); the model itself is a machine default.
 - Short-lived, focused feature branches. Delete merged branches. Keep history clean.
+- **True merge commits** are the default governed merge strategy — `merge.strategy`
+  (`merge | squash | rebase`, default `merge`; decided 2026-09-07). Squash and
+  rebase are permitted when a repository or operator selects them, never
+  prohibited globally; GitHub's allowed methods are a repository setting the
+  human owns. Each strategy keeps the exact-HEAD and provenance guarantee its
+  shape allows, and the `ship` skill titles the pull request for the one that
+  resolves: `merge` — the branch's governed commits reach trunk unchanged and
+  the pull request is titled plainly (its title lands in the merge commit's body,
+  where Release Please does not count it twice); `squash` — the pull request
+  title is the conventional subject of the one commit trunk receives, and that
+  commit carries the governor trailer (`Spark-Governed-By`); `rebase` — every
+  governed commit reaches trunk unchanged, none rewritten without its trailer,
+  and the pull request is titled plainly. `spark doctor` rejects a value outside
+  the vocabulary.
 
 ### Commits
 - **Conventional Commits** with subjects ≤ 72 characters — `commit.convention`,

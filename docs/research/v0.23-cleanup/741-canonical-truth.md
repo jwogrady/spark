@@ -57,7 +57,7 @@ the suite checks each is a number.
 | `parent-dependency` | 7 | 2 |
 | `review-lifecycle` | 6 | 1 + 1 non-prose |
 | `agent-contract` | 1 | 1 |
-| `merge-method` | 3 | 1 + 1 non-prose |
+| `merge-method` | 3 | 2 + 1 non-prose |
 
 ## Contradictions found, and what was done
 
