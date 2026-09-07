@@ -33,7 +33,7 @@ assert_eq "one class-status record per class" "$(rec class | cut -f2 | sort | tr
 assert_eq "exactly one canonical key per class" "$(rec class | cut -f2 | sort | tr '\n' ' ')" "$(rec key | cut -f2 | sort | tr '\n' ' ')"
 assert_eq "every canonical key is prefixed by its class" "" "$(rec key | awk -F'\t' 'index($3, $2 ".") != 1')"
 assert_eq "eight invalidator grammars" "8" "$(rec invalidator | wc -l | tr -d ' ')"
-assert_eq "31 constraint records" "31" "$(rec constraint | wc -l | tr -d ' ')"
+assert_eq "34 constraint records" "34" "$(rec constraint | wc -l | tr -d ' ')"
 while IFS=$'\t' read -r _ scope rx _; do
   if printf 'probe' | grep -qE "$rx" >/dev/null 2>&1; then rc=0; else rc=$?; fi
   [ "$rc" -le 1 ] && ok || bad "constraint regex for $scope compiles as an ERE (no lookaround, so any consumer can apply it)"
@@ -220,6 +220,56 @@ say(rx.fullmatch("0000-02-29T00:00:00Z") is not None and rx.fullmatch("0000-02-3
     "year 0000 is a leap year as ISO 8601 has it: 02-29 admitted, 02-30 not, 01-01 admitted")
 for v in ("2026-09-06T12:00:05.123Z", "2026-09-06T12:00:05+00:00", "2026-09-06 12:00:05Z", "2026-9-6T12:00:05Z", "2026-09-06T12:00:05"):
     say(rx.fullmatch(v) is None, f"{v} is outside the grammar (second precision, Z suffix, zero-padded)")
+PY
+)
+EOF
+fi
+# every grammar is portable ERE: the lint is the dialect's definition; grep -E is the second engine, and every
+# example on the page must match under both
+if command -v python3 >/dev/null 2>&1; then
+  while IFS= read -r line; do
+    case "$line" in OK*) ok ;; *) bad "grammar dialect: $line" ;; esac
+  done <<EOF
+$(python3 - "$TSV" "$DOC" <<'PY'
+import re, sys, subprocess
+rows = [l.rstrip("\n").split("\t") for l in open(sys.argv[1]) if l.strip() and not l.startswith("#")]
+doc = open(sys.argv[2]).read()
+def say(okk, what): print(("OK " if okk else "BAD ") + what)
+def lint(rx):
+    i, n, inb = 0, len(rx), False
+    while i < n:
+        c = rx[i]
+        if not inb:
+            if c == "\\":
+                if i + 1 >= n or rx[i + 1].isalnum(): return f"backslash-letter escape at {i}"
+                i += 2; continue
+            if c == "[":
+                inb = True; i += 1
+                if i < n and rx[i] == "^": i += 1
+                if i < n and rx[i] == "]": i += 1
+                continue
+        else:
+            if c == "\\": return f"backslash inside a bracket expression at {i}"
+            if c == "[" and i + 1 < n and rx[i + 1] in ":.=": return f"POSIX class or collating element at {i}"
+            if c == "]": inb = False
+        i += 1
+    return "unterminated bracket expression" if inb else None
+def grep(rx, text):
+    return subprocess.run(["grep", "-E", "-q", "-e", rx], input=(text + "\n").encode(), capture_output=True).returncode
+for k, name, rx in ((r[0], r[1], r[2]) for r in rows if r[0] in ("identifier", "invalidator", "constraint", "source-identity", "source-version")):
+    why = lint(rx); say(why is None, f"{k} {name} grammar is portable ERE" + (f": {why}" if why else ""))
+    try: re.compile(rx); okp = True
+    except re.error: okp = False
+    say(okp and grep(rx, "") != 2, f"{k} {name} grammar is accepted by both engines")
+ids = {r[1]: r[2] for r in rows if r[0] == "identifier"}
+i = doc.index("| Kind | Canonical form | Grammar (ERE) |"); body = doc[doc.index("\n", doc.index("\n", i) + 1) + 1:].split("\n\n")[0]
+n = 0
+for l in body.split("\n"):
+    cs = [c.strip() for c in l.strip().strip("|").split(" | ")]
+    for ex in re.findall(r"`([^`]*)`", cs[-1]):
+        n += 1; py = re.compile(ids[cs[0]]).fullmatch(ex) is not None; gr = grep(ids[cs[0]], ex) == 0
+        say(py and gr, f"identifier {cs[0]} example {ex!r} matches under both engines (python={py} grep={gr})")
+say(n >= 21, f"{n} identifier examples were run through both engines")
 PY
 )
 EOF
@@ -941,7 +991,8 @@ rej gr 'f["invalidators"]=[i for i in f["invalidators"] if not i.endswith("#39")
 rej gr 'f["invalidators"]=[i for i in f["invalidators"] if not i.endswith("#40")]' "a graph representing parent #40 without listing it must be rejected (R17)"
 # head: the base ref is a freshness dependency the value implies
 # ref grammar: one spelling of a branch; refs/heads/…, empty or dotted components, .. and .lock are rejected
-for r in 'refs/heads/master' '/' 'foo//bar' 'foo..bar' 'master.lock' '.hidden' 'feat/' '/feat' 'a/.b' 'a b' 'a~b' 'a^b' 'a:b' 'a?b' 'a*b' 'a[b' 'a\\b' 'a@{b}' 'trail.' '@' 'foo.lock/bar' "$(printf 'a\001b')" "$(printf 'a\177b')"; do
+# (control characters are not named: Git refuses them in a refname and a portable ERE cannot spell them)
+for r in 'refs/heads/master' '/' 'foo//bar' 'foo..bar' 'master.lock' '.hidden' 'feat/' '/feat' 'a/.b' 'a b' 'a~b' 'a^b' 'a:b' 'a?b' 'a*b' 'a[b' 'a\\b' 'a@{b}' 'trail.' '@' 'foo.lock/bar'; do
   accepts "$(m "$hd0" 'f["value"]["base_ref"]=sys.argv[2]; f["invalidators"][1]="ref:github.com/acme/widgets/"+sys.argv[2]' "$r")" && bad "ref spelling '$r' must be rejected — one canonical branch name (R1)" || ok
 done
 acc hd0 'f["value"]["base_ref"]="release/v1.2.x"; f["invalidators"][1]="ref:github.com/acme/widgets/release/v1.2.x"' "control: a dotted, slashed branch name is a valid ref"
