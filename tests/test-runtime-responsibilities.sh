@@ -85,6 +85,34 @@ done
 n_after="$(rows | grep -c .)"
 grep -qF -- "the $n_after functions in the dispatcher and its three modules" "$MAN" && ok || bad "the manifest does not state the runtime function count $n_after"
 
+# --- the page's account of the inventory change is the maps': names, not arithmetic
+gone="$(comm -23 <(rows_before | cut -f1 | sort) <(rows | cut -f1 | sort))"
+added="$(comm -13 <(rows_before | cut -f1 | sort) <(rows | cut -f1 | sort))"
+for fn in $gone $added; do
+  grep -qF -- "\`$fn\`" "$MAN" && ok || bad "the manifest does not name $fn, which the inventory change includes"
+done
+n_gone="$(printf '%s\n' "$gone" | grep -c .)"; n_added="$(printf '%s\n' "$added" | grep -c .)"
+grep -qF -- "removes $n_gone definition(s)" "$MAN" && ok || bad "the manifest does not state that $n_gone definitions were removed"
+grep -qF -- "adds $n_added" "$MAN" && ok || bad "the manifest does not state that $n_added definitions were added"
+# a function present on both sides whose scope changed is a move, not an addition
+moved=""
+while IFS=$'\t' read -r fn _f scope _rest; do
+  before_scope="$(rows_before | awk -F'\t' -v f="$fn" '$1 == f {print $3}')"
+  [ -n "$before_scope" ] || continue
+  [ "$before_scope" = "$scope" ] || moved="$moved $fn"
+done < <(rows)
+n_moved="$(printf '%s' "$moved" | wc -w | tr -d ' ')"
+grep -qF -- "moves $n_moved" "$MAN" && ok || bad "the manifest does not state that $n_moved definitions moved scope"
+assert_eq "the totals reconcile: before - removed + added = after" "$(rows | grep -c .)" \
+  "$(( $(rows_before | grep -c .) - n_gone + n_added ))"
+
+# --- the map headers describe the reference model the generator implements
+for f in "$MAP" "$MAP_BEFORE"; do
+  grep -q 'Comments are dropped' "$f" && ok || bad "$(basename "$f") does not state that comments are excluded from references"
+  grep -q 'single-quoted strings are dropped' "$f" && ok || bad "$(basename "$f") does not state that single-quoted prose is excluded"
+  assert_eq "$(basename "$f") does not claim comments count" "" "$(grep -c 'a name in a comment counts' "$f" | grep -v '^0$' || true)"
+done
+
 # --- the canonicalizations hold: one definition each, and the replaced copies are gone
 for fn in intent_liveness di_trunk json_escape; do
   assert_eq "$fn is defined exactly once in the dispatcher" "1" "$(grep -c "^$fn() {" "$SPARK")"

@@ -6,13 +6,19 @@
 # canonicalization, domain-semantics, evidence-authority, formatting-reporting, compatibility-fallback.
 # A body that both reads and renders is assigned to the half it owns; the buckets are not disjoint in this code.
 #
-# consumers are whole-word textual references from other runtime bodies, across module boundaries — the model
-# tests/structure.sh documents (a name in a comment counts; a name reached through a variable does not), widened
-# from one file to four. verbs are the cmd_* consumers among them.
+# consumers are whole-word references to this function from the CODE of other runtime bodies, across module
+# boundaries and including nested bodies. Code means what the shell would run.
+# Comments are dropped; single-quoted strings are dropped whole; and inside
+# double quotes only the $(...) and ${...} expansions are kept — the runtime's
+# nested helpers are named place, gap and bool, so counting those words in prose would manufacture edges. A name
+# reached through a variable is still not seen. This is stricter than tests/structure.sh, which counts names in
+# comments and scans top-level bodies only; that model is right for the size of a file and wrong for this graph.
+# verbs are the cmd_* consumers among them.
 #
 # parse lines are the lines of the body that do argument handling — positional parameters, shift, a usage string
-# or a long option. Parsing is not owned by any function in this runtime, so the exclusive map gives it a size
-# here instead of assigning it away.
+# or a long option. Parsing is not owned by any function in this runtime, so the exclusive map gives it a size here
+# instead of assigning it away. This count reads each line with only its comment removed, because "$1" is an
+# argument wherever it appears, message text included: the two scans ask different questions of the same line.
 #
 # scope is top-level or nested; a nested row names the function that holds it. tests/structure.sh reports the
 # top-level half and stays the authority for it; nested definitions are collected here because they are functions

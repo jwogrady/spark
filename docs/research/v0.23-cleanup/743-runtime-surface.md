@@ -39,9 +39,7 @@ Module count is unchanged at three. The runtime holds 248 functions and 10,019 b
 249 and 10,034 before: -1 functions, -15 body lines.
 
 Those totals count **every** definition, nested ones included — 9 of the 248 are nested
-inside another function, against 12 of 249 before. That matters here rather than being a
-detail of scope: the three escapers this unit removed were nested, so a top-level-only inventory would report this
-work unit adding two functions when it removes 2 and adds two, a net of -1.
+inside another function, against 12 of 249 before. Counted whole, this unit removes 2 definition(s) — `bg_json_escape`, `json_escape_out` — adds 1 — `intent_liveness` — and moves 1 — `json_escape` — from nested to top-level, which is why the total goes 249 to 248. A top-level-only inventory saw none of the removals, because all three escapers were nested, and reported this unit adding two functions.
 `tests/structure.sh` reports the top-level half — the right scope for the size of a file — and stays the authority
 for it; the map records each function's scope and, for a nested one, the function that holds it.
 
