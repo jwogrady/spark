@@ -36,8 +36,7 @@ for t in bash sh git grep sed awk cat cut tr sort head tail wc env printf mktemp
          rm mkdir basename dirname date ls chmod touch find readlink uname paste comm jq; do
   src="$(command -v "$t" 2>/dev/null || true)"; [ -n "$src" ] && ln -sf "$src" "$stub/$t"
 done
-cat > "$stub/gh" <<'STUB'
-#!/usr/bin/env bash
+stub_gh "$stub/gh" <<'STUB'
 args="$*"
 case "$1 $2" in
   "auth status") exit 0 ;;
@@ -69,7 +68,6 @@ case "$args" in
 esac
 exit 0
 STUB
-chmod +x "$stub/gh"
 
 N() { # -> N_RC / N_OUT
   N_RC=0
@@ -143,8 +141,7 @@ assert_eq "and it is 3, not 1 and not 4" 3 "$N_RC"
   printf 'family\tdocs-impact\tany\trequired\tDocs impact\n'
   printf 'member\tdocs-impact\tdocs-impact:none\tc5def5\tNone\n'
 } > "$repo/.spark/governance.tsv"
-cat > "$stub/gh" <<'STUB2'
-#!/usr/bin/env bash
+stub_gh "$stub/gh" <<'STUB2'
 args="$*"
 case "$1 $2" in
   "auth status") exit 0 ;;
@@ -175,7 +172,6 @@ case "$args" in
 esac
 exit 0
 STUB2
-chmod +x "$stub/gh"
 N
 assert_eq "a renamed priority family selects normally" 0 "$N_RC"
 assert_contains "and the renamed member is read as the priority" "sev1" "$N_OUT"

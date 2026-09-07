@@ -219,8 +219,7 @@ printf 'issue\tU\tUnmilestoned\tfeature,P1,docs-impact:none\t\tnom.md\n' > "$art
 st2="$work/plan-nom.state"
 printf 'created\tU\t300\t9300\n' > "$st2"
 
-cat > "$stub/gh" <<'STUB3'
-#!/usr/bin/env bash
+stub_gh "$stub/gh" <<'STUB3'
 args="$*"
 case "$1 $2" in "auth status") exit 0 ;; esac
 GH_JQ=""; __prev=""
@@ -280,8 +279,7 @@ assert_contains "naming the body" "body does not match" "$n_out"
 # create leaves the milestone unset rather than setting it to none, so `verify`
 # makes no claim about it either. `apply` and `verify` must read one field the
 # same way, or the verb reports drift against a state `apply` never intended.
-cat > "$stub/gh" <<'STUB4'
-#!/usr/bin/env bash
+stub_gh "$stub/gh" <<'STUB4'
 args="$*"
 case "$1 $2" in "auth status") exit 0 ;; esac
 GH_JQ=""; __prev=""
@@ -325,8 +323,7 @@ esac
 # "returns the expected titles and labels; would return a deliberately wrong
 # milestone and body if asked; exposes no matching hierarchy/dependency/order
 # data." One stub, everything but title and labels wrong at once.
-cat > "$stub/gh" <<'STUB2'
-#!/usr/bin/env bash
+stub_gh "$stub/gh" <<'STUB2'
 args="$*"
 case "$1 $2" in "auth status") exit 0 ;; esac
 GH_JQ=""; __prev=""
@@ -393,8 +390,7 @@ for t in git awk sed grep find sort printf bash env cat wc tr head tail cut date
   src="$(command -v "$t" 2>/dev/null || true)"
   [ -n "$src" ] && ln -sf "$src" "$lsbin/$t" 2>/dev/null || true
 done
-cat > "$lsbin/gh" <<'LSEOF'
-#!/usr/bin/env bash
+stub_gh "$lsbin/gh" <<'LSEOF'
 case "$1 $2" in "auth status") exit 0 ;; esac
 GH_JQ=""; prev=""
 for a in "$@"; do [ "$prev" = "--jq" ] && GH_JQ="$a"; prev="$a"; done
@@ -408,7 +404,6 @@ if [ "$1" = "issue" ] && [ "$2" = "view" ]; then
 fi
 exit 0
 LSEOF
-chmod +x "$lsbin/gh"
 
 # --- existing-issue verification (plan_live_rows)
 lsart="$WORK/ls.tsv"

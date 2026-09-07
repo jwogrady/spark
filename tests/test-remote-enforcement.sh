@@ -75,8 +75,7 @@ assert_contains "caveats classic protection" "classic branch protection" "$out"
 # --- end-to-end: a conforming repo reports the held policy.
 repo="$WORK/prj"; make_repo "$repo"
 fakebin="$WORK/fakegh"; mkdir -p "$fakebin"
-cat > "$fakebin/gh" <<'EOF'
-#!/usr/bin/env bash
+stub_gh "$fakebin/gh" <<'EOF'
 case "$*" in
   --version*) echo "gh version 0.0.0-stub" ;;
   "auth status") exit 0 ;;
@@ -87,7 +86,6 @@ case "$*" in
   *) exit 0 ;;
 esac
 EOF
-chmod +x "$fakebin/gh"
 rc=0; out="$(cd "$repo" && env PATH="$fakebin:$PATH" "$SPARK" doctor --requirements 2>&1)" || rc=$?
 assert_rc "conforming remote exits 0" 0 "$rc"
 assert_contains "reports the held policy" "policy held server-side" "$out"
@@ -101,8 +99,7 @@ cat > "$repo/.github/spark-trunk-ruleset.json" <<'EOF'
 { "rules": [ { "type": "required_status_checks", "parameters": { "required_status_checks": [
   { "context": "doctor" }, { "context": "tests" } ] } } ] }
 EOF
-cat > "$fakebin/gh" <<'EOF'
-#!/usr/bin/env bash
+stub_gh "$fakebin/gh" <<'EOF'
 case "$*" in
   --version*) echo "gh version 0.0.0-stub" ;;
   "auth status") exit 0 ;;
@@ -119,8 +116,7 @@ assert_contains "names the drift" "does not hold the policy" "$out"
 assert_contains "names the missing repo-required context" "tests" "$out"
 
 # --- same repo-local policy, remote carries both (plus an extra) -> healthy.
-cat > "$fakebin/gh" <<'EOF'
-#!/usr/bin/env bash
+stub_gh "$fakebin/gh" <<'EOF'
 case "$*" in
   --version*) echo "gh version 0.0.0-stub" ;;
   "auth status") exit 0 ;;
@@ -139,8 +135,7 @@ rm -rf "$repo/.github"
 # --- conforming rules with an UNREADABLE protected flag must still report
 # conforming (regression: the empty-prot evidence group used to fail the
 # pipeline under pipefail and print a zero-finding false drift).
-cat > "$fakebin/gh" <<'EOF'
-#!/usr/bin/env bash
+stub_gh "$fakebin/gh" <<'EOF'
 case "$*" in
   --version*) echo "gh version 0.0.0-stub" ;;
   "auth status") exit 0 ;;
@@ -157,8 +152,7 @@ assert_contains "full rules conform without the protected probe" "policy held se
 
 # --- a FAILED rules read (vs an empty rule list) is not assessed, never a
 # guessed drift verdict.
-cat > "$fakebin/gh" <<'EOF'
-#!/usr/bin/env bash
+stub_gh "$fakebin/gh" <<'EOF'
 case "$*" in
   --version*) echo "gh version 0.0.0-stub" ;;
   "auth status") exit 0 ;;
@@ -174,8 +168,7 @@ assert_contains "failed rules read is not assessed" "not assessed" "$out"
 
 # --- end-to-end: an unprotected trunk is reported as drift with the explicit
 # (human) apply path — and the run itself never calls a mutating endpoint.
-cat > "$fakebin/gh" <<'EOF'
-#!/usr/bin/env bash
+stub_gh "$fakebin/gh" <<'EOF'
 log="${GH_STUB_LOG:-/dev/null}"
 printf '%s\n' "$*" >> "$log"
 case "$*" in
@@ -201,8 +194,7 @@ unset GH_STUB_LOG
 
 # --- the CONTEXTS read failing (types read fine) is not assessed, never a
 # guessed "no contexts" drift.
-cat > "$fakebin/gh" <<'EOF'
-#!/usr/bin/env bash
+stub_gh "$fakebin/gh" <<'EOF'
 case "$*" in
   --version*) echo "gh version 0.0.0-stub" ;;
   "auth status") exit 0 ;;
@@ -239,8 +231,7 @@ fi
 # any-one-context fallback that would pass a wrong-check remote as healthy.
 mkdir -p "$repo/.github"
 printf '{}\n' > "$repo/.github/spark-trunk-ruleset.json"
-cat > "$fakebin/gh" <<'EOF'
-#!/usr/bin/env bash
+stub_gh "$fakebin/gh" <<'EOF'
 case "$*" in
   --version*) echo "gh version 0.0.0-stub" ;;
   "auth status") exit 0 ;;
@@ -273,8 +264,7 @@ rm -rf "$repo/.github"
 
 # --- json output carries the assessed/ready pair.
 if command -v jq >/dev/null 2>&1; then
-  cat > "$fakebin/gh" <<'EOF'
-#!/usr/bin/env bash
+  stub_gh "$fakebin/gh" <<'EOF'
 case "$*" in
   --version*) echo "gh version 0.0.0-stub" ;;
   "auth status") exit 0 ;;
@@ -292,8 +282,7 @@ EOF
 fi
 
 # --- no gh auth -> honestly not assessed, still exit 0.
-cat > "$fakebin/gh" <<'EOF'
-#!/usr/bin/env bash
+stub_gh "$fakebin/gh" <<'EOF'
 case "$*" in
   --version*) echo "gh version 0.0.0-stub" ;;
   "auth status") exit 1 ;;

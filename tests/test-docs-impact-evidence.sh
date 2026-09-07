@@ -59,8 +59,7 @@ for t in bash sh git grep sed awk cat cut tr sort head tail wc env printf mktemp
          rm mkdir basename dirname date ls chmod touch find readlink uname; do
   src="$(command -v "$t" 2>/dev/null || true)"; [ -n "$src" ] && ln -sf "$src" "$shim/$t"
 done
-cat > "$shim/gh" <<'GH'
-#!/usr/bin/env bash
+stub_gh "$shim/gh" <<'GH'
 case "$1 $2" in
   "auth status") exit 0 ;;
   "repo view")   printf '%s\n' "o/r"; exit 0 ;;
@@ -174,7 +173,6 @@ case "$1 $2" in
 esac
 exit 1
 GH
-chmod +x "$shim/gh"
 
 di() { # <EV_LOOKUP> <EV_FILES> -> prints tsv, sets DI_RC
   DI_RC=0

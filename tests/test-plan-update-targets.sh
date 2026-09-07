@@ -86,8 +86,7 @@ assert_rc "while a valid artifact still passes the verb" 0 "$rc"
 calls="$work/gh-calls"
 : > "$calls"
 stub="$work/stub"; mkdir -p "$stub"
-cat > "$stub/gh" <<STUB
-#!/usr/bin/env bash
+stub_gh "$stub/gh" <<STUB
 printf '%s\n' "\$*" >> "$calls"
 case "\$1" in
   auth) exit 0 ;;
@@ -95,7 +94,6 @@ case "\$1" in
 esac
 exit 0
 STUB
-chmod +x "$stub/gh"
 
 rc=0
 out="$(cd "$work" && PATH="$stub:$PATH" bash "$SCRIPT" --state "$work/live.state" \
