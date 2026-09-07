@@ -150,16 +150,18 @@ say(all(len(vs) == 1 for vs in recorded.values()), "within Example 1 every node 
 recorded = {t: next(iter(vs)) for t, vs in recorded.items()}
 repo_tok = "repository:" + [f for f in snap if f["class"] == "repository"][0]["value"]["id"]
 def digest(members): return hashlib.sha256("".join(m + "\n" for m in sorted(members.split(";") if members else [])).encode()).hexdigest()
-def detect(obs):
-    """fired tokens, derived from the recorded versions and the observation — F1 (versions), F13 (observer), F14 (collections)"""
+def detect(obs, rec=None, obsv=None):
+    """fired tokens, derived from the recorded versions and the observation — F1 (versions), F13 (observer), F14 (collections);
+    the baseline defaults to Example 1 and can be a synthetic one"""
+    rec = recorded if rec is None else rec; obsv = observer if obsv is None else obsv
     fired = set()
     for pair in obs.split(","):
         k, v = pair.split("=", 1)
         if k == "observer.permission":
-            if v != observer["permission"]: fired.add(repo_tok)
+            if v != obsv["permission"]: fired.add(repo_tok)
             continue
         if v.startswith("digest(") and v.endswith(")"): v = digest(v[7:-1])
-        if k in recorded and recorded[k] != v: fired.add(k)
+        if k in rec and rec[k] != v: fired.add(k)
     return fired
 coll = {c[1]: c for c in recs("collection")}
 # every invalidator kind has exactly one version form, and F1 names each form once (F1, F14)
@@ -192,6 +194,12 @@ sh = subprocess.run(["bash", "-c", 'for m in "$@"; do printf "%s\\n" "$m"; done 
 sh0 = subprocess.run(["bash", "-c", 'for m in "$@"; do printf "%s\\n" "$m"; done | sort | sha256sum | cut -d" " -f1', "_"], capture_output=True, text=True).stdout.strip()
 say(sh == digest("b@2;a@1") and sh0 == digest(""), "the collection record's shell form computes the same digest as the contract, for members and for none")
 say("zero bytes" in coll["ruleset"][2] and any(r[1] == "F14" and "zero bytes" in r[2] for r in recs("rule")), "the collection record and F14 state the empty-collection case")
+# empty-state freshness from synthetic baselines: equal digests never fire, whatever the membership size
+say(detect(rs_tok + "=digest()", rec={rs_tok: digest("")}) == set(), "an empty recorded collection observed empty fires nothing")
+say(detect(rs_tok + "=digest()", rec={rs_tok: digest("1001@2026-09-01T08:00:00Z")}) == {rs_tok}, "a one-member baseline emptied fires the ruleset token")
+say(detect(rs_tok + "=digest(1001@2026-09-01T08:00:00Z)", rec={rs_tok: digest("")}) == {rs_tok}, "an empty baseline gaining its first member fires the ruleset token")
+say(detect(rs_tok + "=digest(1001@2026-09-01T08:00:00Z)", rec={rs_tok: digest("1001@2026-09-01T08:00:00Z")}) == set(), "a one-member collection observed unchanged fires nothing")
+say(detect(rs_tok + "=digest(1002@2026-08-15T09:00:00Z;1001@2026-09-01T08:00:00Z)") == set(), "Example 1's membership observed in another order fires nothing")
 by = {f["class"]: f for f in snap}; key_of = {r[1]: r[2] for r in fm if r[0] == "key"}
 def mrow_of(ev):
     col = ev_names.index(ev); return {m[1]: m[2].split(",")[col] for m in recs("matrix")}

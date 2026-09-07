@@ -64,8 +64,10 @@ GitHub versions each ruleset, never the set a repository carries, so the
 the membership with each member's version (F14); the fact model's `digest`
 identifier is its grammar. A ruleset created or deleted changes the digest even
 when every remaining ruleset's timestamp stands — the failure a "latest
-timestamp" rule would miss. Example 1 records the digest of the membership
-below; the suite recomputes it.
+timestamp" rule would miss — and an empty collection recorded empty and observed
+empty is unchanged, like any other equal digest. Example 1 records the digest of
+the membership below; the suite recomputes it, and checks detection from an
+empty and from a one-member baseline as well.
 
 | Token kind | Algorithm | Example 1 membership | Why |
 |---|---|---|---|
