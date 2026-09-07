@@ -70,6 +70,7 @@ Information-oriented — what each piece is and how it behaves:
 - [reference/engineering-preferences.md](reference/engineering-preferences.md) — the operator rationale behind the engineering standard; the machine-applied form is `preferences/defaults.json`.
 - [reference/project-standards.md](reference/project-standards.md) — the two repo-root docs Spark seeds (`CONVENTIONS.md`, `ENGINEERING-STANDARDS.md`), the prose/configuration boundary, and the `spark:pref` marker.
 - [reference/state.md](reference/state.md) — the committed work state (`.spark/state.json`) and its schema.
+- [reference/fact-model.md](reference/fact-model.md) — the operative fact model: the fact classes an agent needs to execute a governed work unit, the envelope, the closed status vocabulary and canonical identifiers; the machine-readable form is `preferences/fact-model.tsv`.
 - [reference/release-docs-checklist.md](reference/release-docs-checklist.md) — the pre-release review that keeps README, docs, changelog, and roadmap coherent; the roadmap status vocabulary.
 - [reference/metadata-governance.md](reference/metadata-governance.md) — GitHub-native issue/metadata governance: the source-of-truth model, category taxonomy, milestone rules, and the metadata-completeness audit.
 - [glossary.md](glossary.md) — Spark vocabulary.
