@@ -256,15 +256,44 @@ The remaining ~24 suites with their own shim scaffolding (baseline B3) keep it f
 stub *bodies* are not pre-shaped in the same way, so adopting `stub_gh` there is a mechanical
 sweep with no discrimination change — packet 4 below, so its per-suite proof stands alone.
 
-## Remaining scope (later packets, in order; packets 1–3 above are done)
+---
 
-1. **Adopt `stub_gh` across the remaining suites** (baseline B3): ~24 suites still restate
-   the shim scaffolding; their stub bodies are not pre-shaped in the packet-3 sense, so the
-   sweep is mechanical, with its own per-suite proof.
-2. **Same-invariant candidates** (baseline C1–C7). The baseline's own verdicts stand:
+## Packet 4 — the `stub_gh` sweep (baseline B3)
+
+**What changed.** Every remaining hand-written `gh` stub — 36 stubs in 15 suites — is now
+written through `stub_gh`: the `cat > "$dir/gh" <<TAG` + shebang opener becomes
+`stub_gh "$dir/gh" <<TAG`, and the `chmod +x` that followed each heredoc is gone. Stub
+*bodies* are untouched: this sweep is scaffolding only, so the answers each suite gives
+stay exactly where they were and mean exactly what they meant. Every stub now also carries
+the prelude (`GH_JQ`, `answer_json`), which a later change can use to answer with JSON
+where a body still pre-shapes rows; none of the swept bodies does so in the packet-3
+sense (they answer GraphQL snapshots through the caller's jq already, or plain text for
+`gh issue view --json … --jq` reads).
+
+| Existing test/case | Invariant proved | Surviving test/case | Same/stronger discrimination? | Validation |
+|---|---|---|---|---|
+| 36 hand-written stubs (shebang + heredoc + chmod) in 15 suites | each suite's own scenarios | the same 36 stubs via `stub_gh`, bodies unchanged | **Same** by construction — bodies identical, PATH ordering unchanged | per-suite pass/fail lines identical (92/92); the runner's silent-suite guard (packet 3) would fail any stub whose heredoc did not terminate |
+
+**Before / after (this packet).**
+
+| | BEFORE (branch base `a504e2c`) | AFTER |
+|---|---|---|
+| hand-written `gh` stubs (`cat > … <<TAG` + shebang + chmod) | 36 in 15 suites | 0 |
+| stubs written through `stub_gh` | 12 | ALL36 |
+| shebang/chmod restatements removed | — | 24 lines |
+| test LOC (`tests/test-*.sh`) | 19,363 | 19,303 |
+| assertions, full run | 3908 passed, 0 failed | 3908 passed, 0 failed |
+| per-suite pass/fail lines | 92 | 92, **all identical** |
+| full-suite wall clock | 162s | 163s |
+
+## Remaining scope (later packets, in order; packets 1–4 above are done)
+
+1. **Same-invariant candidates** (baseline C1–C7). The baseline's own verdicts stand:
    most groups are layered, not duplicated. The two worth a line-level read are
    `test-context-budget.sh` vs `test-footprint-budget.sh` (C4: same fixture marketplace,
    hard-error vs warn — but different functions under test) and the three
    `release-notes-*` suites' private `gitc`/`seed` fixtures (C7). Neither is touched until
    its invariant overlap is read line by line; the non-goal "merging unrelated invariants
    into a giant script" governs.
+2. **Close-out**: the measured totals across every packet against the #737 inventory, and
+   the acceptance checklist evaluated item by item.
