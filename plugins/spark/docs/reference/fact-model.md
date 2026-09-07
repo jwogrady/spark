@@ -9,7 +9,8 @@ is carried in, the closed status vocabulary, and the canonical identifier forms.
 
 The machine-readable authority is `preferences/fact-model.tsv` (schema
 version 1); this page renders it and is checked against it by the behavioral
-suite, never the other way round. The model is **Experimental**: it is the
+suite `tests/test-fact-model.sh` (delivered by the stacked suite pull request),
+never the other way round. The model is **Experimental**: it is the
 contract between the fact sources and their consumers, and it may still change
 while the snapshot work that consumes it is validated.
 
@@ -46,8 +47,12 @@ second `review.*` key is not a fact of the model: a derived fact's `inputs` and
 a consumer's invalidation must address one stable identity per class (R1).
 
 Three further concerns are **facets of the envelope**, not separate facts:
-provenance (`source`, `provenance`), freshness (`source.version`,
-`observed_at`, `invalidators`) and certainty (`status`, `detail`).
+
+| Facet | Fields | Meaning |
+|---|---|---|
+| `provenance` | `source`, `provenance` | Source identity and the pointer that lets an auditor drill down |
+| `freshness` | `source.version`, `observed_at`, `invalidators` | What was observed, when, and what makes the fact stale |
+| `certainty` | `status`, `detail` | UNKNOWN / CONFLICT / NOT_APPLICABLE are explicit statuses, never empty values |
 
 ## The envelope
 
@@ -55,13 +60,13 @@ Every fact, whatever its class, has exactly this shape:
 
 | Field | Required | Meaning |
 |---|---|---|
-| `schema_version` | required | The schema version the fact conforms to (this file's `version`) |
+| `schema_version` | required | The schema version the fact conforms to (this file's `version`), in the schema-version grammar |
 | `key` | required | The class's one canonical fact key (the key records); one representation per operative fact, so inputs and invalidators address a stable identity |
 | `class` | required | One of the class names above |
 | `status` | required | One of the status tokens below |
 | `value` | optional | Present only when status is ESTABLISHED; its shape is the class's value-shape |
 | `source` | required | The source shape below: what was read, its canonical identity in the grammar of that source type, and the version identity observed |
-| `observed_at` | required | ISO-8601 UTC instant the source was read |
+| `observed_at` | required | The instant the source was read, in the timestamp grammar (ISO-8601 UTC, second precision, Z) |
 | `invalidators` | required | Canonical invalidator tokens, each in one of the invalidator grammars and unique within the fact; a change to any one makes the fact stale |
 | `provenance` | required | Pointer to the authoritative record in the provenance grammar (an https URL or a repository-relative path, no whitespace); never the record itself |
 | `inputs` | optional | Fact keys this fact was derived from; required when source.type is derived |
@@ -88,9 +93,32 @@ way it would be at the top level.
 | Status | `value` allowed | Meaning |
 |---|---|---|
 | `ESTABLISHED` | yes | The source was read and yields one value |
-| `UNKNOWN` | no | The source could not be read, or the fact lies outside what was observed. Never a permissive default |
-| `CONFLICT` | no | Two authoritative inputs disagree, or malformed evidence sits beside valid evidence. A human or a released contract resolves it; a model never does |
-| `NOT_APPLICABLE` | no | The class does not apply to this work unit (an issue has no HEAD; a repository has no milestone) |
+| `UNKNOWN` | no | The source could not be read or the fact is outside the observed snapshot; never a permissive default |
+| `CONFLICT` | no | Two authoritative inputs disagree or evidence is malformed beside valid evidence; a human or a released contract resolves it, never the model |
+| `NOT_APPLICABLE` | no | The fact class does not apply to this work unit: a HEAD-bound class for a work unit that has no HEAD (an issue no pull request implements yet); every other class always applies |
+
+## Statuses per class
+
+Not every status is meaningful for every class. A work unit, its repository, its
+placement, its graph and the standing authority always apply, so they are ESTABLISHED,
+UNKNOWN or CONFLICT; the HEAD-bound classes add NOT_APPLICABLE for a work unit with
+no HEAD; the derived class is ESTABLISHED or UNKNOWN (R18). The behavioral suite builds
+one canonical fact for every class × admitted status and proves it validates, and one
+for every class × excluded status and proves it is rejected, so the matrix is not a
+table of intentions.
+
+| Class | Admitted statuses |
+|---|---|
+| `work_unit` | `ESTABLISHED`, `UNKNOWN`, `CONFLICT` |
+| `repository` | `ESTABLISHED`, `UNKNOWN`, `CONFLICT` |
+| `placement` | `ESTABLISHED`, `UNKNOWN`, `CONFLICT` |
+| `graph` | `ESTABLISHED`, `UNKNOWN`, `CONFLICT` |
+| `authority` | `ESTABLISHED`, `UNKNOWN`, `CONFLICT` |
+| `acceptance` | `ESTABLISHED`, `UNKNOWN`, `CONFLICT`, `NOT_APPLICABLE` |
+| `head` | `ESTABLISHED`, `UNKNOWN`, `CONFLICT`, `NOT_APPLICABLE` |
+| `review` | `ESTABLISHED`, `UNKNOWN`, `CONFLICT`, `NOT_APPLICABLE` |
+| `checks` | `ESTABLISHED`, `UNKNOWN`, `CONFLICT`, `NOT_APPLICABLE` |
+| `next_action` | `ESTABLISHED`, `UNKNOWN` |
 
 ## Canonical identifiers
 
@@ -112,6 +140,8 @@ is a projection and is never used to compare or bind.
 | action | The closed next-action vocabulary: only actions whose derivation rule (R15) this version defines; a new action is a new version | `wait-review`, `repair`, `merge`, `stop-decision-required` |
 | item-id | A scalar acceptance item id: one token, no whitespace, unique within its fact | `a1`, `acceptance/3` |
 | provenance | A pointer: an https URL, or a normalized repository-relative path (slash-separated components, none empty, none . or .., no leading slash); never the record itself | `https://github.com/acme/widgets/pull/42#issuecomment-9100`, `preferences/fact-model.tsv` |
+| timestamp | An ISO-8601 UTC instant at second precision with Z suffix whose grammar encodes the calendar itself — 31-day and 30-day months, February to the 28th and the 29th only in a leap year (divisible by 4, or by 400 among century years), hours 00–23, minutes and seconds 00–59 — so a consumer needs nothing beyond the regex; the type of observed_at and the one form every timestamp-bearing source version takes | `2026-09-06T12:00:05Z` |
+| schema-version | A schema version: a positive integer; the type of schema_version | `1` |
 | fact-key | the class's one canonical key (the key records) | `review.independent` |
 | issue-state | Current state of a related work unit; a blocked_by entry is satisfied exactly when closed | `open`, `closed` |
 | check-state | Normalized state of one required check on the exact HEAD: missing = required but no run observed | `success`, `failure`, `pending`, `missing` (required but no run observed) |
@@ -190,7 +220,7 @@ verdict or a CONFLICT input, otherwise `next_action` is UNKNOWN.
 
 | Boundary | Evidence fact | Field | Condition | Why it applies |
 |---|---|---|---|---|
-| `placement:release` | `placement.current` | `release` | not `none` | the work unit is placed in a release, so a routine merge would change what that release ships |
+| `placement:release` | `placement.current` | `release` | `not-none` | The work unit is placed in a release, so a routine merge would change what that release ships |
 
 ## Sources: identity grammar and version identity
 
@@ -198,13 +228,13 @@ verdict or a CONFLICT input, otherwise `next_action` is UNKNOWN.
 of the source type; a role name, a label, a summary, or a word such as
 `latest` can never stand as the identity or the version of a source.
 
-| Source type | Canonical `source.identity` | `source.version` grammar |
-|---|---|---|
-| `github-api` | a repository, work-unit, comment or milestone locator — the node that was read | the node's `updated_at` (ISO-8601 `Z`) or its etag in a delimiter-safe form (letters, digits, `. _ : / -`; never `;` or whitespace, so it can be carried inside a derived-version); the 40-hex head only on a HEAD-bound class, where it is that fact's own HEAD — never a numeric node id, which does not change when the node does |
-| `git` | `<repository>@<commit>` or `<repository>@ref/<ref>` | the 40-hex commit id observed (a ref target is recorded as the commit it pointed at) |
-| `repository-file` | `<repository>@<commit>:<path>` — a normalized repository-relative path (slash-separated components, none empty, none `.` or `..`, no leading slash) | the 40-hex commit id the file was read at |
-| `human-decision` | the decision record itself: a comment locator or `<repository>@<commit>` | the recording comment's `updated_at` (ISO-8601 `Z`) — a comment can be edited, so its id alone cannot version the decision — or the 40-hex commit id that records it |
-| `derived` | `fact-model/<schema version>` | a `derived-version`: the schema version, then `<input key>@<that input's source.version>` for every input, sorted by key — so the version changes whenever any input's version does |
+| Source type | What it is | Version identity | Canonical `source.identity` | `source.version` grammar |
+|---|---|---|---|---|
+| `github-api` | A GitHub REST or GraphQL read | node updated_at, etag, or the observed head the record is keyed by — never a node id, which does not change when the node does | A <repository>, <work-unit>, <comment> or <milestone> locator — the GitHub node that was read | The node's updated_at (ISO-8601 Z), the head it is keyed by (40-hex), or its etag in a delimiter-safe form (letters, digits, . _ : / -; never ; or whitespace, so it can be carried inside a derived-version); a numeric node id never versions a mutable node |
+| `git` | A read of the local or remote git object store | the commit id or ref target observed | <repository>@<commit> or <repository>@ref/<ref> | The commit id observed (a ref target is recorded as the commit it pointed at) |
+| `repository-file` | A committed file in the repository tree | the commit id the file was read at | <repository>@<commit>:<path> — a normalized repository-relative path: slash-separated components, none empty, none . or .., no leading slash | The commit id the file was read at |
+| `human-decision` | A durable, source-backed human decision; never a role, label or summary | the recording comment's updated_at (a comment can be edited, so its id alone cannot version the decision) or the commit id that records it | The <decision-record> itself | The recording comment's updated_at (ISO-8601 Z) for a comment locator, or the commit id for a <repository>@<commit> record — edit-sensitive, so an edited decision re-versions everything derived from it |
+| `derived` | A conclusion computed from other facts (requires inputs); the version changes whenever any input's version does | <derived-version>: the schema version, then <input key>@<that input's source.version> for every input, sorted by key | fact-model/<schema version> | The derived-version (schema version, then <input key>@<input source.version> for every input, sorted) |
 
 ## Rules
 
@@ -322,6 +352,16 @@ behavioral suite checks the two never drift.
   NOT_APPLICABLE). inputs and because list each key once. These source and
   invalidator requirements hold for every status; only the value-dependent ones
   wait for ESTABLISHED.
+- **R18** Each class admits exactly the statuses its class-status record lists:
+  work unit, repository, placement, graph and authority are always applicable
+  (ESTABLISHED, UNKNOWN or CONFLICT); the HEAD-bound classes add NOT_APPLICABLE
+  for a work unit with no HEAD; a derived class is ESTABLISHED or UNKNOWN. Every
+  envelope field whose type is an identifier kind is a string in that grammar,
+  so no field's canonical form lives only in prose. A timestamp anywhere in a
+  fact — observed_at, a GitHub node's updated_at, a decision comment's
+  updated_at — is the one timestamp grammar, whose regex encodes the calendar
+  itself (month lengths and leap years), so an impossible instant is outside the
+  schema with no validator beyond the regex.
 
 ## Versioning
 
