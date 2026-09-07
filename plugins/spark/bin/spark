@@ -313,15 +313,11 @@ prefs_operator_path() {
 # with no shipped baseline, or a baseline with no preset, cannot slip through.
 PERMISSION_PRESETS="delivery conservative"
 # The governed merge strategy (#763): true merge commits by default; squash and rebase when a repository selects them.
-# Each keeps the exact-HEAD/provenance guarantee its shape allows — the reference vocabulary states them once.
+# The closed vocabulary is validated here; each strategy's exact-HEAD/provenance guarantee is stated once, in
+# docs/reference/engineering-preferences.md (Branch hygiene), which doctor points at rather than restates.
 MERGE_STRATEGIES="merge squash rebase"
-merge_strategy_guarantee() { # merge_strategy_guarantee <strategy> — one line, or return 1 for a value outside the vocabulary
-  case "$1" in
-    merge)  printf '%s' "true merge commits: the branch's governed commits reach trunk unchanged; title pull requests plainly" ;;
-    squash) printf '%s' "squash: the pull request title is the conventional subject of the one commit trunk receives, and that commit carries the governor trailer" ;;
-    rebase) printf '%s' "rebase: every governed commit reaches trunk unchanged, none rewritten without its trailer; title pull requests plainly" ;;
-    *) return 1 ;;
-  esac
+merge_strategy_known() { # merge_strategy_known <value> — exit 0 iff the value is one of MERGE_STRATEGIES
+  case " $MERGE_STRATEGIES " in *" $1 "*) return 0 ;; *) return 1 ;; esac
 }
 permission_baseline() { # permission_baseline <preset> — echo path, or return 1
   case "$1" in
@@ -1686,12 +1682,12 @@ EOF
   # value no strategy's guarantee covers fails here rather than at the pull request.
   echo
   echo "Merge strategy (merge.strategy):"
-  local ms_val ms_why
+  local ms_val
   ms_val="$(pref_get merge.strategy 2>/dev/null || true)"
   if [ -z "$ms_val" ]; then
     red "  ✗ merge.strategy does not resolve (the shipped default is 'merge'; set it in .spark/preferences.json)"; errors=$((errors+1))
-  elif ms_why="$(merge_strategy_guarantee "$ms_val")"; then
-    green "  ✓ merge.strategy=$ms_val — $ms_why"
+  elif merge_strategy_known "$ms_val"; then
+    green "  ✓ merge.strategy=$ms_val — the governed strategy; its exact-HEAD/provenance guarantee is stated in reference/engineering-preferences.md (Branch hygiene)"
   else
     red "  ✗ merge.strategy '$ms_val' is not one of: $MERGE_STRATEGIES (each keeps a stated exact-HEAD/provenance guarantee; see reference/engineering-preferences.md)"; errors=$((errors+1))
   fi

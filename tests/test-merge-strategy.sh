@@ -18,7 +18,7 @@ assert_contains "seeded CONVENTIONS.md states how to title the pull request" "pl
 case "$(cat "$repo/CONVENTIONS.md")" in *'{{'*) bad "an unrendered placeholder survived in CONVENTIONS.md" ;; *) ok ;; esac
 if out="$( cd "$repo" && "$SPARK" doctor 2>&1 )"; then rc=0; else rc=$?; fi
 assert_rc "doctor is green on a freshly seeded project" 0 "$rc"
-assert_contains "doctor names the resolved strategy and its guarantee" "✓ merge.strategy=merge — true merge commits" "$out"
+assert_contains "doctor names the resolved strategy and points at the one statement of its guarantee" "✓ merge.strategy=merge — the governed strategy; its exact-HEAD/provenance guarantee is stated in reference/engineering-preferences.md" "$out"
 
 # --- a project selects squash: the marker follows, doctor stays green and names squash's guarantee
 repo="$WORK/squash"; make_repo "$repo"; mkdir -p "$repo/.spark"
@@ -27,8 +27,8 @@ printf '{"merge.strategy":"squash"}\n' > "$repo/.spark/preferences.json"
 assert_contains "project override renders into the marker" "<!-- spark:pref merge.strategy=squash -->" "$(cat "$repo/CONVENTIONS.md")"
 if out="$( cd "$repo" && "$SPARK" doctor 2>&1 )"; then rc=0; else rc=$?; fi
 assert_rc "doctor is green with squash selected" 0 "$rc"
-assert_contains "doctor names squash's guarantee: the conventional subject and the governor trailer" "merge.strategy=squash — squash: the pull request title is the conventional subject" "$out"
-assert_contains "squash's guarantee names the trailer" "governor trailer" "$out"
+assert_contains "doctor names the selected strategy, squash" "✓ merge.strategy=squash — the governed strategy" "$out"
+case "$out" in *"conventional subject"*) bad "doctor restates the squash guarantee instead of pointing at the reference" ;; *) ok ;; esac
 
 # --- an operator selects rebase: the operator tier resolves, doctor names rebase's guarantee
 repo="$WORK/rebase"; make_repo "$repo"; mkdir -p "$XDG_CONFIG_HOME/spark"
@@ -37,7 +37,7 @@ printf '{"merge.strategy":"rebase"}\n' > "$XDG_CONFIG_HOME/spark/preferences.jso
 assert_contains "operator override renders into the marker" "<!-- spark:pref merge.strategy=rebase -->" "$(cat "$repo/CONVENTIONS.md")"
 if out="$( cd "$repo" && "$SPARK" doctor 2>&1 )"; then rc=0; else rc=$?; fi
 assert_rc "doctor is green with rebase selected" 0 "$rc"
-assert_contains "doctor names rebase's guarantee" "merge.strategy=rebase — rebase: every governed commit reaches trunk unchanged" "$out"
+assert_contains "doctor names the selected strategy, rebase" "✓ merge.strategy=rebase — the governed strategy" "$out"
 rm -f "$XDG_CONFIG_HOME/spark/preferences.json"
 
 # --- drift: the seeded marker no longer matches the resolved preference
@@ -64,6 +64,8 @@ assert_contains "the vocabulary records the default" "default \`merge\`" "$ref"
 assert_contains "the ship skill reads the preference" 'merge.strategy' "$(cat "$PLUGIN/skills/ship/SKILL.md")"
 assert_contains "the ship skill's Release Please reference reads the preference, never GitHub's allowed methods" "never guess it from GitHub's" "$(cat "$PLUGIN/skills/ship/references/release-please.md")"
 assert_contains "this repository's convention names the preference" '`merge.strategy`' "$(cat "$ROOT/docs/ops/release-merge-convention.md")"
+assert_contains "the convention points at the one statement of the guarantees" "which this document does not restate" "$(cat "$ROOT/docs/ops/release-merge-convention.md")"
+[ "$(grep -c "governor trailer" "$PLUGIN/bin/spark" "$ROOT/docs/ops/release-merge-convention.md" | awk -F: '{s+=$2} END {print s}')" = 0 ] && ok || bad "the guarantees are restated outside the reference vocabulary"
 assert_contains "the canonical-truth map names defaults.json as the governed strategy's source" $'merge-method\tplugins/spark/preferences/defaults.json' "$(cat "$ROOT/docs/ops/canonical-truth.tsv")"
 [ "$(wc -l < "$PLUGIN/skills/ship/SKILL.md")" -le 100 ] && ok || bad "the ship skill stays within doctor's 100-line budget"
 finish "merge strategy preference (#763)"

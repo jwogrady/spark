@@ -108,9 +108,9 @@ branch was built to preserve.
 preference (#763; shipped default `merge`, so this repository sets nothing), not
 a convention only: squash and rebase
 are not prohibited, and when one is selected Spark must preserve the equivalent
-exact-HEAD and provenance guarantees that strategy allows (a squash commit
-carries the conventional subject and the governor trailer; a rebase keeps every
-governed commit). Recorded exception: the v0.23 packets that landed before this
+exact-HEAD and provenance guarantees that strategy allows — each stated once,
+in `plugins/spark/docs/reference/engineering-preferences.md` (Branch hygiene),
+which this document does not restate. Recorded exception: the v0.23 packets that landed before this
 decision (#738–#740, #731, #732) were squash-merged with conventional titles under
 #677 and stay as they are.
 
