@@ -154,6 +154,27 @@ for f in $FILES; do
   grep -qF -- "| \`$f\` | $pb | $pa |" "$MAN" && ok || bad "the manifest's parse row for $f is not the maps' ($pb/$pa)"
 done
 
+# --- a nested function's own arguments and its own references are its own, not its holder's
+assert_eq "the nested row printer's one-line body carries its own argument reference" "1" \
+  "$(rows | awk -F'\t' '$1 == "bg_row" {print $7}')"
+assert_eq "the nested telemetry row printer carries its own too" "1" \
+  "$(rows | awk -F'\t' '$1 == "tm_row" {print $7}')"
+# every nested one-liner that uses a positional parameter must show at least one parse line
+nested_args_missing=""
+while IFS=$'\t' read -r fn file scope owner _resp body parse _n _cs _v; do
+  [ "$scope" = nested ] || continue
+  [ "$body" = 1 ] || continue
+  line="$(grep -h -m1 -E "^[[:space:]]*$fn\(\) \{" "$SPARK" "$ROOT"/plugins/spark/lib/*.sh 2>/dev/null || true)"
+  case "$line" in
+    *'$1'*|*'$2'*|*'$@'*|*'$#'*) [ "$parse" -ge 1 ] || nested_args_missing="$nested_args_missing $fn" ;;
+  esac
+done < <(rows)
+assert_eq "no nested one-liner using a positional parameter reports zero parse lines" "" \
+  "$(printf '%s' "$nested_args_missing" | sed 's/^ //')"
+# a nested function makes its own outgoing edges: the placement helpers reference each other, not only their holder
+assert_eq "a nested helper is recorded as a consumer of its sibling" "1" \
+  "$(rows | awk -F'\t' '$1 == "place" && $9 ~ /place_template/' | grep -c .)"
+
 # --- the generator is runnable, and both committed maps are what it produces
 [ -x "$GEN" ] && ok || bad "the map's generator is committed and executable"
 [ -f "$ROOT/docs/research/v0.23-cleanup/tools/classification.py" ] && ok || bad "the dispatcher classification is committed under an importable name"

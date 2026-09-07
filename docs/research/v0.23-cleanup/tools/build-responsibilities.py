@@ -87,30 +87,102 @@ def inventory(tree):
     return fns
 
 
-def consumers(tree, fns):
-    """Who references whom across the whole runtime. Whole-word textual references between function bodies — the
-    weaker-than-a-call-graph model tests/structure.sh documents, where a name in a comment counts and a name
-    reached through a variable does not — widened from one file to four."""
-    bodies, out = {}, collections.defaultdict(set)
+def drop_comment(line):
+    """The line without its trailing comment, quotes respected. What a human reads as an argument — `"$1"` — is
+    still there, which is what the parse heuristic needs; the reference scan uses the stricter view below."""
+    i, n, quote = 0, len(line), None
+    while i < n:
+        c = line[i]
+        if quote:
+            if c == quote: quote = None
+        elif c in "'\"":
+            quote = c
+        elif c == "#" and (i == 0 or line[i - 1] in " \t") and line[max(0, i - 2):i] != "${":
+            return line[:i]
+        i += 1
+    return line
+
+
+def bodies_of(tree):
+    """Every function's own lines, attributed to the innermost function that contains them, with comment text
+    removed.
+
+    Each line is kept twice, because two questions need two views. A *reference* must be something the shell would
+    run, so comments and message text are removed: the runtime's nested helpers are called `place`, `gap` and
+    `bool`, and counting those words where they appear in sentences would manufacture edges. An *argument* is
+    `"$1"` wherever it appears, message included, so the parse heuristic reads the line with only its comment gone.
+
+    Both depart from `tests/structure.sh`, deliberately: it scans top-level bodies and counts names in comments,
+    which is the right model for the size of a file and the wrong one for a graph over every body.
+    """
+    bodies, stack = collections.defaultdict(list), []
     for f in FILES:
-        cur, buf = None, []
-        for line in open(os.path.join(tree, f)).read().split("\n"):
-            m = re.match(r"^([A-Za-z_][A-Za-z0-9_]*)\(\) \{(.*)$", line)
+        for raw in open(os.path.join(tree, f)).read().split("\n"):
+            m = DECL_RE.match(raw)
             if m:
-                if cur: bodies[cur] = "\n".join(buf)
-                name, rest = m.group(1), m.group(2)
-                if rest.rstrip().endswith("}"):      # a one-liner opens and closes here; its body is on this line
-                    bodies[name] = rest.rstrip()[:-1]
-                    cur, buf = None, []
+                indent, name, rest = m.group(1), m.group(2), m.group(3)
+                if rest.rstrip().endswith("}"):
+                    line = rest.rstrip()[:-1]
+                    bodies[name].append((drop_comment(line), strip_comment(line)))
                 else:
-                    cur, buf = name, []
+                    stack.append((name, len(indent)))
                 continue
-            if line.startswith("}") and cur:
-                bodies[cur] = "\n".join(buf); cur, buf = None, []
+            if stack and re.match(r"^\s*\}\s*$", raw) and (len(raw) - len(raw.lstrip())) == stack[-1][1]:
+                stack.pop()
                 continue
-            if cur: buf.append(line)
-        if cur: bodies[cur] = "\n".join(buf)
-    for holder, body in bodies.items():
+            if stack: bodies[stack[-1][0]].append((drop_comment(raw), strip_comment(raw)))
+    return bodies
+
+
+def strip_comment(line):
+    """Keep the code of a line and drop the prose.
+
+    Three rules, all about what a shell would execute. A `#` starting a word is a comment, unless it sits in quotes
+    or a parameter expansion. A single-quoted string never expands, so nothing inside one can be a call. Inside a
+    double-quoted string only `$(...)` and `${...}` are code, and the surrounding words are a message — without
+    that rule, `yellow "… gap(s) name a value …"` reads as a call to the nested helper `gap`, and a sentence
+    manufactures an edge in the graph.
+    """
+    out = []
+    i, n = 0, len(line)
+    while i < n:
+        c = line[i]
+        if c == "#" and (i == 0 or line[i - 1] in " \t") and line[max(0, i - 2):i] != "${":
+            break
+        if c == "'":                                   # a literal: skip to its end
+            i += 1
+            while i < n and line[i] != "'": i += 1
+            i += 1
+            continue
+        if c == '"':                                   # a message: keep only its expansions
+            i += 1
+            while i < n and line[i] != '"':
+                if line[i] == "$" and i + 1 < n and line[i + 1] in "({":
+                    close = ")" if line[i + 1] == "(" else "}"
+                    depth, j = 0, i + 1
+                    while j < n:
+                        if line[j] in "({": depth += 1
+                        elif line[j] in ")}":
+                            depth -= 1
+                            if depth == 0: break
+                        j += 1
+                    out.append(line[i:j + 1])
+                    i = j + 1
+                    continue
+                i += 1
+            i += 1
+            continue
+        out.append(c)
+        i += 1
+    return "".join(out)
+
+
+def consumers(tree, fns):
+    """Who references whom across the whole runtime: whole-word references between function bodies, every body
+    included, comments excluded."""
+    out = collections.defaultdict(set)
+    for holder, lines in bodies_of(tree).items():
+        body = "\n".join(code for _text, code in lines)
         for n in fns:
             if n == holder: continue
             if re.search(r"(?<![A-Za-z0-9_])" + re.escape(n) + r"(?![A-Za-z0-9_])", body):
@@ -122,24 +194,15 @@ PARSE_RE = re.compile(r'(\$\{?[1-9#@]|\bshift\b|\busage\b|--[a-z][a-z-]*\))')
 
 
 def parse_lines(tree, fns):
-    """How many lines of each body do argument handling. #743's own map is exclusive — one responsibility per
-    function — but parsing is not held by a function in this runtime: it sits at the head of every verb. Counting
-    the lines that touch positional parameters, `shift`, a usage string or a long option gives the responsibility a
-    size without pretending some function owns it. It is a line-level heuristic and the manifest says so."""
-    out, name = collections.Counter(), None
-    for f in FILES:
-        for line in open(os.path.join(tree, f)).read().split("\n"):
-            m = re.match(r"^([A-Za-z_][A-Za-z0-9_]*)\(\) \{(.*)$", line)
-            if m:
-                one, rest = m.group(1), m.group(2)
-                if rest.rstrip().endswith("}"):      # a one-liner's parse lines are the one line it occupies
-                    if one in fns and PARSE_RE.search(rest): out[one] += 1
-                    name = None
-                else:
-                    name = one
-                continue
-            if line.startswith("}"): name = None; continue
-            if name and name in fns and PARSE_RE.search(line): out[name] += 1
+    """How many lines of each body do argument handling. #743's map is exclusive — one responsibility per function
+    — but parsing is not held by a function in this runtime: it sits at the head of every verb. Counting the lines
+    that touch positional parameters, `shift`, a usage string or a long option gives the responsibility a size
+    without pretending some function owns it. It is a line-level heuristic and the manifest says so. A line counts
+    for the innermost function holding it, so a nested helper's own arguments are not charged to its holder."""
+    out = collections.Counter()
+    for name, lines in bodies_of(tree).items():
+        if name not in fns: continue
+        out[name] = sum(1 for text, _code in lines if PARSE_RE.search(text))
     return out
 
 

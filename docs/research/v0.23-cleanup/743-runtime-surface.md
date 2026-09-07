@@ -66,14 +66,14 @@ without inventing an owner. It is a line-level heuristic, not a parser:
 
 | File | Parse lines before | after |
 |---|---|---|
-| `plugins/spark/bin/spark` | 532 | 533 |
-| `plugins/spark/lib/execution.sh` | 206 | 204 |
-| `plugins/spark/lib/planning.sh` | 62 | 62 |
+| `plugins/spark/bin/spark` | 531 | 532 |
+| `plugins/spark/lib/execution.sh` | 205 | 203 |
+| `plugins/spark/lib/planning.sh` | 61 | 61 |
 | `plugins/spark/lib/repository.sh` | 23 | 23 |
 
-200 functions carried parse lines before and 202 do now, in
-823
-and 822
+212 functions carried parse lines before and 211 do now, in
+820
+and 819
 lines respectively. That is why extracting a shared parser is rejected below: the lines are per-verb strings and
 flags, and a shared parser would either normalize what users see or take it all as parameters.
 
@@ -88,9 +88,8 @@ demonstration, and must not be duplicated back into a module:
 
 | Primitive | Runtime consumers | Responsibility |
 |---|---|---|
-| `red` | 42 | `formatting-reporting` |
-| `yellow` | 32 | `formatting-reporting` |
-| `usage` | 28 | `argument-parsing` |
+| `red` | 43 | `formatting-reporting` |
+| `yellow` | 34 | `formatting-reporting` |
 | `git_root` | 27 | `source-collection` |
 | `green` | 24 | `formatting-reporting` |
 | `resolve_governance` | 17 | `canonicalization` |
