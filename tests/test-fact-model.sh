@@ -147,9 +147,9 @@ PY
 EOF
 fi
 grep -qE '^| `next_action` \| `next_action.governed` \| derived' "$DOC" && ok || bad "doc marks next_action as derived"
-assert_eq "eight examples on the page" "8" "$(grep -c '^### Example [1-8] — ' "$DOC")"
-assert_eq "exactly one example is a complete snapshot" "1" "$(grep -c '^### Example [1-8] — .*(complete snapshot)$' "$DOC")"
-assert_eq "the other seven are marked as fragments" "7" "$(grep -c '^### Example [1-8] — .*(fragment)$' "$DOC")"
+assert_eq "nine examples on the page" "9" "$(grep -c '^### Example [1-9] — ' "$DOC")"
+assert_eq "two examples are complete snapshots (a pull request; an issue with no HEAD)" "2" "$(grep -c '^### Example [1-9] — .*(complete snapshot)$' "$DOC")"
+assert_eq "the other seven are marked as fragments" "7" "$(grep -c '^### Example [1-9] — .*(fragment)$' "$DOC")"
 # shipped docs carry no bare issue-number references (doctor's tier boundary); a canonical work-unit id
 # such as github.com/acme/widgets#42 has a name immediately before the '#', so it is not a bare reference
 if grep -qE '(^|[^A-Za-z0-9/])#[0-9]+' "$DOC"; then bad "doc contains a bare issue reference"; else ok; fi
@@ -371,7 +371,7 @@ def check_fact(f):
         for cand in f["detail"]["candidates"]:
             if ids["comment"].fullmatch(cand) and f"comment:{cand}" not in f["invalidators"]: fail(f"a CONFLICT naming comment {cand} as a candidate lists it as a comment: invalidator (R17)")
     if c == "head" and f["source"]["type"] == "github-api" and f["status"] != "NOT_APPLICABLE" and not ids["work-unit"].fullmatch(ident): fail(f"head read from GitHub names a work unit, not {ident} (R17)")
-    if c == "checks":
+    if c == "checks" and f["status"] != "NOT_APPLICABLE":   # NOT_APPLICABLE checks name their work unit like every HEAD-bound class (R7)
         if not ids["repository"].fullmatch(ident): fail(f"checks name the repository whose rulesets require them, not {ident} (R17)")
         if f"ruleset:{ident}" not in f["invalidators"]: fail(f"checks do not list ruleset:{ident} — required checks change with the rulesets (R17)")
     v = f.get("value")
@@ -450,7 +450,7 @@ def check_set(facts, complete):
             for tok in f["invalidators"]:
                 m = re.fullmatch(r"(issue|pull_request):(.*)", tok)
                 if m and m.group(2) in kinds and m.group(1) != kinds[m.group(2)]: fail(f"invalidator {tok} names the node under the wrong kind: it is a {kinds[m.group(2)]} (R17)")
-        if f["class"] == "checks" and rp1 and f["source"]["identity"] != rp1[0]["value"]["id"]: fail(f"checks are read from {f['source']['identity']} but the repository is {rp1[0]['value']['id']} (R17)")
+        if f["class"] == "checks" and f["status"] != "NOT_APPLICABLE" and rp1 and f["source"]["identity"] != rp1[0]["value"]["id"]: fail(f"checks are read from {f['source']['identity']} but the repository is {rp1[0]['value']['id']} (R17)")
     # R15: next_action is derived from the inputs present, never asserted; every fact the derivation
     # consults must be among its inputs (R4), so the conclusion re-versions when any of them changes
     def one(cls):
@@ -562,8 +562,8 @@ else:
     except (ValueError, KeyError, TypeError) as e: print(f"rejected: {e}"); sys.exit(1)
 PY
 if out="$(python3 "$VAL" "$TSV" "$DOC" doc 2>&1)"; then ok; else bad "every example on the page validates: $out"; fi
-case "$out" in *"snapshots=8 complete=1 "*) ok ;; *) bad "eight examples parsed, one complete snapshot: $out" ;; esac
-case "$out" in *"unknown=1 conflict=1 not_applicable=2"*) ok ;; *) bad "examples include exactly one UNKNOWN, one CONFLICT and two NOT_APPLICABLE facts: $out" ;; esac
+case "$out" in *"snapshots=9 complete=2 "*) ok ;; *) bad "nine examples parsed, two complete snapshots: $out" ;; esac
+case "$out" in *"unknown=2 conflict=1 not_applicable=6"*) ok ;; *) bad "examples include exactly two UNKNOWN, one CONFLICT and six NOT_APPLICABLE facts: $out" ;; esac
 
 # ======================== mutation controls: the validator discriminates ========================
 base='{"schema_version":"1","key":"review.independent","class":"review","status":"ESTABLISHED","value":{"verdict":"PASS","head":"0123456789abcdef0123456789abcdef01234567","reviewer":"login:github-actions[bot]","record":"github.com/acme/widgets#42/comment/9100"},"source":{"type":"github-api","identity":"github.com/acme/widgets#42/comment/9100","version":"2026-09-06T11:58:00Z"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["head:0123456789abcdef0123456789abcdef01234567","comment:github.com/acme/widgets#42/comment/9100"],"provenance":"https://github.com/acme/widgets/pull/42#issuecomment-9100"}'
@@ -752,6 +752,8 @@ rej chk 'f["value"]["results"].append({"name":"tests","state":"failure"})' "a du
 rej chk 'f["source"]["identity"]="github.com/acme/widgets#42"' "checks read from something other than a repository must be rejected (R17)"
 rej chk 'f["invalidators"]=[i for i in f["invalidators"] if not i.startswith("ruleset:")]' "checks without the repository's ruleset: invalidator must be rejected — required checks change with the rulesets (R17)"
 rej chk 'f["status"]="UNKNOWN"; del f["value"]; f["detail"]={"reason":"403","candidates":[]}; f["invalidators"]=[i for i in f["invalidators"] if not i.startswith("ruleset:")]' "an UNKNOWN checks fact without its ruleset: invalidator must be rejected — the requirement does not wait for ESTABLISHED (R17)"
+acc chk 'f["status"]="NOT_APPLICABLE"; del f["value"]; f["source"]["identity"]="github.com/acme/widgets#41"; f["source"]["version"]="2026-09-05T18:00:00Z"; f["invalidators"]=["issue:github.com/acme/widgets#41"]' "control: NOT_APPLICABLE checks are read from the work unit and invalidated by it, like every HEAD-bound class (R7/R17)"
+rej chk 'f["status"]="NOT_APPLICABLE"; del f["value"]; f["invalidators"]=["ruleset:github.com/acme/widgets"]' "NOT_APPLICABLE checks in the repository-and-ruleset form must be rejected — one canonical representation (R7/R17)"
 gr='{"schema_version":"1","key":"graph.native","class":"graph","status":"ESTABLISHED","value":{"parent":{"kind":"issue","id":"github.com/acme/widgets#40","state":"open"},"children":[],"blocked_by":[{"kind":"issue","id":"github.com/acme/widgets#39","state":"closed"}]},"source":{"type":"github-api","identity":"github.com/acme/widgets#41","version":"2026-09-06T11:00:00Z"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["issue:github.com/acme/widgets#41","issue:github.com/acme/widgets#40","issue:github.com/acme/widgets#39"],"provenance":"https://github.com/acme/widgets/issues/41"}'
 accepts "$gr" && ok || bad "control: a graph fact with relationship states is accepted"
 rej gr 'f["value"]["blocked_by"]=[{"kind":"issue","id":"github.com/acme/widgets#39"}]' "a relationship without state must be rejected"
@@ -836,6 +838,16 @@ print(json.dumps(json.loads(m.group(1))))
 PY
 )"
 printf '%s' "$ex2" | grep -q '"action": "repair"' && ok || bad "control: Example 2 derives repair"
+# the complete issue snapshot (Example 9): every required class, HEAD-bound ones NOT_APPLICABLE; minus one class it is no snapshot
+ex9="$(python3 - "$DOC" <<'PY'
+import json, re, sys
+t = open(sys.argv[1]).read()
+m = re.search(r"^### Example 9 — [^\n]*\(complete snapshot\)\n.*?```json\n(.*?)\n```", t, flags=re.S | re.M)
+print(json.dumps(json.loads(m.group(1))))
+PY
+)"
+sets "$(snap "$ex9")" && ok || bad "control: the complete snapshot of an issue with no HEAD is accepted (all nine required classes)"
+sets "$(snap "$(printf '%s' "$ex9" | python3 -c 'import json,sys; s=json.load(sys.stdin); print(json.dumps([f for f in s if f["class"]!="checks"]))')")" && bad "the issue snapshot without its NOT_APPLICABLE checks fact is not complete (R11)" || ok
 sets "$(printf '{"complete": false, "facts": %s}' "$ex2")" && ok || bad "control: the page's repair fragment is accepted"
 sets "$(printf '{"complete": false, "facts": %s}' "$(printf '%s' "$ex2" | python3 -c 'import json,sys; s=json.load(sys.stdin); n=[f for f in s if f["class"]=="next_action"][0]; c=[f for f in s if f["class"]=="checks"][0]; n["inputs"].append("checks.required"); n["source"]["version"]="1;"+";".join(k+"@"+[f for f in s if f["key"]==k][0]["source"]["version"] for k in sorted(n["inputs"])); print(json.dumps(s))')")" && bad "a repair derivation listing an input it never consulted (checks) must be rejected — one conclusion, one representation (R15)" || ok
 sets "$(printf '{"complete": false, "facts": %s}' "$(printf '%s' "$ex2" | python3 -c 'import json,sys; s=json.load(sys.stdin); h=[f for f in s if f["class"]=="head"][0]; h["value"]["current"]=False; print(json.dumps(s))')")" && bad "repair on a HEAD that is not current must be rejected — a stale HEAD is re-reviewed, not repaired (R15)" || ok

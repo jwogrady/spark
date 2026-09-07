@@ -309,16 +309,19 @@ behavioral suite checks the two never drift.
   work-unit node they were read from — within one set, the work unit itself or
   the issue it implements, never an unrelated node — and list it as an
   invalidator; head read from GitHub names a work unit and checks name a
-  repository — within one set, the work unit's own node and the repository's; a
-  NOT_APPLICABLE HEAD-bound fact names the work unit it was read from and lists
-  it as an invalidator. A work-unit invalidator has one canonical form — issue:
-  for an issue, pull_request: for a pull request — and never both. A graph lists
-  every parent, child and blocker whose state it represents as an invalidator of
-  that relationship's kind; head lists its base as ref:<repository>/<base_ref>;
-  checks list ruleset:<repository> for the repository whose rulesets require
-  them. inputs and because list each key once. These source and invalidator
-  requirements hold for every status; only the value-dependent ones wait for
-  ESTABLISHED.
+  repository and list ruleset:<repository> — within one set, the work unit's own
+  node and the repository's — except when NOT_APPLICABLE: a NOT_APPLICABLE
+  HEAD-bound fact of any class (head, review, checks, acceptance) names the work
+  unit it was read from and lists it as an invalidator, since with no HEAD there
+  is no required check, verdict or judged contract to name. A work-unit
+  invalidator has one canonical form — issue: for an issue, pull_request: for a
+  pull request — and never both. A graph lists every parent, child and blocker
+  whose state it represents as an invalidator of that relationship's kind; head
+  lists its base as ref:<repository>/<base_ref>; checks list
+  ruleset:<repository> for the repository whose rulesets require them (unless
+  NOT_APPLICABLE). inputs and because list each key once. These source and
+  invalidator requirements hold for every status; only the value-dependent ones
+  wait for ESTABLISHED.
 
 ## Versioning
 
@@ -335,9 +338,10 @@ contract that builds on this page.
 
 ## Examples
 
-Each example is a JSON array of facts. Example 1 is a **complete snapshot**
-(every required class exactly once); Examples 2–8 are **fragments** that show
-only the classes the situation turns on. The behavioral suite validates every
+Each example is a JSON array of facts. Examples 1 and 9 are **complete
+snapshots** (every required class exactly once — a pull request, and an issue
+with no HEAD); Examples 2–8 are **fragments** that show only the classes the
+situation turns on. The behavioral suite validates every
 fact on this page against the machine-readable schema, enforces the
 snapshot's cardinality and forbids duplicate classes within a fragment, so the
 examples are fixtures, not illustrations. The repository, numbers and ids are
@@ -619,6 +623,68 @@ them applicable again) (R7).
    "source": {"type": "github-api", "identity": "github.com/acme/widgets#41", "version": "2026-09-05T18:00:00Z"},
    "observed_at": "2026-09-06T12:00:05Z", "invalidators": ["issue:github.com/acme/widgets#41"],
    "provenance": "https://github.com/acme/widgets/issues/41"}
+]
+```
+
+### Example 9 — an issue with no HEAD (complete snapshot)
+
+The complete snapshot of an issue that no pull request implements yet. Every
+HEAD-bound class is NOT_APPLICABLE and is read from — and invalidated by — the
+issue itself, `checks` included: with no HEAD there is no required check to name,
+so the repository-and-ruleset form belongs only to a fact that has one (R7,
+R17). The derived action is UNKNOWN, with its reason recorded, because this
+version defines no derivation for a work unit without a HEAD; a pull request
+opened for the issue makes every one of these facts applicable again.
+
+```json
+[
+  {"schema_version": "1", "key": "work_unit.identity", "class": "work_unit", "status": "ESTABLISHED",
+   "value": {"kind": "issue", "id": "github.com/acme/widgets#41", "implements": "none"},
+   "source": {"type": "github-api", "identity": "github.com/acme/widgets#41", "version": "2026-09-05T18:00:00Z"},
+   "observed_at": "2026-09-06T19:00:00Z", "invalidators": ["issue:github.com/acme/widgets#41"],
+   "provenance": "https://github.com/acme/widgets/issues/41"},
+  {"schema_version": "1", "key": "repository.identity", "class": "repository", "status": "ESTABLISHED",
+   "value": {"id": "github.com/acme/widgets", "default_branch": "master"},
+   "source": {"type": "github-api", "identity": "github.com/acme/widgets", "version": "2026-09-01T08:00:00Z"},
+   "observed_at": "2026-09-06T19:00:00Z", "invalidators": ["repository:github.com/acme/widgets"],
+   "provenance": "https://github.com/acme/widgets"},
+  {"schema_version": "1", "key": "placement.current", "class": "placement", "status": "ESTABLISHED",
+   "value": {"milestone": "github.com/acme/widgets/milestone/7", "release": "none", "gate": "github.com/acme/widgets#40"},
+   "source": {"type": "github-api", "identity": "github.com/acme/widgets#41", "version": "2026-09-05T18:00:00Z"},
+   "observed_at": "2026-09-06T19:00:00Z", "invalidators": ["issue:github.com/acme/widgets#41", "milestone:github.com/acme/widgets/milestone/7"],
+   "provenance": "https://github.com/acme/widgets/issues/41"},
+  {"schema_version": "1", "key": "graph.native", "class": "graph", "status": "ESTABLISHED",
+   "value": {"parent": {"kind": "issue", "id": "github.com/acme/widgets#40", "state": "open"}, "children": [], "blocked_by": [{"kind": "issue", "id": "github.com/acme/widgets#39", "state": "closed"}]},
+   "source": {"type": "github-api", "identity": "github.com/acme/widgets#41", "version": "2026-09-05T18:00:00Z"},
+   "observed_at": "2026-09-06T19:00:00Z", "invalidators": ["issue:github.com/acme/widgets#41", "issue:github.com/acme/widgets#40", "issue:github.com/acme/widgets#39"],
+   "provenance": "https://github.com/acme/widgets/issues/41"},
+  {"schema_version": "1", "key": "authority.standing", "class": "authority", "status": "ESTABLISHED",
+   "value": {"grants": [{"decision": "github.com/acme/widgets#7/comment/9001", "target": "github.com/acme/widgets", "scopes": ["merge:routine"]}], "human_boundaries": [{"decision": "github.com/acme/widgets#7/comment/9001", "target": "github.com/acme/widgets", "boundary": "release:approve"}]},
+   "source": {"type": "human-decision", "identity": "github.com/acme/widgets#7/comment/9001", "version": "2026-09-01T09:00:00Z"},
+   "observed_at": "2026-09-06T19:00:00Z", "invalidators": ["comment:github.com/acme/widgets#7/comment/9001"],
+   "provenance": "https://github.com/acme/widgets/issues/7#issuecomment-9001"},
+  {"schema_version": "1", "key": "acceptance.contract", "class": "acceptance", "status": "NOT_APPLICABLE",
+   "source": {"type": "github-api", "identity": "github.com/acme/widgets#41", "version": "2026-09-05T18:00:00Z"},
+   "observed_at": "2026-09-06T19:00:00Z", "invalidators": ["issue:github.com/acme/widgets#41"],
+   "provenance": "https://github.com/acme/widgets/issues/41"},
+  {"schema_version": "1", "key": "head.exact", "class": "head", "status": "NOT_APPLICABLE",
+   "source": {"type": "github-api", "identity": "github.com/acme/widgets#41", "version": "2026-09-05T18:00:00Z"},
+   "observed_at": "2026-09-06T19:00:00Z", "invalidators": ["issue:github.com/acme/widgets#41"],
+   "provenance": "https://github.com/acme/widgets/issues/41"},
+  {"schema_version": "1", "key": "review.independent", "class": "review", "status": "NOT_APPLICABLE",
+   "source": {"type": "github-api", "identity": "github.com/acme/widgets#41", "version": "2026-09-05T18:00:00Z"},
+   "observed_at": "2026-09-06T19:00:00Z", "invalidators": ["issue:github.com/acme/widgets#41"],
+   "provenance": "https://github.com/acme/widgets/issues/41"},
+  {"schema_version": "1", "key": "checks.required", "class": "checks", "status": "NOT_APPLICABLE",
+   "source": {"type": "github-api", "identity": "github.com/acme/widgets#41", "version": "2026-09-05T18:00:00Z"},
+   "observed_at": "2026-09-06T19:00:00Z", "invalidators": ["issue:github.com/acme/widgets#41"],
+   "provenance": "https://github.com/acme/widgets/issues/41"},
+  {"schema_version": "1", "key": "next_action.governed", "class": "next_action", "status": "UNKNOWN",
+   "source": {"type": "derived", "identity": "fact-model/1", "version": "1;head.exact@2026-09-05T18:00:00Z"},
+   "observed_at": "2026-09-06T19:00:00Z", "invalidators": ["issue:github.com/acme/widgets#41"],
+   "provenance": "preferences/fact-model.tsv",
+   "inputs": ["head.exact"],
+   "detail": {"reason": "no next action is derivable for a work unit without a HEAD in this version", "candidates": []}}
 ]
 ```
 
