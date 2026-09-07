@@ -2,7 +2,7 @@
 
 **Model.** `current fact → provenance/index pointer → historical evidence on demand`, never
 `historical evidence → agent reconstruction → current fact`. The pointer is `docs/ops/evidence-index.tsv`:
-every evidence artifact of the repository — 126 files, 921,459 bytes, 15,379 lines under
+every evidence artifact of the repository — 126 files, 924,354 bytes, 15,402 lines under
 `docs/research`, `docs/releases`, `docs/governance`, the three evidence pages under `docs/ops`, `evaluations`
 and `.spark` — is one row or one family member, with a retention class, an explicit *operative now* answer,
 the release/HEAD/work unit it concerned, the fact it supported, who loads or cites it today, and why it is
@@ -21,7 +21,7 @@ are computed from the index and re-checked by the suite.
 
 | Class | Files | Bytes | Lines |
 |---|---|---|---|
-| `active-current` | 33 | 110,933 | 1,916 |
+| `active-current` | 33 | 113,828 | 1,939 |
 | `historical-retained` | 68 | 403,154 | 6,728 |
 | `do-not-delete` | 25 | 407,372 | 6,735 |
 
@@ -40,7 +40,7 @@ reasoning path, and every deletion candidate failed the "independent retention v
 | `docs/ops` | 3 | 138,568 | 2,550 |
 | `docs/releases` | 13 | 103,829 | 1,849 |
 | `docs/research` | 2 | 7,056 | 101 |
-| `docs/research/v0.23-cleanup` | 14 | 174,836 | 2,390 |
+| `docs/research/v0.23-cleanup` | 14 | 177,731 | 2,413 |
 | `docs/research/v0.23-optimization-baseline` | 46 | 385,106 | 6,360 |
 | `evaluations` | 43 | 79,685 | 1,606 |
 
@@ -48,7 +48,11 @@ reasoning path, and every deletion candidate failed the "independent retention v
 
 The static side. A surface that names an artifact by its repository path — the shipped runtime (`plugins/**`),
 a test, a CI script — is a *reference*, not proof of a load: a citation, a fixture assertion or a documentation
-link counts here. From the index's readers column:
+link counts here. This unit's own five files are excluded by name — `docs/ops/evidence-index.tsv`,
+`tests/test-evidence-index.sh`, `docs/research/v0.23-cleanup/742-evidence-separation.md`,
+`docs/research/v0.23-cleanup/742-default-reads.tsv` and
+`docs/research/v0.23-cleanup/tools/evidence-reads.sh` — so the metric measures the repository's references to its
+evidence rather than the index's references to itself. From the readers column:
 
 | Family | Class | Operative now | Referenced by |
 |---|---|---|---|
@@ -61,9 +65,10 @@ link counts here. From the index's readers column:
 | `evaluations/lib/*;evaluations/evidence-index.tsv;evaluations/orchestration/run.sh;evaluations/orchestration/rates.tsv;evaluations/skill-routing/run.sh;evaluations/skill-routing/rates.tsv` | `active-current` | yes | `tests/test-eval-lib.sh`; `tests/test-skill-descriptions.sh` |
 | `.spark/state.json;.spark/preferences.json` | `do-not-delete` | yes | `plugins/spark/bin/spark`; `plugins/spark/docs/README.md`; `plugins/spark/docs/how-to/get-started.md`; `plugins/spark/docs/how-to/resume.md`; `plugins/spark/docs/reference/cli.md`; `plugins/spark/docs/reference/compatibility.md`; `plugins/spark/docs/reference/engineering-preferences.md`; `plugins/spark/docs/reference/fact-freshness.md`; `plugins/spark/docs/reference/fact-model.md`; `plugins/spark/docs/reference/hooks.md`; `plugins/spark/docs/reference/project-standards.md`; `plugins/spark/docs/reference/stability.md`; `plugins/spark/docs/reference/state.md`; `plugins/spark/docs/tutorials/adopt-an-existing-repo.md`; `plugins/spark/docs/tutorials/scaffold-a-new-project.md`; `plugins/spark/preferences/fact-model.tsv`; `plugins/spark/preferences/templates/standards/conventions.md`; `plugins/spark/preferences/templates/standards/engineering-standards.md`; `plugins/spark/skills/bootstrap/SKILL.md`; `plugins/spark/skills/bootstrap/references/profiles.md`; `plugins/spark/skills/codify/SKILL.md`; `plugins/spark/skills/ideate/SKILL.md`; `plugins/spark/skills/knowledge/references/operator-knowledge.md`; `plugins/spark/skills/onboard/SKILL.md`; `plugins/spark/skills/plan/SKILL.md`; `plugins/spark/skills/ship/SKILL.md`; `plugins/spark/skills/validate/SKILL.md`; `tests/bench-memo.sh`; `tests/test-apply-permissions.sh`; `tests/test-brief-resume.sh`; `tests/test-course-derivation.sh`; `tests/test-doctor-standards-boundary.sh`; `tests/test-first-run.sh`; `tests/test-governance-contract.sh`; `tests/test-governance-integration.sh`; `tests/test-governance-schema.sh`; `tests/test-hot-path-memo.sh`; `tests/test-hub.sh`; `tests/test-labels.sh`; `tests/test-merge-strategy.sh`; `tests/test-orient.sh`; `tests/test-preferences.sh`; `tests/test-reconcile-apply.sh`; `tests/test-reconcile-slate.sh`; `tests/test-setup-profiles.sh`; `tests/test-state.sh`; `tests/test-triage-truth.sh` |
 
-**23 files, 244,492 bytes** of the 126-file, 921,459-byte corpus are referenced by code,
-tests or CI (26 % by bytes). The suite holds this list to the tree: a shipped surface that
-starts naming a non-operative artifact fails until the index lists it.
+**23 files, 244,492 bytes** of the 126-file, 924,354-byte corpus are referenced by code,
+tests or CI outside this index's own machinery (26 % by bytes; the exclusion and its
+reason are stated under the footprint section below). The suite holds this list to the tree: a shipped surface
+that starts naming a non-operative artifact fails until the index lists it.
 
 ## Observed default reads: what the runtime actually opens
 
@@ -187,22 +192,40 @@ Physical, over the same roots, against `29e4f4e` — the commit this branch left
 | | Files | Bytes | Lines |
 |---|---|---|---|
 | before | 123 | 888,064 | 14,913 |
-| after | 126 | 921,459 | 15,379 |
-| delta | +3 | +33,395 | +466 |
+| after | 126 | 924,354 | 15,402 |
+| delta | +3 | +36,290 | +489 |
 
-The corpus grew, and this page is part of the growth: the index, this manifest, the observation capture and the
-tool that regenerates it are themselves evidence, and they are indexed like everything else. Nothing was moved
-or deleted, so every byte of the delta is new material, not relocation. The reference footprint grew the same
-way: 23 files before this unit, 23 after, the difference being this unit's own artifacts
+The corpus grew, and this page is part of the growth: this manifest, the observation capture and the tool that
+regenerates it are themselves evidence, and they are indexed like everything else. Nothing was moved or deleted,
+so every byte of the delta is new material, not relocation. The reference footprint grew the same way:
+23 files before this unit, 23 after, the difference being this unit's own artifacts
 becoming readable by name.
+
+The hot path moved too, and by exactly the amount this unit added to it. `doctor`'s link validator opens every
+Markdown surface under these roots, so its read set is the tree's Markdown: **47 files before this
+unit, 63 after**, a delta of **+16** — this unit adds `docs/ops/bounded-execution.md`, `docs/ops/ci-handoff.md`, `docs/ops/claude-coding-lane.md`, `docs/ops/context-efficiency.md`, `docs/ops/execution-configuration-surface.md`, `docs/ops/execution-routing.md`, `docs/ops/existing-implementation.md`, `docs/ops/openai-reviewer-lane.md`, `docs/ops/plugin-manifest.md`, `docs/ops/read-only-assessment.md`, `docs/ops/reconciliation-runbook.md`, `docs/ops/release-gate-role.md`, `docs/ops/release-merge-convention.md`, `docs/ops/release-token-governance.md`, `docs/ops/repository-boundary.md`, `docs/research/v0.23-cleanup/742-evidence-separation.md`. That is a measurement, not an
+argument from construction: both figures come from the same roots, the after figure is the committed capture's
+own `doctor` rows, and the suite recomputes the delta from the base commit whenever it is present. No other
+verb's read set changed, because the session path opens no evidence file at either commit.
+
+**What the corpus excludes, and why.** The corpus is evidence *about the repository's past*. The index and its
+machinery are current-truth metadata *about the corpus*, so they are not members of it: `docs/ops/evidence-index.tsv`
+and `tests/test-evidence-index.sh` are outside the counted roots by construction, and the reference footprint
+does not count this unit's own five files — `docs/ops/evidence-index.tsv`, `tests/test-evidence-index.sh`,
+`docs/research/v0.23-cleanup/742-evidence-separation.md`, `docs/research/v0.23-cleanup/742-default-reads.tsv`
+and `docs/research/v0.23-cleanup/tools/evidence-reads.sh` — as readers, because a metric that counted its own
+machinery would report itself as the repository's dependence on history. The capture is the clearest case: it
+names almost every evidence path, because recording them is its job. The two artifacts of this unit that *are* evidence — this manifest and the observation capture — sit
+under `docs/research` and are indexed like everything else. Both exclusions are checked by the suite, and the
+reference footprint is labelled accordingly: it counts surfaces outside this index's own machinery.
 
 ## What is not claimed
 
 The separation claim is narrow and exact: historical evidence is off the path a session reasons on, measured
 verb by verb. It is not a claim that nothing current touches history — three named records are still read by a
-verb, a suite and a CI default, listed above with their owners. No read-count reduction is claimed either:
-nothing on the hot path changed in this work unit, so the #730 workload figures would be unchanged by
-construction, and the corpus grew by this unit's own artifacts, reported above. No claim that nothing reads the corpus, either — `doctor`'s link validator reads
+verb, a suite and a CI default, listed above with their owners. No read-count reduction is claimed: the hot path grew by
+one Markdown surface, this page, measured above rather than argued away, and the corpus grew by this unit's own
+artifacts. A #730 workload re-run would show that one extra open by `doctor` and nothing else. No claim that nothing reads the corpus, either — `doctor`'s link validator reads
 every Markdown surface it finds, measured above and left in place deliberately, because it is the check that
 keeps this index's pointers valid. What is claimed is machine-checked:
 every evidence artifact is classified and reachable through one index row; a shipped surface that starts naming a

@@ -225,9 +225,29 @@ assert_eq "manifest names the corpus size" "1" "$(grep -c -- "— $total_files f
 hot_files="$(rows | awk -F'\t' '$9 ~ /(^|;)(plugins\/|tests\/|\.github\/)/ {s+=$4} END {print s+0}')"
 assert_eq "manifest names the reference-footprint file count" "1" "$(grep -c -- "\*\*$hot_files files, " "$MAN")"
 grep -q "labelled as references, not loads" "$MAN" && ok || bad "the manifest labels the static footprint as references"
-# --- before/after: the after figures are the tree's, and the before figures are the base commit's when it is here
 base_sha="$(sed -nE 's/^Physical, over the same roots, against `([0-9a-f]{7})` .*/\1/p' "$MAN" | head -1)"
 [ -n "$base_sha" ] && ok || bad "the manifest does not name the commit it measures against"
+# --- the exclusions this metric depends on, stated and true
+for m in docs/ops/evidence-index.tsv tests/test-evidence-index.sh docs/research/v0.23-cleanup/tools/evidence-reads.sh docs/research/v0.23-cleanup/742-default-reads.tsv docs/research/v0.23-cleanup/742-evidence-separation.md; do
+  grep -qF -- "\`$m\`" "$MAN" && ok || bad "the manifest does not name $m as this unit's own machinery"
+done
+assert_eq "the index is not a member of the corpus it indexes" "" "$(printf '%s\n' "$tree" | grep -x 'docs/ops/evidence-index.tsv' || true)"
+assert_eq "the suite is not a member of the corpus it checks" "" "$(printf '%s\n' "$tree" | grep -x 'tests/test-evidence-index.sh' || true)"
+assert_eq "no readers column names this unit's own machinery" "" \
+  "$(rows | awk -F'\t' '$9 ~ /(^|;)(docs\/ops\/evidence-index\.tsv|tests\/test-evidence-index\.sh|docs\/research\/v0\.23-cleanup\/742-evidence-separation\.md|docs\/research\/v0\.23-cleanup\/742-default-reads\.tsv|docs\/research\/v0\.23-cleanup\/tools\/evidence-reads\.sh)(;|$)/ {print $1}' | tr '\n' ' ' | sed 's/ $//')"
+# --- the hot path, before and after, measured against the base commit when it is here
+md_after_n="$(awk -F'\t' '$1 == "doctor" && $2 == "file" && $3 ~ /\.md$/ {n++} END {print n+0}' "$CAP")"
+grep -qF -- "$md_after_n after**" "$MAN" && ok || bad "the manifest does not state the validator's current read count $md_after_n"
+if [ -n "$base_sha" ] && (cd "$ROOT" && git cat-file -e "$base_sha^{commit}" 2>/dev/null); then
+  md_before_n="$(cd "$ROOT" && git ls-tree -r --name-only "$base_sha" -- docs/research docs/releases docs/governance docs/ops/v0.21-dogfood-evaluation.md docs/ops/telemetry-baseline.md docs/ops/evaluation.md evaluations .spark | grep -c '\.md$')"
+  grep -qF -- "**$md_before_n files before this" "$MAN" && ok || bad "the manifest does not state the validator's earlier read count $md_before_n"
+  printf -v want "%+d" "$((md_after_n - md_before_n))"
+  grep -qF -- "delta of **$want**" "$MAN" && ok || bad "the manifest does not state the hot-path delta $want"
+else
+  echo "  · hot-path before/after check skipped: the base commit is not in this checkout"
+fi
+# --- before/after: the after figures are the tree's, and the before figures are the base commit's when it is here
+
 assert_eq "the manifest's after row is the tree's" "1" "$(grep -c "^| after | $total_files | $(printf '%s' "$total_bytes" | sed ':a;s/\B[0-9]\{3\}\>/,&/;ta') | " "$MAN")"
 if [ -n "$base_sha" ] && (cd "$ROOT" && git cat-file -e "$base_sha^{commit}" 2>/dev/null); then
   bf="$(cd "$ROOT" && git ls-tree -r --name-only "$base_sha" -- docs/research docs/releases docs/governance docs/ops/v0.21-dogfood-evaluation.md docs/ops/telemetry-baseline.md docs/ops/evaluation.md evaluations .spark | grep -c .)"
