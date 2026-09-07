@@ -132,7 +132,7 @@ identifier	milestone	^[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+/milestone/[1-9][0-9]
 identifier	commit	^[0-9a-f]{40}$	Full 40-hex lower-case object id; abbreviations are projections
 identifier	ref	^[^\s~^:?*\[\\/.\x00-\x1f\x7f][^\s~^:?*\[\\/\x00-\x1f\x7f]*(/[^\s~^:?*\[\\/.\x00-\x1f\x7f][^\s~^:?*\[\\/\x00-\x1f\x7f]*)*$	A branch name over Git's full ref domain, without the refs/heads/ prefix: slash-separated components, none empty or dot-led, no whitespace or ASCII control characters, no ~ ^ : ? * [ or backslash, no .. or @{, never the single name @, no component ending in .lock, never ending in / or .; refs/… and any other spelling of the same branch are projections
 identifier	release	^v[0-9]+\.[0-9]+\.[0-9]+$	A release tag as published
-identifier	login	^login:[A-Za-z0-9-]+(\[bot\])?$	An actor identity; naming an actor never confers authority
+identifier	login	^login:[a-z0-9]+(-[a-z0-9]+)*(\[bot\])?$	An actor identity: the GitHub login lower-cased (GitHub compares logins case-insensitively, so one representation per actor, R1), alphanumerics joined by single hyphens, never starting or ending with a hyphen, at most 39 characters (the login constraint), with the [bot] suffix for an app; naming an actor never confers authority
 identifier	verdict	^(PASS|CHANGES REQUIRED|DECISION REQUIRED|NOT ASSESSED)$	The independent reviewer's closed vocabulary
 identifier	action	^(wait-review|repair|merge|stop-decision-required)$	The closed next-action vocabulary: only actions whose derivation rule (R15) this version defines; a new action is a new version
 identifier	item-id	^[A-Za-z0-9][A-Za-z0-9._:/-]{0,79}$	A scalar acceptance item id: one token, no whitespace, unique within its fact
@@ -165,6 +165,7 @@ constraint	work-unit	\.git#	the repository name inside a work-unit locator never
 constraint	comment	\.git#	the repository name inside a comment locator never carries .git
 constraint	milestone	\.git/	the repository name inside a milestone locator never carries .git
 constraint	decision-record	\.git(#|@)	the repository name inside a decision record never carries .git
+constraint	login	^login:[a-z0-9-]{40}	a GitHub login is at most 39 characters
 constraint	ref	^refs/	a ref is the branch name, never the refs/ path
 constraint	ref	\.\.	no .. anywhere in a ref
 constraint	ref	@\{	no @{ (reflog syntax) in a ref
