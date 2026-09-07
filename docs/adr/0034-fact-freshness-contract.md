@@ -41,8 +41,9 @@ against fact-model schema version 1), rendered by
 - Every fact records the version it observed for each invalidator token and a
   complete snapshot records its observer, so a consumer decides freshness by
   comparing recorded versions with current ones — from the cached snapshot alone.
-- Ten **event** classes cover the invalidation the release asked for: HEAD push,
-  base move, issue or pull-request metadata, comment creation/edit/deletion,
+- Eleven **event** classes cover the invalidation the release asked for: HEAD
+  push, base move, issue or pull-request metadata, comment edit/deletion and
+  comment creation as two events with exact fired kinds,
   relationship and milestone changes, check runs, ruleset changes, repository
   and permission changes, schema/compiler version changes, and unreadable
   sources. Each names the invalidator kinds it fires.

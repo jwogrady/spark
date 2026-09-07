@@ -20,14 +20,16 @@ An event is a change at an authoritative source. Each event record names the
 invalidator kinds it fires; a fact is stale exactly when an event fires a token
 it carries (F2). Two events fire no token: a check run at the same HEAD, which
 is re-read on observation (F10), and the two whose effect is UNKNOWN for every
-fact — a schema change and an unreadable source.
+fact — a schema change and an unreadable source. A record lists the *kinds* an
+event can fire; the observation decides which tokens fire (F1, F2).
 
 | Event | Fires | Observed as | Meaning |
 |---|---|---|---|
 | `push` | `head` | the pull request's current head commit differs from the recorded head: token (its version is the commit itself) | A pull request's HEAD moves — a new commit, a rebase or a force-push. Every fact carrying head:<old> is stale; nothing judged on the old HEAD is reused for the new one. |
 | `base-move` | `ref` | the base branch's current target commit differs from versions[ref:…], the target recorded when the fact was read | The base branch the work unit targets moves. Facts carrying ref:<repository>/<base_ref> are stale: the head fact's base commit and the merge picture change while the HEAD stands. |
 | `metadata` | `issue,pull_request` | the node's current updated_at differs from versions[issue:…] or versions[pull_request:…], or the node is gone | An issue's or pull request's title, body, state, labels, assignees, milestone or native relationships change. Facts carrying issue:/pull_request:<that node> are stale. |
-| `comment` | `comment,issue,pull_request` | the comment's current updated_at differs from versions[comment:…], or the comment is gone; a created comment moves its node's updated_at, compared with versions[<node token>] | A comment that records a verdict or a decision is created, edited or deleted. An edit or deletion fires comment:<that comment>; a creation cannot fire a token no fact carries yet, so it fires the node's own token — a fact whose value depends on which records a node carries lists that node (fact model R17). |
+| `comment-edit` | `comment` | the comment's current updated_at differs from versions[comment:…], or the comment is gone | A comment that records a verdict or a decision is edited or deleted: comment:<that comment> fires for every fact that recorded it. |
+| `comment-created` | `issue,pull_request` | the node's current updated_at differs from versions[issue:…] or versions[pull_request:…] because a comment was added | A comment is created on an issue or pull request. No fact can carry the new comment's token, so the node's own token fires — a fact whose value depends on which records a node carries lists that node (fact model R17), and reads it again to find the new record. |
 | `relationship` | `issue,pull_request,milestone` | the current updated_at of a listed node or milestone differs from the version recorded for its token | A parent, child, blocker or milestone relationship changes. The graph and placement facts that list the related node or the milestone are stale. |
 | `check-run` | `none` | the check-runs listing for the HEAD (latest per name) differs from results, or any result is non-terminal | A check run or workflow run at the HEAD completes, is re-run or is requested. No token changes — the HEAD is the same — so the checks fact is re-read on observation: a non-terminal result is never carried forward and a terminal one is re-read when a merge decision is derived. |
 | `ruleset` | `ruleset` | the rulesets' current updated_at differs from versions[ruleset:…], or the required-check set differs from required | The repository's rulesets change which checks are required. The checks fact for every open work unit carries ruleset:<repository> and is stale. |
@@ -70,12 +72,12 @@ created after the fact was read fires a token the fact already carries.
 | `repository` | `repository` | its default branch and identity are repository settings |
 | `placement` | `metadata,relationship` | milestone, release and gate placement are node metadata and relationships |
 | `graph` | `metadata,relationship` | parents, children and blockers are relationships; their states are node metadata |
-| `authority` | `comment` | grants and boundaries are decision records: created, edited or deleted comments |
+| `authority` | `comment-edit,comment-created` | grants and boundaries are decision records: comments edited or deleted, or a new decision comment on the node |
 | `acceptance` | `push,metadata` | the judged HEAD moves, or the contract's criteria are edited on the issue |
 | `head` | `push,base-move,metadata` | the HEAD moves, the base tip moves, or the pull request's base branch is switched |
-| `review` | `push,comment` | the judged HEAD moves, or a verdict record is created, edited or deleted |
+| `review` | `push,comment-edit,comment-created` | the judged HEAD moves, a verdict record is edited or deleted, or a new verdict comment appears on the pull request |
 | `checks` | `push,check-run,ruleset` | the HEAD moves, a check runs or re-runs at the HEAD, or the required set changes |
-| `next_action` | `push,base-move,metadata,comment,relationship,check-run,ruleset,repository` | derived from every required class: any event that moves an input re-derives it |
+| `next_action` | `push,base-move,metadata,comment-edit,comment-created,relationship,check-run,ruleset,repository` | derived from every required class: any event that moves an input re-derives it |
 
 ## Effects
 
@@ -89,24 +91,30 @@ created after the fact was read fires a token the fact already carries.
 
 ## The class × event matrix
 
-Derived (F2): a cell is `stale` when the event fires a kind the class carries,
-`re-read` for a check run against the checks fact, `derived` for `next_action`
-whenever any input is stale or re-read, `unknown` for a schema change or an
-unreadable source, `none` otherwise. The suite recomputes every cell from the
+The matrix states **reachability** (F2): a cell is `stale` when the event fires a
+kind the class carries, so the event *can* reach the class — which facts of that
+class are actually stale is decided by the observation, token by token (the
+scenarios below show `metadata` on the implemented issue reaching placement,
+graph and acceptance while the same event on the pull request reaches
+work_unit, head and review). A cell is
+`re-read` for a check run against the checks fact and, under F13, for every
+source-read class on a repository event; `derived` for `next_action` whenever
+any input is stale or re-read; `unknown` for a schema change or an unreadable
+source; `none` otherwise. The suite recomputes every cell from the
 event and class records and fails on any hand edit.
 
-| Class | `push` | `base-move` | `metadata` | `comment` | `relationship` | `check-run` | `ruleset` | `repository` | `schema` | `unreadable` |
-|---|---|---|---|---|---|---|---|---|---|---|
-| `work_unit` | `none` | `none` | `stale` | `stale` | `stale` | `none` | `none` | `re-read` | `unknown` | `unknown` |
-| `repository` | `none` | `none` | `none` | `none` | `none` | `none` | `none` | `stale` | `unknown` | `unknown` |
-| `placement` | `none` | `none` | `stale` | `stale` | `stale` | `none` | `none` | `re-read` | `unknown` | `unknown` |
-| `graph` | `none` | `none` | `stale` | `stale` | `stale` | `none` | `none` | `re-read` | `unknown` | `unknown` |
-| `authority` | `none` | `none` | `stale` | `stale` | `stale` | `none` | `none` | `re-read` | `unknown` | `unknown` |
-| `acceptance` | `stale` | `none` | `stale` | `stale` | `stale` | `none` | `none` | `re-read` | `unknown` | `unknown` |
-| `head` | `stale` | `stale` | `stale` | `stale` | `stale` | `none` | `none` | `re-read` | `unknown` | `unknown` |
-| `review` | `stale` | `none` | `stale` | `stale` | `stale` | `none` | `none` | `re-read` | `unknown` | `unknown` |
-| `checks` | `stale` | `none` | `stale` | `stale` | `stale` | `re-read` | `stale` | `re-read` | `unknown` | `unknown` |
-| `next_action` | `derived` | `derived` | `derived` | `derived` | `derived` | `derived` | `derived` | `derived` | `unknown` | `unknown` |
+| Class | `push` | `base-move` | `metadata` | `comment-edit` | `comment-created` | `relationship` | `check-run` | `ruleset` | `repository` | `schema` | `unreadable` |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `work_unit` | `none` | `none` | `stale` | `none` | `stale` | `stale` | `none` | `none` | `re-read` | `unknown` | `unknown` |
+| `repository` | `none` | `none` | `none` | `none` | `none` | `none` | `none` | `none` | `stale` | `unknown` | `unknown` |
+| `placement` | `none` | `none` | `stale` | `none` | `stale` | `stale` | `none` | `none` | `re-read` | `unknown` | `unknown` |
+| `graph` | `none` | `none` | `stale` | `none` | `stale` | `stale` | `none` | `none` | `re-read` | `unknown` | `unknown` |
+| `authority` | `none` | `none` | `stale` | `stale` | `stale` | `stale` | `none` | `none` | `re-read` | `unknown` | `unknown` |
+| `acceptance` | `stale` | `none` | `stale` | `none` | `stale` | `stale` | `none` | `none` | `re-read` | `unknown` | `unknown` |
+| `head` | `stale` | `stale` | `stale` | `none` | `stale` | `stale` | `none` | `none` | `re-read` | `unknown` | `unknown` |
+| `review` | `stale` | `none` | `stale` | `stale` | `stale` | `stale` | `none` | `none` | `re-read` | `unknown` | `unknown` |
+| `checks` | `stale` | `none` | `stale` | `none` | `stale` | `stale` | `re-read` | `stale` | `re-read` | `unknown` | `unknown` |
+| `next_action` | `derived` | `derived` | `derived` | `derived` | `derived` | `derived` | `derived` | `derived` | `derived` | `unknown` | `unknown` |
 
 ## Conflicting and duplicate evidence
 
@@ -165,12 +173,19 @@ table, and checks it against the matrix column for the event.
 | Scenario | Event | Observation | Stale; re-read; derived | Note |
 |---|---|---|---|---|
 | `push` | `push` | `head:0123456789abcdef0123456789abcdef01234567=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa` | `acceptance,head,review,checks;;next_action` | The pull request's head is now another commit: the recorded head: token no longer names it, so the four HEAD-bound facts are stale and next_action is re-derived; work_unit, repository, placement, graph and authority stand. |
-| `verdict-edit` | `comment` | `comment:github.com/acme/widgets#42/comment/9100=2026-09-06T12:10:00Z` | `review;;next_action` | The verdict record's updated_at moved: the review fact is stale and the derived action with it; HEAD, checks and acceptance stand. |
-| `verdict-created` | `comment` | `pull_request:github.com/acme/widgets#42=2026-09-06T12:10:00Z` | `work_unit,head,review;;next_action` | A new verdict comment on the pull request moved the pull request's updated_at: no fact carries the new comment's token, but every fact that recorded the pull request's version — the review among them — sees the difference and is stale. |
-| `decision-edit` | `comment` | `comment:github.com/acme/widgets#7/comment/9001=2026-09-06T12:20:00Z` | `authority;;next_action` | The standing decision record's updated_at moved: the authority fact is stale and the derived action with it; nothing HEAD-bound moves. |
-| `grant-created` | `comment` | `issue:github.com/acme/widgets#7=2026-09-06T12:20:00Z` | `authority;;next_action` | A new decision comment moved the decision issue's updated_at: the authority fact recorded that issue's version and is stale; nothing else in the snapshot reads that issue. |
+| `verdict-edit` | `comment-edit` | `comment:github.com/acme/widgets#42/comment/9100=2026-09-06T12:10:00Z` | `review;;next_action` | The verdict record's updated_at moved: the review fact is stale and the derived action with it; HEAD, checks and acceptance stand. |
+| `verdict-created` | `comment-created` | `pull_request:github.com/acme/widgets#42=2026-09-06T12:10:00Z` | `work_unit,head,review;;next_action` | A new verdict comment on the pull request moved the pull request's updated_at: no fact carries the new comment's token, but every fact that recorded the pull request's version — the review among them — sees the difference and is stale. |
+| `decision-edit` | `comment-edit` | `comment:github.com/acme/widgets#7/comment/9001=2026-09-06T12:20:00Z` | `authority;;next_action` | The standing decision record's updated_at moved: the authority fact is stale and the derived action with it; nothing HEAD-bound moves. |
+| `grant-created` | `comment-created` | `issue:github.com/acme/widgets#7=2026-09-06T12:20:00Z` | `authority;;next_action` | A new decision comment moved the decision issue's updated_at: the authority fact recorded that issue's version and is stale; nothing else in the snapshot reads that issue. |
 | `base-move` | `base-move` | `ref:github.com/acme/widgets/master=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb` | `head;;next_action` | master's target is another commit than the one recorded for ref:…/master: the head fact (its base commit) is stale; review, checks and acceptance at the HEAD stand. |
 | `base-switch` | `metadata` | `pull_request:github.com/acme/widgets#42=2026-09-06T12:15:00Z` | `work_unit,head,review;;next_action` | The pull request's base branch was switched while both tips stand: its updated_at moved, and the head fact recorded the pull request's version. |
+| `issue-comment-created` | `comment-created` | `issue:github.com/acme/widgets#41=2026-09-06T12:25:00Z` | `placement,graph,acceptance;;next_action` | A comment is created on the implemented issue: its updated_at moved, so placement, graph and the acceptance contract read from it are stale — the reads find no new decision or verdict, and re-establish. |
+| `parent-changed` | `relationship` | `issue:github.com/acme/widgets#41=2026-09-06T12:35:00Z` | `placement,graph,acceptance;;next_action` | The implemented issue's parent or a child changes: its updated_at moved; placement, graph and acceptance read from it are stale. |
+| `blocker-closed` | `relationship` | `issue:github.com/acme/widgets#39=2026-09-06T12:40:00Z` | `graph;;next_action` | The blocker the graph represents is closed: only the graph fact carries that issue, so only it is stale. |
+| `pr-relationship` | `relationship` | `pull_request:github.com/acme/widgets#42=2026-09-06T12:45:00Z` | `work_unit,head,review;;next_action` | A relationship of the pull request itself changes: work_unit, head and review, which recorded the pull request's version, are stale. |
+| `milestone-edit` | `relationship` | `milestone:github.com/acme/widgets/milestone/7=2026-09-06T12:50:00Z` | `placement;;next_action` | The milestone is edited: only the placement fact carries it. |
+| `decision-issue-edit` | `metadata` | `issue:github.com/acme/widgets#7=2026-09-06T12:22:00Z` | `authority;;next_action` | The decision issue's own metadata changes (its title, say): the authority fact recorded that issue's version and is stale; the re-read finds the same decision records. |
+| `decision-issue-relationship` | `relationship` | `issue:github.com/acme/widgets#7=2026-09-06T12:23:00Z` | `authority;;next_action` | A relationship of the decision issue changes: the same token fires, and only the authority fact carries it. |
 | `gate-edit` | `metadata` | `issue:github.com/acme/widgets#41=2026-09-06T12:30:00Z` | `placement,graph,acceptance;;next_action` | The implemented issue's updated_at moved: placement, graph and the acceptance contract read from it are stale. |
 | `ruleset` | `ruleset` | `ruleset:github.com/acme/widgets=2026-09-06T12:05:00Z` | `checks;;next_action` | The rulesets' updated_at moved: the checks fact is stale (which checks are required may have changed). |
 | `permission-loss` | `repository` | `observer.permission=none` | `repository;work_unit,placement,graph,authority,acceptance,head,review,checks;next_action` | The observer's permission, re-read before use, is not the recorded write: a repository event — the repository fact is stale and, under F13, every other source-read fact is re-read before use; each re-read answers 403 and yields UNKNOWN (Example 7 of the fact model). |
@@ -187,10 +202,13 @@ the behavioral suite checks the two never drift.
   node's current version — the commit for head: and ref:, the updated_at for
   every other kind — and nothing else keeps it current. A time-based check may
   trigger the comparison but never replaces it.
-- **F2** An event fires the invalidator kinds its event record lists. A fact is
-  stale exactly when an event fires a token it carries; the class × event matrix
-  is derived from the class kinds and the event kinds and is never edited by
-  hand.
+- **F2** An event record lists the kinds of token the event can fire; which
+  tokens fire is decided by the observation — the tokens whose recorded version
+  differs from the current one (F1). A fact is stale exactly when a fired token
+  is one it carries. The class × event matrix states reachability: a class is
+  stale under an event when it carries a kind the event fires, so the event can
+  reach it; it is derived from the class kinds and the event kinds and never
+  edited by hand.
 - **F3** A stale fact is not usable as authority. It is re-read from its source,
   and the re-read yields ESTABLISHED, UNKNOWN, CONFLICT or NOT_APPLICABLE per
   the fact model; the previous value survives only as provenance.

@@ -24,7 +24,7 @@ rec() { grep -v '^#' "$TSV" | awk -F'\t' -v k="$1" '$1==k'; }
 assert_eq "contract version is 1" "1" "$(rec version | cut -f2)"
 assert_eq "written against fact-model schema version 1" "1" "$(rec schema | cut -f2)"
 assert_eq "the fact model on this tree is schema version 1" "1" "$(grep -v '^#' "$FM_TSV" | awk -F'\t' '$1=="version"{print $2}')"
-assert_eq "ten event classes" "10" "$(rec event | wc -l | tr -d ' ')"
+assert_eq "eleven event classes" "11" "$(rec event | wc -l | tr -d ' ')"
 assert_eq "one kinds record per fact class" "10" "$(rec kinds | wc -l | tr -d ' ')"
 assert_eq "one depends record per fact class" "10" "$(rec depends | wc -l | tr -d ' ')"
 assert_eq "five effects" "5" "$(rec effect | wc -l | tr -d ' ')"
@@ -32,7 +32,7 @@ assert_eq "one matrix row per fact class" "10" "$(rec matrix | wc -l | tr -d ' '
 assert_eq "seven conflict situations" "7" "$(rec conflict | wc -l | tr -d ' ')"
 assert_eq "five unreadable failures" "5" "$(rec unreadable | wc -l | tr -d ' ')"
 assert_eq "one migration rule" "1" "$(rec migration | wc -l | tr -d ' ')"
-assert_eq "eleven executable scenarios" "11" "$(rec scenario | wc -l | tr -d ' ')"
+assert_eq "eighteen executable scenarios" "18" "$(rec scenario | wc -l | tr -d ' ')"
 assert_eq "thirteen rules" "13" "$(rec rule | wc -l | tr -d ' ')"
 # the record kinds the header comment declares are exactly the kinds present
 assert_eq "record kinds present" "conflict depends effect event kinds matrix migration rule scenario schema unreadable version" "$(grep -v '^#' "$TSV" | cut -f1 | sort -u | tr '\n' ' ' | sed 's/ $//')"
@@ -106,7 +106,8 @@ for d in dep:
         cell = effect(d[1], e); want = ("derived",) if d[1] == "next_action" else ("stale", "re-read")
         say(cell in want, f"depends {d[1]}: a {e} event reaches the fact — matrix cell {cell}")
 say(all(e in {x for d in dep for x in d[2].split(",")} for e in ev_names if fires[e] or e == "check-run"), "every token-firing event (and check-run) changes some class's value")
-say({d[1] for d in dep if "comment" in d[2].split(",")} == {"authority", "review", "next_action"}, "the classes whose value a comment can change are authority, review and the derived action — each carries the node a new comment lands on")
+say({d[1] for d in dep if "comment-created" in d[2].split(",")} == {"authority", "review", "next_action"}, "the classes whose value a created comment can change are authority, review and the derived action — each carries the node a new comment lands on")
+say(all(("comment-edit" in d[2].split(",")) == ("comment-created" in d[2].split(",")) for d in dep), "a class that depends on comments depends on both their edits and their creation")
 
 # --- every fact on the fact-model page agrees with the declared kinds
 facts = []
@@ -183,8 +184,16 @@ for s in recs("scenario"):
     say(all(mrow[c] in ("stale", "re-read") for c in stale) and (not derived or mrow["next_action"] == "derived"), f"scenario {name}: the matrix admits the observed effects")
     say(stale, f"scenario {name}: at least one fact is stale (a scenario that moves nothing proves nothing)")
 say(len({(s[2], s[3]) for s in recs("scenario")}) == len(recs("scenario")), "every scenario is a distinct event and observation pair")
+# F2 as reachability, both directions: every scenario's stale set lies in the event's column (checked above), and the
+# scenarios of each token-firing event together reach exactly the Example 1 facts that carry a kind the event fires
+for e in ev_names:
+    if not fires[e]: continue
+    reach = {f["class"] for f in snap if f["class"] != "next_action" and {t.split(":")[0] for t in f["invalidators"]} & fires[e]}
+    got = set().union(*[set(s[4].split(";")[0].split(",")) for s in recs("scenario") if s[2] == e]) - {""}
+    say(got == reach, f"event {e}: its scenarios together reach exactly the Example 1 facts carrying a kind it fires ({sorted(reach)}; scenarios reach {sorted(got)})")
+    col = mrow_of(e); say(reach <= {c for c in col if col[c] == "stale"}, f"event {e}: every reached class is 'stale' in its matrix column (reachability)")
 say(sum(1 for s in recs("scenario") if s[2] == "none") == 1, "exactly one scenario is the unchanged control")
-say({s[2] for s in recs("scenario")} >= {"push", "comment", "base-move", "metadata", "ruleset", "repository"}, "the scenarios cover the token-firing events except relationship (Example 1 lists no other work unit's relationship to move)")
+say({s[2] for s in recs("scenario")} >= {e for e in ev_names if fires[e]}, "every token-firing event has at least one scenario")
 pl = [s for s in recs("scenario") if s[1] == "permission-loss"]
 say(len(pl) == 1 and pl[0][4].split(";")[0] == "repository" and set(pl[0][4].split(";")[1].split(",")) == set(fm_classes) - {"repository", "next_action"}, "the permission-loss scenario re-reads every source-read fact of the snapshot")
 say(len(pl) == 1 and pl[0][3].startswith("observer.permission=") and pl[0][3].split("=")[1] != observer["permission"], "the permission loss is detected from the observer record, not handed in as a token")
@@ -196,7 +205,7 @@ by_name = {s[1]: s for s in recs("scenario")}
 say("review" in by_name["verdict-created"][4].split(";")[0].split(","), "a verdict comment created on the pull request reaches the review fact")
 say(by_name["grant-created"][4].split(";")[0] == "authority", "a decision comment created on the decision issue reaches exactly the authority fact")
 say("head" in by_name["base-switch"][4].split(";")[0].split(","), "a base-branch switch (pull-request metadata, no tip moves) reaches the head fact")
-say(by_name["base-switch"][2] == "metadata" and by_name["verdict-created"][2] == "comment", "the base switch is a metadata event and the created verdict a comment event")
+say(by_name["base-switch"][2] == "metadata" and by_name["verdict-created"][2] == "comment-created" and by_name["verdict-edit"][2] == "comment-edit", "the base switch is a metadata event, the created verdict a comment-created event, the edited verdict a comment-edit event")
 
 # --- parity: the page renders exactly the authority
 def norm(x): return re.sub(r"\s+", " ", x.replace("\\|", "|").replace("`", "")).strip()
@@ -246,7 +255,14 @@ EOF
 
 # ======================== the derivation is discriminating: a hand-edited matrix cell fails ========================
 mtsv="$WORK/mutant-freshness.tsv"
-sed 's/^matrix\trepository\tnone,none,none,none,none,none,none,stale/matrix\trepository\tnone,none,none,none,none,none,none,none/' "$TSV" > "$mtsv"
+python3 - "$TSV" "$mtsv" <<'PY'
+import sys
+ls = open(sys.argv[1]).read().split("\n")
+for i, l in enumerate(ls):
+    if l.startswith("matrix\trepository\t"):
+        c = l.split("\t"); cells = c[2].split(","); cells[cells.index("stale")] = "none"; c[2] = ",".join(cells); ls[i] = "\t".join(c)
+open(sys.argv[2], "w").write("\n".join(ls))
+PY
 cmp -s "$TSV" "$mtsv" && bad "control: the mutation did not change the repository matrix row" || ok
 if python3 - "$mtsv" <<'PY' 2>/dev/null
 import sys
@@ -258,7 +274,8 @@ def eff(c, e):
     if e in ("schema", "unreadable"): return "unknown"
     if c == "next_action": return "derived" if any(eff(x, e) in ("stale", "re-read") for x in ck if x != "next_action") else "none"
     if fires[e] & ck[c]: return "stale"
-    return "re-read" if (e == "check-run" and c == "checks") else "none"
+    if e == "check-run" and c == "checks": return "re-read"
+    return "re-read" if e == "repository" else "none"   # F13
 sys.exit(0 if all(m[c] == [eff(c, e) for e in ev] for c in m) else 1)
 PY
 then bad "a hand-edited matrix cell (repository unaffected by a repository event) must fail the derivation check"; else ok; fi
