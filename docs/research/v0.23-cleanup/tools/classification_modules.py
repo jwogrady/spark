@@ -28,6 +28,8 @@ MODULE_RESP = {
 "evidence-authority": [
     "tm_no_progress", "tm_binding_status", "bg_reject_framing", "ci_sentinel_state", "ci_verdict",
     "tm_secret_shaped"],
-"formatting-reporting": ["label_set_show", "ci_sentinel_report", "json_escape_out", "bg_json_escape"],
+"formatting-reporting": ["label_set_show", "ci_sentinel_report", "json_escape_out", "bg_json_escape",
+    # nested helpers: row printers inside the verb that prints them
+    "tm_row", "bg_row"],
 "compatibility-fallback": [],
 }

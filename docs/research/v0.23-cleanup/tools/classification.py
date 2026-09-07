@@ -18,14 +18,20 @@ RESP = {
     "fp_plugin_bytes", "ruleset_required_checks", "now_ms", "fp_run_ms", "fp_median3_ms", "fp_hot_guard",
     "fp_hot_brief", "fp_hot_doctor", "fp_hot_governance", "ro_snapshot", "ro_isolate", "ro_release",
     "next_impl_prs", "intent_liveness"],
-"canonicalization": ["merge_strategy_known", "permission_baseline", "resolve_prefs", "issue_refs",
+"canonicalization": [
+    # nested helper: accumulates the gap list its verb reports on
+    "gap",
+    "merge_strategy_known", "permission_baseline", "resolve_prefs", "issue_refs",
     "classification_drifted", "resolve_governance", "governance_family_members", "governance_member_from",
     "governance_structure_fact", "release_gate_label", "resolve_issue_taxonomy", "taxonomy_label_color",
     "taxonomy_label_desc", "di_classify", "di_split_linked", "rec_row", "rec_protected_branch", "ms_inventory_of",
     "containers_of", "suborder_of", "governance_family_required", "milestone_inventory", "priority_members",
     "active_in_inventory", "completed_in_inventory", "leaves_in_inventory", "current_milestone",
     "completed_milestones", "hub_locator_valid"],
-"domain-semantics": ["lint_skill_md", "doctor_requirements", "apply_standard", "classify_repo",
+"domain-semantics": [
+    # nested helpers: the placement rules a standard enacts, inside apply_standard
+    "place", "place_template", "place_standard",
+    "lint_skill_md", "doctor_requirements", "apply_standard", "classify_repo",
     "di_exclusive_violated", "rec_rows", "rec_apply_one", "rec_apply", "orient_set", "hub_set",
     "fp_footprint_gate", "fp_cache_stability", "check_tier_boundary", "check_reference_laziness",
     "check_release_component_parity", "fp_latency", "next_select", "next_route", "cmd_version", "cmd_doctor",
@@ -37,6 +43,8 @@ RESP = {
     "gov_cycle_rows", "gov_judgment_rows", "gov_mechanical_rows", "gov_admissible", "rec_kind",
     "rec_still_present", "snapshot_unread", "remote_enforcement_verdict", "ro_probe"],
 "formatting-reporting": ["red", "green", "yellow", "gov_cmd_render", "di_report", "release_gate_render",
-    "gov_gate_rows", "gov_render", "prio_show", "next_report_impl_prs", "json_escape"],
+    "gov_gate_rows", "gov_render", "prio_show", "next_report_impl_prs", "json_escape",
+    # nested helpers: rendering rows and booleans inside the verb that prints them
+    "bool", "tier_line", "fp_lat_row"],
 "compatibility-fallback": ["is_legacy_key", "gov_fallback_desc"],
 }

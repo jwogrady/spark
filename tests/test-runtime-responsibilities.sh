@@ -23,8 +23,12 @@ rows_before() { grep -v '^#' "$MAP_BEFORE" | grep -v '^$'; }
 for which in after before; do
   case "$which" in after) src=rows ;; before) src=rows_before ;; esac
   assert_eq "$which: every responsibility is in the closed vocabulary" "" \
-    "$($src | cut -f3 | grep -vE '^(argument-parsing|routing-dispatch|source-collection|canonicalization|domain-semantics|evidence-authority|formatting-reporting|compatibility-fallback)$' | sort -u | tr '\n' ' ')"
-  assert_eq "$which: every row has eight fields" "" "$($src | awk -F'\t' 'NF != 8 {print $1}' | tr '\n' ' ')"
+    "$($src | cut -f5 | grep -vE '^(argument-parsing|routing-dispatch|source-collection|canonicalization|domain-semantics|evidence-authority|formatting-reporting|compatibility-fallback)$' | sort -u | tr '\n' ' ')"
+  assert_eq "$which: every row has ten fields" "" "$($src | awk -F'\t' 'NF != 10 {print $1}' | tr '\n' ' ')"
+  assert_eq "$which: every scope is top-level or nested" "" \
+    "$($src | cut -f3 | grep -vxE 'top-level|nested' | sort -u | tr '\n' ' ')"
+  assert_eq "$which: every nested function names an owner that the map knows" "" \
+    "$($src | awk -F'\t' '$3 == "nested" {print $4}' | sort -u | while IFS= read -r o; do [ -z "$o" ] && continue; $src | cut -f1 | grep -qx "$o" || printf '%s ' "$o"; done)"
   assert_eq "$which: no function is classified twice" "" "$($src | cut -f1 | sort | uniq -d | tr '\n' ' ')"
   assert_eq "$which: every file named is a runtime file" "" \
     "$($src | cut -f2 | sort -u | grep -vE '^plugins/spark/(bin/spark|lib/(execution|planning|repository)\.sh)$' | tr '\n' ' ')"
@@ -39,10 +43,18 @@ for f in $FILES; do
 "
   done < <(cd "$ROOT" && bash tests/structure.sh --raw "$f")
 done
-assert_eq "the map names exactly the runtime's functions" \
-  "$(printf '%s' "$tree_rows" | cut -f1 | sort)" "$(rows | cut -f1 | sort)"
-assert_eq "every file and body length is the tree's" \
-  "$(printf '%s' "$tree_rows" | sort)" "$(rows | awk -F'\t' '{printf "%s\t%s\t%s\n", $1, $2, $4}' | sort)"
+# the repository's scanner reports top-level definitions only and stays the authority for that half
+assert_eq "the map's top-level rows are exactly the scanner's functions" \
+  "$(printf '%s' "$tree_rows" | cut -f1 | sort)" "$(rows | awk -F'\t' '$3 == "top-level" {print $1}' | sort)"
+assert_eq "every top-level file and body length is the scanner's" \
+  "$(printf '%s' "$tree_rows" | sort)" "$(rows | awk -F'\t' '$3 == "top-level" {printf "%s\t%s\t%s\n", $1, $2, $6}' | sort)"
+# nested definitions are functions too, and the map must carry them: this is what a top-level-only inventory missed
+[ "$(rows | awk -F'\t' '$3 == "nested"' | grep -c .)" -ge 1 ] && ok || bad "the map records no nested function"
+assert_eq "the nested row printer inside the budget verb is mapped" "1" \
+  "$(rows | awk -F'\t' '$1 == "bg_row" && $3 == "nested" && $4 == "cmd_budget"' | grep -c .)"
+nested_in_tree="$(cd "$ROOT" && grep -hE '^[[:space:]]+[A-Za-z_][A-Za-z0-9_]*\(\) \{' $FILES | sed -E 's/^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)\(\).*/\1/' | sort -u)"
+assert_eq "every nested definition in the tree is mapped" "$nested_in_tree" \
+  "$(rows | awk -F'\t' '$3 == "nested" {print $1}' | sort -u)"
 
 # --- the before map is a real baseline: it names the base commit's runtime, not this one's
 assert_eq "the manifest names the commit the before map was taken at" "1" \
@@ -59,10 +71,10 @@ fi
 
 # --- the manifest's figures are the maps'
 for r in argument-parsing routing-dispatch source-collection canonicalization domain-semantics evidence-authority formatting-reporting compatibility-fallback; do
-  na="$(rows | awk -F'\t' -v r="$r" '$3 == r {c++} END {print c+0}')"
-  nb="$(rows_before | awk -F'\t' -v r="$r" '$3 == r {c++} END {print c+0}')"
-  la="$(rows | awk -F'\t' -v r="$r" '$3 == r {s+=$4} END {printf "%d", s}' | sed ':a;s/\B[0-9]\{3\}\>/,&/;ta')"
-  lb="$(rows_before | awk -F'\t' -v r="$r" '$3 == r {s+=$4} END {printf "%d", s}' | sed ':a;s/\B[0-9]\{3\}\>/,&/;ta')"
+  na="$(rows | awk -F'\t' -v r="$r" '$5 == r {c++} END {print c+0}')"
+  nb="$(rows_before | awk -F'\t' -v r="$r" '$5 == r {c++} END {print c+0}')"
+  la="$(rows | awk -F'\t' -v r="$r" '$5 == r {s+=$6} END {printf "%d", s}' | sed ':a;s/\B[0-9]\{3\}\>/,&/;ta')"
+  lb="$(rows_before | awk -F'\t' -v r="$r" '$5 == r {s+=$6} END {printf "%d", s}' | sed ':a;s/\B[0-9]\{3\}\>/,&/;ta')"
   grep -qF -- "| \`$r\` | $nb | $na | $lb | $la |" "$MAN" && ok || bad "the manifest's row for $r is not the maps' ($nb/$na functions, $lb/$la lines)"
 done
 for f in $FILES; do
@@ -91,7 +103,7 @@ assert_eq "resume does not resolve the ref itself" "0" \
   "$(awk '/^cmd_resume\(\) \{/, /^\}/' "$SPARK" | grep -v '^ *#' | grep -c 'refs/remotes/origin/HEAD')"
 
 # --- the map proves the canonicalization across the module boundary, which a dispatcher-only graph could not
-je="$(rows | awk -F'\t' '$1 == "json_escape" {print $7}')"
+je="$(rows | awk -F'\t' '$1 == "json_escape" {print $9}')"
 for consumer in cmd_state cmd_telemetry cmd_budget; do
   case "$je" in
     *"$consumer"*) ok ;;
@@ -102,29 +114,29 @@ grep -q 'json_escape' "$EXEC" && ok || bad "the execution module calls the canon
 
 # --- the primitives are used, not merely defined
 for fn in intent_liveness di_trunk json_escape; do
-  n="$(rows | awk -F'\t' -v f="$fn" '$1 == f {print $6}')"
+  n="$(rows | awk -F'\t' -v f="$fn" '$1 == f {print $8}')"
   [ "${n:-0}" -ge 2 ] && ok || bad "$fn is defined but has fewer than two consumers"
 done
 
 # --- argument parsing is measured, not assigned: the column exists and the manifest's table is the map's
 assert_eq "parse lines are non-negative integers" "" \
-  "$(rows | awk -F'\t' '$5 !~ /^[0-9]+$/ {print $1}' | tr '\n' ' ')"
-[ "$(rows | awk -F'\t' '{s+=$5} END {print s+0}')" -gt 0 ] && ok || bad "no function carries a parse line, which cannot be true"
+  "$(rows | awk -F'\t' '$7 !~ /^[0-9]+$/ {print $1}' | tr '\n' ' ')"
+[ "$(rows | awk -F'\t' '{s+=$7} END {print s+0}')" -gt 0 ] && ok || bad "no function carries a parse line, which cannot be true"
 # a body cannot contain more parse lines than it has lines; that inequality catches a scanner that loses a
 # function's boundary and charges the lines after it to the wrong owner
 for which in after before; do
   case "$which" in after) src=rows ;; before) src=rows_before ;; esac
   assert_eq "$which: no body has more parse lines than lines" "" \
-    "$($src | awk -F'\t' '$5 > $4 {print $1 "(" $5 ">" $4 ")"}' | tr '\n' ' ')"
+    "$($src | awk -F'\t' '$7 > $6 {print $1 "(" $7 ">" $6 ")"}' | tr '\n' ' ')"
 done
 # a one-line function's consumers must name it on that one line — the edge a lost boundary invents
-oneliners="$(rows | awk -F'\t' '$4 == 1 {print $1}')"
+oneliners="$(rows | awk -F'\t' '$6 == 1 {print $1}')"
 bad_edges=""
 while IFS= read -r fn; do
   [ -n "$fn" ] || continue
-  src_line="$(grep -h -m1 "^$fn() {" "$SPARK" "$ROOT"/plugins/spark/lib/*.sh 2>/dev/null || true)"
+  src_line="$(grep -h -m1 -E "^[[:space:]]*$fn\(\) \{" "$SPARK" "$ROOT"/plugins/spark/lib/*.sh 2>/dev/null || true)"
   [ -n "$src_line" ] || continue
-  consumed="$(rows | awk -F'\t' -v f="$fn" '$7 != "-" { n = split($7, cs, ";"); for (i = 1; i <= n; i++) if (cs[i] == f) print $1 }')"
+  consumed="$(rows | awk -F'\t' -v f="$fn" '$9 != "-" { n = split($9, cs, ";"); for (i = 1; i <= n; i++) if (cs[i] == f) print $1 }')"
   while IFS= read -r target; do
     [ -n "$target" ] || continue
     case "$src_line" in *"$target"*) ;; *) bad_edges="$bad_edges $fn->$target" ;; esac
@@ -135,10 +147,10 @@ done <<EOF_ONELINERS
 $oneliners
 EOF_ONELINERS
 assert_eq "no one-line function consumes what its single line does not name" "" "$(printf '%s' "$bad_edges" | sed 's/^ //')"
-assert_eq "the canonical escaper has exactly three consumers" "3" "$(rows | awk -F'\t' '$1 == "json_escape" {print $6}')"
+assert_eq "the canonical escaper has exactly three consumers" "3" "$(rows | awk -F'\t' '$1 == "json_escape" {print $8}')"
 for f in $FILES; do
-  pa="$(rows | awk -F'\t' -v f="$f" '$2 == f {s+=$5} END {printf "%d", s}' | sed ':a;s/\B[0-9]\{3\}\>/,&/;ta')"
-  pb="$(rows_before | awk -F'\t' -v f="$f" '$2 == f {s+=$5} END {printf "%d", s}' | sed ':a;s/\B[0-9]\{3\}\>/,&/;ta')"
+  pa="$(rows | awk -F'\t' -v f="$f" '$2 == f {s+=$7} END {printf "%d", s}' | sed ':a;s/\B[0-9]\{3\}\>/,&/;ta')"
+  pb="$(rows_before | awk -F'\t' -v f="$f" '$2 == f {s+=$7} END {printf "%d", s}' | sed ':a;s/\B[0-9]\{3\}\>/,&/;ta')"
   grep -qF -- "| \`$f\` | $pb | $pa |" "$MAN" && ok || bad "the manifest's parse row for $f is not the maps' ($pb/$pa)"
 done
 

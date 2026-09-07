@@ -6,7 +6,7 @@ with less context. Moving duplication into more files is not one of them, so thi
 and adds no module.
 
 **The map comes first, and it covers the whole runtime.** `docs/research/v0.23-cleanup/743-responsibilities.tsv`
-assigns every one of the 239 functions in the dispatcher and its three modules to exactly one of the issue's
+assigns every one of the 248 functions in the dispatcher and its three modules to exactly one of the issue's
 eight responsibilities, with its body length, everything in the runtime that references it, and the verbs among
 those. `743-responsibilities-before.tsv` is the same map at `29e4f4e`, the commit this branch left, so the
 before-change baseline is a map and not a pair of totals. Both are generated from `tests/structure.sh --raw` run
@@ -22,21 +22,28 @@ stated rather than smoothed over.
 | `argument-parsing` | 1 | 1 | 12 | 12 | reads flags and arguments |
 | `routing-dispatch` | 10 | 10 | 93 | 93 | resolves a verb and loads what it needs |
 | `source-collection` | 86 | 87 | 1,754 | 1,760 | reads a source of truth (git, gh, the filesystem) and returns it unjudged |
-| `canonicalization` | 44 | 44 | 630 | 630 | normalizes what was read into this repository's vocabulary |
-| `domain-semantics` | 63 | 63 | 6,750 | 6,731 | owns a rule about what the facts mean |
+| `canonicalization` | 45 | 45 | 631 | 631 | normalizes what was read into this repository's vocabulary |
+| `domain-semantics` | 66 | 66 | 6,809 | 6,790 | owns a rule about what the facts mean |
 | `evidence-authority` | 19 | 19 | 505 | 505 | decides what the evidence is admissible for |
-| `formatting-reporting` | 12 | 13 | 204 | 205 | renders |
+| `formatting-reporting` | 20 | 18 | 223 | 221 | renders |
 | `compatibility-fallback` | 2 | 2 | 7 | 7 | keeps an older shape working |
 
 | File | Functions before | after |
 |---|---|---|
-| `plugins/spark/bin/spark` | 150 | 152 |
-| `plugins/spark/lib/execution.sh` | 61 | 61 |
+| `plugins/spark/bin/spark` | 158 | 159 |
+| `plugins/spark/lib/execution.sh` | 65 | 63 |
 | `plugins/spark/lib/planning.sh` | 16 | 16 |
 | `plugins/spark/lib/repository.sh` | 10 | 10 |
 
-Module count is unchanged at three. The runtime holds 239 functions and 9,943 body lines, against
-237 and 9,955 before: +2 functions, -12 body lines.
+Module count is unchanged at three. The runtime holds 248 functions and 10,019 body lines, against
+249 and 10,034 before: -1 functions, -15 body lines.
+
+Those totals count **every** definition, nested ones included — 9 of the 248 are nested
+inside another function, against 12 of 249 before. That matters here rather than being a
+detail of scope: the three escapers this unit removed were nested, so a top-level-only inventory would report this
+work unit adding two functions when it removes 2 and adds two, a net of -1.
+`tests/structure.sh` reports the top-level half — the right scope for the size of a file — and stays the authority
+for it; the map records each function's scope and, for a nested one, the function that holds it.
 
 Function bodies are not the whole runtime — top-level dispatch, globals and comments live outside them — so the
 actual line count is reported too:
@@ -49,7 +56,7 @@ actual line count is reported too:
 | `plugins/spark/lib/repository.sh` | 221 | 221 | +0 |
 
 **12,166 lines before, 12,184 after (+18)**, against
-9,955 and 9,943 body lines. The file grows while the bodies shrink because each new primitive is
+10,034 and 10,019 body lines. The file grows while the bodies shrink because each new primitive is
 documented where it lives, at the top level, outside any body.
 
 **Argument parsing, measured rather than assigned.** The map is exclusive — one responsibility per function — and
@@ -70,8 +77,8 @@ and 822
 lines respectively. That is why extracting a shared parser is rejected below: the lines are per-verb strings and
 flags, and a shared parser would either normalize what users see or take it all as parameters.
 
-Two buckets hold 150 of 239 functions and
-8,491 of 9,943 body lines. That
+Two buckets hold 153 of 248 functions and
+8,550 of 10,019 body lines. That
 concentration is the issue's premise, and it is also the trap: for `cmd_doctor`, `cmd_next` and `cmd_labels` the
 rules *are* the product, and there is no lower layer to defer them to. Relocating them would move ownership
 without reducing it.
