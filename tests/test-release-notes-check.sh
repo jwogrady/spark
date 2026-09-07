@@ -11,8 +11,7 @@ script="$root/.github/scripts/release-notes-check.sh"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 pass=0 fail=0
-ok()  { pass=$((pass + 1)); }
-bad() { fail=$((fail + 1)); echo "  ✖ $1"; }
+. "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 
 # check <want-exit> <desc> <commits-content> <notes-content> [needle ...]
 check() {
@@ -419,5 +418,4 @@ rc=0; bash "$script" --commits "$work/nope.tsv" --notes "$work/notes.md" >/dev/n
 rc=0; bash "$script" >/dev/null 2>&1 || rc=$?
 [ "$rc" -eq 2 ] && ok || bad "no args — want exit 2, got $rc"
 
-echo "  $pass passed, $fail failed"
-[ "$fail" -eq 0 ]
+finish

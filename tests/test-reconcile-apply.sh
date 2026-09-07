@@ -19,11 +19,6 @@ set -euo pipefail
 sandbox_init
 . "$SPARK"
 
-assert_eq() {
-  local desc="$1" want="$2" got="$3"
-  if [ "$got" = "$want" ]; then ok; else bad "$desc — want '$want', got '$got'"; fi
-}
-
 nogh="$WORK/nogh"; mkdir -p "$nogh"
 for t in git awk sed grep find sort printf bash env cat wc tr head tail cut date mktemp rm mkdir ls dirname basename jq python3 xargs cksum comm; do
   src="$(command -v "$t" 2>/dev/null || true)"
@@ -134,8 +129,7 @@ done
 # governance surface came back unread, no finding had a disposition, and the
 # assertions below silently skipped — they passed while the defect they exist
 # for was reintroduced.
-cat > "$ggh/gh" <<'GHEOF'
-#!/usr/bin/env bash
+stub_gh "$ggh/gh" <<'GHEOF'
 echo "CALL $*" >> "$GLOG"
 case "${1:-}" in auth) exit 0 ;; esac
 for a in "$@"; do
@@ -146,7 +140,6 @@ for a in "$@"; do
 done
 exit 0
 GHEOF
-chmod +x "$ggh/gh"
 export GLOG="$WORK/gh-calls.log"
 
 # No `exit` in this awk: rec_rows emits far more after the first governance row,

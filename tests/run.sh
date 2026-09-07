@@ -72,7 +72,14 @@ for suite in "$here"/test-*.sh; do
   s1="$(now_s)"
   [ "$rc" -eq 0 ] || fails=$((fails + 1))
 
-  # "  N passed, M failed" is the shared finish() line every suite prints.
+  # "  N passed, M failed" is the shared finish() line every suite prints. A
+  # suite that exits 0 WITHOUT it ran no assertions the runner can see — an
+  # unterminated heredoc, an early `exit`, a sourcing error swallowed by the
+  # shell — and must never count as passed: silence is not evidence.
+  if ! printf '%s\n' "$out" | grep -qE '^  [0-9]+ passed, [0-9]+ failed$'; then
+    echo "  ✖ $name printed no '  N passed, M failed' line — a silent suite is a failed suite"
+    [ "$rc" -eq 0 ] && fails=$((fails + 1))
+  fi
   p="$(printf '%s\n' "$out" | awk '/[0-9]+ passed, [0-9]+ failed/ { p = $1 } END { print p + 0 }')"
   f="$(printf '%s\n' "$out" | awk '/[0-9]+ passed, [0-9]+ failed/ { f = $3 } END { print f + 0 }')"
   assert_pass=$((assert_pass + p))

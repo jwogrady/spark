@@ -18,10 +18,6 @@ set -euo pipefail
 sandbox_init
 . "$SPARK"
 
-assert_eq() {
-  local desc="$1" want="$2" got="$3"
-  if [ "$got" = "$want" ]; then ok; else bad "$desc — want '$want', got '$got'"; fi
-}
 repo_root_dir="$(cd "$(dirname "$0")/.." && pwd)"
 
 # A model with multi-word members in two families: one cardinality-limited, one
@@ -191,8 +187,7 @@ done
 # stub applies the --jq program the BINARY passes, so the read's own shaping is
 # under test — printing pre-shaped TSV here would leave the read unexercised,
 # and re-flattening the labels at that boundary would pass unnoticed.
-cat > "$nxbin/gh" <<'GHEOF'
-#!/usr/bin/env bash
+stub_gh "$nxbin/gh" <<'GHEOF'
 case "${1:-}" in
   auth) exit 0 ;;
   repo) printf 'o/r\n'; exit 0 ;;
@@ -220,12 +215,13 @@ for a in "$@"; do
     # hierarchy rule then correctly refused to offer as work.
     */issues/900/sub_issues*) printf '901\n'; exit 0 ;;
     */issues/901/sub_issues*) exit 0 ;;
-    *dependencies*) printf '0\n'; exit 0 ;;
+    # No blockers is an EMPTY answer from the shared, validated reader — never a
+    # pre-shaped count that assumed one consumer's jq.
+    *dependencies*) exit 0 ;;
   esac
 done
 exit 0
 GHEOF
-chmod +x "$nxbin/gh"
 
 # js <label>... — the JSON for a gate issue 900 plus issue 901 carrying labels.
 js() {

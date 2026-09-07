@@ -16,8 +16,6 @@ script="$here/../plugins/spark/bin/spark"
 . "$script"
 
 pass=0; fail=0
-ok()  { pass=$((pass + 1)); }
-bad() { fail=$((fail + 1)); echo "  ✖ $1"; }
 
 # sel <want-exit> <desc> <evidence> [needle ...]
 sel() {
@@ -341,5 +339,4 @@ sel 0 "dogfood step 6 selects F last" \
 # ever sees it, so a slate of only-the-gate is "no open leaf issues".
 sel 1 "a milestone of only the gate has no leaf to select" "" "no open leaf issues"
 
-echo "  $pass passed, $fail failed"
-[ "$fail" -eq 0 ]
+finish

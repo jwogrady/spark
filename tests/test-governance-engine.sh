@@ -16,11 +16,6 @@ repo="$WORK/repo"
 make_repo "$repo"
 cd "$repo"
 
-assert_eq() {
-  local desc="$1" want="$2" got="$3"
-  if [ "$got" = "$want" ]; then ok; else bad "$desc — want '$want', got '$got'"; fi
-}
-
 model="$(resolve_governance)"
 TAXO="feature bug documentation chore tech-debt research infrastructure"
 

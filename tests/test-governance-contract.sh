@@ -27,11 +27,6 @@ set -euo pipefail
 sandbox_init
 . "$SPARK"
 
-assert_eq() {
-  local desc="$1" want="$2" got="$3"
-  if [ "$got" = "$want" ]; then ok; else bad "$desc — want '$want', got '$got'"; fi
-}
-
 repo="$WORK/r"; make_repo "$repo"; cd "$repo"; mkdir -p .spark
 OPCONF="$XDG_CONFIG_HOME/spark"; mkdir -p "$OPCONF"
 clean() { rm -f .spark/governance.tsv "$OPCONF/governance.tsv" .spark/preferences.json; }

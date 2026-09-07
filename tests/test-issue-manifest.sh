@@ -11,8 +11,7 @@ script="$root/plugins/spark/skills/plan/scripts/issue-manifest.sh"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 pass=0 fail=0
-ok()  { pass=$((pass + 1)); }
-bad() { fail=$((fail + 1)); echo "  ✖ $1"; }
+. "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 
 bash -n "$script" && ok || bad "bash -n issue-manifest.sh"
 
@@ -156,8 +155,7 @@ esac
 bin="$work/bin"
 mkdir -p "$bin"
 export GH_CALLS="$work/gh-calls.log" GH_N="$work/gh-n" GH_FAIL="$work/gh-fail"
-cat > "$bin/gh" <<'STUB'
-#!/usr/bin/env bash
+stub_gh "$bin/gh" <<'STUB'
 # Test stub: log every invocation, answer with the shapes the helper parses.
 echo "$*" >> "$GH_CALLS"
 case "$*" in
@@ -176,7 +174,6 @@ case "$*" in
 esac
 exit 0
 STUB
-chmod +x "$bin/gh"
 
 live_state="$work/live.state"
 
@@ -236,19 +233,16 @@ case "$out" in *"report: created 0, wired 0, skipped 5, failed 0"*) ok ;; *) bad
 # first-match (hostile M-lane): a second stub serves two milestones sharing the
 # manifest's title.
 dupbin="$work/dupbin"; mkdir -p "$dupbin"
-cat > "$dupbin/gh" <<'STUB'
-#!/usr/bin/env bash
+stub_gh "$dupbin/gh" <<'STUB'
 case "$*" in
   *milestones\?*) printf '5\tv0.15\n9\tv0.15\n' ;;
   *labels\?*)     printf 'feature\nplan\n' ;;
 esac
 exit 0
 STUB
-chmod +x "$dupbin/gh"
 rc=0; out="$(cd "$slate" && PATH="$dupbin:$PATH" bash "$script" --state "$work/dup.state" manifest.tsv 2>&1)" || rc=$?
 { [ "$rc" -ne 0 ] && case "$out" in *"share this title"*"ambiguous"*|*ambiguous*) true ;; *) false ;; esac; } \
   && ok || bad "duplicate milestone titles must fail as ambiguous ($rc: $out)"
 case "$out" in *"created 0"*) ok ;; *) bad "ambiguous milestone must create nothing ($out)" ;; esac
 
-echo "  $pass passed, $fail failed"
-[ "$fail" -eq 0 ]
+finish

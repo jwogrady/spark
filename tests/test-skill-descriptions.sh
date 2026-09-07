@@ -15,8 +15,7 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 skills="$root/plugins/spark/skills"
 pass=0 fail=0
-ok()  { pass=$((pass + 1)); }
-bad() { fail=$((fail + 1)); echo "  ✖ $1"; }
+. "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 
 # check_desc <skill> <discriminator-ere>...
 # Each discriminator is a case-insensitive ERE that must appear in the skill's
@@ -49,5 +48,4 @@ check_desc bootstrap 'scaffold'                          'runtime|project'      
 check_desc knowledge 'internal'                          'adr|doc'                  'docit|public|marketing' 'crew|intake|author|librarian'
 check_desc agents-md 'agents\.md'                        'claude\.md'               'docit|knowledge|/init'
 
-echo "  $pass passed, $fail failed"
-[ "$fail" -eq 0 ]
+finish

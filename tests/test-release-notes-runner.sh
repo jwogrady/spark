@@ -14,8 +14,7 @@ runner="$root/.github/scripts/release-notes-runner.sh"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 pass=0 fail=0
-ok()  { pass=$((pass + 1)); }
-bad() { fail=$((fail + 1)); echo "  ✖ $1"; }
+. "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 
 bash -n "$runner" && ok || bad "bash -n release-notes-runner.sh"
 
@@ -247,8 +246,7 @@ grep -q "$(printf 'chore\tdrop the legacy connect config (#304)\t\tbreaking')" "
 # minimal release PR so the full path (mktemp + trap + split + post) runs to
 # completion. Both must exit 0 all the way through process exit.
 stub="$work/stubbin"; mkdir -p "$stub"
-cat > "$stub/gh" <<'STUB'
-#!/usr/bin/env bash
+stub_gh "$stub/gh" <<'STUB'
 case "$1 $2" in
   "pr list")
     if [ -n "${STUB_PR_JSON:-}" ]; then printf '%s' "$STUB_PR_JSON"; fi ;;
@@ -256,7 +254,6 @@ case "$1 $2" in
   *) exit 0 ;;
 esac
 STUB
-chmod +x "$stub/gh"
 rc=0; ( cd "$work" && PATH="$stub:$PATH" GITHUB_REPOSITORY=o/r bash "$runner" >/dev/null 2>&1 ) || rc=$?
 [ "$rc" -eq 0 ] && ok || bad "executed main (no open release PR) must exit 0 through process exit (got $rc)"
 e2e_repo="$work/e2erepo"; mkdir -p "$e2e_repo"
@@ -336,5 +333,4 @@ tsv_line="$(cd "$fixture" && notes_component_commits_tsv "jwogrady/spark" "core"
 [ "$(printf '%s' "$tsv_line" | awk -F'\t' '{print NF}')" = "4" ] \
   && ok || bad "F7: tab-in-subject must yield exactly 4 TSV columns (got: $tsv_line)"
 
-echo "  $pass passed, $fail failed"
-[ "$fail" -eq 0 ]
+finish

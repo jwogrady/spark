@@ -11,8 +11,7 @@ workflow="$root/.github/workflows/milestone-gate.yml"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 pass=0 fail=0
-ok()  { pass=$((pass + 1)); }
-bad() { fail=$((fail + 1)); echo "  ✖ $1"; }
+. "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 
 # gate <want-exit> <desc> <manifest> <issues> <checks> <state> [needle ...]
 gate() {
@@ -93,5 +92,4 @@ for forbidden in 'gh pr merge' 'gh release' 'git tag' 'git push'; do
   else ok; fi
 done
 
-echo "  $pass passed, $fail failed"
-[ "$fail" -eq 0 ]
+finish

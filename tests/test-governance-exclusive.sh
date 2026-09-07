@@ -25,11 +25,6 @@ sandbox_init
 repo="$WORK/r"; make_repo "$repo"; cd "$repo"; mkdir -p .spark
 OPCONF="$XDG_CONFIG_HOME/spark"; mkdir -p "$OPCONF"
 
-assert_eq() {
-  local desc="$1" want="$2" got="$3"
-  if [ "$got" = "$want" ]; then ok; else bad "$desc — want '$want', got '$got'"; fi
-}
-
 clean() { rm -f .spark/governance.tsv "$OPCONF/governance.tsv"; }
 # member|tier for each resolved exclusive row of the family
 exrows() {
@@ -224,15 +219,13 @@ done
 # A gh whose issue labels are whatever the caller put in DI_LABELS. `gh auth
 # status` must succeed or the verb short-circuits to NOT ASSESSED and would
 # never reach the rule under test.
-cat > "$shim/gh" <<'GH'
-#!/usr/bin/env bash
+stub_gh "$shim/gh" <<'GH'
 case "$1 $2" in
   "auth status") exit 0 ;;
   "issue view")  printf '%s\n' ${DI_LABELS:-} ; exit 0 ;;
 esac
 exit 1
 GH
-chmod +x "$shim/gh"
 echo "plugins/spark/docs/reference/x.md" > "$WORK/di-paths"
 
 di_cli() {

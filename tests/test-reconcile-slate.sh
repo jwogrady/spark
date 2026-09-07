@@ -16,10 +16,6 @@ set -euo pipefail
 sandbox_init
 . "$SPARK"
 
-assert_eq() {
-  local desc="$1" want="$2" got="$3"
-  if [ "$got" = "$want" ]; then ok; else bad "$desc — want '$want', got '$got'"; fi
-}
 # field <rows> <id> <n> — column n of the row with that id
 field() { printf '%s\n' "$1" | awk -F'\t' -v i="$2" -v n="$3" '$4 == i { print $n; exit }'; }
 
@@ -180,8 +176,7 @@ for t in git awk sed grep find sort printf bash env cat wc tr head cut date mkte
   src="$(command -v "$t" 2>/dev/null || true)"
   [ -n "$src" ] && ln -sf "$src" "$wgh/$t" 2>/dev/null || true
 done
-cat > "$wgh/gh" <<'GHEOF'
-#!/usr/bin/env bash
+stub_gh "$wgh/gh" <<'GHEOF'
 for a in "$@"; do
   case "$a" in
     --method|-X|-f|-F|edit|create|close|delete|merge|label) echo "WRITE $*" >> "$SENTINEL"; exit 0 ;;
@@ -189,7 +184,6 @@ for a in "$@"; do
 done
 exit 0
 GHEOF
-chmod +x "$wgh/gh"
 export SENTINEL="$WORK/writes.log"; : > "$SENTINEL"
 ( cd "$r" && env PATH="$wgh" SENTINEL="$SENTINEL" "$SPARK" reconcile >/dev/null 2>&1 ) || true
 assert_eq "reconcile makes no write-shaped gh call" "" "$(cat "$SENTINEL")"

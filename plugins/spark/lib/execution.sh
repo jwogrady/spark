@@ -639,13 +639,7 @@ bg_apply_staged() {
   return 0
 }
 
-bg_dir()  { printf '%s/.spark/budgets' "$1"; }
 bg_file() { printf '%s/.spark/budgets/%s.tsv' "$1" "$2"; }
-
-bg_get() {
-  [ -f "$1" ] || return 0
-  awk -F'\t' -v k="$2" '$1 == k { v = $2 } END { if (v != "") print v }' "$1"
-}
 
 # bg_ambiguous <file> — true only when a file both (a) has more than one line,
 # so a forged extra line is even possible, and (b) lacks the format stamp that
@@ -1386,7 +1380,6 @@ route_rows() {  # route_rows <file> <kind> — comment-stripped records of one k
 }
 
 route_class_rank() { route_rows "$1" class | awk -F'\t' -v c="$2" '$2 == c { print $3; exit }'; }
-route_class_desc() { route_rows "$1" class | awk -F'\t' -v c="$2" '$2 == c { print $4; exit }'; }
 route_model()      { route_rows "$1" model | awk -F'\t' -v c="$2" '$2 == c { print $3; exit }'; }
 route_effort()     { route_rows "$1" model | awk -F'\t' -v c="$2" '$2 == c { print $4; exit }'; }
 
@@ -1729,13 +1722,7 @@ EOF
 # knows how many remote calls this run has made.
 CI_FIELDS="pr head required state digest polls unchanged certified_at observed_at observed_head"
 
-ci_dir()  { printf '%s/.spark/ci' "$1"; }
 ci_file() { printf '%s/.spark/ci/%s.tsv' "$1" "$2"; }
-
-ci_get() {
-  [ -f "$1" ] || return 0
-  awk -F'\t' -v k="$2" '$1 == k { v = $2 } END { if (v != "") print v }' "$1"
-}
 
 ci_load() {
   local f="$1" k v

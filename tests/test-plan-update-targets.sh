@@ -23,11 +23,6 @@ SCRIPT="$WORK/plugin/skills/plan/scripts/issue-manifest.sh"
 . "$SCRIPT" 2>/dev/null || true   # sourced for the pure predicates
 set +e
 
-assert_eq() {
-  local desc="$1" want="$2" got="$3"
-  if [ "$got" = "$want" ]; then ok; else bad "$desc — want '$want', got '$got'"; fi
-}
-
 work="$WORK/w"; mkdir -p "$work"
 echo body > "$work/child.md"
 
@@ -91,8 +86,7 @@ assert_rc "while a valid artifact still passes the verb" 0 "$rc"
 calls="$work/gh-calls"
 : > "$calls"
 stub="$work/stub"; mkdir -p "$stub"
-cat > "$stub/gh" <<STUB
-#!/usr/bin/env bash
+stub_gh "$stub/gh" <<STUB
 printf '%s\n' "\$*" >> "$calls"
 case "\$1" in
   auth) exit 0 ;;
@@ -100,7 +94,6 @@ case "\$1" in
 esac
 exit 0
 STUB
-chmod +x "$stub/gh"
 
 rc=0
 out="$(cd "$work" && PATH="$stub:$PATH" bash "$SCRIPT" --state "$work/live.state" \

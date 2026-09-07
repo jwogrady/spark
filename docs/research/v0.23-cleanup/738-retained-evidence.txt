@@ -1,0 +1,40 @@
+=== legacy state keys: call sites (non-comment lines) ===
+7237:        *) is_legacy_key "$key" && [ -n "$value" ] && legacy=1 ;;
+7899:STATE_LEGACY_KEYS="stage problem_statement issue branch pr"
+7900:is_legacy_key() { case " $STATE_LEGACY_KEYS " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
+7948:        if is_legacy_key "$key"; then
+=== legacy state keys: git history ===
+  21ebd5f 2026-08-11 feat: derive the session brief from the repo instead of recorded state
+=== legacy state keys: test references ===
+  tests/test-brief-resume.sh
+  tests/test-state.sh
+=== legacy state keys: runtime execution against a fixture with pre-v0.16 keys ===
+  read: next_action=keep going
+  after write:
+    {
+      "next_action": "keep going",
+      "blockers": "none",
+      "updated": "2026-09-06"
+    }
+=== enhancement alias / --prune-deprecated: call sites ===
+1522:          [ "$tok" = "enhancement" ] && bad_alias=1
+2898:# spark labels [--apply] [--prune-deprecated] — reconcile the declared issue
+2913:  local usage_line="usage: spark labels [--apply] [--prune-deprecated]"
+2918:      --prune-deprecated) prune=1 ;;
+2958:  # --prune-deprecated has nothing to do with the governance model and must
+3135:  printf '%s\n' "$existing" | grep -Fxq "enhancement" && deprecated_present=1
+3167:      yellow "    Remove it deliberately with: spark labels --apply --prune-deprecated"
+=== enhancement alias: git history ===
+  12ef587 2026-08-26 fix: refuse to label from a model that contradicts the taxonomy
+  a165860 2026-08-24 feat: add spark labels to provision the declared issue taxonomy (#396)
+=== enhancement alias: test and doc references ===
+  tests/test-governance-schema.sh
+  tests/test-labels.sh
+  plugins/spark/docs/reference/cli.md
+  plugins/spark/docs/reference/metadata-governance.md
+=== single-reference functions: dispatch table and by-name passing ===
+  verbs dispatched via VERBS: 29
+  7627:  gms=$(fp_median3_ms fp_hot_guard)  || gms=""
+  7628:  bms=$(fp_median3_ms fp_hot_brief)  || bms=""
+  7629:  dms=$(fp_median3_ms fp_hot_doctor) || dms=""
+  7630:  vms=$(fp_median3_ms fp_hot_governance) || vms=""

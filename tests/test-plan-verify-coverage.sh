@@ -57,15 +57,19 @@ st="$work/plan.state"
 # fact. `unread:<what>` makes a single endpoint fail so NOT ASSESSED can be
 # distinguished from drift.
 stub="$work/stub"; mkdir -p "$stub"
-cat > "$stub/gh" <<'STUB'
-#!/usr/bin/env bash
+# The stub answers with the JSON GitHub returns and applies the CALLER's --jq
+# (gh_stub_prelude), so the binary's own jq programs — the milestone list, the
+# sub-issue list, the shared blocked-by reader, the identity read — are
+# exercised rather than assumed; pre-shaped rows would agree with any jq. Each
+# answer exits with jq's own status, as gh does: a rejected program is a failed
+# call, never a silent success.
+stub_gh "$stub/gh" <<'STUB'
 sc="${SC:-ok}"
 args="$*"
 case "$1 $2" in
   "auth status") exit 0 ;;
+  "repo view") [ "$sc" = "unread:identity" ] && exit 1; answer_json '{"nameWithOwner":"acme/widgets"}'; exit $? ;;
 esac
-GH_JQ=""; __prev=""
-for __a in "$@"; do [ "$__prev" = "--jq" ] && GH_JQ="$__a"; __prev="$__a"; done
 # gh_issue_json <title> <label-csv> <milestone> — emit the JSON `gh issue view`
 # returns, then apply the --jq the CALLER passed. A stub that returns
 # pre-shaped rows leaves the binary's own shaping untested, which is exactly how
@@ -109,28 +113,32 @@ if [ "$1" = "api" ]; then
   case "$args" in
     *"/milestones?"*)
       [ "$sc" = "unread:milestones" ] && exit 1
-      [ "$sc" = "no-ms-record" ] && { printf 'something else\tdesc\n'; exit 0; }
-      [ "$sc" = "bad-ms-desc" ] && { printf 'v9.9 — audit probe\twrong description\n'; exit 0; }
-      printf 'v9.9 — audit probe\tAudit milestone\n'; exit 0 ;;
+      [ "$sc" = "no-ms-record" ] && { answer_json '[{"title":"something else","description":"desc"}]'; exit $?; }
+      [ "$sc" = "bad-ms-desc" ] && { answer_json '[{"title":"v9.9 — audit probe","description":"wrong description"}]'; exit $?; }
+      answer_json '[{"title":"v9.9 — audit probe","description":"Audit milestone"}]'; exit $? ;;
     *"/issues/100/sub_issues"*)
       [ "$sc" = "unread:subissues" ] && exit 1
-      [ "$sc" = "no-hierarchy" ] && exit 0
+      [ "$sc" = "no-hierarchy" ] && { answer_json '[]'; exit $?; }
       # 999 is a sub-issue the artifact never mentions: order is RELATIVE, so
       # its presence must not be read as drift. The two ordered children are
       # what the order check compares, and bad-order swaps exactly them.
-      if [ "$sc" = "bad-order" ]; then printf '%s\n%s\n%s\n' 102 999 101
-      else printf '%s\n%s\n%s\n' 101 999 102; fi
-      exit 0 ;;
+      if [ "$sc" = "bad-order" ]; then answer_json '[{"number":102},{"number":999},{"number":101}]'
+      else answer_json '[{"number":101},{"number":999},{"number":102}]'; fi
+      exit $? ;;
     *"/issues/101/dependencies/blocked_by"*)
       [ "$sc" = "unread:blockedby" ] && exit 1
-      [ "$sc" = "no-dependency" ] && exit 0
-      printf '%s\n' 100; exit 0 ;;
+      [ "$sc" = "no-dependency" ] && { answer_json '[]'; exit $?; }
+      # The JSON GitHub returns for a blocker: number, state, owning repository.
+      # A foreign repository's #100 must never satisfy an edge declared between
+      # two local issues, and a blocker whose repository is unknown is `?`.
+      [ "$sc" = "foreign-number" ] && { answer_json '[{"number":100,"state":"open","repository":{"full_name":"other/elsewhere"}}]'; exit $?; }
+      [ "$sc" = "unknown-repo" ] && { answer_json '[{"number":100,"state":"open"}]'; exit $?; }
+      answer_json '[{"number":100,"state":"open","repository":{"full_name":"acme/widgets"}}]'; exit $? ;;
   esac
   exit 1
 fi
 exit 1
 STUB
-chmod +x "$stub/gh"
 
 V() { # <SC> -> V_RC / V_OUT (tsv)
   V_RC=0
@@ -141,10 +149,6 @@ V() { # <SC> -> V_RC / V_OUT (tsv)
 verdict() { printf '%s\n' "$V_OUT" | awk -F'\t' '$1 == "verdict" { print $2 }'; }
 kinds()   { printf '%s\n' "$V_OUT" | awk -F'\t' 'NF > 2 { print $1 }' | LC_ALL=C sort -u | paste -sd, -; }
 
-assert_eq() {
-  local desc="$1" want="$2" got="$3"
-  if [ "$got" = "$want" ]; then ok; else bad "$desc — want '$want', got '$got'"; fi
-}
 # drift <SC> <desc> <substring-that-must-appear>
 drift() {
   V "$1"
@@ -181,15 +185,18 @@ drift no-ms-record   "a declared milestone that does not exist" "no milestone ti
 drift bad-ms-desc    "a milestone whose description drifted"   "description is"
 drift no-hierarchy   "a sub-issue link that was never wired"   "NOT a sub-issue"
 drift no-dependency  "a blocked-by edge that was never wired"  "NOT blocked by"
+drift foreign-number "a foreign repository's issue with the same number as the declared blocker" "NOT blocked by"
 drift bad-order      "sub-issues in the wrong declared order"  "order"
 
 # ============ unreadable is NOT ASSESSED, never PASS =======================
 na unread:milestones "the milestone list unreadable"
 na unread:subissues  "sub-issues unreadable"
 na unread:blockedby  "blocked-by unreadable"
+na unread:identity   "the repository identity unreadable (no blocker can be matched)"
+na unknown-repo      "a same-numbered blocker whose repository is unknown"
 na unread:body       "an issue body unreadable"
 na unread:issue      "an issue itself unreadable"
-for sc in unread:milestones unread:subissues unread:blockedby unread:body unread:issue; do
+for sc in unread:milestones unread:subissues unread:blockedby unread:body unread:issue unread:identity unknown-repo; do
   V "$sc"
   case "$(verdict)" in
     PASS) bad "$sc reported PASS for state it could not read" ;;
@@ -212,8 +219,7 @@ printf 'issue\tU\tUnmilestoned\tfeature,P1,docs-impact:none\t\tnom.md\n' > "$art
 st2="$work/plan-nom.state"
 printf 'created\tU\t300\t9300\n' > "$st2"
 
-cat > "$stub/gh" <<'STUB3'
-#!/usr/bin/env bash
+stub_gh "$stub/gh" <<'STUB3'
 args="$*"
 case "$1 $2" in "auth status") exit 0 ;; esac
 GH_JQ=""; __prev=""
@@ -244,7 +250,6 @@ fi
 [ "$1" = "api" ] && exit 0
 exit 1
 STUB3
-chmod +x "$stub/gh"
 
 n_rc=0
 n_out="$(cd "$work" && env PATH="$stub:$PATH" BODY_U="$work/nom.md" \
@@ -274,8 +279,7 @@ assert_contains "naming the body" "body does not match" "$n_out"
 # create leaves the milestone unset rather than setting it to none, so `verify`
 # makes no claim about it either. `apply` and `verify` must read one field the
 # same way, or the verb reports drift against a state `apply` never intended.
-cat > "$stub/gh" <<'STUB4'
-#!/usr/bin/env bash
+stub_gh "$stub/gh" <<'STUB4'
 args="$*"
 case "$1 $2" in "auth status") exit 0 ;; esac
 GH_JQ=""; __prev=""
@@ -306,7 +310,6 @@ fi
 [ "$1" = "api" ] && exit 0
 exit 1
 STUB4
-chmod +x "$stub/gh"
 n_rc=0
 n_out="$(cd "$work" && env PATH="$stub:$PATH" BODY_U="$work/nom.md" \
   "$SPARK" plan verify "$art2" --state "$st2" --tsv 2>&1)" || n_rc=$?
@@ -320,8 +323,7 @@ esac
 # "returns the expected titles and labels; would return a deliberately wrong
 # milestone and body if asked; exposes no matching hierarchy/dependency/order
 # data." One stub, everything but title and labels wrong at once.
-cat > "$stub/gh" <<'STUB2'
-#!/usr/bin/env bash
+stub_gh "$stub/gh" <<'STUB2'
 args="$*"
 case "$1 $2" in "auth status") exit 0 ;; esac
 GH_JQ=""; __prev=""
@@ -362,7 +364,6 @@ if [ "$1" = "api" ]; then
 fi
 exit 1
 STUB2
-chmod +x "$stub/gh"
 r=0
 o="$(cd "$work" && env PATH="$stub:$PATH" "$SPARK" plan verify "$art" --state "$st" 2>&1)" || r=$?
 case "$o" in
@@ -371,7 +372,6 @@ case "$o" in
   *) ok ;;
 esac
 if [ "$r" -ne 0 ]; then ok; else bad "#517: verify exited 0 for that repository"; fi
-
 
 # ============ label SETS, compared as sets (#599) =========================
 # `[.labels[].name] | sort | join(",")` on the live side against a joined
@@ -390,8 +390,7 @@ for t in git awk sed grep find sort printf bash env cat wc tr head tail cut date
   src="$(command -v "$t" 2>/dev/null || true)"
   [ -n "$src" ] && ln -sf "$src" "$lsbin/$t" 2>/dev/null || true
 done
-cat > "$lsbin/gh" <<'LSEOF'
-#!/usr/bin/env bash
+stub_gh "$lsbin/gh" <<'LSEOF'
 case "$1 $2" in "auth status") exit 0 ;; esac
 GH_JQ=""; prev=""
 for a in "$@"; do [ "$prev" = "--jq" ] && GH_JQ="$a"; prev="$a"; done
@@ -405,7 +404,6 @@ if [ "$1" = "issue" ] && [ "$2" = "view" ]; then
 fi
 exit 0
 LSEOF
-chmod +x "$lsbin/gh"
 
 # --- existing-issue verification (plan_live_rows)
 lsart="$WORK/ls.tsv"

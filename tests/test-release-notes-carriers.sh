@@ -20,8 +20,6 @@ runner="$here/../.github/scripts/release-notes-runner.sh"
 . "$runner"
 
 pass=0; fail=0
-ok()  { pass=$((pass + 1)); }
-bad() { fail=$((fail + 1)); echo "  ✖ $1"; }
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -303,5 +301,4 @@ rc=0
     notes_component_commits_tsv "o/r" "core" "v1.9.0..$headx" ) >/dev/null 2>&1 || rc=$?
 [ "$rc" -eq 2 ] && ok || bad "a cycle split across ledger and trailer must be caught (got $rc)"
 
-echo "  $pass passed, $fail failed"
-[ "$fail" -eq 0 ]
+finish

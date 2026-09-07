@@ -19,10 +19,6 @@ set -euo pipefail
 sandbox_init
 . "$SPARK"
 
-assert_eq() {
-  local desc="$1" want="$2" got="$3"
-  if [ "$got" = "$want" ]; then ok; else bad "$desc — want '$want', got '$got'"; fi
-}
 assert_lacks() {
   local desc="$1" needle="$2" haystack="$3"
   case "$haystack" in
@@ -54,8 +50,7 @@ gh_stub() {
     [ -n "$src" ] && ln -sf "$src" "$d/$t" 2>/dev/null || true
   done
   printf '%s' "$json" > "$d/cap.json"
-  cat > "$d/gh" <<'GHEOF'
-#!/usr/bin/env bash
+  stub_gh "$d/gh" <<'GHEOF'
 case "${1:-}" in
   auth) exit 0 ;;
   repo) printf 'o/r\n'; exit 0 ;;
@@ -73,7 +68,6 @@ if [ "$isq" = 1 ]; then
 fi
 exit 0
 GHEOF
-  chmod +x "$d/gh"
 }
 
 # rows <response-json> — the gate rows, through the real capture and the real
@@ -326,8 +320,7 @@ nx_stub() {
     src="$(command -v "$t" 2>/dev/null || true)"
     [ -n "$src" ] && ln -sf "$src" "$d/$t" 2>/dev/null || true
   done
-  cat > "$d/gh" <<'GHEOF'
-#!/usr/bin/env bash
+  stub_gh "$d/gh" <<'GHEOF'
 case "${1:-}" in
   auth) exit 0 ;;
   repo) printf 'o/r\n'; exit 0 ;;
@@ -347,14 +340,15 @@ for a in "$@"; do
     exit 0
   fi
 done
+# No blockers is an EMPTY answer from the shared, validated dependency reader —
+# never a pre-shaped count that assumed one consumer's jq.
 for a in "$@"; do
   case "$a" in
-    *dependencies*) printf '0\n'; exit 0 ;;
+    *dependencies*) exit 0 ;;
   esac
 done
 exit 0
 GHEOF
-  chmod +x "$d/gh"
 }
 nxb="$WORK/nxb"; nx_stub "$nxb"
 # nx <issue-list-json> <capture-json>
