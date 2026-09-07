@@ -115,7 +115,8 @@ page's examples against the TSV is what keeps prose from becoming the schema.
   conflict contract can be written against this envelope rather than against
   each consumer's shape.
 - The doc↔TSV parity and the executable examples add a suite,
-  `tests/test-fact-model.sh`, delivered by the stacked pull request; the shipped
+  `tests/test-fact-model.sh`, delivered by the stacked pull request — until it
+  lands, what the page and the TSV say the suite checks is prospective; the shipped
   reference page must not use issue-number references (the tier boundary), so
   its examples use an invented repository.
 - Until the snapshot work lands, nothing reads this model at runtime. That is
