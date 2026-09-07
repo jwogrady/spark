@@ -8,9 +8,12 @@ from issue history. This page defines the fact classes, the envelope every fact
 is carried in, the closed status vocabulary, and the canonical identifier forms.
 
 The machine-readable authority is `preferences/fact-model.tsv` (schema
-version 1); this page renders it and is checked against it by the behavioral
-suite `tests/test-fact-model.sh` (delivered by the stacked suite pull request),
-never the other way round. The model is **Experimental**: it is the
+version 1); this page renders it, never the other way round. The behavioral
+suite `tests/test-fact-model.sh` that checks the page against the authority is
+delivered by the stacked suite pull request; until it lands, every statement on
+this page about what the suite checks, proves or validates describes that
+suite's contract, not an enforcement already present in this repository. The
+model is **Experimental**: it is the
 contract between the fact sources and their consumers, and it may still change
 while the snapshot work that consumes it is validated.
 
@@ -58,20 +61,20 @@ Three further concerns are **facets of the envelope**, not separate facts:
 
 Every fact, whatever its class, has exactly this shape:
 
-| Field | Required | Meaning |
-|---|---|---|
-| `schema_version` | required | The schema version the fact conforms to (this file's `version`), in the schema-version grammar |
-| `key` | required | The class's one canonical fact key (the key records); one representation per operative fact, so inputs and invalidators address a stable identity |
-| `class` | required | One of the class names above |
-| `status` | required | One of the status tokens below |
-| `value` | optional | Present only when status is ESTABLISHED; its shape is the class's value-shape |
-| `source` | required | The source shape below: what was read, its canonical identity in the grammar of that source type, and the version identity observed |
-| `observed_at` | required | The instant the source was read, in the timestamp grammar (ISO-8601 UTC, second precision, Z) |
-| `invalidators` | required | Canonical invalidator tokens, each in one of the invalidator grammars and unique within the fact; a change to any one makes the fact stale |
-| `provenance` | required | Pointer to the authoritative record in the provenance grammar (an https URL or a repository-relative path, no whitespace); never the record itself |
-| `inputs` | optional | Fact keys this fact was derived from; required when source.type is derived |
-| `inferred` | optional | The literal true, present only on a legitimately inferred fact (any other value is rejected); an inferred fact is never authority |
-| `detail` | optional | The detail shape below, present only when status is UNKNOWN or CONFLICT: reason is one non-empty line, candidates is a list (possibly empty) of canonical locators — never prose or a raw record |
+| Field | Required | Type | Meaning |
+|---|---|---|---|
+| `schema_version` | required | `schema-version` | The schema version the fact conforms to (this file's `version`), in the schema-version grammar |
+| `key` | required | `fact-key` | The class's one canonical fact key (the key records); one representation per operative fact, so inputs and invalidators address a stable identity |
+| `class` | required | `string` | One of the class names above |
+| `status` | required | `string` | One of the status tokens below |
+| `value` | optional | `any` | Present only when status is ESTABLISHED; its shape is the class's value-shape |
+| `source` | required | `object` | The source shape below: what was read, its canonical identity in the grammar of that source type, and the version identity observed |
+| `observed_at` | required | `timestamp` | The instant the source was read, in the timestamp grammar (ISO-8601 UTC, second precision, Z) |
+| `invalidators` | required | `list` | Canonical invalidator tokens, each in one of the invalidator grammars and unique within the fact; a change to any one makes the fact stale |
+| `provenance` | required | `provenance` | Pointer to the authoritative record in the provenance grammar (an https URL or a repository-relative path, no whitespace); never the record itself |
+| `inputs` | optional | `list` | Fact keys this fact was derived from; required when source.type is derived |
+| `inferred` | optional | `boolean` | The literal true, present only on a legitimately inferred fact (any other value is rejected); an inferred fact is never authority |
+| `detail` | optional | `object` | The detail shape below, present only when status is UNKNOWN or CONFLICT: reason is one non-empty line, candidates is a list (possibly empty) of canonical locators — never prose or a raw record |
 
 The two envelope objects have exact shapes, in the same grammar as a class's value
 shape:
@@ -102,7 +105,7 @@ way it would be at the top level.
 Not every status is meaningful for every class. A work unit, its repository, its
 placement, its graph and the standing authority always apply, so they are ESTABLISHED,
 UNKNOWN or CONFLICT; the HEAD-bound classes add NOT_APPLICABLE for a work unit with
-no HEAD; the derived class is ESTABLISHED or UNKNOWN (R18). The behavioral suite builds
+no HEAD; the derived class is ESTABLISHED or UNKNOWN (R18). Once it lands, the behavioral suite builds
 one canonical fact for every class × admitted status and proves it validates, and one
 for every class × excluded status and proves it is rejected, so the matrix is not a
 table of intentions.
@@ -126,29 +129,29 @@ One representation per identity. Everything else — a bare issue number, a
 seven-char SHA, a display title, a differently-cased owner or repository name —
 is a projection and is never used to compare or bind.
 
-| Kind | Canonical form | Example |
-|---|---|---|
-| repository | <host>/<owner>/<name>, all lower-case (GitHub compares owner and name case-insensitively, so one spelling is the identity), no scheme, and the name never ends in .git — that is the clone URL's spelling, a projection | `github.com/acme/widgets` |
-| work-unit | <repository>#<number>; a bare #<number> is a projection, never an identity | `github.com/acme/widgets#42` |
-| comment | <work-unit>/comment/<comment id> | `github.com/acme/widgets#42/comment/9001` |
-| milestone | <repository>/milestone/<number> | `github.com/acme/widgets/milestone/7` |
-| commit | Full 40-hex lower-case object id; abbreviations are projections | `4f3d…` (40 characters) |
-| ref | A branch name over Git's full ref domain, without the refs/heads/ prefix: slash-separated components, none empty or dot-led, no whitespace or ASCII control characters, no ~ ^ : ? * [ or backslash, no .. or @{, never the single name @, no component ending in .lock, never ending in / or .; refs/… and any other spelling of the same branch are projections | `master`, `release/v1.2.x`, `feat/x+y` |
-| release | A release tag as published | `v0.22.0` |
-| login | An actor identity; naming an actor never confers authority | `login:github-actions[bot]` — naming an actor never confers authority |
-| verdict | The independent reviewer's closed vocabulary | `PASS`, `CHANGES REQUIRED`, `DECISION REQUIRED`, `NOT ASSESSED` |
-| action | The closed next-action vocabulary: only actions whose derivation rule (R15) this version defines; a new action is a new version | `wait-review`, `repair`, `merge`, `stop-decision-required` |
-| item-id | A scalar acceptance item id: one token, no whitespace, unique within its fact | `a1`, `acceptance/3` |
-| provenance | A pointer: an https URL, or a normalized repository-relative path (slash-separated components, none empty, none . or .., no leading slash); never the record itself | `https://github.com/acme/widgets/pull/42#issuecomment-9100`, `preferences/fact-model.tsv` |
-| timestamp | An ISO-8601 UTC instant at second precision with Z suffix whose grammar encodes the calendar itself — 31-day and 30-day months, February to the 28th and the 29th only in a leap year (divisible by 4, or by 400 among century years), hours 00–23, minutes and seconds 00–59 — so a consumer needs nothing beyond the regex; the type of observed_at and the one form every timestamp-bearing source version takes | `2026-09-06T12:00:05Z` |
-| schema-version | A schema version: a positive integer; the type of schema_version | `1` |
-| fact-key | the class's one canonical key (the key records) | `review.independent` |
-| issue-state | Current state of a related work unit; a blocked_by entry is satisfied exactly when closed | `open`, `closed` |
-| check-state | Normalized state of one required check on the exact HEAD: missing = required but no run observed | `success`, `failure`, `pending`, `missing` (required but no run observed) |
-| scope | What a standing grant permits; the closed scope vocabulary | `merge:routine`, `close:issue`, `metadata:labels`, `metadata:hierarchy`, `evidence:publish`, `branch:push` |
-| boundary | What a human reserves; the closed boundary vocabulary | `release:approve`, `authority:grant`, `settings:repository`, `action:destructive`, `placement:release`, `semantics:product` |
-| derived-version | <schema version>;<input key>@<input source.version>;… — one entry per input, sorted by key | `1;head.exact@4f3d…;review.independent@2026-09-06T11:58:00Z` |
-| decision-record | A durable human decision: a <comment> locator or <repository>@<commit>; never a role, label or summary | `github.com/acme/widgets#7/comment/9001` |
+| Kind | Canonical form | Grammar (ERE) | Example |
+|---|---|---|---|
+| repository | <host>/<owner>/<name>, all lower-case (GitHub compares owner and name case-insensitively, so one spelling is the identity), no scheme, and the name never ends in .git — that is the clone URL's spelling, a projection | `^[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+$` | `github.com/acme/widgets` |
+| work-unit | <repository>#<number>; a bare #<number> is a projection, never an identity | `^[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+#[1-9][0-9]*$` | `github.com/acme/widgets#42` |
+| comment | <work-unit>/comment/<comment id> | `^[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+#[1-9][0-9]*/comment/[1-9][0-9]*$` | `github.com/acme/widgets#42/comment/9001` |
+| milestone | <repository>/milestone/<number> | `^[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+/milestone/[1-9][0-9]*$` | `github.com/acme/widgets/milestone/7` |
+| commit | Full 40-hex lower-case object id; abbreviations are projections | `^[0-9a-f]{40}$` | `4f3d…` (40 characters) |
+| ref | A branch name over Git's full ref domain, without the refs/heads/ prefix: slash-separated components, none empty or dot-led, no whitespace or ASCII control characters, no ~ ^ : ? * [ or backslash, no .. or @{, never the single name @, no component ending in .lock, never ending in / or .; refs/… and any other spelling of the same branch are projections | `^[^\s~^:?*\[\\/.\x00-\x1f\x7f][^\s~^:?*\[\\/\x00-\x1f\x7f]*(/[^\s~^:?*\[\\/.\x00-\x1f\x7f][^\s~^:?*\[\\/\x00-\x1f\x7f]*)*$` | `master`, `release/v1.2.x`, `feat/x+y` |
+| release | A release tag as published | `^v[0-9]+\.[0-9]+\.[0-9]+$` | `v0.22.0` |
+| login | An actor identity; naming an actor never confers authority | `^login:[A-Za-z0-9-]+(\[bot\])?$` | `login:github-actions[bot]` — naming an actor never confers authority |
+| verdict | The independent reviewer's closed vocabulary | `^(PASS\|CHANGES REQUIRED\|DECISION REQUIRED\|NOT ASSESSED)$` | `PASS`, `CHANGES REQUIRED`, `DECISION REQUIRED`, `NOT ASSESSED` |
+| action | The closed next-action vocabulary: only actions whose derivation rule (R15) this version defines; a new action is a new version | `^(wait-review\|repair\|merge\|stop-decision-required)$` | `wait-review`, `repair`, `merge`, `stop-decision-required` |
+| item-id | A scalar acceptance item id: one token, no whitespace, unique within its fact | `^[A-Za-z0-9][A-Za-z0-9._:/-]{0,79}$` | `a1`, `acceptance/3` |
+| provenance | A pointer: an https URL, or a normalized repository-relative path (slash-separated components, none empty, none . or .., no leading slash); never the record itself | `^(https://\S+\|[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*)$` | `https://github.com/acme/widgets/pull/42#issuecomment-9100`, `preferences/fact-model.tsv` |
+| timestamp | An ISO-8601 UTC instant at second precision with Z suffix whose grammar encodes the calendar itself — 31-day and 30-day months, February to the 28th and the 29th only in a leap year (divisible by 4, or by 400 among century years; year 0000 is a leap year, as ISO 8601 has it), hours 00–23, minutes and seconds 00–59 — so a consumer needs nothing beyond the regex; the type of observed_at and the one form every timestamp-bearing source version takes | `^([0-9]{4}-((0[13578]\|1[02])-(0[1-9]\|[12][0-9]\|3[01])\|(0[469]\|11)-(0[1-9]\|[12][0-9]\|30)\|02-(0[1-9]\|1[0-9]\|2[0-8]))\|([0-9]{2}(0[48]\|[2468][048]\|[13579][26])\|([02468][048]\|[13579][26])00)-02-29)T([01][0-9]\|2[0-3]):[0-5][0-9]:[0-5][0-9]Z$` | `2026-09-06T12:00:05Z` |
+| schema-version | A schema version: a positive integer; the type of schema_version | `^[1-9][0-9]*$` | `1` |
+| fact-key | the class's one canonical key (the key records) | `^(work_unit\.identity\|repository\.identity\|placement\.current\|graph\.native\|authority\.standing\|acceptance\.contract\|head\.exact\|review\.independent\|checks\.required\|next_action\.governed)$` | `review.independent` |
+| issue-state | Current state of a related work unit; a blocked_by entry is satisfied exactly when closed | `^(open\|closed)$` | `open`, `closed` |
+| check-state | Normalized state of one required check on the exact HEAD: missing = required but no run observed | `^(success\|failure\|pending\|missing)$` | `success`, `failure`, `pending`, `missing` (required but no run observed) |
+| scope | What a standing grant permits; the closed scope vocabulary | `^(merge:routine\|close:issue\|metadata:labels\|metadata:hierarchy\|evidence:publish\|branch:push)$` | `merge:routine`, `close:issue`, `metadata:labels`, `metadata:hierarchy`, `evidence:publish`, `branch:push` |
+| boundary | What a human reserves; the closed boundary vocabulary | `^(release:approve\|authority:grant\|settings:repository\|action:destructive\|placement:release\|semantics:product)$` | `release:approve`, `authority:grant`, `settings:repository`, `action:destructive`, `placement:release`, `semantics:product` |
+| derived-version | <schema version>;<input key>@<input source.version>;… — one entry per input, sorted by key | `^[1-9][0-9]*(;[a-z_]+\.[a-z_]+@[^;\s]+)+$` | `1;head.exact@4f3d…;review.independent@2026-09-06T11:58:00Z` |
+| decision-record | A durable human decision: a <comment> locator or <repository>@<commit>; never a role, label or summary | `^([a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+#[1-9][0-9]*/comment/[1-9][0-9]*\|[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+@[0-9a-f]{40})$` | `github.com/acme/widgets#7/comment/9001` |
 
 ## Constraints
 
@@ -198,16 +201,16 @@ consumer applies them rather than reconstructing them from prose.
 each token at most once per fact (R16). A change to any named node invalidates the
 fact; prose can never be an invalidator.
 
-| Kind | Token form and meaning |
-|---|---|
-| `head` | head:<commit> — the exact HEAD a HEAD-bound fact was judged on (ESTABLISHED) or observed against (UNKNOWN, CONFLICT) |
-| `pull_request` | pull_request:<work-unit> — the pull request whose metadata or head the fact was read from |
-| `issue` | issue:<work-unit> — the issue whose metadata or relationships the fact was read from |
-| `comment` | comment:<comment> — the comment that records the verdict or decision |
-| `milestone` | milestone:<milestone> — the milestone the placement was read from |
-| `repository` | repository:<repository> — the repository node (default branch, settings) |
-| `ref` | ref:<repository>/<ref> — the branch whose target the fact depends on |
-| `ruleset` | ruleset:<repository> — the repository's rulesets (which checks are required) |
+| Kind | Grammar (ERE) | Token form and meaning |
+|---|---|---|
+| `head` | `^head:[0-9a-f]{40}$` | head:<commit> — the exact HEAD a HEAD-bound fact was judged on (ESTABLISHED) or observed against (UNKNOWN, CONFLICT) |
+| `pull_request` | `^pull_request:[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+#[1-9][0-9]*$` | pull_request:<work-unit> — the pull request whose metadata or head the fact was read from |
+| `issue` | `^issue:[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+#[1-9][0-9]*$` | issue:<work-unit> — the issue whose metadata or relationships the fact was read from |
+| `comment` | `^comment:[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+#[1-9][0-9]*/comment/[1-9][0-9]*$` | comment:<comment> — the comment that records the verdict or decision |
+| `milestone` | `^milestone:[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+/milestone/[1-9][0-9]*$` | milestone:<milestone> — the milestone the placement was read from |
+| `repository` | `^repository:[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+$` | repository:<repository> — the repository node (default branch, settings) |
+| `ref` | `^ref:[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+/[^\s~^:?*\[\\/.\x00-\x1f\x7f][^\s~^:?*\[\\/\x00-\x1f\x7f]*(/[^\s~^:?*\[\\/.\x00-\x1f\x7f][^\s~^:?*\[\\/\x00-\x1f\x7f]*)*$` | ref:<repository>/<ref> — the branch whose target the fact depends on |
+| `ruleset` | `^ruleset:[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+$` | ruleset:<repository> — the repository's rulesets (which checks are required) |
 
 ## Reserved boundaries the model can derive a stop from
 
@@ -228,18 +231,18 @@ verdict or a CONFLICT input, otherwise `next_action` is UNKNOWN.
 of the source type; a role name, a label, a summary, or a word such as
 `latest` can never stand as the identity or the version of a source.
 
-| Source type | What it is | Version identity | Canonical `source.identity` | `source.version` grammar |
-|---|---|---|---|---|
-| `github-api` | A GitHub REST or GraphQL read | node updated_at, etag, or the observed head the record is keyed by — never a node id, which does not change when the node does | A <repository>, <work-unit>, <comment> or <milestone> locator — the GitHub node that was read | The node's updated_at (ISO-8601 Z), the head it is keyed by (40-hex), or its etag in a delimiter-safe form (letters, digits, . _ : / -; never ; or whitespace, so it can be carried inside a derived-version); a numeric node id never versions a mutable node |
-| `git` | A read of the local or remote git object store | the commit id or ref target observed | <repository>@<commit> or <repository>@ref/<ref> | The commit id observed (a ref target is recorded as the commit it pointed at) |
-| `repository-file` | A committed file in the repository tree | the commit id the file was read at | <repository>@<commit>:<path> — a normalized repository-relative path: slash-separated components, none empty, none . or .., no leading slash | The commit id the file was read at |
-| `human-decision` | A durable, source-backed human decision; never a role, label or summary | the recording comment's updated_at (a comment can be edited, so its id alone cannot version the decision) or the commit id that records it | The <decision-record> itself | The recording comment's updated_at (ISO-8601 Z) for a comment locator, or the commit id for a <repository>@<commit> record — edit-sensitive, so an edited decision re-versions everything derived from it |
-| `derived` | A conclusion computed from other facts (requires inputs); the version changes whenever any input's version does | <derived-version>: the schema version, then <input key>@<that input's source.version> for every input, sorted by key | fact-model/<schema version> | The derived-version (schema version, then <input key>@<input source.version> for every input, sorted) |
+| Source type | What it is | Version identity | Canonical `source.identity` | Identity grammar (ERE) | `source.version` form | Version grammar (ERE) |
+|---|---|---|---|---|---|---|
+| `github-api` | A GitHub REST or GraphQL read | node updated_at, etag, or the observed head the record is keyed by — never a node id, which does not change when the node does | A <repository>, <work-unit>, <comment> or <milestone> locator — the GitHub node that was read | `^[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+(#[1-9][0-9]*(/comment/[1-9][0-9]*)?\|/milestone/[1-9][0-9]*)?$` | The node's updated_at (ISO-8601 Z), the head it is keyed by (40-hex), or its etag in a delimiter-safe form (letters, digits, . _ : / -; never ; or whitespace, so it can be carried inside a derived-version); a numeric node id never versions a mutable node | `^(([0-9]{4}-((0[13578]\|1[02])-(0[1-9]\|[12][0-9]\|3[01])\|(0[469]\|11)-(0[1-9]\|[12][0-9]\|30)\|02-(0[1-9]\|1[0-9]\|2[0-8]))\|([0-9]{2}(0[48]\|[2468][048]\|[13579][26])\|([02468][048]\|[13579][26])00)-02-29)T([01][0-9]\|2[0-3]):[0-5][0-9]:[0-5][0-9]Z\|[0-9a-f]{40}\|W/"[A-Za-z0-9._:/-]+"\|"[A-Za-z0-9._:/-]+")$` |
+| `git` | A read of the local or remote git object store | the commit id or ref target observed | <repository>@<commit> or <repository>@ref/<ref> | `^[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+@([0-9a-f]{40}\|ref/[^\s~^:?*\[\\/.\x00-\x1f\x7f][^\s~^:?*\[\\/\x00-\x1f\x7f]*(/[^\s~^:?*\[\\/.\x00-\x1f\x7f][^\s~^:?*\[\\/\x00-\x1f\x7f]*)*)$` | The commit id observed (a ref target is recorded as the commit it pointed at) | `^[0-9a-f]{40}$` |
+| `repository-file` | A committed file in the repository tree | the commit id the file was read at | <repository>@<commit>:<path> — a normalized repository-relative path: slash-separated components, none empty, none . or .., no leading slash | `^[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+@[0-9a-f]{40}:[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*$` | The commit id the file was read at | `^[0-9a-f]{40}$` |
+| `human-decision` | A durable, source-backed human decision; never a role, label or summary | the recording comment's updated_at (a comment can be edited, so its id alone cannot version the decision) or the commit id that records it | The <decision-record> itself | `^([a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+#[1-9][0-9]*/comment/[1-9][0-9]*\|[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+@[0-9a-f]{40})$` | The recording comment's updated_at (ISO-8601 Z) for a comment locator, or the commit id for a <repository>@<commit> record — edit-sensitive, so an edited decision re-versions everything derived from it | `^(([0-9]{4}-((0[13578]\|1[02])-(0[1-9]\|[12][0-9]\|3[01])\|(0[469]\|11)-(0[1-9]\|[12][0-9]\|30)\|02-(0[1-9]\|1[0-9]\|2[0-8]))\|([0-9]{2}(0[48]\|[2468][048]\|[13579][26])\|([02468][048]\|[13579][26])00)-02-29)T([01][0-9]\|2[0-3]):[0-5][0-9]:[0-5][0-9]Z\|[0-9a-f]{40})$` |
+| `derived` | A conclusion computed from other facts (requires inputs); the version changes whenever any input's version does | <derived-version>: the schema version, then <input key>@<that input's source.version> for every input, sorted by key | fact-model/<schema version> | `^fact-model/[1-9][0-9]*$` | The derived-version (schema version, then <input key>@<input source.version> for every input, sorted) | `^[1-9][0-9]*(;[a-z_]+\.[a-z_]+@[^;\s]+)+$` |
 
 ## Rules
 
 Rendered verbatim from the `rule` records of `preferences/fact-model.tsv`; the
-behavioral suite checks the two never drift.
+behavioral suite, once it lands, checks the two never drift.
 
 - **R1** Canonical identifiers have one representation; labels, abbreviations
   and pretty names are projections. Each class has exactly one canonical fact
@@ -371,7 +374,7 @@ class, status token or vocabulary member, and any change to the meaning, type
 or requiredness of an existing one, is a new version. A consumer therefore
 rejects every field and class it does not know for the version it reads (R9
 applies to the whole fact), which is exactly what the behavioral suite's
-validator does, and an older consumer can never accept a snapshot it cannot
+validator does once it lands, and an older consumer can never accept a snapshot it cannot
 judge complete. The invalidation and
 migration rules that follow from a version change belong to the freshness
 contract that builds on this page.
@@ -381,7 +384,7 @@ contract that builds on this page.
 Each example is a JSON array of facts. Examples 1 and 9 are **complete
 snapshots** (every required class exactly once — a pull request, and an issue
 with no HEAD); Examples 2–8 are **fragments** that show only the classes the
-situation turns on. The behavioral suite validates every
+situation turns on. Once it lands, the behavioral suite validates every
 fact on this page against the machine-readable schema, enforces the
 snapshot's cardinality and forbids duplicate classes within a fragment, so the
 examples are fixtures, not illustrations. The repository, numbers and ids are
