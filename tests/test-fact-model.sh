@@ -33,7 +33,7 @@ assert_eq "one class-status record per class" "$(rec class | cut -f2 | sort | tr
 assert_eq "exactly one canonical key per class" "$(rec class | cut -f2 | sort | tr '\n' ' ')" "$(rec key | cut -f2 | sort | tr '\n' ' ')"
 assert_eq "every canonical key is prefixed by its class" "" "$(rec key | awk -F'\t' 'index($3, $2 ".") != 1')"
 assert_eq "eight invalidator grammars" "8" "$(rec invalidator | wc -l | tr -d ' ')"
-assert_eq "31 constraint records" "31" "$(rec constraint | wc -l | tr -d ' ')"
+assert_eq "41 constraint records" "41" "$(rec constraint | wc -l | tr -d ' ')"
 while IFS=$'\t' read -r _ scope rx _; do
   if printf 'probe' | grep -qE "$rx" >/dev/null 2>&1; then rc=0; else rc=$?; fi
   [ "$rc" -le 1 ] && ok || bad "constraint regex for $scope compiles as an ERE (no lookaround, so any consumer can apply it)"
@@ -236,6 +236,7 @@ rows = [l.rstrip("\n").split("\t") for l in open(sys.argv[1]) if l.strip() and n
 doc = open(sys.argv[2]).read()
 def say(okk, what): print(("OK " if okk else "BAD ") + what)
 def lint(rx):
+    if "](" in rx: return "contains ]( which the page's link check reads as a markdown link"
     i, n, inb = 0, len(rx), False
     while i < n:
         c = rx[i]
@@ -900,6 +901,16 @@ rej wu 'del f["value"]["implements"]' "a work unit without the implements field 
 rej wu 'f["value"]["id"]="github.com/Acme/widgets#42"; f["source"]["identity"]=f["value"]["id"]; f["invalidators"]=["pull_request:"+f["value"]["id"]]' "a mixed-case owner in a work-unit id must be rejected (R1)"
 rej wu 'f["value"]["id"]="github.com/acme/widgets.git#42"; f["source"]["identity"]=f["value"]["id"]; f["invalidators"]=["pull_request:"+f["value"]["id"]]' "a .git-suffixed repository name is the clone URL's spelling, never the identity (R1)"
 rp='{"schema_version":"1","key":"repository.identity","class":"repository","status":"ESTABLISHED","value":{"id":"github.com/acme/widgets","default_branch":"master"},"source":{"type":"github-api","identity":"github.com/acme/widgets","version":"2026-09-01T08:00:00Z"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["repository:github.com/acme/widgets"],"provenance":"https://github.com/acme/widgets"}'
+# a repository locator is three GitHub identities: a DNS host, a login-shaped owner, a GitHub repository name;
+# the same components sit inside every work unit, comment, milestone, decision record, invalidator and source identity
+for x in 'github.com./acme/widgets' 'github..com/acme/widgets' '-github.com/acme/widgets' 'github.com-/acme/widgets' 'github/acme/widgets' \
+         'github.com/_owner/widgets' 'github.com/ac.me/widgets' 'github.com/-acme/widgets' 'github.com/acme-/widgets' 'github.com/ac--me/widgets' \
+         'github.com/acme/.' 'github.com/acme/..' 'github.com/acme/' "github.com/$(printf 'a%.0s' $(seq 40))/widgets" "github.com/acme/$(printf 'a%.0s' $(seq 101))"; do
+  accepts "$(m "$rp" 'x=sys.argv[2]; f["value"]["id"]=x; f["source"]["identity"]=x; f["invalidators"]=["repository:"+x]' "$x")" && bad "repository spelling '$x' must be rejected — not a GitHub identity (R1/R14)" || ok
+done
+for x in 'github.com/acme/.github' 'ghe.example.internal/acme-2/my_repo.v2' 'github.com/acme/..dots' "github.com/$(printf 'a%.0s' $(seq 39))/widgets" "github.com/acme/$(printf 'a%.0s' $(seq 100))"; do
+  accepts "$(m "$rp" 'x=sys.argv[2]; f["value"]["id"]=x; f["source"]["identity"]=x; f["invalidators"]=["repository:"+x]' "$x")" && ok || bad "control: GitHub identity '$x' is a valid repository"
+done
 accepts "$rp" && ok || bad "control: a canonical repository fact is accepted"
 rej rp 'f["value"]["id"]="github.com/acme/widgets.git"; f["source"]["identity"]=f["value"]["id"]; f["invalidators"]=["repository:"+f["value"]["id"]]' "a repository id ending in .git must be rejected (R1)"
 # ETag round trip: a delimiter-safe etag versions a node and is carried inside a derived-version; a ';' etag is outside the grammar
