@@ -274,7 +274,10 @@ def pinned_base():
     if BASE:
         return sh("git", "rev-parse", BASE).strip()
     if os.path.exists(committed):
-        for line in open(committed).read().split("\n")[:12]:
+        # the whole comment header, not a guessed number of lines: the header grows whenever the model is
+        # documented more fully, and a pin the default path cannot find is a pin that does nothing
+        for line in open(committed).read().split("\n"):
+            if not line.startswith("#"): break
             m = re.match(r"^# observed at ([0-9a-f]{40})$", line)
             if m: return m.group(1)
     return sh("git", "merge-base", "origin/master", "HEAD").strip()

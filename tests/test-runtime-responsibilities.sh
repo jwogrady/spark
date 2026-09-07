@@ -224,4 +224,15 @@ else
 fi
 rm -rf "$gen_out"
 
+# the DEFAULT invocation must find the pin on its own; passing it explicitly above would mask a pin the generator
+# cannot read, which is how a moving baseline hides until someone else's branch fails
+default_out="$(mktemp -d)"
+if (cd "$ROOT" && python3 "$GEN" "$ROOT" --map-only "--out=$default_out" >/dev/null 2>&1); then
+  assert_eq "the generator finds the pin with no base argument" "" \
+    "$(diff "$MAP_BEFORE" "$default_out/docs/research/v0.23-cleanup/743-responsibilities-before.tsv" | head -5 | tr '\n' ' ')"
+else
+  bad "the generator does not run without an explicit base"
+fi
+rm -rf "$default_out"
+
 finish "runtime responsibilities (#743)"
