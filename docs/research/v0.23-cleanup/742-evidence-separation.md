@@ -2,7 +2,7 @@
 
 **Model.** `current fact → provenance/index pointer → historical evidence on demand`, never
 `historical evidence → agent reconstruction → current fact`. The pointer is `docs/ops/evidence-index.tsv`:
-every evidence artifact of the repository — 126 files, 923,720 bytes, 15,434 lines under
+every evidence artifact of the repository — 126 files, 918,181 bytes, 15,340 lines under
 `docs/research`, `docs/releases`, `docs/governance`, the three evidence pages under `docs/ops`, `evaluations`
 and `.spark` — is one row or one family member, with a retention class, an explicit *operative now* answer,
 the release/HEAD/work unit it concerned, the fact it supported, who loads or cites it today, and why it is
@@ -21,8 +21,8 @@ are computed from the index and re-checked by the suite.
 
 | Class | Files | Bytes | Lines |
 |---|---|---|---|
-| `active-current` | 33 | 116,110 | 2,008 |
-| `historical-retained` | 68 | 400,238 | 6,691 |
+| `active-current` | 33 | 107,983 | 1,882 |
+| `historical-retained` | 68 | 402,826 | 6,723 |
 | `do-not-delete` | 25 | 407,372 | 6,735 |
 
 No artifact is classified `redundant`. Two identical blobs exist (`evaluations/orchestration/rates.tsv` and
@@ -40,7 +40,7 @@ reasoning path, and every deletion candidate failed the "independent retention v
 | `docs/ops` | 3 | 138,568 | 2,550 |
 | `docs/releases` | 13 | 103,829 | 1,849 |
 | `docs/research` | 2 | 7,056 | 101 |
-| `docs/research/v0.23-cleanup` | 14 | 177,097 | 2,445 |
+| `docs/research/v0.23-cleanup` | 14 | 171,558 | 2,351 |
 | `docs/research/v0.23-optimization-baseline` | 46 | 385,106 | 6,360 |
 | `evaluations` | 43 | 79,685 | 1,606 |
 
@@ -61,7 +61,7 @@ link counts here. From the index's readers column:
 | `evaluations/lib/*;evaluations/evidence-index.tsv;evaluations/orchestration/run.sh;evaluations/orchestration/rates.tsv;evaluations/skill-routing/run.sh;evaluations/skill-routing/rates.tsv` | `active-current` | yes | `tests/test-eval-lib.sh`; `tests/test-skill-descriptions.sh` |
 | `.spark/state.json;.spark/preferences.json` | `do-not-delete` | yes | `plugins/spark/bin/spark`; `plugins/spark/docs/README.md`; `plugins/spark/docs/how-to/get-started.md`; `plugins/spark/docs/how-to/resume.md`; `plugins/spark/docs/reference/cli.md`; `plugins/spark/docs/reference/compatibility.md`; `plugins/spark/docs/reference/engineering-preferences.md`; `plugins/spark/docs/reference/fact-freshness.md`; `plugins/spark/docs/reference/fact-model.md`; `plugins/spark/docs/reference/hooks.md`; `plugins/spark/docs/reference/project-standards.md`; `plugins/spark/docs/reference/stability.md`; `plugins/spark/docs/reference/state.md`; `plugins/spark/docs/tutorials/adopt-an-existing-repo.md`; `plugins/spark/docs/tutorials/scaffold-a-new-project.md`; `plugins/spark/preferences/fact-model.tsv`; `plugins/spark/preferences/templates/standards/conventions.md`; `plugins/spark/preferences/templates/standards/engineering-standards.md`; `plugins/spark/skills/bootstrap/SKILL.md`; `plugins/spark/skills/bootstrap/references/profiles.md`; `plugins/spark/skills/codify/SKILL.md`; `plugins/spark/skills/ideate/SKILL.md`; `plugins/spark/skills/knowledge/references/operator-knowledge.md`; `plugins/spark/skills/onboard/SKILL.md`; `plugins/spark/skills/plan/SKILL.md`; `plugins/spark/skills/ship/SKILL.md`; `plugins/spark/skills/validate/SKILL.md`; `tests/bench-memo.sh`; `tests/test-apply-permissions.sh`; `tests/test-brief-resume.sh`; `tests/test-course-derivation.sh`; `tests/test-doctor-standards-boundary.sh`; `tests/test-first-run.sh`; `tests/test-governance-contract.sh`; `tests/test-governance-integration.sh`; `tests/test-governance-schema.sh`; `tests/test-hot-path-memo.sh`; `tests/test-hub.sh`; `tests/test-labels.sh`; `tests/test-merge-strategy.sh`; `tests/test-orient.sh`; `tests/test-preferences.sh`; `tests/test-reconcile-apply.sh`; `tests/test-reconcile-slate.sh`; `tests/test-setup-profiles.sh`; `tests/test-state.sh`; `tests/test-triage-truth.sh` |
 
-**23 files, 244,492 bytes** of the 126-file, 923,720-byte corpus are referenced by code,
+**23 files, 244,492 bytes** of the 126-file, 918,181-byte corpus are referenced by code,
 tests or CI (26 % by bytes). The suite holds this list to the tree: a shipped surface that
 starts naming a non-operative artifact fails until the index lists it.
 
@@ -70,63 +70,76 @@ starts naming a non-operative artifact fails until the index lists it.
 The observed side, in the #730 sense. `tools/evidence-reads.sh` runs the read-only, network-free verbs
 (`doctor`, `brief`, `footprint`, `preferences`, `profiles`, `list-skills`) under `strace -e trace=openat`
 against a pristine clone checked out at one commit — never against a working tree, because `brief` shells out to
-`git status`, which reads every modified file, and an author's edits are not runtime reads — and records every
-evidence-root path each verb opens successfully, separating a file read from a directory traversal. The capture is
-committed beside this page as `742-default-reads.tsv`; its header names the observed commit and the tracer, the
-suite checks that commit is an ancestor of HEAD, and rerunning the tool at that commit reproduces the rows.
+`git status`, which reads every file git cannot vouch for, and an author's edits are not runtime reads. Before
+measuring anything the tool proves git is not the reader: it warms the clone's index and then traces a bare
+`git status`, which must open no file under the evidence roots. It arms the clone with the git hooks a developer's
+tree has, requires every verb to exit 0, and records each exit status in the capture's header, so a run that ends
+early cannot be mistaken for a measurement. Each evidence-root path is recorded once per verb, with a file read
+and a directory traversal kept apart. The capture is committed beside this page as `742-default-reads.tsv`.
 What the verbs opened:
 
 | Verb | Corpus files opened | `historical-retained` | `do-not-delete` | `active-current` | Directories traversed | Non-corpus files opened |
 |---|---|---|---|---|---|---|
 | `doctor` | 49 | 18 | 17 | 14 | 0 | 15 |
-| `brief` | 124 | 67 | 25 | 32 | 34 | 18 |
+| `brief` | 2 | 0 | 2 | 0 | 34 | 0 |
 | `footprint` | 2 | 0 | 2 | 0 | 34 | 0 |
 | `preferences` | 1 | 0 | 1 | 0 | 0 | 0 |
 | `profiles` | 0 | 0 | 0 | 0 | 0 | 0 |
 | `list-skills` | 0 | 0 | 0 | 0 | 0 | 0 |
 
-On a clean checkout the default verbs opened 142 files under the evidence roots, 124 of them indexed corpus artifacts, of which **92 are non-operative history** (`historical-retained` or `do-not-delete`).
+`spark doctor` opens 50 indexed corpus artifacts, **36 non-operative evidence files** among them; the session path opens 2 corpus files — `.spark/preferences.json`, `.spark/state.json` — and nothing else under the evidence roots.
 
-This contradicts the assumption the work unit started from, and it is the measurement the issue asked for. The
-mechanism is a directory walk, not a citation: `spark doctor` validates the tier of every Markdown surface in the
-repository, so it opens each one to read its front matter, and repo-root `docs/` is where the evidence lives;
-`spark brief` performs that same validation and additionally reads the ops registers and the evaluation run data
-while orienting a session. Traversal is counted separately — `footprint` walks the evidence tree to size it and
-opens no file in it, which is the shape the model wants.
+The two sides of that line are different acts. The session-orientation path — `brief`, `footprint`,
+`preferences`, `profiles`, `list-skills` — opens no evidence file at all: it reads the two committed state files
+the runtime owns and, where it needs a size, traverses directories without opening what is in them. Historical
+evidence is therefore off the path a session reasons on, which is what #742 asks for.
 
-Which history the default path opens, by family:
+The reads that remain are one mechanical validation. `spark doctor`'s Doc-links check
+(`plugins/spark/bin/spark`, the `Doc links:` section) opens every Markdown file it can find and resolves each
+relative link in it, so it reads the evidence pages because they are Markdown, not because anything cites them.
+That check is what keeps this index's pointers honest — the acceptance item "current fact/provenance links
+valid" is enforced by it — so narrowing it would trade a guarantee for a read count, and the read is one open of
+each file by a validator that runs on demand, not a load into a session's reasoning context. It is reported here
+as a measured fact rather than repaired, and the suite pins it: the capture's `doctor` rows must equal exactly
+the Markdown surfaces HEAD's tree has under the evidence roots, which is also what makes the committed capture
+valid for HEAD rather than only for the commit it was observed at.
+
+**Method correction.** The first capture in this PR was taken on a cold clone, and this page reported git's work
+as Spark's. In a fresh checkout git has no stat data for any file, and entries written in the same second as the
+index are racily clean, so the next `git status` re-hashes the whole tree — 144 extra evidence-file opens
+attributed to `brief`, nondeterministically: two runs of the same tool at the same commit disagreed. Refreshing
+the index is not enough to state as an assumption, so the tool now measures the precondition, and the header line
+above is written only after a traced `git status` opens no evidence file. The directory traversals in the table
+are that same `git status` walking the tree for untracked files, which is why they are counted apart from reads.
+
+Which non-operative evidence the default path opens, by family. The two `.spark` files are the runtime's own
+committed state — classified `do-not-delete`, read by design — and every other row is the link validator:
 
 | Family | Class | Files opened |
 |---|---|---|
-| `docs/research/v0.23-optimization-baseline/raw/*` | `historical-retained` | 21 |
-| `docs/research/v0.23-optimization-baseline/tools/*` | `historical-retained` | 15 |
 | `docs/releases/v0.1*.md` and 1 more pattern(s) | `do-not-delete` | 10 |
-| `evaluations/orchestration/runs/**` | `historical-retained` | 9 |
-| `docs/research/v0.23-optimization-baseline/raw/pr724/**` and 1 more pattern(s) | `do-not-delete` | 6 |
-| `docs/research/v0.23-cleanup/738-*` | `historical-retained` | 5 |
+| `docs/research/v0.23-optimization-baseline/raw/*` | `historical-retained` | 6 |
 | `docs/research/v0.23-optimization-baseline/README.md` and 2 more pattern(s) | `do-not-delete` | 3 |
 | `evaluations/provenance-promotion/PROOF.md` and 2 more pattern(s) | `historical-retained` | 3 |
-| `evaluations/skill-routing/runs/pre-trim-descriptions/**` | `historical-retained` | 3 |
 | `.spark/state.json` and 1 more pattern(s) | `do-not-delete` | 2 |
 | `docs/governance/is-state-baseline-pre-v020.md` and 1 more pattern(s) | `historical-retained` | 2 |
-| `docs/research/v0.23-cleanup/tools/*` | `historical-retained` | 2 |
 | `evaluations/orchestration/BASELINE.md` and 1 more pattern(s) | `historical-retained` | 2 |
 | `docs/ops/telemetry-baseline.md` | `do-not-delete` | 1 |
 | `docs/ops/v0.21-dogfood-evaluation.md` | `do-not-delete` | 1 |
 | `docs/releases/v0.23-usage-evidence.md` | `do-not-delete` | 1 |
 | `docs/research/v0.12-orchestration-recommendation.md` | `historical-retained` | 1 |
 | `docs/research/v0.13-mechanical-offload-audit.md` | `historical-retained` | 1 |
+| `docs/research/v0.23-cleanup/738-*` | `historical-retained` | 1 |
 | `docs/research/v0.23-cleanup/739-semantic-map.md` | `historical-retained` | 1 |
 | `docs/research/v0.23-cleanup/740-test-consolidation.md` | `historical-retained` | 1 |
-| `docs/research/v0.23-cleanup/741-transcript-reads.json` | `historical-retained` | 1 |
-| `docs/research/v0.23-optimization-baseline/raw/branches.tsv` | `do-not-delete` | 1 |
 
 The suite recomputes every figure in both tables from the capture and the index and fails if this page states a
-different one, so a change in what the default verbs read cannot land silently: regenerate the capture and the
-numbers move together. Set `SPARK_OBSERVE_READS=1` on a machine with `strace` and the suite re-observes the
-capture's own commit and fails on any drift from the committed rows.
+different one, so a change in what the default verbs read cannot land silently. It also asserts the separation
+claim directly: no verb other than `doctor` may open a file under the evidence roots except the two `.spark`
+state files. Set `SPARK_OBSERVE_READS=1` on a machine with `strace` and the suite re-observes HEAD itself and
+fails on any drift from the committed rows.
 
-## Three leaks: non-operative evidence on the active path
+## Two leaks: non-operative evidence on the active path
 
 | Artifact | Why it is on the path |
 |---|---|
@@ -147,14 +160,6 @@ capture's own commit and fails on any drift from the committed rows.
   +[ -n "$ledger" ] || { echo "--ledger is required: the current release's ledger" >&2; exit 2; }
   +[ -n "$record" ] || { echo "--record is required: the current release's record" >&2; exit 2; }
   ```
-- **The default read path opens the historical corpus** — measured above, not repaired here. `doctor`'s tier
-  validation and `brief`'s orientation walk repo-root `docs/` and `evaluations/` and open every Markdown surface
-  in them, so the non-operative corpus is read on the default path of the two verbs a session runs first. The
-  index cannot fix this: the reads are positional (a directory walk), not by name, so no reader column and no
-  file move would change them. The repair is a runtime-scope change — the tier validation needs the corpus's
-  boundary as data (this index is that data) instead of walking every Markdown file it finds, and the workload
-  measurement belongs to the #730 lane — so it is recorded here with its measurement and left to its own unit
-  rather than smuggled into a docs-only change.
 - **`.spark/state.json`** — the committed work state is a current-truth artifact by definition (ADR-0031),
   but its narrative (`updated 2026-08-30`) names work long closed (#474, #484, #616, PR #617). It is
   operative — the runtime reads it — and stale; the state verbs own it, so it is flagged for the next
@@ -162,13 +167,15 @@ capture's own commit and fails on any drift from the committed rows.
 
 ## What is not claimed
 
-No read-count reduction, and no claim that history is off the default-read path — the capture shows the
-opposite, and that finding is recorded as a leak rather than dressed up. Nothing on the hot path changed in this
-work unit, so the #730 workload figures would be unchanged by construction. What is claimed is machine-checked:
+No read-count reduction: nothing on the hot path changed in this work unit, so the #730 workload figures would
+be unchanged by construction. No claim that nothing reads the corpus, either — `doctor`'s link validator reads
+every Markdown surface it finds, measured above and left in place deliberately, because it is the check that
+keeps this index's pointers valid. What is claimed is machine-checked:
 every evidence artifact is classified and reachable through one index row; a shipped surface that starts naming a
 non-operative artifact fails `tests/test-evidence-index.sh` until the index lists it as a reader; and the
-default-read behaviour of the read-only verbs is a committed, commit-pinned, regenerable observation whose every
-reported figure the suite recomputes. Physical footprint is reported unchanged, separately from the reference
+default-read behaviour of the read-only verbs is a committed, regenerable observation whose every reported
+figure the suite recomputes and whose `doctor` rows the suite derives from HEAD's own tree; and the session
+path — every read-only verb but the validator — opens no evidence file, which the suite asserts directly. Physical footprint is reported unchanged, separately from the reference
 footprint and the observed reads, as the issue requires.
 
 ## Acceptance, item by item
@@ -184,8 +191,8 @@ footprint and the observed reads, as the issue requires.
   per-suite inputs by design.
 - **Active-reasoning claims supported by observed/default-read behaviour** — an `strace` capture of the
   read-only verbs on a clean checkout (`742-default-reads.tsv`, regenerable by `tools/evidence-reads.sh`),
-  every figure recomputed by the suite. The measurement refuted the starting assumption and is reported as the
-  third leak; the reference footprint is reported separately and labelled as references, not loads.
+  every figure recomputed by the suite, `doctor`'s rows derived from HEAD's tree, and the separation claim
+  asserted verb by verb. The reference footprint is reported separately and labelled as references, not loads.
 - **Physical and hot-path footprints reported separately** — the physical table, the reference table and the
   observed-reads tables above.
 - **Current fact/provenance links valid** — nothing moved; the suite checks every reader path exists and

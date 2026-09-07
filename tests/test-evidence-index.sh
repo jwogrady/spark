@@ -90,18 +90,32 @@ while IFS=$'\t' read -r fam cls op files bytes lines concerns fact readers why; 
   done
 done < <(rows)
 
-# --- the observed default reads: the committed capture names the tree and the tracer, and opens no historical evidence
+# --- the observed default reads: a committed capture, validated against HEAD's own tree
 CAP="$ROOT/docs/research/v0.23-cleanup/742-default-reads.tsv"
+TOOL="docs/research/v0.23-cleanup/tools/evidence-reads.sh"
 [ -f "$CAP" ] && ok || bad "the observed default-read capture is committed"
-cap_sha="$(head -1 "$CAP" | sed -nE 's/^# observed default reads — clean checkout of ([0-9a-f]{40}) — strace.*/\1/p')"
+[ -x "$ROOT/$TOOL" ] && ok || bad "the capture's tool is committed and executable"
+cap_sha="$(sed -nE 's/^# observed default reads — clean checkout of ([0-9a-f]{40}) — strace.*/\1/p' "$CAP" | head -1)"
 [ -n "$cap_sha" ] && ok || bad "the capture's header names the observed commit and the tracer"
-if [ -n "$cap_sha" ]; then
-  (cd "$ROOT" && git merge-base --is-ancestor "$cap_sha" HEAD) && ok || bad "the capture's commit $cap_sha is not an ancestor of HEAD (a capture must observe this history)"
-fi
-[ -x "$ROOT/docs/research/v0.23-cleanup/tools/evidence-reads.sh" ] && ok || bad "the capture's tool is committed and executable"
+grep -q '^# git index verified warm before tracing' "$CAP" && ok || bad "the capture does not state that the index was refreshed (a cold checkout attributes git's re-hashing to the verb)"
 for v in doctor brief footprint preferences profiles list-skills; do
+  grep -qxF "# $v exit 0" "$CAP" && ok || bad "the capture does not record verb $v exiting 0 (an incomplete run is not a capture)"
   assert_eq "the capture traces verb $v" "1" "$([ "$(awk -F'\t' -v v="$v" '$1 == v {print "y"; exit}' "$CAP")" = y ] && echo 1 || echo 0)"
 done
+
+# Exact-HEAD validity without a tracer. `doctor`'s Doc-links check reads every Markdown file it can find, so the
+# Markdown files under the evidence roots are exactly the ones it opens; deriving that set from HEAD's tree proves
+# the committed rows still describe HEAD, whatever commit they were observed at, and fails the moment a Markdown
+# surface is added or removed under those roots.
+md_tree="$(cd "$ROOT" && git ls-files -- 'docs/research/*.md' 'docs/research/**/*.md' 'docs/releases/*.md' 'docs/releases/**/*.md' 'docs/governance/*.md' 'docs/governance/**/*.md' 'docs/ops/*.md' 'docs/ops/**/*.md' 'evaluations/*.md' 'evaluations/**/*.md' | sort)"
+md_cap="$(awk -F'\t' '$1 == "doctor" && $2 == "file" && $3 ~ /\.md$/ {print $3}' "$CAP" | sort)"
+assert_eq "the capture's doctor rows are HEAD's Markdown surfaces under the evidence roots" "$md_tree" "$md_cap"
+
+# The session path's claim, machine-checked: no verb but `doctor` opens a file under the evidence roots other than
+# the two committed state files the runtime owns.
+assert_eq "only doctor opens evidence files, and only .spark state otherwise" "" \
+  "$(awk -F'\t' '$2 == "file" && $1 != "doctor" && $3 !~ /^\.spark\// {print $1 ":" $3}' "$CAP" | sort | tr '\n' ' ' | sed 's/ $//')"
+
 # every corpus artifact's class, by path — the join key between the capture and the index
 CLSMAP="$(mktemp)"; trap 'rm -f "$CLSMAP"' EXIT
 while IFS= read -r p; do
@@ -116,9 +130,9 @@ while IFS=$'\t' read -r v kind p n; do
     file)
       nfile=$((nfile+1))
       [ -f "$ROOT/$p" ] && ok || bad "observed file $p does not exist in the tree"
-      # a path under an evidence root that the index does not cover must be outside the corpus by construction
+      # a path under an evidence root that the index does not cover is outside the corpus (a current-truth doc)
       if printf '%s\n' "$tree" | grep -qxF "$p"; then
-        grep -qxF "$p	$(awk -F'\t' -v k="$p" '$1 == k {print $2}' "$CLSMAP")" "$CLSMAP" && ok || bad "observed corpus file $p is not indexed"
+        [ -n "$(awk -F'\t' -v k="$p" '$1 == k {print $2}' "$CLSMAP")" ] && ok || bad "observed corpus file $p is not indexed"
       fi
       ;;
     dir) [ -d "$ROOT/${p%/}" ] && ok || bad "observed directory $p does not exist in the tree" ;;
@@ -137,14 +151,16 @@ for v in doctor brief footprint preferences profiles list-skills; do
   ' "$CLSMAP" "$CAP")"
   grep -qxF -- "$row" "$MAN" && ok || bad "the manifest's observed row for $v is not the capture's: expected $row"
 done
-# the count of non-operative history the default path opens, as the page states it
+# the non-operative history the validator reads, as the page states it
 nonop="$(awk -F'\t' 'NR == FNR { cls[$1] = $2; next } $2 == "file" && (cls[$3] == "historical-retained" || cls[$3] == "do-not-delete") { seen[$3] = 1 } END { print length(seen) }' "$CLSMAP" "$CAP")"
-grep -qF -- "**$nonop are non-operative history**" "$MAN" && ok || bad "the manifest does not state the observed non-operative count $nonop"
-[ "$nonop" -gt 0 ] && { grep -q "^## Three leaks" "$MAN" && ok || bad "history is on the default path but the manifest does not record it as a leak"; }
-# opt-in re-observation: on a machine with strace, re-run the tool at the capture's own commit and compare
-if [ "${SPARK_OBSERVE_READS:-0}" = 1 ] && command -v strace >/dev/null 2>&1 && [ -n "$cap_sha" ]; then
-  fresh="$(mktemp)"; (cd "$ROOT" && bash docs/research/v0.23-cleanup/tools/evidence-reads.sh "$cap_sha") > "$fresh" 2>/dev/null || bad "re-observation failed"
-  assert_eq "re-observing $cap_sha reproduces the committed rows" "$(grep -v '^#' "$CAP" | sort)" "$(grep -v '^#' "$fresh" | sort)"
+grep -qF -- "**$nonop non-operative evidence files**" "$MAN" && ok || bad "the manifest does not state the validator's non-operative read count $nonop"
+sess="$(awk -F'\t' 'NR == FNR { cls[$1] = $2; next } $2 == "file" && $1 != "doctor" && $3 in cls { seen[$3] = 1 } END { print length(seen) }' "$CLSMAP" "$CAP")"
+grep -qF -- "the session path opens $sess corpus files" "$MAN" && ok || bad "the manifest does not state the session path's corpus reads ($sess)"
+# opt-in re-observation: on a machine with strace, re-observe HEAD itself and compare row for row
+if [ "${SPARK_OBSERVE_READS:-0}" = 1 ] && command -v strace >/dev/null 2>&1; then
+  fresh="$(mktemp)"
+  (cd "$ROOT" && bash "$TOOL" HEAD) > "$fresh" 2>/dev/null || bad "re-observation of HEAD failed"
+  assert_eq "re-observing HEAD reproduces the committed rows" "$(grep -v '^#' "$CAP" | sort)" "$(grep -v '^#' "$fresh" | sort)"
   rm -f "$fresh"
 fi
 # --- the manifest's figures are the index's
