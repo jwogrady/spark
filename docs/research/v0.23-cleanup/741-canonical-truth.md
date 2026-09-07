@@ -1,6 +1,6 @@
 # Canonical governance and documentation truth — the audit and its register (v0.23 cleanup, #741)
 
-**Scope.** Every Markdown surface of the repository — 163 files: the root contract and roadmap,
+**Scope.** Every Markdown surface of the repository — 164 files: the root contract and roadmap,
 the repo-root developer docs (ADRs, ops, releases, governance, research, alpha), the shipped plugin
 docs and every skill's SKILL.md and references — classified by exactly one primary role in `docs/ops/doc-roles.tsv`, and the seven governed concepts
 the issue named (plus two the audit found contested) mapped to one operative source each in
@@ -23,7 +23,7 @@ computed from the two data files when this page is built, never typed.
 | `operative-authority` | 24 |
 | `current-projection` | 18 |
 | `explanation` | 59 |
-| `historical-evidence` | 62 |
+| `historical-evidence` | 63 |
 | `superseded` | 0 |
 
 Nothing is left as `duplicate` or `false-stale`: the six findings of those kinds were treated and the
@@ -94,7 +94,7 @@ measures what a session loads and what the reviewer re-read. The same tool run o
 |---|---|---|
 | `root.contract` (AGENTS.md + CLAUDE.md, auto-loaded every session) | 15,433 bytes / 292 lines | 15,648 bytes / 295 lines |
 | `shipped.docs.spark` | 310,651 bytes / 5,908 lines | 427,680 bytes / 7,072 lines |
-| `devdocs.ops` | 225,751 bytes / 4,286 lines | 226,008 bytes / 4,290 lines |
+| `devdocs.ops` | 225,751 bytes / 4,286 lines | 252,305 bytes / 4,486 lines |
 
 The contract grows by one clause (contradiction 1); the shipped docs shrink by the two duplicated
 paragraphs and grow by the fact-freshness page #732 added between the two measurements — the figures are the
@@ -105,7 +105,7 @@ concept, projections marked) rather than how many bytes a session loads. No read
 
 ## Acceptance, item by item
 
-- **Surfaces classified by role with evidence** — `docs/ops/doc-roles.tsv`, 163 rows, one role each; the
+- **Surfaces classified by role with evidence** — `docs/ops/doc-roles.tsv`, 164 rows, one role each; the
   evidence per concept is the sweep summarised above and the map's surface lists.
 - **One operative source per concept or an explicit exception** — `docs/ops/canonical-truth.tsv`, nine
   concepts; one exception (routine merge authority) and one unresolved contradiction (merge method), each
