@@ -275,6 +275,21 @@ while IFS=$'\t' read -r fam _cls _op _f _b _l _c _fact readers _why; do
 done < <(rows)
 assert_eq "every member of a family with readers is referenced by one of them" "" "$(printf '%s' "$unbacked" | sed 's/^ //')"
 
+# --- a rationale may not contradict its own row: claiming no reader while listing readers, or claiming a single
+# reader while listing several, is exactly the drift that survives a reproducibility gate
+contradictory=""
+while IFS=$'\t' read -r fam _cls _op _f _b _l _c _fact readers why; do
+  n=0
+  [ "$readers" = "-" ] || { IFS=';' read -ra _rs <<<"$readers"; n=${#_rs[@]}; }
+  case "$why" in
+    *"no reader"*|*"listed with no reader"*) [ "$n" -eq 0 ] || contradictory="$contradictory $fam(says-none-has-$n)" ;;
+  esac
+  case "$why" in
+    *"only reader"*) [ "$n" -le 1 ] || contradictory="$contradictory $fam(says-one-has-$n)" ;;
+  esac
+done < <(rows)
+assert_eq "no rationale contradicts its own readers column" "" "$(printf '%s' "$contradictory" | sed 's/^ //')"
+
 # --- the exclusions this metric depends on, stated and true
 for m in docs/ops/evidence-index.tsv tests/test-evidence-index.sh docs/research/v0.23-cleanup/tools/evidence-reads.sh docs/research/v0.23-cleanup/742-default-reads.tsv docs/research/v0.23-cleanup/742-evidence-separation.md; do
   grep -qF -- "\`$m\`" "$MAN" && ok || bad "the manifest does not name $m as this unit's own machinery"
