@@ -12,6 +12,7 @@
 #   superseded            kept for the record and marked so in its first lines; nothing reads it as current
 #
 # Columns: path <TAB> role <TAB> governed concepts (comma list, or -) <TAB> note
+.github/PULL_REQUEST_TEMPLATE.md	operative-authority	pr-template	the pull-request body every PR opens with; the plan and ship skills fill it
 AGENTS.md	operative-authority	agent-contract	the one agent contract; states other concepts only as projections that point at their sources
 CLAUDE.md	current-projection	agent-contract	imports AGENTS.md
 README.md	explanation	-	public positioning

@@ -13,7 +13,7 @@ REG="$ROOT/docs/ops/doc-roles.tsv"; MAP="$ROOT/docs/ops/canonical-truth.tsv"
 
 rows() { grep -v '^#' "$REG" | grep -v '^$'; }
 # every Markdown surface of the covered roots is registered exactly once, and every registered path exists
-tree="$(cd "$ROOT" && git ls-files -- AGENTS.md CLAUDE.md README.md ROADMAP.md 'docs/*.md' 'docs/**/*.md' 'plugins/*/docs/**' 'plugins/*/skills/*/SKILL.md' 'plugins/*/skills/*/references/*.md' | grep -E '\.md$' | sort)"
+tree="$(cd "$ROOT" && git ls-files -- AGENTS.md CLAUDE.md README.md ROADMAP.md 'docs/*.md' 'docs/**/*.md' 'plugins/*/docs/**' 'plugins/*/skills/*/SKILL.md' 'plugins/*/skills/*/references/*.md' '.github/*.md' '.github/**/*.md' | grep -E '\.md$' | sort)"
 reg="$(rows | cut -f1 | sort)"
 assert_eq "every surface is registered and nothing else is" "" "$(comm -3 <(printf '%s\n' "$tree") <(printf '%s\n' "$reg") | tr '\n' ' ' | sed 's/ $//')"
 assert_eq "no surface is registered twice" "" "$(rows | cut -f1 | sort | uniq -d | tr '\n' ' ')"
@@ -35,6 +35,10 @@ while IFS=$'\t' read -r concept sources projections historical risk treatment; d
   [ -n "$risk" ] && [ -n "$treatment" ] && ok || bad "$concept: drift risk and treatment are stated"
   IFS=';' read -ra srcs <<<"$sources"
   [ "${#srcs[@]}" -ge 1 ] && ok || bad "$concept names an operative source"
+  # one operative source, or a declared composite (which aspect each source owns), or an explicit exception
+  if [ "${#srcs[@]}" -gt 1 ]; then
+    case "$treatment" in COMPOSITE:*|EXCEPTION:*) ok ;; *) bad "$concept names ${#srcs[@]} operative sources without declaring a composite or an exception" ;; esac
+  fi
   for s in "${srcs[@]}"; do
     case "$s" in
       github:*) printf '%s' "$s" | grep -qE '^github:[a-z0-9.-]+/[a-z0-9_.-]+#[1-9][0-9]*$' && ok || bad "$concept: $s is not a canonical GitHub decision-record locator" ;;
@@ -73,4 +77,21 @@ for c in $mapped; do
   srcs="$(mrows | awk -F'\t' -v c="$c" '$1 == c {print $2 ";" $3}' | tr ';' '\n')"
   for o in $ops; do printf '%s\n' "$srcs" | grep -qx "$o" && ok || bad "concept $c: $o is registered operative-authority but the map does not name it as a source or a contract projecting it"; done
 done
+# the manifest's figures are the data's: role counts and the after-column are recomputed and compared
+MAN="$ROOT/docs/research/v0.23-cleanup/741-canonical-truth.md"
+[ -f "$MAN" ] && ok || bad "the manifest is present"
+for role in operative-authority current-projection explanation historical-evidence superseded; do
+  want="$(rows | awk -F'\t' -v r="$role" '$2 == r {n++} END {print n+0}')"
+  got="$(grep -E "^\| \`$role\` \| [0-9]+ \|$" "$MAN" | sed -E 's/^\| `[a-z-]+` \| ([0-9]+) \|$/\1/')"
+  assert_eq "manifest role count for $role is the register's" "$want" "$got"
+done
+while IFS=$'\t' read -r concept sources _p _h _r _t; do
+  prose="$(printf '%s' "$sources" | tr ';' '\n' | grep -cvE '^(ci|github):' || true)"; other="$(printf '%s' "$sources" | tr ';' '\n' | grep -cE '^(ci|github):' || true)"
+  want="$prose"; [ "$other" -gt 0 ] && want="$prose + $other non-prose"
+  got="$(grep -E "^\| \`$concept\` \| [^|]+ \| [^|]+ \|$" "$MAN" | sed -E 's/^\| `[a-z-]+` \| [^|]+ \| ([^|]+) \|$/\1/')"
+  assert_eq "manifest after-count for $concept is the map's" "$want" "$got"
+  before="$(grep -E "^\| \`$concept\` \| [^|]+ \| [^|]+ \|$" "$MAN" | sed -E 's/^\| `[a-z-]+` \| ([^|]+) \| [^|]+ \|$/\1/')"
+  printf '%s' "$before" | grep -qE '^[0-9]+$' && ok || bad "manifest before-count for $concept is a number, not '$before'"
+done < <(mrows)
+assert_eq "the manifest names the register's row count" "1" "$(grep -c -- "— $(rows | grep -c .) files:" "$MAN")"
 finish "documentation roles and canonical truth (#741)"
