@@ -38,6 +38,9 @@ against fact-model schema version 1), rendered by
 `plugins/spark/docs/reference/fact-freshness.md` and proven by
 `tests/test-fact-freshness.sh`.**
 
+- Every fact records the version it observed for each invalidator token and a
+  complete snapshot records its observer, so a consumer decides freshness by
+  comparing recorded versions with current ones — from the cached snapshot alone.
 - Ten **event** classes cover the invalidation the release asked for: HEAD push,
   base move, issue or pull-request metadata, comment creation/edit/deletion,
   relationship and milestone changes, check runs, ruleset changes, repository
@@ -60,8 +63,10 @@ against fact-model schema version 1), rendered by
   — re-reads every source-read fact of the set, so a permission loss cannot
   leave a cached fact usable. A schema or compiler version mismatch
   makes every fact UNKNOWN; nothing is migrated in place.
-- **Scenarios** are executable: the suite applies each fired token to Example 1
-  of the fact model and checks the stale set against the page and the matrix.
+- **Scenarios** are observations against Example 1 of the fact model — current
+  node versions, or the observer's re-read permission — and the suite derives the
+  fired tokens from the versions the example recorded, then checks the stale set
+  against the page and the matrix.
 
 ## Rationale
 
@@ -101,7 +106,10 @@ or a released contract resolves either.
   fact model now closes in R17 and R14: a fact whose value depends on which
   records a node carries lists the node itself (a review its pull request, an
   authority fact the node of its decision records, a head fact its pull request),
-  and a record carrying a field twice is malformed before parsing. Both change
+  and a record carrying a field twice is malformed before parsing; then two
+  more: every fact records the version it observed for each token (R20) and a
+  complete snapshot records its observer (R21), so freshness is a comparison the
+  consumer can make from the cached snapshot alone. All of them change
   which schema-v1 records are valid; R19 states why that is allowed: a version
   identifies a shipped contract, and v1 has not shipped, so it is corrected in
   place and v0.23 fixes it.

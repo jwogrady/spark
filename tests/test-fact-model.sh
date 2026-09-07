@@ -41,7 +41,7 @@ while IFS=$'\t' read -r _ scope rx _; do
 done <<EOF
 $(rec constraint)
 EOF
-assert_eq "two envelope object shapes (source, detail)" "detail source" "$(rec shape | cut -f2 | sort | tr '\n' ' ' | sed 's/ $//')"
+assert_eq "three envelope object shapes (source, detail, observer)" "detail observer source" "$(rec shape | cut -f2 | sort | tr '\n' ' ' | sed 's/ $//')"
 while IFS=$'\t' read -r _ kind rx _; do
   if printf 'probe' | grep -qE "$rx" >/dev/null 2>&1; then rc=0; else rc=$?; fi
   [ "$rc" -le 1 ] && ok || bad "invalidator regex for $kind compiles"
@@ -53,12 +53,12 @@ for b in $(rec boundary-evidence | cut -f2); do printf '%s' "$b" | grep -qE "$(r
 for k in $(rec boundary-evidence | cut -f3); do rec key | cut -f3 | grep -qx "$k" && ok || bad "boundary-evidence names canonical key $k"; done
 assert_eq "four status tokens" "4" "$(rec status | wc -l | tr -d ' ')"
 assert_eq "ESTABLISHED is the only status that may carry a value" "ESTABLISHED" "$(rec status | awk -F'\t' '$3=="yes"{print $2}')"
-assert_eq "twelve envelope fields" "12" "$(rec field | wc -l | tr -d ' ')"
+assert_eq "thirteen envelope fields" "13" "$(rec field | wc -l | tr -d ' ')"
 assert_eq "value is optional in the envelope (present only when ESTABLISHED)" "optional" "$(rec field | awk -F'\t' '$2=="value"{print $3}')"
 assert_eq "five source types" "5" "$(rec source | wc -l | tr -d ' ')"
-assert_eq "nineteen rules" "19" "$(rec rule | wc -l | tr -d ' ')"
+assert_eq "twenty-one rules" "21" "$(rec rule | wc -l | tr -d ' ')"
 assert_eq "one source-version grammar per source type" "$(rec source | cut -f2 | sort | tr '\n' ' ')" "$(rec source-version | cut -f2 | sort | tr '\n' ' ')"
-assert_eq "twenty-one identifier kinds" "21" "$(rec identifier | wc -l | tr -d ' ')"
+assert_eq "twenty-two identifier kinds" "22" "$(rec identifier | wc -l | tr -d ' ')"
 for k in issue-state check-state scope boundary decision-record derived-version; do rec identifier | cut -f2 | grep -qx "$k" && ok || bad "closed vocabulary $k declared"; done
 assert_eq "one source-identity grammar per source type" "$(rec source | cut -f2 | sort | tr '\n' ' ')" "$(rec source-identity | cut -f2 | sort | tr '\n' ' ')"
 while IFS=$'\t' read -r _ kind rx _; do
@@ -142,8 +142,8 @@ ident = {c[0]: c for c in table("| Kind | Canonical form |")}
 for r in kind("identifier", 1, 2, 3):
     c = ident.get(r[1]); say(c is not None and norm(c[1]) == norm(r[3]) and raw(c[2]) == r[2], f"identifier {r[1]} row is the TSV's canonical form and grammar")
 inv = {norm(c[0]): c for c in table("| Kind | Grammar (ERE) |")}
-for r in kind("invalidator", 1, 2, 3):
-    c = inv.get(r[1]); say(c is not None and raw(c[1]) == r[2] and norm(c[2]) == norm(r[3]), f"invalidator {r[1]} row is the TSV's grammar and token form")
+for r in kind("invalidator", 1, 2, 3, 4):
+    c = inv.get(r[1]); say(c is not None and raw(c[1]) == r[2] and norm(c[2]) == norm(r[3]) and norm(c[3]) == r[4], f"invalidator {r[1]} row is the TSV's grammar, token form and observed-version kind")
 sta = {norm(c[0]): c for c in table("| Status | `value` allowed |")}
 for r in kind("status", 1, 2, 3):
     c = sta.get(r[1]); say(c is not None and [norm(x) for x in c[1:]] == [r[2], norm(r[3])], f"status {r[1]} row is the TSV's value-allowed flag and meaning")
@@ -425,6 +425,7 @@ def one_wu_token(f, wid, what):
     if len(have) != 1: fail(f"{what} lists {wid} as an invalidator exactly once, as issue: or pull_request: (R17)")
 FORBIDDEN_KEYS = {"body", "comments", "timeline", "prose", "summary", "history"}
 ISO = ids["timestamp"]
+VKIND = {r[1]: r[4] for r in rows if r[0] == "invalidator"}   # the observed-version kind of each token kind
 
 def fail(msg): raise ValueError(msg)
 
@@ -526,6 +527,15 @@ def check_fact(f):
         for cand in f["detail"]["candidates"]:
             if ids["comment"].fullmatch(cand) and f"comment:{cand}" not in f["invalidators"]: fail(f"a CONFLICT naming comment {cand} as a candidate lists it as a comment: invalidator (R17)")
     if c == "head" and f["source"]["type"] == "github-api" and f["status"] != "NOT_APPLICABLE" and not ids["work-unit"].fullmatch(ident): fail(f"head read from GitHub names a work unit, not {ident} (R17)")
+    # every token has the version observed for its node, and nothing else (R20)
+    vers = f.get("versions")
+    if isinstance(vers, dict):
+        if set(vers) != set(f["invalidators"]): fail(f"versions names exactly the fact's invalidator tokens (R20): {sorted(set(vers) ^ set(f['invalidators']))}")
+        for t, v in vers.items():
+            k, rest = t.split(":", 1)
+            if not isinstance(v, str) or not ids[VKIND[k]].fullmatch(v): fail(f"versions[{t}] is not a {VKIND[k]} (R20)")
+            if k == "head" and v != rest: fail(f"the version observed for {t} is the head itself (R20)")
+            if rest == ident and isinstance(f["source"].get("version"), str) and ISO.fullmatch(f["source"]["version"]) and v != f["source"]["version"]: fail(f"the source node's observed version {v} is not the fact's source.version {f['source']['version']} (R20)")
     # a fact whose value depends on which records a node carries lists the node, so a record created later reaches it (R17)
     if c == "review" and f["status"] != "NOT_APPLICABLE":
         one_wu_token(f, ident if ids["work-unit"].fullmatch(ident) else ident.split("/comment/")[0], "review (the pull request whose comments hold the verdicts)")
@@ -585,14 +595,24 @@ def check_fact(f):
         if f"ref:{repo}/{v['base_ref']}" not in f["invalidators"]: fail(f"head carries base_ref {v['base_ref']} but does not list ref:{repo}/{v['base_ref']} as an invalidator (R17)")
 
 REQUIRED = {c for c, req in classes.items() if req == "required"}
-def check_set(facts, complete):
-    """Snapshot-level rules (R11): a complete snapshot has every required class exactly once; a fragment
-    never repeats a class. Both: every fact validates; next_action.because ⊆ keys present."""
+def check_set(facts, complete, observer=None):
+    """Snapshot-level rules (R11, R20, R21): a complete snapshot has every required class exactly once and records
+    its observer; a fragment never repeats a class; one node has one observed version; next_action.because ⊆ keys."""
     seen = [f["class"] for f in facts]
     if len(set(seen)) != len(seen): fail("a class appears twice in one set")
     if complete:
         missing = REQUIRED - set(seen)
         if missing: fail(f"complete snapshot lacks required classes: {sorted(missing)}")
+        if not isinstance(observer, dict): fail("a complete snapshot records its observer: login, permission, checked_at (R21)")
+        else:
+            if set(observer) != {"login", "permission", "checked_at"}: fail(f"observer has exactly login, permission and checked_at (R21): {sorted(observer)}")
+            for k, kind_ in (("login", "login"), ("permission", "permission"), ("checked_at", "timestamp")):
+                if not isinstance(observer.get(k), str) or not ids[kind_].fullmatch(observer[k]): fail(f"observer.{k} is not a {kind_} (R21)")
+    nv = {}
+    for f in facts:
+        for t, v in (f.get("versions") or {}).items(): nv.setdefault(t, set()).add(v)
+    for t, vs in nv.items():
+        if len(vs) != 1: fail(f"within one set a node has one observed version; {t} has {sorted(vs)} (R20)")
     keys = {f["key"]: f for f in facts}
     for f in facts:
         for i in f.get("inputs", []) or []:
@@ -700,27 +720,28 @@ def examples_from_doc(text):
     """(kind, facts) per example, kind read from the heading marker: complete snapshot | fragment."""
     out = []
     for m in re.finditer(r"^### Example \d+ — [^\n]*\((complete snapshot|fragment)\)\n(.*?)```json\n(.*?)\n```", text, flags=re.S | re.M):
-        out.append((m.group(1), json.loads(m.group(3), object_pairs_hook=no_dupes)))
+        obj = json.loads(m.group(3), object_pairs_hook=no_dupes)
+        out.append((m.group(1), obj["facts"] if isinstance(obj, dict) else obj, obj.get("observer") if isinstance(obj, dict) else None))
     return out
 
 mode = sys.argv[3] if len(sys.argv) > 3 else "doc"
 if mode == "doc":
     exs = examples_from_doc(open(doc).read())
     n = 0
-    for kind, facts in exs:
+    for kind, facts, observer in exs:
         for f in facts: check_fact(f); n += 1
-        check_set(facts, kind == "complete snapshot")
+        check_set(facts, kind == "complete snapshot", observer)
     kinds = {"UNKNOWN": 0, "CONFLICT": 0, "NOT_APPLICABLE": 0}
-    for _, facts in exs:
+    for _, facts, _o in exs:
         for f in facts:
             if f["status"] in kinds: kinds[f["status"]] += 1
-    print(f"snapshots={len(exs)} complete={sum(1 for k,_ in exs if k=='complete snapshot')} facts={n} unknown={kinds['UNKNOWN']} conflict={kinds['CONFLICT']} not_applicable={kinds['NOT_APPLICABLE']}")
+    print(f"snapshots={len(exs)} complete={sum(1 for k,_,_o in exs if k=='complete snapshot')} facts={n} unknown={kinds['UNKNOWN']} conflict={kinds['CONFLICT']} not_applicable={kinds['NOT_APPLICABLE']}")
 elif mode == "set":
     # snapshot-level control: stdin = {"complete": bool, "facts": [...]}
     d = json.load(sys.stdin, object_pairs_hook=no_dupes)
     try:
         for f in d["facts"]: check_fact(f)
-        check_set(d["facts"], d["complete"]); print("accepted")
+        check_set(d["facts"], d["complete"], d.get("observer")); print("accepted")
     except (ValueError, KeyError, TypeError) as e: print(f"rejected: {e}"); sys.exit(1)
 else:
     # mutation control: read one fact JSON from stdin; exit 0 if it validates, 1 if rejected
@@ -732,11 +753,31 @@ case "$out" in *"snapshots=9 complete=2 "*) ok ;; *) bad "nine examples parsed, 
 case "$out" in *"unknown=2 conflict=1 not_applicable=6"*) ok ;; *) bad "examples include exactly two UNKNOWN, one CONFLICT and six NOT_APPLICABLE facts: $out" ;; esac
 
 # ======================== mutation controls: the validator discriminates ========================
-base='{"schema_version":"1","key":"review.independent","class":"review","status":"ESTABLISHED","value":{"verdict":"PASS","head":"0123456789abcdef0123456789abcdef01234567","reviewer":"login:github-actions[bot]","record":"github.com/acme/widgets#42/comment/9100"},"source":{"type":"github-api","identity":"github.com/acme/widgets#42/comment/9100","version":"2026-09-06T11:58:00Z"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["head:0123456789abcdef0123456789abcdef01234567","comment:github.com/acme/widgets#42/comment/9100","pull_request:github.com/acme/widgets#42"],"provenance":"https://github.com/acme/widgets/pull/42#issuecomment-9100"}'
+base='{"schema_version":"1","key":"review.independent","class":"review","status":"ESTABLISHED","value":{"verdict":"PASS","head":"0123456789abcdef0123456789abcdef01234567","reviewer":"login:github-actions[bot]","record":"github.com/acme/widgets#42/comment/9100"},"source":{"type":"github-api","identity":"github.com/acme/widgets#42/comment/9100","version":"2026-09-06T11:58:00Z"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["head:0123456789abcdef0123456789abcdef01234567","comment:github.com/acme/widgets#42/comment/9100","pull_request:github.com/acme/widgets#42"],"versions":{"head:0123456789abcdef0123456789abcdef01234567":"0123456789abcdef0123456789abcdef01234567","comment:github.com/acme/widgets#42/comment/9100":"2026-09-06T11:58:00Z","pull_request:github.com/acme/widgets#42":"2026-09-05T18:00:00Z"},"provenance":"https://github.com/acme/widgets/pull/42#issuecomment-9100"}'
 # m <fact-json> <python-statements> [<arg>] — one fact, mutated: the statements see it as `f` (and the arg as sys.argv[2])
-m() { printf '%s' "$1" | python3 -c "import json,sys; f=json.load(sys.stdin); exec(sys.argv[1]); print(json.dumps(f))" "$2" "${3:-}"; }
+SYNC="$WORK/sync.py"
+cat > "$SYNC" <<'PY'
+# after a mutation, versions names exactly the tokens left (R20); a control about versions itself sets NOSYNC=True
+NOSYNC = False
+def _dflt(f, t):
+    if ":" not in t: return None
+    k, rest = t.split(":", 1)
+    if k == "head": return rest
+    if k == "ref": return "89abcdef0123456789abcdef0123456789abcdef"
+    src = f.get("source") if isinstance(f.get("source"), dict) else {}
+    if src.get("identity") == rest and isinstance(src.get("version"), str) and "T" in src["version"]: return src["version"]
+    return None
+def sync(x):
+    if globals().get("NOSYNC"): return
+    for f in (x if isinstance(x, list) else [x]):
+        if isinstance(f, dict) and isinstance(f.get("invalidators"), list):
+            old = f.get("versions") if isinstance(f.get("versions"), dict) else {}
+            f["versions"] = {t: (_dflt(f, t) or old.get(t) or "2026-09-05T18:00:00Z") for t in f["invalidators"] if isinstance(t, str)}
+PY
+m() { printf '%s' "$1" | python3 -c "import json,sys; exec(open('$SYNC').read()); f=json.load(sys.stdin); exec(sys.argv[1]); sync(f); print(json.dumps(f))" "$2" "${3:-}"; }
 # snap <facts-json> — a complete-snapshot envelope for sets()
-snap() { printf '{"complete": true, "facts": %s}' "$1"; }
+OBS='{"login": "login:acme-orchestrator[bot]", "permission": "write", "checked_at": "2026-09-06T12:00:05Z"}'
+snap() { printf '{"complete": true, "observer": %s, "facts": %s}' "$OBS" "$1"; }
 # rej <fixture-name> <python> <why-it-must-be-rejected> [<arg>]  /  acc <fixture-name> <python> <control-description> [<arg>]
 rej() { accepts "$(m "${!1}" "$2" "${4:-}")" && bad "$3" || ok; }
 acc() { accepts "$(m "${!1}" "$2" "${4:-}")" && ok || bad "$3"; }
@@ -766,6 +807,13 @@ def fact(cls, status, value, src, inv, detail=None, inputs=None):
     if status == "ESTABLISHED": f["value"] = value
     if status in ("UNKNOWN", "CONFLICT"): f["detail"] = detail or {"reason": "the source answered 403", "candidates": []}
     if inputs is not None: f["inputs"] = inputs
+    def ver(t):
+        k, rest = t.split(":", 1)
+        if k == "head": return rest
+        if k == "ref": return B
+        if rest == src["identity"] and "T" in str(src["version"]): return src["version"]
+        return T
+    f["versions"] = {t: ver(t) for t in inv}
     return f
 def cell(cls, status):
     E, U, C, N = status == "ESTABLISHED", status == "UNKNOWN", status == "CONFLICT", status == "NOT_APPLICABLE"
@@ -809,7 +857,7 @@ $(python3 "$MATRIX" "$TSV")
 EOF
 
 accepts "$base" && ok || bad "control: the canonical review fact is accepted"
-mut() { printf '%s' "$base" | python3 -c "import json,sys; f=json.load(sys.stdin); exec(sys.argv[1]); print(json.dumps(f))" "$1"; }
+mut() { printf '%s' "$base" | python3 -c "import json,sys; exec(open('$SYNC').read()); f=json.load(sys.stdin); exec(sys.argv[1]); sync(f); print(json.dumps(f))" "$1"; }
 rej base 'f["status"]="UNKNOWN"; f["detail"]={"reason":"x","candidates":[]}' "UNKNOWN with a value must be rejected (R6)"
 rej base 'f["status"]="UNKNOWN"; del f["value"]' "UNKNOWN without detail must be rejected"
 acc base 'f["status"]="UNKNOWN"; del f["value"]; f["detail"]={"reason":"the endpoint returned 403","candidates":[]}' "control: an UNKNOWN with a well-shaped detail is accepted"
@@ -834,7 +882,7 @@ rej base 'f["schema_version"]="2"' "an unknown schema_version must be rejected (
 rej base 'f["body"]="the whole comment text"' "a raw prose field must be rejected (R2)"
 rej base 'f["status"]="CONFLICT"; del f["value"]; f["detail"]={"reason":"x","candidates":["github.com/acme/widgets#42/comment/9100"]}' "a CONFLICT naming one candidate must be rejected (R8)"
 rej base 'f["value"]=None' "value: null must not stand in for absence (R6)"
-derived='{"schema_version":"1","key":"next_action.governed","class":"next_action","status":"ESTABLISHED","value":{"action":"merge","because":["review.independent"],"boundary":"none"},"source":{"type":"derived","identity":"fact-model/1","version":"1;review.independent@2026-09-06T11:58:00Z"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["head:0123456789abcdef0123456789abcdef01234567"],"provenance":"preferences/fact-model.tsv","inputs":["review.independent"]}'
+derived='{"schema_version":"1","key":"next_action.governed","class":"next_action","status":"ESTABLISHED","value":{"action":"merge","because":["review.independent"],"boundary":"none"},"source":{"type":"derived","identity":"fact-model/1","version":"1;review.independent@2026-09-06T11:58:00Z"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["head:0123456789abcdef0123456789abcdef01234567"],"versions":{"head:0123456789abcdef0123456789abcdef01234567":"0123456789abcdef0123456789abcdef01234567"},"provenance":"preferences/fact-model.tsv","inputs":["review.independent"]}'
 accepts "$derived" && ok || bad "control: a derived fact with inputs is accepted"
 rej derived 'del f["inputs"]' "a derived fact without inputs must be rejected (R4)"
 rej derived 'f["source"]={"type":"github-api","identity":"github.com/acme/widgets#42","version":"2026-09-06T11:58:00Z"}' "a next_action asserted from a raw read (a valid non-derived source) must be rejected — the class is derived, never asserted (R4/R15)"
@@ -921,13 +969,21 @@ rej base 'f["value"]["record"]="github.com/acme/widgets#42/comment/9101"; f["inv
 rej base 'f["invalidators"]=[i for i in f["invalidators"] if not i.startswith("comment:")]' "a review that does not list its record as a comment: invalidator must be rejected (R17)"
 rej base 'f["invalidators"]=[i for i in f["invalidators"] if not i.startswith("pull_request:")]' "a review that does not list the pull request whose comments hold the verdicts must be rejected — a verdict record created later would never reach it (R17)"
 rej base 'f["invalidators"].append("issue:github.com/acme/widgets#42")' "a review listing its pull request under both kinds must be rejected — one canonical token (R17)"
+# versions: tokens say what, versions say as of when (R20)
+rej base 'NOSYNC=True; del f["versions"]' "a fact without versions must be rejected — nothing could compare it with the source (R20)"
+rej base 'NOSYNC=True; del f["versions"]["comment:github.com/acme/widgets#42/comment/9100"]' "versions must name every token the fact carries (R20)"
+rej base 'NOSYNC=True; f["versions"]["issue:github.com/acme/widgets#41"]="2026-09-05T18:00:00Z"' "versions must name only the fact's tokens (R20)"
+rej base 'NOSYNC=True; f["versions"]["pull_request:github.com/acme/widgets#42"]="0123456789abcdef0123456789abcdef01234567"' "a node's observed version in the wrong grammar (a commit for a pull request) must be rejected (R20)"
+rej base 'NOSYNC=True; f["versions"]["head:0123456789abcdef0123456789abcdef01234567"]="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"' "a head token's observed version is the head itself (R20)"
+rej base 'NOSYNC=True; f["versions"]["comment:github.com/acme/widgets#42/comment/9100"]="2026-09-06T11:00:00Z"' "the source node's observed version must be the fact's source.version (R20)"
+acc base 'f["versions"]["pull_request:github.com/acme/widgets#42"]="2026-09-06T12:00:00Z"' "control: a pull request's observed version in the timestamp grammar is accepted (R20)"
 dup="$(printf '%s' "$base" | sed 's/"key":"review.independent"/"key":"review.independent","key":"review.independent"/')"
 [ "$dup" != "$base" ] && ok || bad "control: the duplicate-field mutation did not apply"
 printf '%s' "$dup" | python3 "$VAL" "$TSV" "$DOC" one >/dev/null 2>&1 && bad "a record carrying the same field twice must be rejected before parsing — keeping first or last would choose silently (R14)" || ok
 dup2="$(printf '%s' "$base" | sed 's/"status":"ESTABLISHED"/"status":"ESTABLISHED","status":"UNKNOWN"/')"
 printf '%s' "$dup2" | python3 "$VAL" "$TSV" "$DOC" one >/dev/null 2>&1 && bad "a record with two disagreeing copies of one field must be rejected, not resolved by position (R14)" || ok
 rej base 'f["value"]["record"]="github.com/Acme/Widgets#42/comment/9100"; f["source"]["identity"]=f["value"]["record"]; f["invalidators"]=["head:0123456789abcdef0123456789abcdef01234567","comment:"+f["value"]["record"]]' "a mixed-case owner/name is a projection, never the identity (R1)"
-wu='{"schema_version":"1","key":"work_unit.identity","class":"work_unit","status":"ESTABLISHED","value":{"kind":"pull_request","id":"github.com/acme/widgets#42","implements":"github.com/acme/widgets#41"},"source":{"type":"github-api","identity":"github.com/acme/widgets#42","version":"2026-09-06T12:00:00Z"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["pull_request:github.com/acme/widgets#42"],"provenance":"https://github.com/acme/widgets/pull/42"}'
+wu='{"schema_version":"1","key":"work_unit.identity","class":"work_unit","status":"ESTABLISHED","value":{"kind":"pull_request","id":"github.com/acme/widgets#42","implements":"github.com/acme/widgets#41"},"source":{"type":"github-api","identity":"github.com/acme/widgets#42","version":"2026-09-06T12:00:00Z"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["pull_request:github.com/acme/widgets#42"],"versions":{"pull_request:github.com/acme/widgets#42":"2026-09-06T12:00:00Z"},"provenance":"https://github.com/acme/widgets/pull/42"}'
 accepts "$wu" && ok || bad "control: a canonical work_unit fact is accepted"
 rej wu 'f["source"]["version"]="0123456789abcdef0123456789abcdef01234567"' "a commit cannot version a mutable work_unit node (R14)"
 rej wu 'f["value"]["body"]="the PR description"' "work_unit.value.body must be rejected (R2/R14)"
@@ -937,7 +993,7 @@ acc wu 'f["value"]["implements"]="none"' "control: a pull request that implement
 rej wu 'del f["value"]["implements"]' "a work unit without the implements field must be rejected (R14)"
 rej wu 'f["value"]["id"]="github.com/Acme/widgets#42"; f["source"]["identity"]=f["value"]["id"]; f["invalidators"]=["pull_request:"+f["value"]["id"]]' "a mixed-case owner in a work-unit id must be rejected (R1)"
 rej wu 'f["value"]["id"]="github.com/acme/widgets.git#42"; f["source"]["identity"]=f["value"]["id"]; f["invalidators"]=["pull_request:"+f["value"]["id"]]' "a .git-suffixed repository name is the clone URL's spelling, never the identity (R1)"
-rp='{"schema_version":"1","key":"repository.identity","class":"repository","status":"ESTABLISHED","value":{"id":"github.com/acme/widgets","default_branch":"master"},"source":{"type":"github-api","identity":"github.com/acme/widgets","version":"2026-09-01T08:00:00Z"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["repository:github.com/acme/widgets"],"provenance":"https://github.com/acme/widgets"}'
+rp='{"schema_version":"1","key":"repository.identity","class":"repository","status":"ESTABLISHED","value":{"id":"github.com/acme/widgets","default_branch":"master"},"source":{"type":"github-api","identity":"github.com/acme/widgets","version":"2026-09-01T08:00:00Z"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["repository:github.com/acme/widgets"],"versions":{"repository:github.com/acme/widgets":"2026-09-01T08:00:00Z"},"provenance":"https://github.com/acme/widgets"}'
 # a repository locator is three GitHub identities: a DNS host, a login-shaped owner, a GitHub repository name;
 # the same components sit inside every work unit, comment, milestone, decision record, invalidator and source identity
 for x in 'github.com./acme/widgets' 'github..com/acme/widgets' '-github.com/acme/widgets' 'github.com-/acme/widgets' 'github/acme/widgets' \
@@ -958,7 +1014,7 @@ rej rp 'f["value"]["id"]="github.com/acme/widgets.git"; f["source"]["identity"]=
 acc rp 'f["source"]["version"]="W/\"a1b2c3d4:e5f6\""' "control: a delimiter-safe etag is a valid github-api version"
 rej rp 'f["source"]["version"]="W/\"a1b2;c3d4\""' "an etag containing ';' must be rejected — it could not be carried inside a derived-version (R4/R14)"
 acc derived 'f["source"]["version"]="1;review.independent@W/\"a1b2c3d4:e5f6\""' "control: a derived-version carrying an etag input version round-trips"
-acc='{"schema_version":"1","key":"acceptance.contract","class":"acceptance","status":"ESTABLISHED","value":{"contract":"github.com/acme/widgets#41","head":"0123456789abcdef0123456789abcdef01234567","items":[{"id":"a1","state":"MET"}]},"source":{"type":"github-api","identity":"github.com/acme/widgets#41","version":"2026-09-05T18:00:00Z"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["issue:github.com/acme/widgets#41","head:0123456789abcdef0123456789abcdef01234567"],"provenance":"https://github.com/acme/widgets/issues/41"}'
+acc='{"schema_version":"1","key":"acceptance.contract","class":"acceptance","status":"ESTABLISHED","value":{"contract":"github.com/acme/widgets#41","head":"0123456789abcdef0123456789abcdef01234567","items":[{"id":"a1","state":"MET"}]},"source":{"type":"github-api","identity":"github.com/acme/widgets#41","version":"2026-09-05T18:00:00Z"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["issue:github.com/acme/widgets#41","head:0123456789abcdef0123456789abcdef01234567"],"versions":{"issue:github.com/acme/widgets#41":"2026-09-05T18:00:00Z","head:0123456789abcdef0123456789abcdef01234567":"0123456789abcdef0123456789abcdef01234567"},"provenance":"https://github.com/acme/widgets/issues/41"}'
 accepts "$acc" && ok || bad "control: a canonical acceptance fact is accepted"
 rej acc 'f["value"]["items"][0]["summary"]="done, I think"' "acceptance.items[].summary must be rejected (R2/R14)"
 rej acc 'del f["value"]["head"]' "an acceptance fact without an explicit HEAD must be rejected (R7)"
@@ -971,7 +1027,7 @@ rej acc 'f["value"]["items"].append({"id":"a1","state":"NOT_MET"})' "duplicate a
 rej acc 'f["value"]["items"][0]["id"]={"body":"raw prose"}' "an object as an acceptance item id must be rejected (R2/R14)"
 rej acc 'f["value"]["items"][0]["id"]=""' "an empty acceptance item id must be rejected (R14)"
 rej acc 'f["value"]["items"][0]["id"]="the first criterion, roughly"' "a prose acceptance item id must be rejected (R14)"
-auth='{"schema_version":"1","key":"authority.standing","class":"authority","status":"ESTABLISHED","value":{"grants":[{"decision":"github.com/acme/widgets#7/comment/9001","target":"github.com/acme/widgets","scopes":["merge:routine"]}],"human_boundaries":[{"decision":"github.com/acme/widgets#7/comment/9001","target":"github.com/acme/widgets","boundary":"release:approve"}]},"source":{"type":"human-decision","identity":"github.com/acme/widgets#7/comment/9001","version":"2026-09-01T09:00:00Z"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["comment:github.com/acme/widgets#7/comment/9001","issue:github.com/acme/widgets#7"],"provenance":"https://github.com/acme/widgets/issues/7"}'
+auth='{"schema_version":"1","key":"authority.standing","class":"authority","status":"ESTABLISHED","value":{"grants":[{"decision":"github.com/acme/widgets#7/comment/9001","target":"github.com/acme/widgets","scopes":["merge:routine"]}],"human_boundaries":[{"decision":"github.com/acme/widgets#7/comment/9001","target":"github.com/acme/widgets","boundary":"release:approve"}]},"source":{"type":"human-decision","identity":"github.com/acme/widgets#7/comment/9001","version":"2026-09-01T09:00:00Z"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["comment:github.com/acme/widgets#7/comment/9001","issue:github.com/acme/widgets#7"],"versions":{"comment:github.com/acme/widgets#7/comment/9001":"2026-09-01T09:00:00Z","issue:github.com/acme/widgets#7":"2026-09-05T18:00:00Z"},"provenance":"https://github.com/acme/widgets/issues/7"}'
 accepts "$auth" && ok || bad "control: a canonical authority fact is accepted"
 rej auth 'f["source"]["type"]="github-api"' "authority from a non-human-decision source must be rejected (R5)"
 rej auth 'f["invalidators"]=["repository:github.com/acme/widgets"]' "an authority recorded in a comment that does not list that comment as an invalidator must be rejected — an edited decision would never go stale (R17)"
@@ -992,10 +1048,10 @@ rej auth 'f["source"]["identity"]="the maintainer approved this in chat"' "a hum
 rej auth 'f["source"]["version"]="9001"' "a decision recorded in a comment versioned by the comment id must be rejected — comments are edited, ids are not (R14)"
 acc auth 'f["source"]["version"]="2026-09-03T10:00:00Z"' "control: an edited decision carries the new updated_at as its version"
 # git and repository-file sources: the commit in the identity IS the version observed
-hd0='{"schema_version":"1","key":"head.exact","class":"head","status":"ESTABLISHED","value":{"head":"0123456789abcdef0123456789abcdef01234567","base_ref":"master","base":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","current":true},"source":{"type":"github-api","identity":"github.com/acme/widgets#42","version":"0123456789abcdef0123456789abcdef01234567"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["head:0123456789abcdef0123456789abcdef01234567","ref:github.com/acme/widgets/master","pull_request:github.com/acme/widgets#42"],"provenance":"https://github.com/acme/widgets/pull/42/commits"}'
-rf='{"schema_version":"1","key":"acceptance.contract","class":"acceptance","status":"ESTABLISHED","value":{"contract":"github.com/acme/widgets#41","head":"0123456789abcdef0123456789abcdef01234567","items":[{"id":"a1","state":"MET"}]},"source":{"type":"repository-file","identity":"github.com/acme/widgets@0123456789abcdef0123456789abcdef01234567:docs/acceptance/41.md","version":"0123456789abcdef0123456789abcdef01234567"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["head:0123456789abcdef0123456789abcdef01234567","ref:github.com/acme/widgets/master","issue:github.com/acme/widgets#41"],"provenance":"https://github.com/acme/widgets/blob/0123456789abcdef0123456789abcdef01234567/docs/acceptance/41.md"}'
+hd0='{"schema_version":"1","key":"head.exact","class":"head","status":"ESTABLISHED","value":{"head":"0123456789abcdef0123456789abcdef01234567","base_ref":"master","base":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","current":true},"source":{"type":"github-api","identity":"github.com/acme/widgets#42","version":"0123456789abcdef0123456789abcdef01234567"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["head:0123456789abcdef0123456789abcdef01234567","ref:github.com/acme/widgets/master","pull_request:github.com/acme/widgets#42"],"versions":{"head:0123456789abcdef0123456789abcdef01234567":"0123456789abcdef0123456789abcdef01234567","ref:github.com/acme/widgets/master":"89abcdef0123456789abcdef0123456789abcdef","pull_request:github.com/acme/widgets#42":"2026-09-05T18:00:00Z"},"provenance":"https://github.com/acme/widgets/pull/42/commits"}'
+rf='{"schema_version":"1","key":"acceptance.contract","class":"acceptance","status":"ESTABLISHED","value":{"contract":"github.com/acme/widgets#41","head":"0123456789abcdef0123456789abcdef01234567","items":[{"id":"a1","state":"MET"}]},"source":{"type":"repository-file","identity":"github.com/acme/widgets@0123456789abcdef0123456789abcdef01234567:docs/acceptance/41.md","version":"0123456789abcdef0123456789abcdef01234567"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["head:0123456789abcdef0123456789abcdef01234567","ref:github.com/acme/widgets/master","issue:github.com/acme/widgets#41"],"versions":{"head:0123456789abcdef0123456789abcdef01234567":"0123456789abcdef0123456789abcdef01234567","ref:github.com/acme/widgets/master":"89abcdef0123456789abcdef0123456789abcdef","issue:github.com/acme/widgets#41":"2026-09-05T18:00:00Z"},"provenance":"https://github.com/acme/widgets/blob/0123456789abcdef0123456789abcdef01234567/docs/acceptance/41.md"}'
 accepts "$rf" && ok || bad "control: a repository-file source with a path identity is accepted (the grammar is Python-compatible)"
-rmut() { printf '%s' "$rf" | python3 -c "import json,sys; f=json.load(sys.stdin); exec(sys.argv[1]); print(json.dumps(f))" "$1" "${2:-}"; }
+rmut() { printf '%s' "$rf" | python3 -c "import json,sys; exec(open('$SYNC').read()); f=json.load(sys.stdin); exec(sys.argv[1]); sync(f); print(json.dumps(f))" "$1" "${2:-}"; }
 rej rf 'f["source"]["version"]="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"' "a repository-file read pinned to commit A claiming version B must be rejected (R14)"
 rej rf 'f["source"]["identity"]="github.com/acme/widgets@0123456789abcdef0123456789abcdef01234567:docs/with space.md"' "a repository-file path with whitespace is outside the grammar"
 rej rf 'f["source"]["identity"]="github.com/acme/widgets@0123456789abcdef0123456789abcdef01234567:docs/with\ttab.md"' "a repository-file path with a tab is outside the grammar"
@@ -1021,7 +1077,7 @@ rej auth 'f["value"]["human_boundaries"][0]["boundary"]="release approval"' "a p
 rej auth 'f["value"]["human_boundaries"]=["release:approve"]' "a bare-token boundary without decision and target must be rejected (R13/R14)"
 rej auth 'f["value"]["human_boundaries"][0]["target"]="everywhere"' "a prose boundary target must be rejected (R14)"
 rej auth 'f["value"]["grants"][0]["scopes"]=[]' "a grant with no scopes must be rejected (R13)"
-chk='{"schema_version":"1","key":"checks.required","class":"checks","status":"ESTABLISHED","value":{"head":"0123456789abcdef0123456789abcdef01234567","required":["doctor","tests"],"results":[{"name":"doctor","state":"success"},{"name":"tests","state":"success"}]},"source":{"type":"github-api","identity":"github.com/acme/widgets","version":"0123456789abcdef0123456789abcdef01234567"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["head:0123456789abcdef0123456789abcdef01234567","ruleset:github.com/acme/widgets"],"provenance":"https://github.com/acme/widgets/commit/0123456789abcdef0123456789abcdef01234567/checks"}'
+chk='{"schema_version":"1","key":"checks.required","class":"checks","status":"ESTABLISHED","value":{"head":"0123456789abcdef0123456789abcdef01234567","required":["doctor","tests"],"results":[{"name":"doctor","state":"success"},{"name":"tests","state":"success"}]},"source":{"type":"github-api","identity":"github.com/acme/widgets","version":"0123456789abcdef0123456789abcdef01234567"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["head:0123456789abcdef0123456789abcdef01234567","ruleset:github.com/acme/widgets"],"versions":{"head:0123456789abcdef0123456789abcdef01234567":"0123456789abcdef0123456789abcdef01234567","ruleset:github.com/acme/widgets":"2026-09-05T18:00:00Z"},"provenance":"https://github.com/acme/widgets/commit/0123456789abcdef0123456789abcdef01234567/checks"}'
 accepts "$chk" && ok || bad "control: a covered checks fact is accepted"
 rej chk 'f["value"]["results"]=f["value"]["results"][:1]' "a required check with no result must be rejected (R12)"
 rej chk 'f["value"]["results"][1]["state"]="green"' "a check state outside the vocabulary must be rejected (R12)"
@@ -1032,7 +1088,7 @@ rej chk 'f["invalidators"]=[i for i in f["invalidators"] if not i.startswith("ru
 rej chk 'f["status"]="UNKNOWN"; del f["value"]; f["detail"]={"reason":"403","candidates":[]}; f["invalidators"]=[i for i in f["invalidators"] if not i.startswith("ruleset:")]' "an UNKNOWN checks fact without its ruleset: invalidator must be rejected — the requirement does not wait for ESTABLISHED (R17)"
 acc chk 'f["status"]="NOT_APPLICABLE"; del f["value"]; f["source"]["identity"]="github.com/acme/widgets#41"; f["source"]["version"]="2026-09-05T18:00:00Z"; f["invalidators"]=["issue:github.com/acme/widgets#41"]' "control: NOT_APPLICABLE checks are read from the work unit and invalidated by it, like every HEAD-bound class (R7/R17)"
 rej chk 'f["status"]="NOT_APPLICABLE"; del f["value"]; f["invalidators"]=["ruleset:github.com/acme/widgets"]' "NOT_APPLICABLE checks in the repository-and-ruleset form must be rejected — one canonical representation (R7/R17)"
-gr='{"schema_version":"1","key":"graph.native","class":"graph","status":"ESTABLISHED","value":{"parent":{"kind":"issue","id":"github.com/acme/widgets#40","state":"open"},"children":[],"blocked_by":[{"kind":"issue","id":"github.com/acme/widgets#39","state":"closed"}]},"source":{"type":"github-api","identity":"github.com/acme/widgets#41","version":"2026-09-06T11:00:00Z"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["issue:github.com/acme/widgets#41","issue:github.com/acme/widgets#40","issue:github.com/acme/widgets#39"],"provenance":"https://github.com/acme/widgets/issues/41"}'
+gr='{"schema_version":"1","key":"graph.native","class":"graph","status":"ESTABLISHED","value":{"parent":{"kind":"issue","id":"github.com/acme/widgets#40","state":"open"},"children":[],"blocked_by":[{"kind":"issue","id":"github.com/acme/widgets#39","state":"closed"}]},"source":{"type":"github-api","identity":"github.com/acme/widgets#41","version":"2026-09-06T11:00:00Z"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["issue:github.com/acme/widgets#41","issue:github.com/acme/widgets#40","issue:github.com/acme/widgets#39"],"versions":{"issue:github.com/acme/widgets#41":"2026-09-06T11:00:00Z","issue:github.com/acme/widgets#40":"2026-09-05T18:00:00Z","issue:github.com/acme/widgets#39":"2026-09-05T18:00:00Z"},"provenance":"https://github.com/acme/widgets/issues/41"}'
 accepts "$gr" && ok || bad "control: a graph fact with relationship states is accepted"
 rej gr 'f["value"]["blocked_by"]=[{"kind":"issue","id":"github.com/acme/widgets#39"}]' "a relationship without state must be rejected"
 rej gr 'f["value"]["parent"]["state"]="done"' "a relationship state outside the vocabulary must be rejected"
@@ -1053,7 +1109,7 @@ acc hd0 'f["value"]["base_ref"]="release/v1.2.x"; f["invalidators"][1]="ref:gith
 for r in 'feat/x+y' 'user@host' 'a#b' 'x=1' 'v1.0{rc}' "a'b" 'q"q' 'x]y' 'k=v,w;z' '%20' 'ba`ck'; do
   accepts "$(m "$hd0" 'f["value"]["base_ref"]=sys.argv[2]; f["invalidators"][1]="ref:github.com/acme/widgets/"+sys.argv[2]' "$r")" && ok || bad "control: valid Git branch name '$r' is a valid ref"
 done
-hd='{"schema_version":"1","key":"head.exact","class":"head","status":"ESTABLISHED","value":{"head":"0123456789abcdef0123456789abcdef01234567","base_ref":"master","base":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","current":true},"source":{"type":"github-api","identity":"github.com/acme/widgets#42","version":"0123456789abcdef0123456789abcdef01234567"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["head:0123456789abcdef0123456789abcdef01234567","ref:github.com/acme/widgets/master","pull_request:github.com/acme/widgets#42"],"provenance":"https://github.com/acme/widgets/pull/42/commits"}'
+hd='{"schema_version":"1","key":"head.exact","class":"head","status":"ESTABLISHED","value":{"head":"0123456789abcdef0123456789abcdef01234567","base_ref":"master","base":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","current":true},"source":{"type":"github-api","identity":"github.com/acme/widgets#42","version":"0123456789abcdef0123456789abcdef01234567"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["head:0123456789abcdef0123456789abcdef01234567","ref:github.com/acme/widgets/master","pull_request:github.com/acme/widgets#42"],"versions":{"head:0123456789abcdef0123456789abcdef01234567":"0123456789abcdef0123456789abcdef01234567","ref:github.com/acme/widgets/master":"89abcdef0123456789abcdef0123456789abcdef","pull_request:github.com/acme/widgets#42":"2026-09-05T18:00:00Z"},"provenance":"https://github.com/acme/widgets/pull/42/commits"}'
 accepts "$hd" && ok || bad "control: a head fact listing its HEAD and base ref is accepted"
 rej hd 'f["invalidators"]=["head:0123456789abcdef0123456789abcdef01234567"]' "a head fact without ref:<repository>/<base_ref> must be rejected — the base moves without the HEAD moving (R17)"
 rej hd 'f["invalidators"][1]="ref:github.com/acme/widgets/main"' "a head fact whose ref: invalidator names a different branch than base_ref must be rejected (R17)"
@@ -1072,17 +1128,22 @@ full="$(python3 - "$DOC" <<'PY'
 import json, re, sys
 t = open(sys.argv[1]).read()
 m = re.search(r"^### Example 1 — [^\n]*\(complete snapshot\)\n.*?```json\n(.*?)\n```", t, flags=re.S | re.M)
-print(json.dumps(json.loads(m.group(1))))
+o=json.loads(m.group(1)); print(json.dumps(o["facts"] if isinstance(o, dict) else o))
 PY
 )"
 sets "$(snap "$full")" && ok || bad "control: the page's complete snapshot is accepted as a snapshot"
 # R15 controls: the complete snapshot derives merge; break one condition at a time and the derivation must be rejected
-smut() { printf '%s' "$full" | python3 -c "import json,sys; s=json.load(sys.stdin); exec(sys.argv[1]); print(json.dumps(s))" "$1"; }
+smut() { printf '%s' "$full" | python3 -c "import json,sys; exec(open('$SYNC').read()); s=json.load(sys.stdin); exec(sys.argv[1]); sync(s); print(json.dumps(s))" "$1"; }
 srej 'nx=[f for f in s if f["class"]=="checks"][0]; nx["value"]["results"][1]["state"]="failure"' "merge with a failed required check must be rejected (R15)"
 srej 'nx=[f for f in s if f["class"]=="review"][0]; nx["value"]["verdict"]="CHANGES REQUIRED"' "merge with a CHANGES REQUIRED review must be rejected (R15)"
 srej 'nx=[f for f in s if f["class"]=="acceptance"][0]; nx["value"]["items"][0]["state"]="NOT_MET"' "merge with an unmet acceptance item must be rejected (R15)"
 srej 'nx=[f for f in s if f["class"]=="head"][0]; nx["value"]["current"]=False' "merge on a HEAD that is not current must be rejected (R15)"
 srej 'h=[f for f in s if f["class"]=="head"][0]; h["source"]["identity"]="github.com/acme/widgets#43"' "a head read from a different node than the set's work unit must be rejected (R17)"
+srej 'NOSYNC=True; w=[f for f in s if f["class"]=="work_unit"][0]; w["versions"]["pull_request:github.com/acme/widgets#42"]="2026-09-06T12:30:00Z"; w["source"]["version"]="2026-09-06T12:30:00Z"' "two facts of one set observing one node at two versions must be rejected — one snapshot, one observation (R20)"
+sets "$(printf '{"complete": true, "facts": %s}' "$full")" && bad "a complete snapshot without its observer must be rejected — readability is a property of the snapshot (R21)" || ok
+sets "$(printf '{"complete": true, "observer": {"login": "login:acme-orchestrator[bot]", "permission": "owner", "checked_at": "2026-09-06T12:00:05Z"}, "facts": %s}' "$full")" && bad "an observer permission outside GitHub's vocabulary must be rejected (R21)" || ok
+sets "$(printf '{"complete": true, "observer": {"login": "login:acme-orchestrator[bot]", "permission": "write"}, "facts": %s}' "$full")" && bad "an observer without checked_at must be rejected — the permission cannot be compared without knowing when it was read (R21)" || ok
+sets "$(printf '{"complete": true, "observer": {"login": "acme-orchestrator", "permission": "write", "checked_at": "2026-09-06T12:00:05Z"}, "facts": %s}' "$full")" && bad "an observer login outside the login grammar must be rejected (R21)" || ok
 srej 'r=[f for f in s if f["class"]=="repository"][0]; r["value"]["id"]="github.com/acme/program"; r["source"]["identity"]="github.com/acme/program"; r["invalidators"]=["repository:github.com/acme/program"]' "a work unit from one repository spliced with another repository's facts must be rejected (R17)"
 srej 'a=[f for f in s if f["class"]=="acceptance"][0]; a["value"]["contract"]="github.com/acme/widgets#40"; a["source"]["identity"]="github.com/acme/widgets#40"; a["invalidators"]=["issue:github.com/acme/widgets#40"]+[i for i in a["invalidators"] if not i.startswith("issue:")]' "acceptance judged against an unrelated issue's contract must be rejected — merge may not rest on it (R17)"
 unk_acc='a=[f for f in s if f["class"]=="acceptance"][0]; a["status"]="UNKNOWN"; del a["value"]; a["detail"]={"reason":"403","candidates":[]}; n=[f for f in s if f["class"]=="next_action"][0]; n["value"]={"action":"wait-review","because":["acceptance.contract"],"boundary":"none"}; n["inputs"]=["acceptance.contract","head.exact","review.independent","checks.required"]; n["source"]["version"]="1;"+";".join(k+"@"+[f for f in s if f["key"]==k][0]["source"]["version"] for k in sorted(n["inputs"]))'
@@ -1114,7 +1175,7 @@ ex2="$(python3 - "$DOC" <<'PY'
 import json, re, sys
 t = open(sys.argv[1]).read()
 m = re.search(r"^### Example 2 — [^\n]*\(fragment\)\n.*?```json\n(.*?)\n```", t, flags=re.S | re.M)
-print(json.dumps(json.loads(m.group(1))))
+o=json.loads(m.group(1)); print(json.dumps(o["facts"] if isinstance(o, dict) else o))
 PY
 )"
 printf '%s' "$ex2" | grep -q '"action": "repair"' && ok || bad "control: Example 2 derives repair"
@@ -1123,7 +1184,7 @@ ex9="$(python3 - "$DOC" <<'PY'
 import json, re, sys
 t = open(sys.argv[1]).read()
 m = re.search(r"^### Example 9 — [^\n]*\(complete snapshot\)\n.*?```json\n(.*?)\n```", t, flags=re.S | re.M)
-print(json.dumps(json.loads(m.group(1))))
+o=json.loads(m.group(1)); print(json.dumps(o["facts"] if isinstance(o, dict) else o))
 PY
 )"
 sets "$(snap "$ex9")" && ok || bad "control: the complete snapshot of an issue with no HEAD is accepted (all nine required classes)"
@@ -1149,10 +1210,10 @@ ex6="$(python3 - "$DOC" <<'PY'
 import json, re, sys
 t = open(sys.argv[1]).read()
 m = re.search(r"^### Example 6 — [^\n]*\(fragment\)\n.*?```json\n(.*?)\n```", t, flags=re.S | re.M)
-print(json.dumps(json.loads(m.group(1))))
+o=json.loads(m.group(1)); print(json.dumps(o["facts"] if isinstance(o, dict) else o))
 PY
 )"
-xmut() { printf '%s' "$ex6" | python3 -c "import json,sys; s=json.load(sys.stdin); exec(sys.argv[1]); print(json.dumps(s))" "$1"; }
+xmut() { printf '%s' "$ex6" | python3 -c "import json,sys; exec(open('$SYNC').read()); s=json.load(sys.stdin); exec(sys.argv[1]); sync(s); print(json.dumps(s))" "$1"; }
 sets "$(printf '{"complete": false, "facts": %s}' "$ex6")" && ok || bad "control: the page's reserved-boundary fragment is accepted"
 sets "$(printf '{"complete": false, "facts": %s}' "$(xmut 'a=[f for f in s if f["class"]=="authority"][0]; [b.__setitem__("target","github.com/acme/program") for b in a["value"]["human_boundaries"]]')")" && bad "a boundary reserved for another repository must not stop this work unit (R15)" || ok
 sets "$(printf '{"complete": false, "facts": %s}' "$(xmut 'p=[f for f in s if f["class"]=="placement"][0]; p["value"]["release"]="none"')")" && bad "placement:release must not apply when the work unit is in no release (R15)" || ok
