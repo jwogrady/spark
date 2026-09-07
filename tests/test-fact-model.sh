@@ -33,7 +33,7 @@ assert_eq "one class-status record per class" "$(rec class | cut -f2 | sort | tr
 assert_eq "exactly one canonical key per class" "$(rec class | cut -f2 | sort | tr '\n' ' ')" "$(rec key | cut -f2 | sort | tr '\n' ' ')"
 assert_eq "every canonical key is prefixed by its class" "" "$(rec key | awk -F'\t' 'index($3, $2 ".") != 1')"
 assert_eq "eight invalidator grammars" "8" "$(rec invalidator | wc -l | tr -d ' ')"
-assert_eq "34 constraint records" "34" "$(rec constraint | wc -l | tr -d ' ')"
+assert_eq "31 constraint records" "31" "$(rec constraint | wc -l | tr -d ' ')"
 while IFS=$'\t' read -r _ scope rx _; do
   if printf 'probe' | grep -qE "$rx" >/dev/null 2>&1; then rc=0; else rc=$?; fi
   [ "$rc" -le 1 ] && ok || bad "constraint regex for $scope compiles as an ERE (no lookaround, so any consumer can apply it)"
@@ -244,13 +244,14 @@ def lint(rx):
                 if i + 1 >= n or rx[i + 1].isalnum(): return f"backslash-letter escape at {i}"
                 i += 2; continue
             if c == "[":
+                if i + 1 < n and rx[i + 1] == "^": return f"negated bracket expression at {i} (every class is positive)"
                 inb = True; i += 1
-                if i < n and rx[i] == "^": i += 1
                 if i < n and rx[i] == "]": i += 1
                 continue
         else:
             if c == "\\": return f"backslash inside a bracket expression at {i}"
             if c == "[" and i + 1 < n and rx[i + 1] in ":.=": return f"POSIX class or collating element at {i}"
+            if c == "-" and 0 < i + 1 < n and rx[i + 1] != "]" and rx[i - 1] not in "[^" and not (rx[i - 1].isalnum() and rx[i + 1].isalnum() and rx[i - 1].islower() == rx[i + 1].islower() and rx[i - 1].isdigit() == rx[i + 1].isdigit()): return f"range outside A-Z, a-z, 0-9 at {i} (collation-dependent)"
             if c == "]": inb = False
         i += 1
     return "unterminated bracket expression" if inb else None
@@ -991,12 +992,12 @@ rej gr 'f["invalidators"]=[i for i in f["invalidators"] if not i.endswith("#39")
 rej gr 'f["invalidators"]=[i for i in f["invalidators"] if not i.endswith("#40")]' "a graph representing parent #40 without listing it must be rejected (R17)"
 # head: the base ref is a freshness dependency the value implies
 # ref grammar: one spelling of a branch; refs/heads/…, empty or dotted components, .. and .lock are rejected
-# (control characters are not named: Git refuses them in a refname and a portable ERE cannot spell them)
-for r in 'refs/heads/master' '/' 'foo//bar' 'foo..bar' 'master.lock' '.hidden' 'feat/' '/feat' 'a/.b' 'a b' 'a~b' 'a^b' 'a:b' 'a?b' 'a*b' 'a[b' 'a\\b' 'a@{b}' 'trail.' '@' 'foo.lock/bar'; do
+# the classes are positive printable ASCII, so a tab, a control character or a non-ASCII name is outside the grammar
+for r in 'refs/heads/master' '/' 'foo//bar' 'foo..bar' 'master.lock' '.hidden' 'feat/' '/feat' 'a/.b' 'a b' 'a~b' 'a^b' 'a:b' 'a?b' 'a*b' 'a[b' 'a\\b' 'a@{b}' 'trail.' '@' 'foo.lock/bar' 'ünïcode' "$(printf 'a\tb')" "$(printf 'a\001b')" "$(printf 'a\177b')"; do
   accepts "$(m "$hd0" 'f["value"]["base_ref"]=sys.argv[2]; f["invalidators"][1]="ref:github.com/acme/widgets/"+sys.argv[2]' "$r")" && bad "ref spelling '$r' must be rejected — one canonical branch name (R1)" || ok
 done
 acc hd0 'f["value"]["base_ref"]="release/v1.2.x"; f["invalidators"][1]="ref:github.com/acme/widgets/release/v1.2.x"' "control: a dotted, slashed branch name is a valid ref"
-for r in 'feat/x+y' 'user@host' 'a#b' 'x=1' 'ünïcode'; do
+for r in 'feat/x+y' 'user@host' 'a#b' 'x=1' 'v1.0{rc}' "a'b" 'q"q' 'x]y' 'k=v,w;z' '%20' 'ba`ck'; do
   accepts "$(m "$hd0" 'f["value"]["base_ref"]=sys.argv[2]; f["invalidators"][1]="ref:github.com/acme/widgets/"+sys.argv[2]' "$r")" && ok || bad "control: valid Git branch name '$r' is a valid ref"
 done
 hd='{"schema_version":"1","key":"head.exact","class":"head","status":"ESTABLISHED","value":{"head":"0123456789abcdef0123456789abcdef01234567","base_ref":"master","base":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","current":true},"source":{"type":"github-api","identity":"github.com/acme/widgets#42","version":"0123456789abcdef0123456789abcdef01234567"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["head:0123456789abcdef0123456789abcdef01234567","ref:github.com/acme/widgets/master"],"provenance":"https://github.com/acme/widgets/pull/42/commits"}'
