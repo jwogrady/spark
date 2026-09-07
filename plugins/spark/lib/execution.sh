@@ -441,17 +441,16 @@ EOF
 
       if [ -n "$json" ] && [ "$action" = "show" ]; then
         local first=1 k v
-        json_escape_out() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
-        printf '{"run":"%s","fields":{' "$(json_escape_out "$run")"
+        printf '{"run":"%s","fields":{' "$(json_escape "$run")"
         for k in $TELEMETRY_KEYS; do
           eval "v=\$tmv_$k"
           [ "$first" -eq 1 ] && first=0 || printf ','
           if [ -z "$v" ]; then printf '"%s":null' "$k"
           elif tm_is_int_key "$k"; then printf '"%s":%s' "$k" "$v"
-          else printf '"%s":"%s"' "$k" "$(json_escape_out "$v")"; fi
+          else printf '"%s":"%s"' "$k" "$(json_escape "$v")"; fi
         done
         printf '},"derived":{"cache_hit_ratio":"%s","context_delta":"%s","failing_delta":"%s","no_progress":"%s","binding":"%s"}}\n' \
-          "$ratio" "$cdelta" "$fdelta" "$(json_escape_out "$noprog")" "$(json_escape_out "$binding")"
+          "$ratio" "$cdelta" "$fdelta" "$(json_escape "$noprog")" "$(json_escape "$binding")"
         return 0
       fi
 
@@ -980,14 +979,13 @@ cmd_budget() {
       fi
       if [ -n "$json" ]; then
         local k v first=1
-        bg_json_escape() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
-        printf '{"run":"%s","declared":{' "$(bg_json_escape "$run")"
+        printf '{"run":"%s","declared":{' "$(json_escape "$run")"
         for k in $BUDGET_DECLARED; do
           eval "v=\$bgv_$k"
           [ "$first" -eq 1 ] && first=0 || printf ','
           if [ -z "$v" ]; then printf '"%s":null' "$k"
           elif bg_is_int_key "$k"; then printf '"%s":%s' "$k" "$v"
-          else printf '"%s":"%s"' "$k" "$(bg_json_escape "$v")"; fi
+          else printf '"%s":"%s"' "$k" "$(json_escape "$v")"; fi
         done
         printf '},"state":{'
         first=1
@@ -996,9 +994,9 @@ cmd_budget() {
           [ "$first" -eq 1 ] && first=0 || printf ','
           if [ -z "$v" ]; then printf '"%s":null' "$k"
           elif bg_is_int_key "$k"; then printf '"%s":%s' "$k" "$v"
-          else printf '"%s":"%s"' "$k" "$(bg_json_escape "$v")"; fi
+          else printf '"%s":"%s"' "$k" "$(json_escape "$v")"; fi
         done
-        printf '},"shrinking":"%s"}\n' "$(bg_json_escape "$shrinking")"
+        printf '},"shrinking":"%s"}\n' "$(json_escape "$shrinking")"
         return 0
       fi
       bg_row() { printf '  %-26s %s\n' "$1" "$2"; }
