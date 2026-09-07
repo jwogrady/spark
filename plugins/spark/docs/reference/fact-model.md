@@ -155,6 +155,7 @@ each example below through both `grep -E` and a second engine.
 | schema-version | A schema version: a positive integer; the type of schema_version | `^[1-9][0-9]*$` | `1` |
 | fact-key | the class's one canonical key (the key records) | `^(work_unit\.identity\|repository\.identity\|placement\.current\|graph\.native\|authority\.standing\|acceptance\.contract\|head\.exact\|review\.independent\|checks\.required\|next_action\.governed)$` | `review.independent` |
 | permission | The observing identity's repository permission, GitHub's closed vocabulary; recorded by a complete snapshot's observer | `^(admin\|maintain\|write\|triage\|read\|none)$` | `write` |
+| digest | A SHA-256 hex digest: the version of a collection a token names — for ruleset:, the digest of the sorted lines <ruleset id>@<updated_at>, each newline-terminated, so membership changes are detected even when every remaining member's timestamp stands | `^[0-9a-f]{64}$` | `c9f00a0e122890a3e89bcf721cba56fcbaf06229ae3f28e5f0254cd40d6f69d3` |
 | issue-state | Current state of a related work unit; a blocked_by entry is satisfied exactly when closed | `^(open\|closed)$` | `open`, `closed` |
 | check-state | Normalized state of one required check on the exact HEAD: missing = required but no run observed | `^(success\|failure\|pending\|missing)$` | `success`, `failure`, `pending`, `missing` (required but no run observed) |
 | scope | What a standing grant permits; the closed scope vocabulary | `^(merge:routine\|close:issue\|metadata:labels\|metadata:hierarchy\|evidence:publish\|branch:push)$` | `merge:routine`, `close:issue`, `metadata:labels`, `metadata:hierarchy`, `evidence:publish`, `branch:push` |
@@ -230,7 +231,7 @@ fact; prose can never be an invalidator.
 | `milestone` | `^milestone:(([a-z0-9][a-z0-9-]*)?[a-z0-9]\.)+([a-z0-9][a-z0-9-]*)?[a-z0-9]/[a-z0-9]+(-[a-z0-9]+)*/([a-z0-9_-][a-z0-9_.-]*\|\.[a-z0-9_-][a-z0-9_.-]*\|\.\.[a-z0-9_.-]+)/milestone/[1-9][0-9]*$` | milestone:<milestone> — the milestone the placement was read from | `timestamp` |
 | `repository` | `^repository:(([a-z0-9][a-z0-9-]*)?[a-z0-9]\.)+([a-z0-9][a-z0-9-]*)?[a-z0-9]/[a-z0-9]+(-[a-z0-9]+)*/([a-z0-9_-][a-z0-9_.-]*\|\.[a-z0-9_-][a-z0-9_.-]*\|\.\.[a-z0-9_.-]+)$` | repository:<repository> — the repository node (default branch, settings) | `timestamp` |
 | `ref` | ``^ref:(([a-z0-9][a-z0-9-]*)?[a-z0-9]\.)+([a-z0-9][a-z0-9-]*)?[a-z0-9]/[a-z0-9]+(-[a-z0-9]+)*/([a-z0-9_-][a-z0-9_.-]*\|\.[a-z0-9_-][a-z0-9_.-]*\|\.\.[a-z0-9_.-]+)/[]!"#$%&'()+,0-9;<=>@A-Z_`a-z{\|}-][]!"#$%&'()+,.0-9;<=>@A-Z_`a-z{\|}-]*(/[]!"#$%&'()+,0-9;<=>@A-Z_`a-z{\|}-][]!"#$%&'()+,.0-9;<=>@A-Z_`a-z{\|}-]*)*$`` | ref:<repository>/<ref> — the branch whose target the fact depends on | `commit` |
-| `ruleset` | `^ruleset:(([a-z0-9][a-z0-9-]*)?[a-z0-9]\.)+([a-z0-9][a-z0-9-]*)?[a-z0-9]/[a-z0-9]+(-[a-z0-9]+)*/([a-z0-9_-][a-z0-9_.-]*\|\.[a-z0-9_-][a-z0-9_.-]*\|\.\.[a-z0-9_.-]+)$` | ruleset:<repository> — the repository's rulesets (which checks are required) | `timestamp` |
+| `ruleset` | `^ruleset:(([a-z0-9][a-z0-9-]*)?[a-z0-9]\.)+([a-z0-9][a-z0-9-]*)?[a-z0-9]/[a-z0-9]+(-[a-z0-9]+)*/([a-z0-9_-][a-z0-9_.-]*\|\.[a-z0-9_-][a-z0-9_.-]*\|\.\.[a-z0-9_.-]+)$` | ruleset:<repository> — the repository's rulesets (which checks are required) | `digest` |
 
 ## Reserved boundaries the model can derive a stop from
 
@@ -403,16 +404,21 @@ behavioral suite checks the two never drift.
   register marks the model Experimental while that is so.
 - **R20** Every fact carries versions: for each invalidator token, the version
   observed for that node when the fact was read — the commit itself for head:,
-  the branch's target commit for ref:, the node's updated_at for every other
-  kind — and no other key. The source node's observed version is the fact's
-  source.version where that is a timestamp, and within one set a node has one
-  observed version. The tokens say what a fact depends on; the versions say as
-  of when, so freshness is a comparison of versions, never a judgment of age.
+  the branch's target commit for ref: (a head fact's value.base), the collection
+  digest for ruleset: (the freshness contract's collection record), the node's
+  updated_at for every other kind — and no other key. The source node's observed
+  version is the fact's source.version where that is a timestamp, and within one
+  set a node has one observed version. The tokens say what a fact depends on;
+  the versions say as of when, so freshness is a comparison of versions, never a
+  judgment of age.
 - **R21** A complete snapshot records its observer: the login that read it, that
   login's repository permission in GitHub's closed vocabulary, and when the
   permission was checked. Readability is a property of the snapshot: before a
   cached snapshot is used, the observer's permission is re-read and compared,
   and a difference is a repository event of the freshness contract.
+- **R22** A complete snapshot is exactly the object {observer, facts}; a
+  fragment is a bare list of facts. No other top-level shape is a snapshot, and
+  a consumer rejects an object with any other key rather than reading past it.
 
 ## Versioning
 
@@ -512,7 +518,7 @@ action follows mechanically from named inputs.
    "value": {"head": "0123456789abcdef0123456789abcdef01234567", "required": ["doctor", "tests"], "results": [{"name": "doctor", "state": "success"}, {"name": "tests", "state": "success"}]},
    "source": {"type": "github-api", "identity": "github.com/acme/widgets", "version": "0123456789abcdef0123456789abcdef01234567"},
    "observed_at": "2026-09-06T12:00:05Z", "invalidators": ["head:0123456789abcdef0123456789abcdef01234567", "ruleset:github.com/acme/widgets"],
-   "versions": {"head:0123456789abcdef0123456789abcdef01234567": "0123456789abcdef0123456789abcdef01234567", "ruleset:github.com/acme/widgets": "2026-09-01T08:00:00Z"},
+   "versions": {"head:0123456789abcdef0123456789abcdef01234567": "0123456789abcdef0123456789abcdef01234567", "ruleset:github.com/acme/widgets": "c9f00a0e122890a3e89bcf721cba56fcbaf06229ae3f28e5f0254cd40d6f69d3"},
    "provenance": "https://github.com/acme/widgets/commit/0123456789abcdef0123456789abcdef01234567/checks"},
   {"schema_version": "1", "key": "next_action.governed", "class": "next_action", "status": "ESTABLISHED",
    "value": {"action": "merge", "because": ["review.independent", "checks.required", "head.exact", "authority.standing", "acceptance.contract"], "boundary": "none"},
@@ -547,7 +553,7 @@ observed on. Nothing here can be reused for another HEAD.
    "value": {"head": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "required": ["doctor", "tests"], "results": [{"name": "doctor", "state": "success"}, {"name": "tests", "state": "pending"}]},
    "source": {"type": "github-api", "identity": "github.com/acme/widgets", "version": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
    "observed_at": "2026-09-06T13:00:00Z", "invalidators": ["head:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "ruleset:github.com/acme/widgets"],
-   "versions": {"head:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "ruleset:github.com/acme/widgets": "2026-09-05T18:00:00Z"},
+   "versions": {"head:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "ruleset:github.com/acme/widgets": "c9f00a0e122890a3e89bcf721cba56fcbaf06229ae3f28e5f0254cd40d6f69d3"},
    "provenance": "https://github.com/acme/widgets/commit/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/checks"},
   {"schema_version": "1", "key": "acceptance.contract", "class": "acceptance", "status": "ESTABLISHED",
    "value": {"contract": "github.com/acme/widgets#41", "head": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "items": [{"id": "a1", "state": "MET"}, {"id": "a2", "state": "NOT_MET"}]},
@@ -718,7 +724,7 @@ merging.
   {"schema_version": "1", "key": "checks.required", "class": "checks", "status": "UNKNOWN",
    "source": {"type": "github-api", "identity": "github.com/acme/widgets", "version": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"},
    "observed_at": "2026-09-06T18:00:00Z", "invalidators": ["head:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "ruleset:github.com/acme/widgets"],
-   "versions": {"head:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "ruleset:github.com/acme/widgets": "2026-09-05T18:00:00Z"},
+   "versions": {"head:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "ruleset:github.com/acme/widgets": "c9f00a0e122890a3e89bcf721cba56fcbaf06229ae3f28e5f0254cd40d6f69d3"},
    "provenance": "https://github.com/acme/widgets/commit/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee/checks",
    "detail": {"reason": "check-runs endpoint returned HTTP 403 for the observing identity", "candidates": []}},
   {"schema_version": "1", "key": "next_action.governed", "class": "next_action", "status": "ESTABLISHED",
