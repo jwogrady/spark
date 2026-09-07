@@ -279,8 +279,8 @@ sense (they answer GraphQL snapshots through the caller's jq already, or plain t
 | | BEFORE (branch base `a504e2c`) | AFTER |
 |---|---|---|
 | hand-written `gh` stubs (`cat > … <<TAG` + shebang + chmod) | 36 in 15 suites | 0 |
-| stubs written through `stub_gh` | 12 | ALL36 |
-| shebang/chmod restatements removed | — | 24 lines |
+| stubs written through `stub_gh` | 12 | 49 (12 + 36) |
+| scaffolding lines removed (shebang + `chmod +x`) | — | 60 (36 shebang lines, 24 chmod lines; the remaining converted stubs reused a directory whose file was already executable) |
 | test LOC (`tests/test-*.sh`) | 19,363 | 19,303 |
 | assertions, full run | 3908 passed, 0 failed | 3908 passed, 0 failed |
 | per-suite pass/fail lines | 92 | 92, **all identical** |
