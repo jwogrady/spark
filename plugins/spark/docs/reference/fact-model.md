@@ -89,9 +89,9 @@ way it would be at the top level.
 | Status | `value` allowed | Meaning |
 |---|---|---|
 | `ESTABLISHED` | yes | The source was read and yields one value |
-| `UNKNOWN` | no | The source could not be read, or the fact lies outside what was observed. Never a permissive default |
-| `CONFLICT` | no | Two authoritative inputs disagree, or malformed evidence sits beside valid evidence. A human or a released contract resolves it; a model never does |
-| `NOT_APPLICABLE` | no | The class does not apply to this work unit: a HEAD-bound class for a work unit that has no HEAD (an issue no pull request implements yet); every other class always applies |
+| `UNKNOWN` | no | The source could not be read or the fact is outside the observed snapshot; never a permissive default |
+| `CONFLICT` | no | Two authoritative inputs disagree or evidence is malformed beside valid evidence; a human or a released contract resolves it, never the model |
+| `NOT_APPLICABLE` | no | The fact class does not apply to this work unit: a HEAD-bound class for a work unit that has no HEAD (an issue no pull request implements yet); every other class always applies |
 
 ## Statuses per class
 
@@ -136,7 +136,7 @@ is a projection and is never used to compare or bind.
 | action | The closed next-action vocabulary: only actions whose derivation rule (R15) this version defines; a new action is a new version | `wait-review`, `repair`, `merge`, `stop-decision-required` |
 | item-id | A scalar acceptance item id: one token, no whitespace, unique within its fact | `a1`, `acceptance/3` |
 | provenance | A pointer: an https URL, or a normalized repository-relative path (slash-separated components, none empty, none . or .., no leading slash); never the record itself | `https://github.com/acme/widgets/pull/42#issuecomment-9100`, `preferences/fact-model.tsv` |
-| timestamp | An ISO-8601 UTC instant at second precision, Z suffix; the type of observed_at | `2026-09-06T12:00:05Z` |
+| timestamp | An ISO-8601 UTC instant at second precision with Z suffix, in calendar range (month 01–12, day 01–31, hour 00–23, minute and second 00–59) and a real calendar date (the validator parses it); the type of observed_at and the form every timestamp-bearing source version takes | `2026-09-06T12:00:05Z` |
 | schema-version | A schema version: a positive integer; the type of schema_version | `1` |
 | fact-key | the class's one canonical key (the key records) | `review.independent` |
 | issue-state | Current state of a related work unit; a blocked_by entry is satisfied exactly when closed | `open`, `closed` |
@@ -216,7 +216,7 @@ verdict or a CONFLICT input, otherwise `next_action` is UNKNOWN.
 
 | Boundary | Evidence fact | Field | Condition | Why it applies |
 |---|---|---|---|---|
-| `placement:release` | `placement.current` | `release` | not `none` | the work unit is placed in a release, so a routine merge would change what that release ships |
+| `placement:release` | `placement.current` | `release` | `not-none` | The work unit is placed in a release, so a routine merge would change what that release ships |
 
 ## Sources: identity grammar and version identity
 
@@ -224,13 +224,13 @@ verdict or a CONFLICT input, otherwise `next_action` is UNKNOWN.
 of the source type; a role name, a label, a summary, or a word such as
 `latest` can never stand as the identity or the version of a source.
 
-| Source type | Canonical `source.identity` | `source.version` grammar |
-|---|---|---|
-| `github-api` | a repository, work-unit, comment or milestone locator — the node that was read | the node's `updated_at` (ISO-8601 `Z`) or its etag in a delimiter-safe form (letters, digits, `. _ : / -`; never `;` or whitespace, so it can be carried inside a derived-version); the 40-hex head only on a HEAD-bound class, where it is that fact's own HEAD — never a numeric node id, which does not change when the node does |
-| `git` | `<repository>@<commit>` or `<repository>@ref/<ref>` | the 40-hex commit id observed (a ref target is recorded as the commit it pointed at) |
-| `repository-file` | `<repository>@<commit>:<path>` — a normalized repository-relative path (slash-separated components, none empty, none `.` or `..`, no leading slash) | the 40-hex commit id the file was read at |
-| `human-decision` | the decision record itself: a comment locator or `<repository>@<commit>` | the recording comment's `updated_at` (ISO-8601 `Z`) — a comment can be edited, so its id alone cannot version the decision — or the 40-hex commit id that records it |
-| `derived` | `fact-model/<schema version>` | a `derived-version`: the schema version, then `<input key>@<that input's source.version>` for every input, sorted by key — so the version changes whenever any input's version does |
+| Source type | What it is | Version identity | Canonical `source.identity` | `source.version` grammar |
+|---|---|---|---|---|
+| `github-api` | A GitHub REST or GraphQL read | node updated_at, etag, or the observed head the record is keyed by — never a node id, which does not change when the node does | A <repository>, <work-unit>, <comment> or <milestone> locator — the GitHub node that was read | The node's updated_at (ISO-8601 Z), the head it is keyed by (40-hex), or its etag in a delimiter-safe form (letters, digits, . _ : / -; never ; or whitespace, so it can be carried inside a derived-version); a numeric node id never versions a mutable node |
+| `git` | A read of the local or remote git object store | the commit id or ref target observed | <repository>@<commit> or <repository>@ref/<ref> | The commit id observed (a ref target is recorded as the commit it pointed at) |
+| `repository-file` | A committed file in the repository tree | the commit id the file was read at | <repository>@<commit>:<path> — a normalized repository-relative path: slash-separated components, none empty, none . or .., no leading slash | The commit id the file was read at |
+| `human-decision` | A durable, source-backed human decision; never a role, label or summary | the recording comment's updated_at (a comment can be edited, so its id alone cannot version the decision) or the commit id that records it | The <decision-record> itself | The recording comment's updated_at (ISO-8601 Z) for a comment locator, or the commit id for a <repository>@<commit> record — edit-sensitive, so an edited decision re-versions everything derived from it |
+| `derived` | A conclusion computed from other facts (requires inputs); the version changes whenever any input's version does | <derived-version>: the schema version, then <input key>@<that input's source.version> for every input, sorted by key | fact-model/<schema version> | The derived-version (schema version, then <input key>@<input source.version> for every input, sorted) |
 
 ## Rules
 
@@ -353,7 +353,9 @@ behavioral suite checks the two never drift.
   (ESTABLISHED, UNKNOWN or CONFLICT); the HEAD-bound classes add NOT_APPLICABLE
   for a work unit with no HEAD; a derived class is ESTABLISHED or UNKNOWN. Every
   envelope field whose type is an identifier kind is a string in that grammar,
-  so no field's canonical form lives only in prose.
+  so no field's canonical form lives only in prose. A timestamp anywhere in a
+  fact — observed_at, a GitHub node's updated_at, a decision comment's
+  updated_at — is one grammar and a real calendar instant.
 
 ## Versioning
 
