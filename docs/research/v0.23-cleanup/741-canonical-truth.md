@@ -15,8 +15,11 @@ as such, no surface left in a finding state.
 surrounding lines to classify each hit as an operative definition, a projection, an explanation or a
 historical record. The register was then built from directory defaults (ADRs, releases and research are
 historical evidence; shipped reference pages are projections; the rest is explanation) with per-file
-overrides where a page is the one definition of something or was found stale. The counts below are
-computed from the two data files when this page is built, never typed.
+overrides where a page is the one definition of something or was found stale; every surface a map row
+names carries that concept in the register (derived from the map when the register is built, and the suite
+enforces it). Of the counts below, the role counts and the after-counts are computed from the two data
+files when this page is built and re-checked by the suite; the before-counts are the sweep's, recorded here
+and checked as numbers.
 
 ## Roles
 
@@ -44,7 +47,7 @@ the suite checks each is a number.
 
 | Concept | Before | After |
 |---|---|---|
-| `release-gate-placement` | 8 | 1 |
+| `release-gate-placement` | 8 | 3 |
 | `version-minting` | 4 | 1 + 1 non-prose |
 | `authority-boundaries` | 9 | 2 |
 | `routine-merge-authority` | 9 | 1 + 1 non-prose |
@@ -102,7 +105,7 @@ what the reviewer re-read, as tracked bytes and lines:
 |---|---|---|
 | `root.contract` (AGENTS.md + CLAUDE.md, auto-loaded every session) | 15,433 bytes / 292 lines | 15,648 bytes / 295 lines |
 | `shipped.docs.spark` | 310,651 bytes / 5,908 lines | 427,680 bytes / 7,072 lines |
-| `devdocs.ops` | 225,751 bytes / 4,286 lines | 255,178 bytes / 4,502 lines |
+| `devdocs.ops` | 225,751 bytes / 4,286 lines | 256,236 bytes / 4,502 lines |
 
 The contract grows by one clause (contradiction 1); the shipped docs shrink by the two duplicated
 paragraphs and grow by the fact-freshness page #732 added between the two measurements — the figures are the

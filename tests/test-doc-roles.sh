@@ -63,6 +63,13 @@ while IFS=$'\t' read -r concept sources projections historical risk treatment; d
   fi
   case "$treatment" in *EXCEPTION*|*"DECISION REQUIRED"*) printf '%s' "$risk$treatment" | grep -q "#" && ok || bad "$concept: an exception or open decision names the record or PR it rests on" ;; esac
 done < <(mrows)
+# every surface a map row names carries that concept in the register (map/register consistency)
+while IFS=$'\t' read -r concept sources projections historical _r _t; do
+  for p in $(printf '%s;%s;%s' "$sources" "$projections" "$historical" | tr ';' '\n' | grep -vE '^(-|ci:.*|github:.*|.*\.tsv|.*\.json)$'); do
+    cs="$(rows | awk -F'\t' -v p="$p" '$1 == p {print $3}')"
+    case ",$cs," in *",$concept,"*) ok ;; *) bad "$p is named by the $concept row but its register concepts are '$cs'" ;; esac
+  done
+done < <(mrows)
 # one operative source per governed concept: the map's row, or exactly one operative-authority surface
 mapped="$(mrows | cut -f1 | sort -u)"
 for c in $(rows | cut -f3 | tr ',' '\n' | grep -v '^-$' | sort -u); do
@@ -74,8 +81,8 @@ done
 # the register's operative concepts that the map covers are the map's prose sources or contracts the map names as such
 for c in $mapped; do
   ops="$(rows | awk -F'\t' -v c="$c" '$2 == "operative-authority" && ("," $3 ",") ~ ("," c ",") {print $1}')"
-  srcs="$(mrows | awk -F'\t' -v c="$c" '$1 == c {print $2 ";" $3}' | tr ';' '\n')"
-  for o in $ops; do printf '%s\n' "$srcs" | grep -qx "$o" && ok || bad "concept $c: $o is registered operative-authority but the map does not name it as a source or a contract projecting it"; done
+  srcs="$(mrows | awk -F'\t' -v c="$c" '$1 == c {print $2 ";" $3 ";" $4}' | tr ';' '\n')"
+  for o in $ops; do printf '%s\n' "$srcs" | grep -qx "$o" && ok || bad "concept $c: $o is registered operative-authority but the map does not name it as a source, a projection or a historical surface of the concept"; done
 done
 # the manifest's figures are the data's: role counts and the after-column are recomputed and compared
 MAN="$ROOT/docs/research/v0.23-cleanup/741-canonical-truth.md"
