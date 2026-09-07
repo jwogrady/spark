@@ -1,7 +1,7 @@
 # Spark — documentation role register (#741)
 #
-# Every Markdown surface of this repository (repo-root docs, the shipped plugin docs, the root contract and
-# roadmap) carries exactly one primary role. A surface may link to another role, but it never presents
+# Every documentation surface of this repository (repo-root docs, the shipped plugin docs and skills, the root
+# contract and roadmap, the .github templates — Markdown or YAML) carries exactly one primary role. A surface may link to another role, but it never presents
 # historical state as current authority. tests/test-doc-roles.sh holds this file to the tree and the tree to it.
 #
 # Roles (closed):
@@ -12,6 +12,11 @@
 #   superseded            kept for the record and marked so in its first lines; nothing reads it as current
 #
 # Columns: path <TAB> role <TAB> governed concepts (comma list, or -) <TAB> note
+.github/ISSUE_TEMPLATE/alpha-feedback.yml	operative-authority	issue-template-alpha-feedback	governance prose in YAML: the alpha feedback form
+.github/ISSUE_TEMPLATE/bug.yml	operative-authority	issue-template-bug	governance prose in YAML: the bug issue form; its Dependencies field says prose explains and the native relationship records (this audit)
+.github/ISSUE_TEMPLATE/config.yml	operative-authority	issue-chooser	GitHub's template chooser configuration: which forms exist, whether blank issues are allowed
+.github/ISSUE_TEMPLATE/feature.yml	operative-authority	issue-template-feature	governance prose in YAML: the feature issue form; its Dependencies field says prose explains and the native relationship records (this audit)
+.github/ISSUE_TEMPLATE/skill.yml	operative-authority	issue-template-skill	governance prose in YAML: the skill issue form
 .github/PULL_REQUEST_TEMPLATE.md	operative-authority	pr-template	the pull-request body every PR opens with; the plan and ship skills fill it
 AGENTS.md	operative-authority	agent-contract	the one agent contract; states other concepts only as projections that point at their sources
 CLAUDE.md	current-projection	agent-contract	imports AGENTS.md

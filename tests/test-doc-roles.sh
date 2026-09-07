@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Behavioral suite for the documentation role register and the canonical-truth map (#741): every Markdown surface of
+# Behavioral suite for the documentation role register and the canonical-truth map (#741): every documentation surface of
 # the repository is registered exactly once with one role from the closed vocabulary; no surface is left in a finding
 # state; a surface registered as superseded or banner-marked says so in its first lines; every governed concept has one
 # operative source (the map's row, or exactly one operative-authority surface); every locator the map names resolves,
@@ -12,8 +12,8 @@ REG="$ROOT/docs/ops/doc-roles.tsv"; MAP="$ROOT/docs/ops/canonical-truth.tsv"
 [ -f "$MAP" ] && ok || bad "docs/ops/canonical-truth.tsv is present"
 
 rows() { grep -v '^#' "$REG" | grep -v '^$'; }
-# every Markdown surface of the covered roots is registered exactly once, and every registered path exists
-tree="$(cd "$ROOT" && git ls-files -- AGENTS.md CLAUDE.md README.md ROADMAP.md 'docs/*.md' 'docs/**/*.md' 'plugins/*/docs/**' 'plugins/*/skills/*/SKILL.md' 'plugins/*/skills/*/references/*.md' '.github/*.md' '.github/**/*.md' | grep -E '\.md$' | sort)"
+# every documentation surface of the covered roots (Markdown, and the YAML issue forms) is registered exactly once
+tree="$(cd "$ROOT" && git ls-files -- AGENTS.md CLAUDE.md README.md ROADMAP.md 'docs/*.md' 'docs/**/*.md' 'plugins/*/docs/**' 'plugins/*/skills/*/SKILL.md' 'plugins/*/skills/*/references/*.md' '.github/*.md' '.github/**/*.md' '.github/ISSUE_TEMPLATE/*.yml' | grep -E '\.(md|yml)$' | sort)"
 reg="$(rows | cut -f1 | sort)"
 assert_eq "every surface is registered and nothing else is" "" "$(comm -3 <(printf '%s\n' "$tree") <(printf '%s\n' "$reg") | tr '\n' ' ' | sed 's/ $//')"
 assert_eq "no surface is registered twice" "" "$(rows | cut -f1 | sort | uniq -d | tr '\n' ' ')"

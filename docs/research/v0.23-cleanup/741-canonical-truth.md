@@ -1,7 +1,8 @@
 # Canonical governance and documentation truth — the audit and its register (v0.23 cleanup, #741)
 
-**Scope.** Every Markdown surface of the repository — 165 files: the root contract and roadmap, the
-`.github` templates,
+**Scope.** Every documentation surface of the repository — 170 files: the root contract and roadmap, the
+`.github` templates (the Markdown pull-request template and the YAML issue forms, governance prose in
+either syntax),
 the repo-root developer docs (ADRs, ops, releases, governance, research, alpha), the shipped plugin
 docs and every skill's SKILL.md and references — classified by exactly one primary role in `docs/ops/doc-roles.tsv`, and the seven governed concepts
 the issue named (plus two the audit found contested) mapped to one operative source each in
@@ -21,7 +22,7 @@ computed from the two data files when this page is built, never typed.
 
 | Role | Surfaces |
 |---|---|
-| `operative-authority` | 25 |
+| `operative-authority` | 30 |
 | `current-projection` | 18 |
 | `explanation` | 59 |
 | `historical-evidence` | 63 |
@@ -92,25 +93,51 @@ that asserted live state are banners now.
 
 ## Hot-path reads, compared where the baseline instrumented them
 
-The #737 footprint (`docs/research/v0.23-optimization-baseline/raw/footprint.txt`, frozen `921c982`)
-measures what a session loads and what the reviewer re-read. The same tool run on this change's HEAD:
+Two instruments observed the hot path in the #737/#730 baseline, and both are re-run here.
+
+**Footprint** (`tools/footprint.sh`, frozen `921c982` vs this change's HEAD) — what a session loads and
+what the reviewer re-read, as tracked bytes and lines:
 
 | Bucket | Before (921c982) | After (this HEAD) |
 |---|---|---|
 | `root.contract` (AGENTS.md + CLAUDE.md, auto-loaded every session) | 15,433 bytes / 292 lines | 15,648 bytes / 295 lines |
 | `shipped.docs.spark` | 310,651 bytes / 5,908 lines | 427,680 bytes / 7,072 lines |
-| `devdocs.ops` | 225,751 bytes / 4,286 lines | 254,266 bytes / 4,497 lines |
+| `devdocs.ops` | 225,751 bytes / 4,286 lines | 255,178 bytes / 4,502 lines |
 
 The contract grows by one clause (contradiction 1); the shipped docs shrink by the two duplicated
 paragraphs and grow by the fact-freshness page #732 added between the two measurements — the figures are the
-trees', not this change's alone. What #730 §2.3 observed as repeated reading was concentrated on the files
-under repair (`cli.md` 11×, `ship/SKILL.md` 18× in workload A), not on the surfaces this audit
-re-classified; the audit therefore changes what an agent must *reconcile* (one operative source per
-concept, projections marked) rather than how many bytes a session loads. No read-count claim is made.
+trees', not this change's alone.
+
+**Workload reads** (`tools/analyze-transcript.py`, the baseline's transcript analyzer, over this job's own
+Claude Code transcript). The baseline's workloads A (repairing PR #727) and B (PR #724) cannot be re-run:
+each was a repair episode driven by a reviewer finding stream against a tree that no longer exists, so no
+after-measurement of *those* workloads can be produced. What can be measured is the same instrument over
+the workloads that consumed the audited surfaces after the change — the #732 contract rounds (D) and this
+audit's own rounds (C), windows pinned in `741-transcript-reads.json` beside this page:
+
+| Measure | A (#727 repair, baseline §2.3) | B (#724 repair, baseline §2.3) | D (#732 contract) | C (#741 audit) |
+|---|---|---|---|---|
+| tool calls in the window | 558 API requests | — | 184 | 65 |
+| Read-tool calls | top read path 5× | top eight paths were task output | 2 | 2 |
+| shell reads (sed/grep/cat) of repository files | — | — | 55 | 10 |
+| distinct repository paths read | — | — | 2 | 7 |
+| repeated repository path reads | — | — | 0 | 4 |
+| gh invocations (lower bound) | `gh pr view 727` 21×, comments 19× | `issues/724/comments` 51× | 87 | 20 |
+| touches of `plugins/spark/docs/reference/cli.md` | 11 | — | 0 (whole after-side) | 0 (whole after-side) |
+| touches of `plugins/spark/skills/ship/SKILL.md` | 18 | — | 2 (whole after-side) | 2 (whole after-side) |
+| touches of `plugins/spark/lib/execution.sh` | 62 | — | 0 (whole after-side) | 0 (whole after-side) |
+| touches of `AGENTS.md` | — | — | 0 (whole after-side) | 0 (whole after-side) |
+
+The two after-windows read the governed prose surfaces a handful of times because the evidence was captured
+once (one sweep, kept as findings) and the rounds ran from scripts; the baseline's repeated reads were the
+re-reconciliation of ADR, skill and CLI reference in every round. The workloads differ in kind (repair of
+a runtime change vs. a schema contract and an audit), so the table compares instruments, not outcomes:
+it shows the after-side is observable with the baseline's own tool and records what it observed. No claim
+of a read-count reduction is made from it.
 
 ## Acceptance, item by item
 
-- **Surfaces classified by role with evidence** — `docs/ops/doc-roles.tsv`, 165 rows, one role each; the
+- **Surfaces classified by role with evidence** — `docs/ops/doc-roles.tsv`, 170 rows, one role each; the
   evidence per concept is the sweep summarised above and the map's surface lists.
 - **One operative source per concept or an explicit exception** — `docs/ops/canonical-truth.tsv`, nine
   concepts; one exception (routine merge authority), stated as such; the merge-method contradiction is
