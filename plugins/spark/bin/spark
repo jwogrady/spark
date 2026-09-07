@@ -1986,6 +1986,46 @@ issue_refs() {
     }'
 }
 
+# intent_liveness <recorded next action> — the liveness of the issues a recorded
+# intent names, as one tab-separated row: <named>\t<closed>\t<open>\t<unread>.
+#
+# The single reader of issue state for this question (#743, after #739's rule
+# that one fact has one reader). It reads and counts; it never decides what the
+# counts mean. `triage` renders them as an intent verdict and `reconcile` as a
+# disposition, and both stay honest about *why* a state was not read: with no
+# `gh` at all every reference counts unread, exactly as a `gh` that could not
+# answer does, because the two are the same evidentiary gap and the caller —
+# not this primitive — is where they are told apart for the operator.
+intent_liveness() {
+  local closed=0 open_seen=0 unread=0 named=0 n refs
+  refs="$(issue_refs "$1" | awk '!seen[$0]++')"
+  for n in $refs; do
+    named=$((named+1))
+    if command -v gh >/dev/null 2>&1; then
+      case "$(gh api "repos/{owner}/{repo}/issues/$n" --jq .state 2>/dev/null)" in
+        closed) closed=$((closed+1)) ;;
+        open)   open_seen=$((open_seen+1)) ;;
+        *)      unread=$((unread+1)) ;;
+      esac
+    else
+      unread=$((unread+1))
+    fi
+  done
+  printf '%d\t%d\t%d\t%d\n' "$named" "$closed" "$open_seen" "$unread"
+}
+
+# json_escape <string> — a one-line string as a JSON string body: the two
+# metacharacters a JSON string cannot carry raw, and nothing else.
+#
+# The single escaper of the runtime (#743). Callers that write JSON — `state`,
+# `telemetry show --json`, `budget --json` — each carried an identical copy;
+# one body means one place to fix if the escaping is ever wrong. It does NOT
+# handle control characters: every caller rejects newlines and tabs before
+# writing, because a record silently corrupted for all readers is worse than a
+# refused write. `js` is a different function with a similar name: it deletes
+# quotes and backslashes for doctor's --json, and must not be merged with this.
+json_escape() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+
 # repo_git_facts <root> — the cheap local git facts. No network: this is on
 # the SessionStart hot path through brief --short.
 repo_git_facts() {
@@ -3314,7 +3354,15 @@ EOF
 # mapping live in the governance model.
 # ---------------------------------------------------------------------------
 
-# di_trunk <root> — the remote trunk ref, by the same idiom cmd_brief uses.
+# di_trunk <root> — the remote trunk ref: `refs/remotes/origin/HEAD` when the
+# clone records one, else whichever of origin/master, origin/main exists.
+#
+# The single reader of that fact (#743). `spark docs-impact` needs it for a diff
+# base and `spark resume` for #344's trunk-ancestry drift; both are the same
+# question about the same remote. `repo_trunk` answers a DIFFERENT one — the
+# local trunk name, network-free, on brief's SessionStart path — and stays
+# separate deliberately (#739): collapsing them would make an offline triage
+# depend on a remote ref.
 di_trunk() {
   local root="$1" trunk='' t
   trunk="$(git -C "$root" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)"
@@ -4861,23 +4909,12 @@ triage_rows() {
     # number repeated in prose is queried once and the query set is
     # deterministic — the fixtures assert which issues were asked for, not just
     # the verdict.
-    local closed=0 open_seen=0 unread=0 n refs
-    refs="$(issue_refs "$next" | awk '!seen[$0]++')"
-    if [ -z "$refs" ]; then
+    local closed=0 open_seen=0 unread=0 named=0
+    IFS=$'\t' read -r named closed open_seen unread < <(intent_liveness "$next")
+    if [ "$named" -eq 0 ]; then
       printf 'intent\t=\trecorded\trecorded %s; it references no issue explicitly, so its liveness is not judged from issue state\n' \
         "${updated:-at an unknown date}"
     else
-      for n in $refs; do
-        if command -v gh >/dev/null 2>&1; then
-          case "$(gh api "repos/{owner}/{repo}/issues/$n" --jq .state 2>/dev/null)" in
-            closed) closed=$((closed+1)) ;;
-            open)   open_seen=$((open_seen+1)) ;;
-            *)      unread=$((unread+1)) ;;
-          esac
-        else
-          unread=$((unread+1))
-        fi
-      done
       if [ "$closed" -gt 0 ] && [ "$open_seen" -eq 0 ] && [ "$unread" -eq 0 ]; then
         printf 'intent\t!\trecorded\tevery issue the recorded next action names (%d) is closed, so the intent recorded %s is spent; the next action is yours\n' \
           "$closed" "${updated:-at an unknown date}"
@@ -4962,29 +4999,18 @@ rec_rows() {
   local root="$1" k v
 
   # --- recorded intent, through triage's own producers ---------------------
-  local next='' updated='' refs closed=0 open_seen=0 unread=0 n
+  local next='' updated='' named=0 closed=0 open_seen=0 unread=0
   while IFS=$'\t' read -r k v; do
     case "$k" in next_action) next="$v" ;; updated) updated="$v" ;; esac
   done < <(repo_recorded_intent "$root")
   if [ -n "$next" ]; then
-    refs="$(issue_refs "$next" | awk '!seen[$0]++')"
-    if [ -z "$refs" ]; then
+    IFS=$'\t' read -r named closed open_seen unread < <(intent_liveness "$next")
+    if [ "$named" -eq 0 ]; then
       rec_row intent known KEEP state.json \
         "recorded intent references no issue explicitly" \
         "none — its liveness cannot be judged from issue state" \
         none "spark triage" deterministic
     else
-      for n in $refs; do
-        if command -v gh >/dev/null 2>&1; then
-          case "$(gh api "repos/{owner}/{repo}/issues/$n" --jq .state 2>/dev/null)" in
-            closed) closed=$((closed+1)) ;;
-            open)   open_seen=$((open_seen+1)) ;;
-            *)      unread=$((unread+1)) ;;
-          esac
-        else
-          unread=$((unread+1))
-        fi
-      done
       if [ "$unread" -gt 0 ]; then
         rec_row intent unread - state.json \
           "recorded intent names $unread issue(s) whose state could not be read" \
@@ -7234,13 +7260,8 @@ cmd_resume() {
 
   # Trunk ancestry (#344): commits on the remote trunk that this branch lacks
   # may include a merged prerequisite. Report the drift; never repair it.
-  local trunk='' behind_trunk='' t
-  trunk="$(git -C "$root" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)"
-  if [ -z "$trunk" ]; then
-    for t in origin/master origin/main; do
-      git -C "$root" show-ref --verify --quiet "refs/remotes/$t" && { trunk="$t"; break; }
-    done
-  fi
+  local trunk='' behind_trunk=''
+  trunk="$(di_trunk "$root")"
   [ -n "$trunk" ] && [ "$branch" != "${trunk#origin/}" ] \
     && behind_trunk="$(git -C "$root" rev-list --count "HEAD..$trunk" 2>/dev/null || true)"
 
@@ -8040,7 +8061,6 @@ cmd_state() {
   # Write canonical one-level JSON in the schema's key order. Values are escaped
   # for the two JSON metacharacters that can appear in a one-line string.
   mkdir -p "$top/.spark" || { red "could not create $top/.spark"; return 1; }
-  json_escape() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
   {
     printf '{\n'
     local first=1
