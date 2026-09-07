@@ -66,10 +66,15 @@ def consumers(tree, fns):
     for f in FILES:
         cur, buf = None, []
         for line in open(os.path.join(tree, f)).read().split("\n"):
-            m = re.match(r"^([A-Za-z_][A-Za-z0-9_]*)\(\) \{", line)
+            m = re.match(r"^([A-Za-z_][A-Za-z0-9_]*)\(\) \{(.*)$", line)
             if m:
                 if cur: bodies[cur] = "\n".join(buf)
-                cur, buf = m.group(1), []
+                name, rest = m.group(1), m.group(2)
+                if rest.rstrip().endswith("}"):      # a one-liner opens and closes here; its body is on this line
+                    bodies[name] = rest.rstrip()[:-1]
+                    cur, buf = None, []
+                else:
+                    cur, buf = name, []
                 continue
             if line.startswith("}") and cur:
                 bodies[cur] = "\n".join(buf); cur, buf = None, []
@@ -92,11 +97,18 @@ def parse_lines(tree, fns):
     function — but parsing is not held by a function in this runtime: it sits at the head of every verb. Counting
     the lines that touch positional parameters, `shift`, a usage string or a long option gives the responsibility a
     size without pretending some function owns it. It is a line-level heuristic and the manifest says so."""
-    out, cur, name = collections.Counter(), None, None
+    out, name = collections.Counter(), None
     for f in FILES:
         for line in open(os.path.join(tree, f)).read().split("\n"):
-            m = re.match(r"^([A-Za-z_][A-Za-z0-9_]*)\(\) \{", line)
-            if m: name = m.group(1); continue
+            m = re.match(r"^([A-Za-z_][A-Za-z0-9_]*)\(\) \{(.*)$", line)
+            if m:
+                one, rest = m.group(1), m.group(2)
+                if rest.rstrip().endswith("}"):      # a one-liner's parse lines are the one line it occupies
+                    if one in fns and PARSE_RE.search(rest): out[one] += 1
+                    name = None
+                else:
+                    name = one
+                continue
             if line.startswith("}"): name = None; continue
             if name and name in fns and PARSE_RE.search(line): out[name] += 1
     return out

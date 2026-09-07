@@ -59,14 +59,14 @@ without inventing an owner. It is a line-level heuristic, not a parser:
 
 | File | Parse lines before | after |
 |---|---|---|
-| `plugins/spark/bin/spark` | 531 | 531 |
-| `plugins/spark/lib/execution.sh` | 202 | 200 |
+| `plugins/spark/bin/spark` | 532 | 533 |
+| `plugins/spark/lib/execution.sh` | 206 | 204 |
 | `plugins/spark/lib/planning.sh` | 62 | 62 |
-| `plugins/spark/lib/repository.sh` | 21 | 21 |
+| `plugins/spark/lib/repository.sh` | 23 | 23 |
 
-190 functions carried parse lines before and 191 do now, in
-816
-and 814
+200 functions carried parse lines before and 202 do now, in
+823
+and 822
 lines respectively. That is why extracting a shared parser is rejected below: the lines are per-verb strings and
 flags, and a shared parser would either normalize what users see or take it all as parameters.
 
@@ -82,7 +82,7 @@ demonstration, and must not be duplicated back into a module:
 | Primitive | Runtime consumers | Responsibility |
 |---|---|---|
 | `red` | 42 | `formatting-reporting` |
-| `yellow` | 33 | `formatting-reporting` |
+| `yellow` | 32 | `formatting-reporting` |
 | `usage` | 28 | `argument-parsing` |
 | `git_root` | 27 | `source-collection` |
 | `green` | 24 | `formatting-reporting` |
@@ -116,11 +116,11 @@ both sides with `git grep -l`, so a zero is a measured zero:
 
 | Fact | Runtime files before | after | Test files before | after | Doc files before | after |
 |---|---|---|---|---|---|---|
-| the liveness of the issues a recorded intent names | 1 | 1 | 0 | 0 | 0 | 0 |
+| the liveness of the issues a recorded intent names | 1 | 1 | 0 | 0 | 0 | 1 |
 | the remote trunk ref | 1 | 1 | 0 | 1 | 0 | 2 |
 | a JSON string body | 2 | 1 | 1 | 1 | 0 | 0 |
 
-In reader bodies the same three facts go two to one, two to one and three to one. Runtime files fell for a JSON string body, which is the escaper moving out of the module it was copied into. Test and doc files rose for the remote trunk ref: this unit's own suite asserts the idiom and its map and manifest name it, which is what a measurement of surfaces is supposed to show rather than hide. No shipped documentation needed an edit: the suites that own the affected verbs exercise them by behaviour, not by naming the idiom.
+In reader bodies the same three facts go two to one, two to one and three to one. Runtime files fell for a JSON string body, which is the escaper moving out of the module it was copied into. Test and doc files rose for the liveness of the issues a recorded intent names, the remote trunk ref: this unit's own suite asserts the idiom and its map and manifest name it, which is what a measurement of surfaces is supposed to show rather than hide. No shipped documentation needed an edit: the suites that own the affected verbs exercise them by behaviour, not by naming the idiom.
 
 ## What was rejected, and why
 

@@ -110,6 +110,32 @@ done
 assert_eq "parse lines are non-negative integers" "" \
   "$(rows | awk -F'\t' '$5 !~ /^[0-9]+$/ {print $1}' | tr '\n' ' ')"
 [ "$(rows | awk -F'\t' '{s+=$5} END {print s+0}')" -gt 0 ] && ok || bad "no function carries a parse line, which cannot be true"
+# a body cannot contain more parse lines than it has lines; that inequality catches a scanner that loses a
+# function's boundary and charges the lines after it to the wrong owner
+for which in after before; do
+  case "$which" in after) src=rows ;; before) src=rows_before ;; esac
+  assert_eq "$which: no body has more parse lines than lines" "" \
+    "$($src | awk -F'\t' '$5 > $4 {print $1 "(" $5 ">" $4 ")"}' | tr '\n' ' ')"
+done
+# a one-line function's consumers must name it on that one line — the edge a lost boundary invents
+oneliners="$(rows | awk -F'\t' '$4 == 1 {print $1}')"
+bad_edges=""
+while IFS= read -r fn; do
+  [ -n "$fn" ] || continue
+  src_line="$(grep -h -m1 "^$fn() {" "$SPARK" "$ROOT"/plugins/spark/lib/*.sh 2>/dev/null || true)"
+  [ -n "$src_line" ] || continue
+  consumed="$(rows | awk -F'\t' -v f="$fn" '$7 != "-" { n = split($7, cs, ";"); for (i = 1; i <= n; i++) if (cs[i] == f) print $1 }')"
+  while IFS= read -r target; do
+    [ -n "$target" ] || continue
+    case "$src_line" in *"$target"*) ;; *) bad_edges="$bad_edges $fn->$target" ;; esac
+  done <<EOF_TARGETS
+$consumed
+EOF_TARGETS
+done <<EOF_ONELINERS
+$oneliners
+EOF_ONELINERS
+assert_eq "no one-line function consumes what its single line does not name" "" "$(printf '%s' "$bad_edges" | sed 's/^ //')"
+assert_eq "the canonical escaper has exactly three consumers" "3" "$(rows | awk -F'\t' '$1 == "json_escape" {print $6}')"
 for f in $FILES; do
   pa="$(rows | awk -F'\t' -v f="$f" '$2 == f {s+=$5} END {printf "%d", s}' | sed ':a;s/\B[0-9]\{3\}\>/,&/;ta')"
   pb="$(rows_before | awk -F'\t' -v f="$f" '$2 == f {s+=$5} END {printf "%d", s}' | sed ':a;s/\B[0-9]\{3\}\>/,&/;ta')"
