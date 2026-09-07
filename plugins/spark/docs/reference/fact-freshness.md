@@ -32,7 +32,7 @@ event can fire; the observation decides which tokens fire (F1, F2).
 | `comment-created` | `issue,pull_request` | the node's current updated_at differs from versions[issue:…] or versions[pull_request:…] because a comment was added | A comment is created on an issue or pull request. No fact can carry the new comment's token, so the node's own token fires — a fact whose value depends on which records a node carries lists that node (fact model R17), and reads it again to find the new record. |
 | `relationship` | `issue,pull_request,milestone` | the current updated_at of a listed node or milestone differs from the version recorded for its token | A parent, child, blocker or milestone relationship changes. The graph and placement facts that list the related node or the milestone are stale. |
 | `check-run` | `none` | the check-runs listing for the HEAD (latest per name) differs from results, or any result is non-terminal | A check run or workflow run at the HEAD completes, is re-run or is requested. No token changes — the HEAD is the same — so the checks fact is re-read on observation: a non-terminal result is never carried forward and a terminal one is re-read when a merge decision is derived. |
-| `ruleset` | `ruleset` | the rulesets' current updated_at differs from versions[ruleset:…], or the required-check set differs from required | The repository's rulesets change which checks are required. The checks fact for every open work unit carries ruleset:<repository> and is stale. |
+| `ruleset` | `ruleset` | the digest of the repository's current rulesets — sorted lines <ruleset id>@<updated_at>, newline-terminated, SHA-256 — differs from versions[ruleset:…] (the collection record); creating or deleting a ruleset changes it even when every remaining ruleset's updated_at stands | The repository's rulesets change which checks are required. The checks fact for every open work unit carries ruleset:<repository> and is stale. |
 | `repository` | `repository` | the repository's current updated_at differs from versions[repository:…], or the observer's permission, re-read before the snapshot is used, differs from the snapshot's observer record (fact model R21) | Repository settings, the default branch or the observing identity's permission change. Facts carrying repository:<repository> are stale, and every other source-read fact of the set is re-read (F13): readability was a property of the snapshot, and after a permission loss each re-read yields UNKNOWN (unreadable records). |
 | `schema` | `none` | the snapshot's schema_version differs from the consumer's fact-model version, or the compiler that derived a fact changed its version | The fact model's schema version or the compiler's interpretation changes. Every fact of the snapshot is UNKNOWN to that consumer (R9); the snapshot is recompiled, never migrated in place. |
 | `unreadable` | `none` | a read of the source fails: permission denied, not found, rate-limited, timed out, or malformed | An authoritative source cannot be re-read. The fact takes the status the unreadable record assigns, with detail.reason naming the failure; the previous value is never reused as authority. |
@@ -56,6 +56,20 @@ kind appears on at least one fact there (the suite checks both).
 | `review` | `head,comment,pull_request,issue` | the exact HEAD (R7), the verdict record and the pull request whose comments hold the verdicts, so a verdict posted later reaches the fact (R17), and — with no HEAD — the issue |
 | `checks` | `head,ruleset,issue` | the exact HEAD (R7), the rulesets that decide which checks are required, and — with no HEAD — the issue |
 | `next_action` | `inputs` | derived: it may carry any token of its inputs' kinds — at least the HEAD it was derived at — and it re-derives when any input's version changes, because its own version binds every input's (R4, R15) |
+
+## Collection versions
+
+GitHub versions each ruleset, never the set a repository carries, so the
+`ruleset:` token cannot record a node's `updated_at`. It records the digest of
+the membership with each member's version (F14); the fact model's `digest`
+identifier is its grammar. A ruleset created or deleted changes the digest even
+when every remaining ruleset's timestamp stands — the failure a "latest
+timestamp" rule would miss. Example 1 records the digest of the membership
+below; the suite recomputes it.
+
+| Token kind | Algorithm | Example 1 membership | Why |
+|---|---|---|---|
+| `ruleset` | SHA-256, hex-encoded, over the sorted lines <ruleset id>@<updated_at>, each newline-terminated (printf '%s\n' … \| sort \| sha256sum) | `1001@2026-09-01T08:00:00Z;1002@2026-08-15T09:00:00Z` | GitHub versions each ruleset, never the set; a digest of the membership with each member's version changes when a ruleset is created, deleted or edited, even when every remaining timestamp stands |
 
 ## What can change each fact
 
@@ -187,9 +201,11 @@ table, and checks it against the matrix column for the event.
 | `decision-issue-edit` | `metadata` | `issue:github.com/acme/widgets#7=2026-09-06T12:22:00Z` | `authority;;next_action` | The decision issue's own metadata changes (its title, say): the authority fact recorded that issue's version and is stale; the re-read finds the same decision records. |
 | `decision-issue-relationship` | `relationship` | `issue:github.com/acme/widgets#7=2026-09-06T12:23:00Z` | `authority;;next_action` | A relationship of the decision issue changes: the same token fires, and only the authority fact carries it. |
 | `gate-edit` | `metadata` | `issue:github.com/acme/widgets#41=2026-09-06T12:30:00Z` | `placement,graph,acceptance;;next_action` | The implemented issue's updated_at moved: placement, graph and the acceptance contract read from it are stale. |
-| `ruleset` | `ruleset` | `ruleset:github.com/acme/widgets=2026-09-06T12:05:00Z` | `checks;;next_action` | The rulesets' updated_at moved: the checks fact is stale (which checks are required may have changed). |
+| `ruleset-edited` | `ruleset` | `ruleset:github.com/acme/widgets=digest(1001@2026-09-01T08:00:00Z;1002@2026-09-06T12:05:00Z)` | `checks;;next_action` | A ruleset is edited: its updated_at moves, the membership digest differs from the recorded one, and the checks fact is stale (which checks are required may have changed). |
+| `ruleset-created` | `ruleset` | `ruleset:github.com/acme/widgets=digest(1001@2026-09-01T08:00:00Z;1002@2026-08-15T09:00:00Z;1003@2026-09-06T12:05:00Z)` | `checks;;next_action` | A ruleset is created: the two existing rulesets' timestamps stand, the membership grew, the digest differs; the checks fact is stale. |
+| `ruleset-deleted` | `ruleset` | `ruleset:github.com/acme/widgets=digest(1001@2026-09-01T08:00:00Z)` | `checks;;next_action` | A ruleset is deleted: the remaining ruleset's timestamp stands, the membership shrank, the digest differs; the checks fact is stale — a maximum-timestamp rule would have missed this. |
 | `permission-loss` | `repository` | `observer.permission=none` | `repository;work_unit,placement,graph,authority,acceptance,head,review,checks;next_action` | The observer's permission, re-read before use, is not the recorded write: a repository event — the repository fact is stale and, under F13, every other source-read fact is re-read before use; each re-read answers 403 and yields UNKNOWN (Example 7 of the fact model). |
-| `unchanged` | `none` | `pull_request:github.com/acme/widgets#42=2026-09-06T12:00:00Z,observer.permission=write` | `;;` | A control: the observation equals the recorded versions and permission, so no token fires and nothing is stale — freshness never expires by age. |
+| `unchanged` | `none` | `pull_request:github.com/acme/widgets#42=2026-09-06T12:00:00Z,observer.permission=write,ruleset:github.com/acme/widgets=digest(1001@2026-09-01T08:00:00Z;1002@2026-08-15T09:00:00Z)` | `;;` | A control: the observation equals the recorded versions and permission, so no token fires and nothing is stale — freshness never expires by age. |
 
 ## Rules
 
@@ -247,6 +263,11 @@ the behavioral suite checks the two never drift.
   the repository fact stale and re-reads every other source-read fact of the
   set, so a permission loss cannot leave a cached fact usable: the re-read
   yields UNKNOWN through the unreadable records.
+- **F14** A token that names a collection records the collection's digest, not a
+  member's timestamp: for ruleset:, the SHA-256 of the sorted lines <ruleset
+  id>@<updated_at>, each newline-terminated (the collection record). Membership
+  changes are therefore detected even when every remaining member's version
+  stands, and any consumer with sort and sha256sum computes the same version.
 - **F12** Every event that can change a fact's value reaches the fact through a
   token it carries: the depends record of each class names those events, and the
   matrix cell for each is stale or re-read (derived for the derived class). A

@@ -38,8 +38,9 @@ against fact-model schema version 1), rendered by
 `plugins/spark/docs/reference/fact-freshness.md` and proven by
 `tests/test-fact-freshness.sh`.**
 
-- Every fact records the version it observed for each invalidator token and a
-  complete snapshot records its observer, so a consumer decides freshness by
+- Every fact records the version it observed for each invalidator token (a
+  digest of the membership for a token that names a collection) and a complete
+  snapshot records its observer, so a consumer decides freshness by
   comparing recorded versions with current ones — from the cached snapshot alone.
 - Eleven **event** classes cover the invalidation the release asked for: HEAD
   push, base move, issue or pull-request metadata, comment edit/deletion and

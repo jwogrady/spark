@@ -32,12 +32,12 @@ assert_eq "one matrix row per fact class" "10" "$(rec matrix | wc -l | tr -d ' '
 assert_eq "seven conflict situations" "7" "$(rec conflict | wc -l | tr -d ' ')"
 assert_eq "five unreadable failures" "5" "$(rec unreadable | wc -l | tr -d ' ')"
 assert_eq "one migration rule" "1" "$(rec migration | wc -l | tr -d ' ')"
-assert_eq "eighteen executable scenarios" "18" "$(rec scenario | wc -l | tr -d ' ')"
-assert_eq "thirteen rules" "13" "$(rec rule | wc -l | tr -d ' ')"
+assert_eq "twenty executable scenarios" "20" "$(rec scenario | wc -l | tr -d ' ')"
+assert_eq "fourteen rules" "14" "$(rec rule | wc -l | tr -d ' ')"
 # the record kinds the header comment declares are exactly the kinds present
-assert_eq "record kinds present" "conflict depends effect event kinds matrix migration rule scenario schema unreadable version" "$(grep -v '^#' "$TSV" | cut -f1 | sort -u | tr '\n' ' ' | sed 's/ $//')"
+assert_eq "record kinds present" "collection conflict depends effect event kinds matrix migration rule scenario schema unreadable version" "$(grep -v '^#' "$TSV" | cut -f1 | sort -u | tr '\n' ' ' | sed 's/ $//')"
 # every record kind's field count is constant
-for k in event kinds depends effect matrix conflict unreadable migration scenario rule; do
+for k in event kinds collection depends effect matrix conflict unreadable migration scenario rule; do
   n="$(rec "$k" | awk -F'\t' '{print NF}' | sort -u | wc -l | tr -d ' ')"; [ "$n" = 1 ] && ok || bad "record kind $k has rows of differing width"
 done
 # shipped docs carry no bare issue-number references (doctor's tier boundary)
@@ -51,7 +51,7 @@ while IFS= read -r line; do
   last="$line"; case "$line" in OK*) ok ;; *) bad "$line" ;; esac
 done <<EOF
 $(python3 - "$TSV" "$DOC" "$FM_TSV" "$FM_DOC" 2>&1 <<'PY'
-import re, sys, json, collections
+import re, sys, json, collections, hashlib
 tsv, doc, fm_tsv, fm_doc = (open(p).read() for p in sys.argv[1:5])
 rows = [l.split("\t") for l in tsv.split("\n") if l.strip() and not l.startswith("#")]
 fm = [l.split("\t") for l in fm_tsv.split("\n") if l.strip() and not l.startswith("#")]
@@ -149,15 +149,24 @@ for f in snap:
 say(all(len(vs) == 1 for vs in recorded.values()), "within Example 1 every node has one recorded version (R20)")
 recorded = {t: next(iter(vs)) for t, vs in recorded.items()}
 repo_tok = "repository:" + [f for f in snap if f["class"] == "repository"][0]["value"]["id"]
+def digest(members): return hashlib.sha256("".join(m + "\n" for m in sorted(members.split(";"))).encode()).hexdigest()
 def detect(obs):
-    """fired tokens, derived from the recorded versions and the observation — F1 (versions) and F13 (observer)"""
+    """fired tokens, derived from the recorded versions and the observation — F1 (versions), F13 (observer), F14 (collections)"""
     fired = set()
     for pair in obs.split(","):
         k, v = pair.split("=", 1)
         if k == "observer.permission":
             if v != observer["permission"]: fired.add(repo_tok)
-        elif k in recorded and recorded[k] != v: fired.add(k)
+            continue
+        if v.startswith("digest(") and v.endswith(")"): v = digest(v[7:-1])
+        if k in recorded and recorded[k] != v: fired.add(k)
     return fired
+coll = {c[1]: c for c in recs("collection")}
+say(set(coll) == {"ruleset"}, "exactly the ruleset token names a collection")
+rs_tok = "ruleset:" + [f for f in snap if f["class"] == "repository"][0]["value"]["id"]
+say(recorded.get(rs_tok) == digest(coll["ruleset"][3]), "Example 1 records the digest of the documented ruleset membership — the two pages agree")
+say(digest("b@2;a@1") == digest("a@1;b@2") and digest("a@1") != digest("a@1;b@2") and digest("a@1;b@2") != digest("a@1;b@3"), "the digest is order-free and changes with membership or a member's version")
+say(hashlib.sha256(b"a@1\nb@2\n").hexdigest() == digest("b@2;a@1"), "the digest is the SHA-256 of the sorted, newline-terminated member lines — what sort and sha256sum compute")
 by = {f["class"]: f for f in snap}; key_of = {r[1]: r[2] for r in fm if r[0] == "key"}
 def mrow_of(ev):
     col = ev_names.index(ev); return {m[1]: m[2].split(",")[col] for m in recs("matrix")}
@@ -199,6 +208,11 @@ say(len(pl) == 1 and pl[0][4].split(";")[0] == "repository" and set(pl[0][4].spl
 say(len(pl) == 1 and pl[0][3].startswith("observer.permission=") and pl[0][3].split("=")[1] != observer["permission"], "the permission loss is detected from the observer record, not handed in as a token")
 say(any(s[1] == "base-switch" and s[3].startswith("pull_request:") and "head" in s[4].split(";")[0].split(",") for s in recs("scenario")), "a base-branch switch is detected from the pull request's recorded version and reaches the head fact")
 say(any(s[1] == "verdict-created" and s[3].startswith("pull_request:") and "review" in s[4].split(";")[0].split(",") for s in recs("scenario")), "a created verdict is detected from the pull request's recorded version and reaches the review fact")
+by_name = {s[1]: s for s in recs("scenario")}
+for nm in ("ruleset-created", "ruleset-deleted", "ruleset-edited"):
+    sc = by_name.get(nm); say(sc is not None and sc[3].startswith(rs_tok + "=digest(") and sc[4].split(";")[0] == "checks", f"{nm}: detected from the membership digest, reaching exactly the checks fact")
+say(by_name["ruleset-deleted"][3].split("digest(")[1].rstrip(")") == "1001@2026-09-01T08:00:00Z" and "1001@2026-09-01T08:00:00Z" in coll["ruleset"][3], "the deleted-ruleset scenario keeps the remaining member's timestamp unchanged and still fires")
+say("ruleset:" in by_name["unchanged"][3] and "digest(" + coll["ruleset"][3] + ")" in by_name["unchanged"][3], "the unchanged control includes the recorded membership, which fires nothing")
 say(any(u[1] == "permission-denied" and u[2] == "UNKNOWN" for u in recs("unreadable")), "the re-read after a permission loss has a closed outcome: UNKNOWN")
 # the three findings of round 1, as scenarios: a created verdict, a created grant, a base-branch switch
 by_name = {s[1]: s for s in recs("scenario")}
@@ -222,6 +236,7 @@ def exact(header, k, cols, label):
     return t
 exact("| Event | Fires |", "event", [1, 2, 3, 4], "event")
 exact("| Class | Invalidator kinds |", "kinds", [1, 2, 3], "kinds")
+exact("| Token kind | Algorithm |", "collection", [1, 2, 3, 4], "collection")
 exact("| Class | Value changes on |", "depends", [1, 2, 3], "depends")
 exact("| Effect | Meaning |", "effect", [1, 2], "effect")
 exact("| Situation | Outcome |", "conflict", [1, 2, 3, 4], "conflict")
@@ -239,7 +254,7 @@ rules_md = doc[doc.index("## Rules"):doc.index("## Relation to the rest of the m
 found = re.findall(r"^- \*\*(F\d+)\*\* (.*?)(?=^- \*\*F|\Z)", rules_md, flags=re.S | re.M)
 say([f[0] for f in found] == [r[1] for r in recs("rule")], "the rules list has exactly the TSV's rules, in order")
 for r, f in zip(recs("rule"), found): say(norm(f[1]) == norm(r[2]), f"rule {r[1]} statement is the TSV's, verbatim")
-covered = {"version": {1}, "schema": {1}, "event": {1, 2, 3, 4}, "kinds": {1, 2, 3}, "depends": {1, 2, 3}, "effect": {1, 2}, "matrix": {1, 2}, "conflict": {1, 2, 3, 4}, "unreadable": {1, 2, 3, 4}, "migration": {1, 2, 3}, "scenario": {1, 2, 3, 4, 5}, "rule": {1, 2}}
+covered = {"version": {1}, "schema": {1}, "event": {1, 2, 3, 4}, "kinds": {1, 2, 3}, "collection": {1, 2, 3, 4}, "depends": {1, 2, 3}, "effect": {1, 2}, "matrix": {1, 2}, "conflict": {1, 2, 3, 4}, "unreadable": {1, 2, 3, 4}, "migration": {1, 2, 3}, "scenario": {1, 2, 3, 4, 5}, "rule": {1, 2}}
 unchecked = sorted({f"{r[0]}[{i}]" for r in rows for i in range(1, len(r)) if i not in covered.get(r[0], set())})
 say(not unchecked, f"every column of every record kind is rendered on the page and compared: {unchecked or 'none unchecked'}")
 for blk in re.findall(r"(?:^\|.*\n)+", doc, flags=re.M):
