@@ -173,6 +173,11 @@ for r in kind("rule", 1, 2):
 say(len(found) == len([r for r in rows if r[0] == "rule"]), "the page states no rule the TSV lacks")
 unchecked = sorted({f"{r[0]}[{i}]" for r in rows for i in range(1, len(r)) if i not in seen.get(r[0], set())})
 say(not unchecked, f"every column of every record kind in the TSV is rendered on the page and compared: {unchecked or 'none unchecked'}")
+for blk in re.findall(r"(?:^\|.*\n)+", doc, flags=re.M):
+    ls = blk.strip("\n").split("\n"); hdr = cells(ls[0]); n = len(hdr)
+    off = [l for l in ls[2:] if len(cells(l)) != n]
+    sep = [c.strip() for c in ls[1].strip().strip("|").split("|")]
+    say(not off and len(sep) == n and all(c and set(c) <= set("-:") for c in sep), f"table '{hdr[0]}' has {n} columns in every row" + (f" — off: {off[0][:80]}" if off else ""))
 PY
 )
 EOF
