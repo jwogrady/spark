@@ -135,6 +135,16 @@ for r in (r for r in rows if r[0] == "identifier"):
 inv = {norm(c[0]): c for c in table("| Kind | Token form and meaning |")}
 for r in (r for r in rows if r[0] == "invalidator"):
     c = inv.get(r[1]); say(c is not None and norm(c[1]) == norm(r[3]), f"invalidator {r[1]} form is the TSV's")
+sta = {norm(c[0]): c for c in table("| Status | `value` allowed |")}
+for r in (r for r in rows if r[0] == "status"):
+    c = sta.get(r[1]); say(c is not None and [norm(x) for x in c[1:]] == [r[2], norm(r[3])], f"status {r[1]} row is the TSV's value-allowed flag and meaning")
+sidr = {r[1]: r for r in rows if r[0] == "source-identity"}; sverr = {r[1]: r for r in rows if r[0] == "source-version"}
+srcr = {norm(c[0]): c for c in table("| Source type | What it is |")}
+for r in (r for r in rows if r[0] == "source"):
+    c = srcr.get(r[1]); say(c is not None and [norm(x) for x in c[1:]] == [norm(r[3]), norm(r[2]), norm(sidr[r[1]][3]), norm(sverr[r[1]][3])], f"source {r[1]} row is the TSV's description, version identity, identity form and version grammar")
+bev = {norm(c[0]): c for c in table("| Boundary | Evidence fact |")}
+for r in (r for r in rows if r[0] == "boundary-evidence"):
+    c = bev.get(r[1]); say(c is not None and [norm(x) for x in c[1:]] == [r[2], r[3], r[4], norm(r[5])], f"boundary-evidence {r[1]} row is the TSV's fact, field, condition and meaning")
 cst = {norm(c[0]): c for c in table("| Class | Admitted statuses |")}
 for r in (r for r in rows if r[0] == "class-status"):
     c = cst.get(r[1]); say(c is not None and norm(c[1]).replace(", ", ",") == r[2], f"class-status {r[1]} row lists the TSV's admitted statuses")
@@ -283,7 +293,12 @@ def one_wu_token(f, wid, what):
     have = {f"issue:{wid}", f"pull_request:{wid}"} & set(f["invalidators"])
     if len(have) != 1: fail(f"{what} lists {wid} as an invalidator exactly once, as issue: or pull_request: (R17)")
 FORBIDDEN_KEYS = {"body", "comments", "timeline", "prose", "summary", "history"}
-ISO = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+ISO = ids["timestamp"]
+import datetime
+def real_instant(v, where):
+    """the grammar bounds each field; the calendar (30-day months, leap years) needs a parse (R18)"""
+    try: datetime.datetime.strptime(v, "%Y-%m-%dT%H:%M:%SZ")
+    except ValueError: fail(f"{where} = {v!r} is not a real calendar instant (R18)")
 
 def fail(msg): raise ValueError(msg)
 
@@ -301,6 +316,7 @@ def check_fact(f):
             if t not in ids: fail(f"field {k} is typed by an undeclared identifier kind {t}")
             if not isinstance(f[k], str) or not ids[t].fullmatch(f[k]): fail(f"field {k} = {f[k]!r} is not in the {t} grammar (R14/R18)")
             constrained(t, f[k], k)
+            if t == "timestamp": real_instant(f[k], k)
     if f["schema_version"] != version: fail("schema_version mismatch")
     if not ids["fact-key"].fullmatch(f["key"]): fail(f"key not canonical: {f['key']}")
     if f["class"] not in classes: fail(f"unknown class {f['class']}")
@@ -324,6 +340,7 @@ def check_fact(f):
     constrained(f"source-identity/{src['type']}", str(src["identity"]), "source.identity")
     if not src["version"]: fail("source.version empty")
     if not sver[src["type"]].fullmatch(str(src["version"])): fail(f"source.version {src['version']!r} is not in the {src['type']} version grammar (R14)")
+    if ISO.fullmatch(str(src["version"])): real_instant(str(src["version"]), "source.version")
     # a github-api commit version is only ever a HEAD-bound fact keyed by its own HEAD (R14): for any other class
     # an unrelated commit would never change when the node's metadata does
     if src["type"] == "github-api" and re.fullmatch(r"[0-9a-f]{40}", str(src["version"])):
@@ -736,6 +753,15 @@ rej base 'f["source"]["version"]="2026-09-06T11:58:00Z\n"' "a trailing newline o
 rej base 'f["observed_at"]=["2026-09-06T12:00:05Z"]' "observed_at as a list must be rejected: the field is typed by the timestamp grammar (R14/R18)"
 rej base 'f["observed_at"]="yesterday"' "observed_at outside the timestamp grammar must be rejected — the canonical form is data, not prose (R18)"
 rej base 'f["observed_at"]="2026-09-06T12:00:05.123Z"' "observed_at with fractional seconds is outside the grammar (R18)"
+for ts in '2026-99-99T99:99:99Z' '2026-13-01T00:00:00Z' '2026-00-10T00:00:00Z' '2026-09-06T24:00:00Z' '2026-09-06T12:60:00Z'; do
+  rej base "f[\"observed_at\"]=\"$ts\"" "observed_at $ts is outside the calendar ranges the grammar encodes (R18)"
+  rej base "f[\"source\"][\"version\"]=\"$ts\"" "a github-api updated_at of $ts is outside the timestamp grammar (R18)"
+done
+for ts in '2026-02-30T00:00:00Z' '2026-04-31T00:00:00Z' '2025-02-29T00:00:00Z'; do
+  rej base "f[\"observed_at\"]=\"$ts\"" "observed_at $ts passes the ranges but is not a real calendar date and must be rejected (R18)"
+  rej base "f[\"source\"][\"version\"]=\"$ts\"" "a github-api updated_at of $ts is not a real calendar date (R18)"
+done
+acc base 'f["observed_at"]="2024-02-29T23:59:59Z"' "control: a leap-day instant at the last second of the day is a real instant"
 rej base 'f["schema_version"]="01"' "a schema_version outside the schema-version grammar must be rejected (R18)"
 rej base 'f["invalidators"]="head:0123456789abcdef0123456789abcdef01234567"' "invalidators as a string must be rejected: the field record says list (R14)"
 rej base 'f["provenance"]=["https://github.com/acme/widgets/pull/42"]' "provenance as a list must be rejected: the field record says string (R14)"
@@ -785,6 +811,9 @@ rej auth 'f["status"]="UNKNOWN"; del f["value"]; f["detail"]={"reason":"403","ca
 rej auth 'f["value"]["grants"][0]["decision"]="github.com/acme/widgets#7/comment/9002"' "a grant naming a decision the fact's source does not back must be rejected (R5)"
 rej auth 'f["value"]["human_boundaries"][0]["decision"]="github.com/acme/widgets#8/comment/9100"' "a boundary naming a decision the fact's source does not back must be rejected (R5)"
 rej auth 'f["inferred"]=True' "an inferred authority fact must be rejected (R5)"
+for ts in '2026-99-99T99:99:99Z' '2026-02-30T00:00:00Z' '2025-02-29T00:00:00Z'; do
+  rej auth "f[\"source\"][\"version\"]=\"$ts\"" "a decision comment's updated_at of $ts is not a real calendar instant (R18)"
+done
 rej auth 'f["inferred"]=False' "inferred: false on authority must be rejected (never a representation)"
 rej auth 'f["source"]["identity"]="role:owner"' "a human-decision source whose identity is a role must be rejected (R5/R14)"
 rej auth 'f["source"]["version"]="banana"' "a human-decision source version outside its grammar must be rejected (R14)"
