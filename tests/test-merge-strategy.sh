@@ -65,7 +65,13 @@ assert_contains "the ship skill reads the preference" 'merge.strategy' "$(cat "$
 assert_contains "the ship skill's Release Please reference reads the preference, never GitHub's allowed methods" "never guess it from GitHub's" "$(cat "$PLUGIN/skills/ship/references/release-please.md")"
 assert_contains "this repository's convention names the preference" '`merge.strategy`' "$(cat "$ROOT/docs/ops/release-merge-convention.md")"
 assert_contains "the convention points at the one statement of the guarantees" "which this document does not restate" "$(cat "$ROOT/docs/ops/release-merge-convention.md")"
-[ "$(grep -c "governor trailer" "$PLUGIN/bin/spark" "$ROOT/docs/ops/release-merge-convention.md" | awk -F: '{s+=$2} END {print s}')" = 0 ] && ok || bad "the guarantees are restated outside the reference vocabulary"
+# the guarantee prose lives in the vocabulary only: every other surface that names the strategy may carry the title
+# instruction and a pointer, never the guarantee's own words
+for f in "$PLUGIN/bin/spark" "$PLUGIN/skills/ship/SKILL.md" "$PLUGIN/skills/ship/references/release-please.md" "$PLUGIN/preferences/templates/standards/conventions.md" "$ROOT/docs/ops/release-merge-convention.md" "$ROOT/docs/ops/canonical-truth.tsv"; do
+  hits="$(grep -nE "governor trailer|reach(es)? trunk unchanged|keeps? the branch commits|none rewritten|conventional subject of the one commit" "$f" || true)"
+  [ -z "$hits" ] && ok || bad "$(basename "$f") restates a merge-strategy guarantee: $(printf '%s' "$hits" | head -1 | cut -c1-120)"
+done
+assert_contains "the ship reference points at the vocabulary for the guarantees" "is stated once, in \`docs/reference/engineering-preferences.md\`" "$(cat "$PLUGIN/skills/ship/references/release-please.md")"
 assert_contains "the canonical-truth map names defaults.json as the governed strategy's source" $'merge-method\tplugins/spark/preferences/defaults.json' "$(cat "$ROOT/docs/ops/canonical-truth.tsv")"
 [ "$(wc -l < "$PLUGIN/skills/ship/SKILL.md")" -le 100 ] && ok || bad "the ship skill stays within doctor's 100-line budget"
 finish "merge strategy preference (#763)"

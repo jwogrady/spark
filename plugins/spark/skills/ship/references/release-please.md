@@ -134,8 +134,9 @@ the API permits no combination that avoids the problem (see this repo's
 `docs/ops/release-merge-convention.md` for the refusal). The strategy
 is the `merge.strategy` preference (`merge` by default; `squash` or `rebase`
 when the repository selects them) — read it, never guess it from GitHub's
-allowed-methods setting, which only says what is permitted. A rebase keeps the
-branch commits as they are, so its pull request is titled plainly like a merge.
+allowed-methods setting, which only says what is permitted. Title plainly for
+`merge` and `rebase`, conventionally for `squash`; what each strategy guarantees
+is stated once, in `docs/reference/engineering-preferences.md` (Branch hygiene).
 
 ## Ownership
 
