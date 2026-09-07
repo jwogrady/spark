@@ -84,7 +84,7 @@ while IFS=$'\t' read -r fam cls op files bytes lines concerns fact readers why; 
   case "$readers" in
     *plugins/*|*tests/*|*.github/*)
       assert_eq "family $fam is read by code, so it is operative now" "yes" "$op"
-      # a record kept for the record, read by current code, is a dependency and must say so; current material is not
+      # a record of closed work that current code reads is a dependency and must say so, whatever class it carries
       case "$cls" in
         do-not-delete|historical-retained)
           case "$fam" in
@@ -99,6 +99,9 @@ case "$ndep" in
   1) word=One ;; 2) word=Two ;; 3) word=Three ;; 4) word=Four ;; 5) word=Five ;; *) word="$ndep" ;;
 esac
 grep -qF -- "## $word current-state dependencies on historical records" "$MAN" && ok || bad "the manifest's dependency heading does not name $ndep"
+while IFS=$'\t' read -r fam _c op _f _b _l _cn _fa _r why; do
+  case "$why" in "$DEP_MARK"*) assert_eq "the dependency $fam is operative now" "yes" "$op" ;; esac
+done < <(rows)
 assert_eq "the dependency table has one row per dependency" "$ndep" \
   "$(awk '/^## .* current-state dependencies on historical records$/ {sec=1; next} /^## / {sec=0} sec && /^\| `/ {n++} END {print n+0}' "$MAN")"
 while IFS=$'\t' read -r fam _cls _op _f _b _l _c _fact _r why; do
@@ -239,7 +242,8 @@ assert_eq "no readers column names this unit's own machinery" "" \
 md_after_n="$(awk -F'\t' '$1 == "doctor" && $2 == "file" && $3 ~ /\.md$/ {n++} END {print n+0}' "$CAP")"
 grep -qF -- "$md_after_n after**" "$MAN" && ok || bad "the manifest does not state the validator's current read count $md_after_n"
 if [ -n "$base_sha" ] && (cd "$ROOT" && git cat-file -e "$base_sha^{commit}" 2>/dev/null); then
-  md_before_n="$(cd "$ROOT" && git ls-tree -r --name-only "$base_sha" -- docs/research docs/releases docs/governance docs/ops/v0.21-dogfood-evaluation.md docs/ops/telemetry-baseline.md docs/ops/evaluation.md evaluations .spark | grep -c '\.md$')"
+  # the capture's roots, so both sides of the delta count the same question
+  md_before_n="$(cd "$ROOT" && git ls-tree -r --name-only "$base_sha" -- docs/research docs/releases docs/governance docs/ops evaluations .spark | grep -c '\.md$')"
   grep -qF -- "**$md_before_n files before this" "$MAN" && ok || bad "the manifest does not state the validator's earlier read count $md_before_n"
   printf -v want "%+d" "$((md_after_n - md_before_n))"
   grep -qF -- "delta of **$want**" "$MAN" && ok || bad "the manifest does not state the hot-path delta $want"

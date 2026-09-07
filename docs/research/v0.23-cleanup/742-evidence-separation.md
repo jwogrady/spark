@@ -2,7 +2,7 @@
 
 **Model.** `current fact → provenance/index pointer → historical evidence on demand`, never
 `historical evidence → agent reconstruction → current fact`. The pointer is `docs/ops/evidence-index.tsv`:
-every evidence artifact of the repository — 126 files, 924,354 bytes, 15,402 lines under
+every evidence artifact of the repository — 126 files, 923,964 bytes, 15,401 lines under
 `docs/research`, `docs/releases`, `docs/governance`, the three evidence pages under `docs/ops`, `evaluations`
 and `.spark` — is one row or one family member, with a retention class, an explicit *operative now* answer,
 the release/HEAD/work unit it concerned, the fact it supported, who loads or cites it today, and why it is
@@ -21,9 +21,9 @@ are computed from the index and re-checked by the suite.
 
 | Class | Files | Bytes | Lines |
 |---|---|---|---|
-| `active-current` | 33 | 113,828 | 1,939 |
+| `active-current` | 45 | 311,476 | 5,573 |
 | `historical-retained` | 68 | 403,154 | 6,728 |
-| `do-not-delete` | 25 | 407,372 | 6,735 |
+| `do-not-delete` | 13 | 209,334 | 3,100 |
 
 No artifact is classified `redundant`. Two identical blobs exist (`evaluations/orchestration/rates.tsv` and
 `evaluations/skill-routing/rates.tsv`; the two `run.tsv` files under `skill-routing/runs/*/routing/`) but each
@@ -40,7 +40,7 @@ reasoning path, and every deletion candidate failed the "independent retention v
 | `docs/ops` | 3 | 138,568 | 2,550 |
 | `docs/releases` | 13 | 103,829 | 1,849 |
 | `docs/research` | 2 | 7,056 | 101 |
-| `docs/research/v0.23-cleanup` | 14 | 177,731 | 2,413 |
+| `docs/research/v0.23-cleanup` | 14 | 177,341 | 2,412 |
 | `docs/research/v0.23-optimization-baseline` | 46 | 385,106 | 6,360 |
 | `evaluations` | 43 | 79,685 | 1,606 |
 
@@ -58,14 +58,14 @@ evidence rather than the index's references to itself. From the readers column:
 |---|---|---|---|
 | `docs/research/v0.23-cleanup/741-canonical-truth.md` | `active-current` | yes | `tests/test-doc-roles.sh` |
 | `docs/releases/README.md` | `active-current` | yes | `tests/test-state-docs-chronology.sh` |
-| `docs/releases/v0.1*.md;docs/releases/v0.2[0-2].md` | `do-not-delete` | yes | `.github/scripts/ledger-truth-check.sh`; `tests/test-docs-impact.sh`; `tests/test-readme-product-truth.sh`; `tests/test-reconcile-apply.sh`; `tests/test-state-docs-chronology.sh` |
+| `docs/releases/v0.1*.md;docs/releases/v0.2[0-2].md` | `active-current` | yes | `.github/scripts/ledger-truth-check.sh`; `tests/test-docs-impact.sh`; `tests/test-readme-product-truth.sh`; `tests/test-reconcile-apply.sh`; `tests/test-state-docs-chronology.sh` |
 | `docs/governance/capability-evaluation.md` | `active-current` | yes | `plugins/spark/docs/reference/release-docs-checklist.md` |
-| `docs/ops/v0.21-dogfood-evaluation.md` | `do-not-delete` | yes | `.github/scripts/ledger-truth-check.sh` |
-| `docs/ops/telemetry-baseline.md` | `do-not-delete` | yes | `tests/test-run-telemetry.sh` |
+| `docs/ops/v0.21-dogfood-evaluation.md` | `active-current` | yes | `.github/scripts/ledger-truth-check.sh` |
+| `docs/ops/telemetry-baseline.md` | `active-current` | yes | `tests/test-run-telemetry.sh` |
 | `evaluations/lib/*;evaluations/evidence-index.tsv;evaluations/orchestration/run.sh;evaluations/orchestration/rates.tsv;evaluations/skill-routing/run.sh;evaluations/skill-routing/rates.tsv` | `active-current` | yes | `tests/test-eval-lib.sh`; `tests/test-skill-descriptions.sh` |
 | `.spark/state.json;.spark/preferences.json` | `do-not-delete` | yes | `plugins/spark/bin/spark`; `plugins/spark/docs/README.md`; `plugins/spark/docs/how-to/get-started.md`; `plugins/spark/docs/how-to/resume.md`; `plugins/spark/docs/reference/cli.md`; `plugins/spark/docs/reference/compatibility.md`; `plugins/spark/docs/reference/engineering-preferences.md`; `plugins/spark/docs/reference/fact-freshness.md`; `plugins/spark/docs/reference/fact-model.md`; `plugins/spark/docs/reference/hooks.md`; `plugins/spark/docs/reference/project-standards.md`; `plugins/spark/docs/reference/stability.md`; `plugins/spark/docs/reference/state.md`; `plugins/spark/docs/tutorials/adopt-an-existing-repo.md`; `plugins/spark/docs/tutorials/scaffold-a-new-project.md`; `plugins/spark/preferences/fact-model.tsv`; `plugins/spark/preferences/templates/standards/conventions.md`; `plugins/spark/preferences/templates/standards/engineering-standards.md`; `plugins/spark/skills/bootstrap/SKILL.md`; `plugins/spark/skills/bootstrap/references/profiles.md`; `plugins/spark/skills/codify/SKILL.md`; `plugins/spark/skills/ideate/SKILL.md`; `plugins/spark/skills/knowledge/references/operator-knowledge.md`; `plugins/spark/skills/onboard/SKILL.md`; `plugins/spark/skills/plan/SKILL.md`; `plugins/spark/skills/ship/SKILL.md`; `plugins/spark/skills/validate/SKILL.md`; `tests/bench-memo.sh`; `tests/test-apply-permissions.sh`; `tests/test-brief-resume.sh`; `tests/test-course-derivation.sh`; `tests/test-doctor-standards-boundary.sh`; `tests/test-first-run.sh`; `tests/test-governance-contract.sh`; `tests/test-governance-integration.sh`; `tests/test-governance-schema.sh`; `tests/test-hot-path-memo.sh`; `tests/test-hub.sh`; `tests/test-labels.sh`; `tests/test-merge-strategy.sh`; `tests/test-orient.sh`; `tests/test-preferences.sh`; `tests/test-reconcile-apply.sh`; `tests/test-reconcile-slate.sh`; `tests/test-setup-profiles.sh`; `tests/test-state.sh`; `tests/test-triage-truth.sh` |
 
-**23 files, 244,492 bytes** of the 126-file, 924,354-byte corpus are referenced by code,
+**23 files, 244,492 bytes** of the 126-file, 923,964-byte corpus are referenced by code,
 tests or CI outside this index's own machinery (26 % by bytes; the exclusion and its
 reason are stated under the footprint section below). The suite holds this list to the tree: a shipped surface
 that starts naming a non-operative artifact fails until the index lists it.
@@ -85,14 +85,14 @@ What the verbs opened:
 
 | Verb | Corpus files opened | `historical-retained` | `do-not-delete` | `active-current` | Directories traversed | Non-corpus files opened |
 |---|---|---|---|---|---|---|
-| `doctor` | 49 | 18 | 17 | 14 | 0 | 15 |
+| `doctor` | 49 | 18 | 5 | 26 | 0 | 15 |
 | `brief` | 2 | 0 | 2 | 0 | 34 | 0 |
 | `footprint` | 2 | 0 | 2 | 0 | 34 | 0 |
 | `preferences` | 1 | 0 | 1 | 0 | 0 | 0 |
 | `profiles` | 0 | 0 | 0 | 0 | 0 | 0 |
 | `list-skills` | 0 | 0 | 0 | 0 | 0 | 0 |
 
-`spark doctor` opens **49** indexed corpus artifacts, **35** of them non-operative. The session path opens **2** corpus files, both the runtime's own committed state. Across the six read-only verbs, **36** non-operative evidence files are opened by default.
+`spark doctor` opens **49** indexed corpus artifacts, **23** of them non-operative. The session path opens **2** corpus files, both the runtime's own committed state. Across the six read-only verbs, **24** non-operative evidence files are opened by default.
 
 The session path's files are `.spark/preferences.json`, `.spark/state.json`, and it opens nothing else under the evidence roots.
 
@@ -124,15 +124,12 @@ committed state — classified `do-not-delete`, read by design — and every oth
 
 | Family | Class | Files opened |
 |---|---|---|
-| `docs/releases/v0.1*.md` and 1 more pattern(s) | `do-not-delete` | 10 |
 | `docs/research/v0.23-optimization-baseline/raw/*` | `historical-retained` | 6 |
 | `docs/research/v0.23-optimization-baseline/README.md` and 2 more pattern(s) | `do-not-delete` | 3 |
 | `evaluations/provenance-promotion/PROOF.md` and 2 more pattern(s) | `historical-retained` | 3 |
 | `.spark/state.json` and 1 more pattern(s) | `do-not-delete` | 2 |
 | `docs/governance/is-state-baseline-pre-v020.md` and 1 more pattern(s) | `historical-retained` | 2 |
 | `evaluations/orchestration/BASELINE.md` and 1 more pattern(s) | `historical-retained` | 2 |
-| `docs/ops/telemetry-baseline.md` | `do-not-delete` | 1 |
-| `docs/ops/v0.21-dogfood-evaluation.md` | `do-not-delete` | 1 |
 | `docs/releases/v0.23-usage-evidence.md` | `do-not-delete` | 1 |
 | `docs/research/v0.12-orchestration-recommendation.md` | `historical-retained` | 1 |
 | `docs/research/v0.13-mechanical-offload-audit.md` | `historical-retained` | 1 |
@@ -159,9 +156,9 @@ suite behaviour that belongs to other work units; recording them with owners is 
 
 | Artifact | Class | Operative now | Why it is on the current path |
 |---|---|---|---|
-| `docs/releases/v0.1*.md;docs/releases/v0.2[0-2].md` | `do-not-delete` | yes | `spark reconcile`'s release-record residue loop globs `docs/releases/v*.md` and reads each record's `Disposition:` line against the published tags, so every closed record is read by a current-state verb and deleting one changes its output |
-| `docs/ops/v0.21-dogfood-evaluation.md` | `do-not-delete` | yes | the live CI script defaults its ledger to this v0.21 record, so a release two versions old is the fallback truth of a current check |
-| `docs/ops/telemetry-baseline.md` | `do-not-delete` | yes | tests/test-run-telemetry.sh pins this path, so a closed baseline is load-bearing for a suite that runs on every change |
+| `docs/releases/v0.1*.md;docs/releases/v0.2[0-2].md` | `active-current` | yes | `spark reconcile`'s release-record residue loop globs `docs/releases/v*.md` and reads each record's `Disposition:` line against the published tags, so every closed record is read by a current-state verb and deleting one changes its output |
+| `docs/ops/v0.21-dogfood-evaluation.md` | `active-current` | yes | the live CI script defaults its ledger to this v0.21 record, so a release two versions old is the fallback truth of a current check |
+| `docs/ops/telemetry-baseline.md` | `active-current` | yes | tests/test-run-telemetry.sh pins this path, so a closed baseline is load-bearing for a suite that runs on every change |
 
 - **`docs/releases/v0.1*.md;docs/releases/v0.2[0-2].md`** — concerns v0.10 – v0.22, one record each; it supported what each release shipped and its disposition. Owner: the reconcile slate (#467); repairing it means giving reconcile the current release record by name instead of the directory
 - **`docs/ops/v0.21-dogfood-evaluation.md`** — concerns milestone #18 (v0.21) driven by v0.20.0; fd407c72; it supported the v0.21 dogfood ledger. Owner: the human who approves CI edits in this repository; the exact diff is proposed on the manifest and deliberately not applied here
@@ -192,18 +189,18 @@ Physical, over the same roots, against `29e4f4e` — the commit this branch left
 | | Files | Bytes | Lines |
 |---|---|---|---|
 | before | 123 | 888,064 | 14,913 |
-| after | 126 | 924,354 | 15,402 |
-| delta | +3 | +36,290 | +489 |
+| after | 126 | 923,964 | 15,401 |
+| delta | +3 | +35,900 | +488 |
 
 The corpus grew, and this page is part of the growth: this manifest, the observation capture and the tool that
 regenerates it are themselves evidence, and they are indexed like everything else. Nothing was moved or deleted,
-so every byte of the delta is new material, not relocation. The reference footprint grew the same way:
-23 files before this unit, 23 after, the difference being this unit's own artifacts
-becoming readable by name.
+so every byte of the delta is new material, not relocation. The reference footprint did not move: 23 files before
+this unit and 23 after, because this unit's own five files are excluded as readers and no other surface
+started naming evidence. The corpus grew and the count of referenced files did not, so the share of the corpus that any surface names by path fell.
 
 The hot path moved too, and by exactly the amount this unit added to it. `doctor`'s link validator opens every
-Markdown surface under these roots, so its read set is the tree's Markdown: **47 files before this
-unit, 63 after**, a delta of **+16** — this unit adds `docs/ops/bounded-execution.md`, `docs/ops/ci-handoff.md`, `docs/ops/claude-coding-lane.md`, `docs/ops/context-efficiency.md`, `docs/ops/execution-configuration-surface.md`, `docs/ops/execution-routing.md`, `docs/ops/existing-implementation.md`, `docs/ops/openai-reviewer-lane.md`, `docs/ops/plugin-manifest.md`, `docs/ops/read-only-assessment.md`, `docs/ops/reconciliation-runbook.md`, `docs/ops/release-gate-role.md`, `docs/ops/release-merge-convention.md`, `docs/ops/release-token-governance.md`, `docs/ops/repository-boundary.md`, `docs/research/v0.23-cleanup/742-evidence-separation.md`. That is a measurement, not an
+Markdown surface under these roots, so its read set is the tree's Markdown: **62 files before this
+unit, 63 after**, a delta of **+1** — this unit adds `docs/research/v0.23-cleanup/742-evidence-separation.md`. That is a measurement, not an
 argument from construction: both figures come from the same roots, the after figure is the committed capture's
 own `doctor` rows, and the suite recomputes the delta from the base commit whenever it is present. No other
 verb's read set changed, because the session path opens no evidence file at either commit.
@@ -232,8 +229,9 @@ every evidence artifact is classified and reachable through one index row; a shi
 non-operative artifact fails `tests/test-evidence-index.sh` until the index lists it as a reader; and the
 default-read behaviour of the read-only verbs is a committed, regenerable observation whose every reported
 figure the suite recomputes and whose `doctor` rows the suite derives from HEAD's own tree; and the session
-path — every read-only verb but the validator — opens no evidence file, which the suite asserts directly. Physical footprint is reported unchanged, separately from the reference
-footprint and the observed reads, as the issue requires.
+path — every read-only verb but the validator — opens no evidence file, which the suite asserts directly. Physical footprint is reported before and after, separately from the
+reference footprint and the observed reads, as the issue requires: it grew by this unit's own evidence, and the
+table above is the accounting.
 
 ## Acceptance, item by item
 
@@ -243,7 +241,8 @@ footprint and the observed reads, as the issue requires.
   do-not-delete row names an identity and the fact it supported; the suite checks both.
 - **Retained history explicitly non-operative where appropriate** — the `operative-now` column; every
   historical-retained row says `no`.
-- **No evidence deleted for LOC or file count** — nothing deleted.
+- **No evidence deleted for LOC or file count** — nothing deleted; the corpus grew by this unit's own
+  artifacts, reported before and after against the PR's base commit.
 - **Redundant evidence deleted only when disproven and safe** — none qualified; the two identical blobs are
   per-suite inputs by design.
 - **Active-reasoning claims supported by observed/default-read behaviour** — an `strace` capture of the
