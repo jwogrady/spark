@@ -2,7 +2,7 @@
 
 **Model.** `current fact → provenance/index pointer → historical evidence on demand`, never
 `historical evidence → agent reconstruction → current fact`. The pointer is `docs/ops/evidence-index.tsv`:
-every evidence artifact of the repository — 132 files, 1,036,047 bytes, 16,756 lines under
+every evidence artifact of the repository — 132 files, 1,036,774 bytes, 16,771 lines under
 `docs/research`, `docs/releases`, `docs/governance`, the three evidence pages under `docs/ops`, `evaluations`
 and `.spark` — is one row or one family member, with a retention class, an explicit *operative now* answer,
 the release/HEAD/work unit it concerned, the fact it supported, who loads or cites it today, and why it is
@@ -21,7 +21,7 @@ are computed from the index and re-checked by the suite.
 
 | Class | Files | Bytes | Lines |
 |---|---|---|---|
-| `active-current` | 52 | 429,342 | 7,012 |
+| `active-current` | 52 | 430,069 | 7,027 |
 | `historical-retained` | 67 | 397,371 | 6,644 |
 | `do-not-delete` | 13 | 209,334 | 3,100 |
 
@@ -40,7 +40,7 @@ reasoning path, and every deletion candidate failed the "independent retention v
 | `docs/ops` | 3 | 138,568 | 2,550 |
 | `docs/releases` | 13 | 103,829 | 1,849 |
 | `docs/research` | 2 | 7,056 | 101 |
-| `docs/research/v0.23-cleanup` | 20 | 289,424 | 3,767 |
+| `docs/research/v0.23-cleanup` | 20 | 290,151 | 3,782 |
 | `docs/research/v0.23-optimization-baseline` | 46 | 385,106 | 6,360 |
 | `evaluations` | 43 | 79,685 | 1,606 |
 
@@ -69,7 +69,7 @@ evidence rather than the index's references to itself. From the readers column:
 | `evaluations/lib/*;evaluations/evidence-index.tsv;evaluations/orchestration/run.sh;evaluations/orchestration/rates.tsv;evaluations/skill-routing/run.sh;evaluations/skill-routing/rates.tsv` | `active-current` | yes | `tests/test-eval-lib.sh`; `tests/test-skill-descriptions.sh` |
 | `.spark/state.json;.spark/preferences.json` | `do-not-delete` | yes | `plugins/spark/bin/spark`; `plugins/spark/docs/README.md`; `plugins/spark/docs/how-to/get-started.md`; `plugins/spark/docs/how-to/resume.md`; `plugins/spark/docs/reference/cli.md`; `plugins/spark/docs/reference/compatibility.md`; `plugins/spark/docs/reference/engineering-preferences.md`; `plugins/spark/docs/reference/fact-freshness.md`; `plugins/spark/docs/reference/fact-model.md`; `plugins/spark/docs/reference/hooks.md`; `plugins/spark/docs/reference/project-standards.md`; `plugins/spark/docs/reference/stability.md`; `plugins/spark/docs/reference/state.md`; `plugins/spark/docs/tutorials/adopt-an-existing-repo.md`; `plugins/spark/docs/tutorials/scaffold-a-new-project.md`; `plugins/spark/preferences/fact-model.tsv`; `plugins/spark/preferences/templates/standards/conventions.md`; `plugins/spark/preferences/templates/standards/engineering-standards.md`; `plugins/spark/skills/bootstrap/SKILL.md`; `plugins/spark/skills/bootstrap/references/profiles.md`; `plugins/spark/skills/codify/SKILL.md`; `plugins/spark/skills/ideate/SKILL.md`; `plugins/spark/skills/knowledge/references/operator-knowledge.md`; `plugins/spark/skills/onboard/SKILL.md`; `plugins/spark/skills/plan/SKILL.md`; `plugins/spark/skills/ship/SKILL.md`; `plugins/spark/skills/validate/SKILL.md`; `tests/bench-memo.sh`; `tests/test-apply-permissions.sh`; `tests/test-brief-resume.sh`; `tests/test-course-derivation.sh`; `tests/test-doctor-standards-boundary.sh`; `tests/test-first-run.sh`; `tests/test-governance-contract.sh`; `tests/test-governance-integration.sh`; `tests/test-governance-schema.sh`; `tests/test-hot-path-memo.sh`; `tests/test-hub.sh`; `tests/test-labels.sh`; `tests/test-merge-strategy.sh`; `tests/test-orient.sh`; `tests/test-preferences.sh`; `tests/test-reconcile-apply.sh`; `tests/test-reconcile-slate.sh`; `tests/test-setup-profiles.sh`; `tests/test-state.sh`; `tests/test-triage-truth.sh` |
 
-**29 files, 355,265 bytes** of the 132-file, 1,036,047-byte corpus are referenced by code,
+**29 files, 355,265 bytes** of the 132-file, 1,036,774-byte corpus are referenced by code,
 tests or CI outside this index's own machinery (34 % by bytes; the exclusion and its
 reason are stated under the footprint section below). The suite holds this list to the tree: a shipped surface
 that starts naming a non-operative artifact fails until the index lists it.
@@ -158,10 +158,25 @@ Separation is proven for the path a session reasons on, and it is not complete f
 records are read by current-state surfaces today. They are classified `operative-now = yes`, because they are —
 the classification follows the behaviour, not the intent — and each names the issue that owns its repair.
 
-The boundary is the repository operator's decision, not this unit's preference. Widening this unit into CI,
-shipped `spark reconcile` behaviour and the telemetry suite was declined; the claim stays narrow and all three
-dependencies move to **#768**, a sub-issue of #729 alongside this one, which keeps them required v0.23 cleanup
-work rather than waiving them. Nothing here declares #729 or #480 complete.
+The boundary is the repository operator's decision, recorded on #742 and quoted here so this page carries the
+approval rather than a claim about one — [issue comment 5575893971](https://github.com/jwogrady/spark/issues/742#issuecomment-5575893971),
+by `jwogrady`, whom GitHub reports as `OWNER`, on 2026-09-07:
+
+> ## Human decision — narrow #742; preserve work-unit boundaries
+>
+> Approved: **accept the narrowed #742 claim**.
+>
+> #742 should land only the evidence index plus the measured separation it actually proves. Do **not** widen this
+> unit to modify CI, shipped `spark reconcile` behavior, or the #558 telemetry suite.
+>
+> The three remaining current dependencies on historical records must move to a bounded follow-up under parent
+> #729 and remain required v0.23 cleanup work […]
+>
+> This decision narrows #742's claim; it does **not** waive those dependencies or declare #729/#480 complete. #742
+> still requires exact-HEAD independent PASS before governed merge/closeout.
+
+All three dependencies therefore move to **#768**, a sub-issue of #729 alongside this one, and nothing here
+declares #729 or #480 complete.
 
 | Artifact | Class | Operative now | Why it is on the current path |
 |---|---|---|---|
@@ -198,8 +213,8 @@ Physical, over the same roots, against `efbdb47` — the commit this branch left
 | | Files | Bytes | Lines |
 |---|---|---|---|
 | before | 129 | 998,837 | 16,256 |
-| after | 132 | 1,036,047 | 16,756 |
-| delta | +3 | +37,210 | +500 |
+| after | 132 | 1,036,774 | 16,771 |
+| delta | +3 | +37,937 | +515 |
 
 The corpus grew, and this page is part of the growth: this manifest, the observation capture and the tool that
 regenerates it are themselves evidence, and they are indexed like everything else. Nothing was moved or deleted,
