@@ -321,6 +321,9 @@ behavioral suite checks the two never drift.
   is that fact's HEAD; a derived identity's schema version equals the fact's
   schema_version and its derived-version prefix. Every grammar is matched
   against the whole string, and whitespace of any kind is outside every locator.
+  A record that carries the same field twice is malformed and is rejected before
+  parsing; a consumer that keeps the first or the last duplicate is not
+  conforming.
 - **R15** next_action is derived, never asserted, and its inputs are exactly the
   facts its derivation consulted — nothing omitted, nothing extra — so R4
   re-versions it when any of them changes and one conclusion has one
@@ -371,7 +374,12 @@ behavioral suite checks the two never drift.
   ruleset:<repository> for the repository whose rulesets require them (unless
   NOT_APPLICABLE). inputs and because list each key once. These source and
   invalidator requirements hold for every status; only the value-dependent ones
-  wait for ESTABLISHED.
+  wait for ESTABLISHED. A fact whose value depends on which records a node
+  carries lists that node too — a review lists the work unit whose comments hold
+  the verdicts, an authority fact lists the node of every decision record it
+  names or considers, a head fact lists the pull request it was read from —
+  under the node's kind, so a record created after the fact was read, or a
+  base-branch switch, fires a token the fact already carries.
 - **R18** Each class admits exactly the statuses its class-status record lists:
   work unit, repository, placement, graph and authority are always applicable
   (ESTABLISHED, UNKNOWN or CONFLICT); the HEAD-bound classes add NOT_APPLICABLE
@@ -443,7 +451,7 @@ action follows mechanically from named inputs.
    "value": {"grants": [{"decision": "github.com/acme/widgets#7/comment/9001", "target": "github.com/acme/widgets", "scopes": ["merge:routine", "close:issue"]}],
              "human_boundaries": [{"decision": "github.com/acme/widgets#7/comment/9001", "target": "github.com/acme/widgets", "boundary": "release:approve"}, {"decision": "github.com/acme/widgets#7/comment/9001", "target": "github.com/acme/widgets", "boundary": "authority:grant"}, {"decision": "github.com/acme/widgets#7/comment/9001", "target": "github.com/acme/widgets", "boundary": "action:destructive"}]},
    "source": {"type": "human-decision", "identity": "github.com/acme/widgets#7/comment/9001", "version": "2026-09-01T09:00:00Z"},
-   "observed_at": "2026-09-06T12:00:05Z", "invalidators": ["comment:github.com/acme/widgets#7/comment/9001"],
+   "observed_at": "2026-09-06T12:00:05Z", "invalidators": ["comment:github.com/acme/widgets#7/comment/9001", "issue:github.com/acme/widgets#7"],
    "provenance": "https://github.com/acme/widgets/issues/7#issuecomment-9001"},
   {"schema_version": "1", "key": "acceptance.contract", "class": "acceptance", "status": "ESTABLISHED",
    "value": {"contract": "github.com/acme/widgets#41", "head": "0123456789abcdef0123456789abcdef01234567", "items": [{"id": "a1", "state": "MET"}, {"id": "a2", "state": "MET"}]},
@@ -453,12 +461,12 @@ action follows mechanically from named inputs.
   {"schema_version": "1", "key": "head.exact", "class": "head", "status": "ESTABLISHED",
    "value": {"head": "0123456789abcdef0123456789abcdef01234567", "base_ref": "master", "base": "89abcdef0123456789abcdef0123456789abcdef", "current": true},
    "source": {"type": "github-api", "identity": "github.com/acme/widgets#42", "version": "0123456789abcdef0123456789abcdef01234567"},
-   "observed_at": "2026-09-06T12:00:05Z", "invalidators": ["head:0123456789abcdef0123456789abcdef01234567", "ref:github.com/acme/widgets/master"],
+   "observed_at": "2026-09-06T12:00:05Z", "invalidators": ["head:0123456789abcdef0123456789abcdef01234567", "ref:github.com/acme/widgets/master", "pull_request:github.com/acme/widgets#42"],
    "provenance": "https://github.com/acme/widgets/pull/42/commits"},
   {"schema_version": "1", "key": "review.independent", "class": "review", "status": "ESTABLISHED",
    "value": {"verdict": "PASS", "head": "0123456789abcdef0123456789abcdef01234567", "reviewer": "login:github-actions[bot]", "record": "github.com/acme/widgets#42/comment/9100"},
    "source": {"type": "github-api", "identity": "github.com/acme/widgets#42/comment/9100", "version": "2026-09-06T11:58:00Z"},
-   "observed_at": "2026-09-06T12:00:05Z", "invalidators": ["head:0123456789abcdef0123456789abcdef01234567", "comment:github.com/acme/widgets#42/comment/9100"],
+   "observed_at": "2026-09-06T12:00:05Z", "invalidators": ["head:0123456789abcdef0123456789abcdef01234567", "comment:github.com/acme/widgets#42/comment/9100", "pull_request:github.com/acme/widgets#42"],
    "provenance": "https://github.com/acme/widgets/pull/42#issuecomment-9100"},
   {"schema_version": "1", "key": "checks.required", "class": "checks", "status": "ESTABLISHED",
    "value": {"head": "0123456789abcdef0123456789abcdef01234567", "required": ["doctor", "tests"], "results": [{"name": "doctor", "state": "success"}, {"name": "tests", "state": "success"}]},
@@ -484,12 +492,12 @@ observed on. Nothing here can be reused for another HEAD.
   {"schema_version": "1", "key": "head.exact", "class": "head", "status": "ESTABLISHED",
    "value": {"head": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "base_ref": "master", "base": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "current": true},
    "source": {"type": "github-api", "identity": "github.com/acme/widgets#42", "version": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
-   "observed_at": "2026-09-06T13:00:00Z", "invalidators": ["head:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "ref:github.com/acme/widgets/master"],
+   "observed_at": "2026-09-06T13:00:00Z", "invalidators": ["head:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "ref:github.com/acme/widgets/master", "pull_request:github.com/acme/widgets#42"],
    "provenance": "https://github.com/acme/widgets/pull/42/commits"},
   {"schema_version": "1", "key": "review.independent", "class": "review", "status": "ESTABLISHED",
    "value": {"verdict": "CHANGES REQUIRED", "head": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "reviewer": "login:github-actions[bot]", "record": "github.com/acme/widgets#42/comment/9200"},
    "source": {"type": "github-api", "identity": "github.com/acme/widgets#42/comment/9200", "version": "2026-09-06T12:59:00Z"},
-   "observed_at": "2026-09-06T13:00:00Z", "invalidators": ["head:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "comment:github.com/acme/widgets#42/comment/9200"],
+   "observed_at": "2026-09-06T13:00:00Z", "invalidators": ["head:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "comment:github.com/acme/widgets#42/comment/9200", "pull_request:github.com/acme/widgets#42"],
    "provenance": "https://github.com/acme/widgets/pull/42#issuecomment-9200"},
   {"schema_version": "1", "key": "checks.required", "class": "checks", "status": "ESTABLISHED",
    "value": {"head": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "required": ["doctor", "tests"], "results": [{"name": "doctor", "state": "success"}, {"name": "tests", "state": "pending"}]},
@@ -527,12 +535,12 @@ no HEAD invalidator and remain established.
   {"schema_version": "1", "key": "head.exact", "class": "head", "status": "ESTABLISHED",
    "value": {"head": "cccccccccccccccccccccccccccccccccccccccc", "base_ref": "master", "base": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "current": true},
    "source": {"type": "github-api", "identity": "github.com/acme/widgets#42", "version": "cccccccccccccccccccccccccccccccccccccccc"},
-   "observed_at": "2026-09-06T14:00:00Z", "invalidators": ["head:cccccccccccccccccccccccccccccccccccccccc", "ref:github.com/acme/widgets/master"],
+   "observed_at": "2026-09-06T14:00:00Z", "invalidators": ["head:cccccccccccccccccccccccccccccccccccccccc", "ref:github.com/acme/widgets/master", "pull_request:github.com/acme/widgets#42"],
    "provenance": "https://github.com/acme/widgets/pull/42/commits"},
   {"schema_version": "1", "key": "review.independent", "class": "review", "status": "ESTABLISHED",
    "value": {"verdict": "CHANGES REQUIRED", "head": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "reviewer": "login:github-actions[bot]", "record": "github.com/acme/widgets#42/comment/9200"},
    "source": {"type": "github-api", "identity": "github.com/acme/widgets#42/comment/9200", "version": "2026-09-06T12:59:00Z"},
-   "observed_at": "2026-09-06T14:00:00Z", "invalidators": ["head:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "comment:github.com/acme/widgets#42/comment/9200"],
+   "observed_at": "2026-09-06T14:00:00Z", "invalidators": ["head:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "comment:github.com/acme/widgets#42/comment/9200", "pull_request:github.com/acme/widgets#42"],
    "provenance": "https://github.com/acme/widgets/pull/42#issuecomment-9200"},
   {"schema_version": "1", "key": "next_action.governed", "class": "next_action", "status": "ESTABLISHED",
    "value": {"action": "wait-review", "because": ["head.exact", "review.independent"], "boundary": "none"},
@@ -553,7 +561,7 @@ the newer or the more plausible one.
 [
   {"schema_version": "1", "key": "review.independent", "class": "review", "status": "CONFLICT",
    "source": {"type": "github-api", "identity": "github.com/acme/widgets#42", "version": "dddddddddddddddddddddddddddddddddddddddd"},
-   "observed_at": "2026-09-06T15:00:00Z", "invalidators": ["head:dddddddddddddddddddddddddddddddddddddddd", "comment:github.com/acme/widgets#42/comment/9300", "comment:github.com/acme/widgets#42/comment/9301"],
+   "observed_at": "2026-09-06T15:00:00Z", "invalidators": ["head:dddddddddddddddddddddddddddddddddddddddd", "comment:github.com/acme/widgets#42/comment/9300", "comment:github.com/acme/widgets#42/comment/9301", "pull_request:github.com/acme/widgets#42"],
    "provenance": "https://github.com/acme/widgets/pull/42",
    "detail": {"reason": "two trusted verdict records for the same HEAD disagree", "candidates": ["github.com/acme/widgets#42/comment/9300", "github.com/acme/widgets#42/comment/9301"]}},
   {"schema_version": "1", "key": "next_action.governed", "class": "next_action", "status": "ESTABLISHED",
@@ -588,7 +596,7 @@ its target and confer nothing here, without anyone reading the decision record.
    "value": {"grants": [{"decision": "github.com/acme/widgets#7/comment/9001", "target": "github.com/acme/widgets", "scopes": ["merge:routine"]}],
              "human_boundaries": [{"decision": "github.com/acme/widgets#7/comment/9001", "target": "github.com/acme/widgets", "boundary": "release:approve"}, {"decision": "github.com/acme/widgets#7/comment/9001", "target": "github.com/acme/widgets", "boundary": "authority:grant"}]},
    "source": {"type": "human-decision", "identity": "github.com/acme/widgets#7/comment/9001", "version": "2026-09-01T09:00:00Z"},
-   "observed_at": "2026-09-06T16:00:05Z", "invalidators": ["comment:github.com/acme/widgets#7/comment/9001"],
+   "observed_at": "2026-09-06T16:00:05Z", "invalidators": ["comment:github.com/acme/widgets#7/comment/9001", "issue:github.com/acme/widgets#7"],
    "provenance": "https://github.com/acme/widgets/issues/7#issuecomment-9001"}
 ]
 ```
@@ -621,7 +629,7 @@ derivation, and it re-versions if any of them changes.
   {"schema_version": "1", "key": "authority.standing", "class": "authority", "status": "ESTABLISHED",
    "value": {"grants": [{"decision": "github.com/acme/widgets#7/comment/9001", "target": "github.com/acme/widgets", "scopes": ["merge:routine"]}], "human_boundaries": [{"decision": "github.com/acme/widgets#7/comment/9001", "target": "github.com/acme/widgets", "boundary": "placement:release"}, {"decision": "github.com/acme/widgets#7/comment/9001", "target": "github.com/acme/widgets", "boundary": "release:approve"}, {"decision": "github.com/acme/widgets#7/comment/9001", "target": "github.com/acme/widgets", "boundary": "settings:repository"}]},
    "source": {"type": "human-decision", "identity": "github.com/acme/widgets#7/comment/9001", "version": "2026-09-01T09:00:00Z"},
-   "observed_at": "2026-09-06T17:00:00Z", "invalidators": ["comment:github.com/acme/widgets#7/comment/9001"],
+   "observed_at": "2026-09-06T17:00:00Z", "invalidators": ["comment:github.com/acme/widgets#7/comment/9001", "issue:github.com/acme/widgets#7"],
    "provenance": "https://github.com/acme/widgets/issues/7#issuecomment-9001"},
   {"schema_version": "1", "key": "placement.current", "class": "placement", "status": "ESTABLISHED",
    "value": {"milestone": "github.com/acme/widgets/milestone/8", "release": "v1.2.0", "gate": "none"},
@@ -721,7 +729,7 @@ opened for the issue makes every one of these facts applicable again.
   {"schema_version": "1", "key": "authority.standing", "class": "authority", "status": "ESTABLISHED",
    "value": {"grants": [{"decision": "github.com/acme/widgets#7/comment/9001", "target": "github.com/acme/widgets", "scopes": ["merge:routine"]}], "human_boundaries": [{"decision": "github.com/acme/widgets#7/comment/9001", "target": "github.com/acme/widgets", "boundary": "release:approve"}]},
    "source": {"type": "human-decision", "identity": "github.com/acme/widgets#7/comment/9001", "version": "2026-09-01T09:00:00Z"},
-   "observed_at": "2026-09-06T19:00:00Z", "invalidators": ["comment:github.com/acme/widgets#7/comment/9001"],
+   "observed_at": "2026-09-06T19:00:00Z", "invalidators": ["comment:github.com/acme/widgets#7/comment/9001", "issue:github.com/acme/widgets#7"],
    "provenance": "https://github.com/acme/widgets/issues/7#issuecomment-9001"},
   {"schema_version": "1", "key": "acceptance.contract", "class": "acceptance", "status": "NOT_APPLICABLE",
    "source": {"type": "github-api", "identity": "github.com/acme/widgets#41", "version": "2026-09-05T18:00:00Z"},

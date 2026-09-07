@@ -27,7 +27,7 @@ fact — a schema change and an unreadable source.
 | `push` | `head` | the pull request's head commit differs from the head: token | A pull request's HEAD moves — a new commit, a rebase or a force-push. Every fact carrying head:<old> is stale; nothing judged on the old HEAD is reused for the new one. |
 | `base-move` | `ref` | the base branch's target commit differs from the head fact's base | The base branch the work unit targets moves. Facts carrying ref:<repository>/<base_ref> are stale: the head fact's base commit and the merge picture change while the HEAD stands. |
 | `metadata` | `issue,pull_request` | the node's updated_at is later than the fact's source.version, or the node is closed, reopened, transferred or deleted | An issue's or pull request's title, body, state, labels, assignees, milestone or native relationships change. Facts carrying issue:/pull_request:<that node> are stale. |
-| `comment` | `comment` | the comment's updated_at is later than the fact's source.version, or the comment is gone | A comment that records a verdict or a decision is created, edited or deleted. Facts carrying comment:<that comment> are stale; a new comment is also a metadata event of its node. |
+| `comment` | `comment,issue,pull_request` | the comment's updated_at is later than the fact's source.version, or the comment is gone; for a created comment, its node's updated_at moves | A comment that records a verdict or a decision is created, edited or deleted. An edit or deletion fires comment:<that comment>; a creation cannot fire a token no fact carries yet, so it fires the node's own token — a fact whose value depends on which records a node carries lists that node (fact model R17). |
 | `relationship` | `issue,pull_request,milestone` | a parent, child, blocker or milestone listed by the fact changes state or membership | A parent, child, blocker or milestone relationship changes. The graph and placement facts that list the related node or the milestone are stale. |
 | `check-run` | `none` | the check-runs listing for the HEAD (latest per name) differs from results, or any result is non-terminal | A check run or workflow run at the HEAD completes, is re-run or is requested. No token changes — the HEAD is the same — so the checks fact is re-read on observation: a non-terminal result is never carried forward and a terminal one is re-read when a merge decision is derived. |
 | `ruleset` | `ruleset` | the repository's rulesets or the required-check set differ from required | The repository's rulesets change which checks are required. The checks fact for every open work unit carries ruleset:<repository> and is stale. |
@@ -48,12 +48,34 @@ kind appears on at least one fact there (the suite checks both).
 | `repository` | `repository` | the repository node it describes (R17) |
 | `placement` | `issue,pull_request,milestone` | the work unit it was read from and the milestone it is placed in |
 | `graph` | `issue,pull_request` | the node it was read from and every parent, child and blocker it represents, each under its kind (R17) |
-| `authority` | `comment` | the decision record each grant and boundary rests on (R5, R17); permissions are not a source of authority |
+| `authority` | `comment,issue,pull_request` | the decision record each grant and boundary rests on and the node carrying it, so a record posted later reaches the fact (R5, R17); permissions are not a source of authority |
 | `acceptance` | `head,issue` | the exact HEAD it was judged on (R7) and the contract's node |
-| `head` | `head,ref,issue` | the exact HEAD (R7), the base branch whose target the merge picture depends on, and — with no HEAD — the issue it was read from |
-| `review` | `head,comment,issue` | the exact HEAD (R7), the verdict record (R17), and — with no HEAD — the issue |
+| `head` | `head,ref,pull_request,issue` | the exact HEAD (R7), the base branch whose target the merge picture depends on, the pull request whose base selection it read (a base-branch switch moves no tip), and — with no HEAD — the issue it was read from |
+| `review` | `head,comment,pull_request,issue` | the exact HEAD (R7), the verdict record and the pull request whose comments hold the verdicts, so a verdict posted later reaches the fact (R17), and — with no HEAD — the issue |
 | `checks` | `head,ruleset,issue` | the exact HEAD (R7), the rulesets that decide which checks are required, and — with no HEAD — the issue |
 | `next_action` | `inputs` | derived: it may carry any token of its inputs' kinds — at least the HEAD it was derived at — and it re-derives when any input's version changes, because its own version binds every input's (R4, R15) |
+
+## What can change each fact
+
+Each class names the events that can change its value. The suite checks that
+every one of them reaches the class in the matrix below — as `stale` or
+`re-read`, `derived` for the derived class — so no change a fact depends on can
+leave a cached fact authoritative (F12). This is why a review lists its pull
+request and an authority fact the node of its decision records: a record
+created after the fact was read fires a token the fact already carries.
+
+| Class | Value changes on | Why |
+|---|---|---|
+| `work_unit` | `metadata` | its kind, id and what it implements are pull-request metadata |
+| `repository` | `repository` | its default branch and identity are repository settings |
+| `placement` | `metadata,relationship` | milestone, release and gate placement are node metadata and relationships |
+| `graph` | `metadata,relationship` | parents, children and blockers are relationships; their states are node metadata |
+| `authority` | `comment` | grants and boundaries are decision records: created, edited or deleted comments |
+| `acceptance` | `push,metadata` | the judged HEAD moves, or the contract's criteria are edited on the issue |
+| `head` | `push,base-move,metadata` | the HEAD moves, the base tip moves, or the pull request's base branch is switched |
+| `review` | `push,comment` | the judged HEAD moves, or a verdict record is created, edited or deleted |
+| `checks` | `push,check-run,ruleset` | the HEAD moves, a check runs or re-runs at the HEAD, or the required set changes |
+| `next_action` | `push,base-move,metadata,comment,relationship,check-run,ruleset,repository` | derived from every required class: any event that moves an input re-derives it |
 
 ## Effects
 
@@ -75,15 +97,15 @@ event and class records and fails on any hand edit.
 
 | Class | `push` | `base-move` | `metadata` | `comment` | `relationship` | `check-run` | `ruleset` | `repository` | `schema` | `unreadable` |
 |---|---|---|---|---|---|---|---|---|---|---|
-| `work_unit` | `none` | `none` | `stale` | `none` | `stale` | `none` | `none` | `none` | `unknown` | `unknown` |
+| `work_unit` | `none` | `none` | `stale` | `stale` | `stale` | `none` | `none` | `none` | `unknown` | `unknown` |
 | `repository` | `none` | `none` | `none` | `none` | `none` | `none` | `none` | `stale` | `unknown` | `unknown` |
-| `placement` | `none` | `none` | `stale` | `none` | `stale` | `none` | `none` | `none` | `unknown` | `unknown` |
-| `graph` | `none` | `none` | `stale` | `none` | `stale` | `none` | `none` | `none` | `unknown` | `unknown` |
-| `authority` | `none` | `none` | `none` | `stale` | `none` | `none` | `none` | `none` | `unknown` | `unknown` |
-| `acceptance` | `stale` | `none` | `stale` | `none` | `stale` | `none` | `none` | `none` | `unknown` | `unknown` |
-| `head` | `stale` | `stale` | `stale` | `none` | `stale` | `none` | `none` | `none` | `unknown` | `unknown` |
+| `placement` | `none` | `none` | `stale` | `stale` | `stale` | `none` | `none` | `none` | `unknown` | `unknown` |
+| `graph` | `none` | `none` | `stale` | `stale` | `stale` | `none` | `none` | `none` | `unknown` | `unknown` |
+| `authority` | `none` | `none` | `stale` | `stale` | `stale` | `none` | `none` | `none` | `unknown` | `unknown` |
+| `acceptance` | `stale` | `none` | `stale` | `stale` | `stale` | `none` | `none` | `none` | `unknown` | `unknown` |
+| `head` | `stale` | `stale` | `stale` | `stale` | `stale` | `none` | `none` | `none` | `unknown` | `unknown` |
 | `review` | `stale` | `none` | `stale` | `stale` | `stale` | `none` | `none` | `none` | `unknown` | `unknown` |
-| `checks` | `stale` | `none` | `stale` | `none` | `stale` | `re-read` | `stale` | `none` | `unknown` | `unknown` |
+| `checks` | `stale` | `none` | `stale` | `stale` | `stale` | `re-read` | `stale` | `none` | `unknown` | `unknown` |
 | `next_action` | `derived` | `derived` | `derived` | `derived` | `derived` | `derived` | `derived` | `derived` | `unknown` | `unknown` |
 
 ## Conflicting and duplicate evidence
@@ -95,6 +117,7 @@ event and class records and fails on any hand edit.
 | `duplicates-agree` | `ESTABLISHED` | no detail; source.identity is the earliest record; every duplicate is listed as an invalidator | Two or more records for one fact say the same thing: ESTABLISHED from the earliest durable record, every duplicate carried as a comment: token so an edit to any of them fires. |
 | `noncanonical-identity` | `canonicalized` | no detail; the fact carries the canonical spelling | A source spells an identity in a projection (upper-case owner, refs/heads/ prefix, .git suffix, a bare issue number): the compiler emits the one canonical representation (R1); a record whose identity does not canonicalize to one representation is malformed evidence. |
 | `other-head` | `historical` | no fact of the current snapshot; the record stays reachable through provenance | Evidence judged on another HEAD (a PASS for head:A when the HEAD is B) is historical: its head: token names the other HEAD, it never enters the current fact and it never conflicts with current evidence (Example 3 of the fact model). |
+| `duplicate-fields` | `malformed` | alone: UNKNOWN with the record in candidates; beside a valid record: CONFLICT | A record that carries the same field twice (two id fields, two status fields) is malformed before parsing, whatever the values: alone it follows the malformed-alone unreadable record, beside a valid record the malformed-beside-valid conflict record. A consumer that keeps the first or the last duplicate is not conforming (fact model R14). |
 | `other-work-unit` | `historical` | no fact of the current snapshot; the record stays reachable through provenance | Evidence that belongs to another work unit (a grant targeting another repository, a review on another pull request) is historical for this snapshot: it is distinguishable by its work-unit token and confers nothing here (Example 6 of the fact model). |
 
 ## Unreadable sources
@@ -117,16 +140,20 @@ event and class records and fails on any hand edit.
 
 Each scenario applies one fired token to Example 1 of the fact model — the
 complete snapshot of a normal pull request — and lists the facts that become
-stale, then the derived fact that follows because a stale fact is among its inputs. The suite executes them: it loads the
+stale, then the derived fact that follows because a stale fact is among its inputs.
+The stale sets are computed from the example when the page is built, never typed. The suite executes them: it loads the
 example, marks every fact carrying the fired token, checks the set against this
 table, and checks it against the matrix column for the event.
 
 | Scenario | Event | Fired token | Stale; derived | Note |
 |---|---|---|---|---|
-| `push` | `push` | `head:0123456789abcdef0123456789abcdef01234567` | `acceptance,head,review,checks;next_action` | Example 1 after a new commit: the four HEAD-bound facts are stale and next_action is re-derived; work_unit, repository, placement, graph and authority stand. |
-| `verdict-edit` | `comment` | `comment:github.com/acme/widgets#42/comment/9100` | `review;next_action` | The verdict record is edited: only the review fact is stale (and the derived action); the HEAD, checks and acceptance stand. |
+| `push` | `push` | `head:0123456789abcdef0123456789abcdef01234567` | `acceptance,head,review,checks;next_action` | A new commit: the four HEAD-bound facts are stale and next_action is re-derived; work_unit, repository, placement, graph and authority stand. |
+| `verdict-edit` | `comment` | `comment:github.com/acme/widgets#42/comment/9100` | `review;next_action` | The verdict record is edited: the review fact is stale and the derived action with it; HEAD, checks and acceptance stand. |
+| `verdict-created` | `comment` | `pull_request:github.com/acme/widgets#42` | `work_unit,head,review;next_action` | A new verdict comment on the pull request: no fact carries the new comment's token, so the creation fires the pull request's own token — the review fact carries it and is stale, as are the other facts read from the pull request. |
 | `decision-edit` | `comment` | `comment:github.com/acme/widgets#7/comment/9001` | `authority;next_action` | The standing decision record is edited: the authority fact is stale and the derived action with it; nothing HEAD-bound moves. |
-| `base-move` | `base-move` | `ref:github.com/acme/widgets/master` | `head;next_action` | master moves under the pull request: the head fact (its base commit) is stale; the review, checks and acceptance at the HEAD stand. |
+| `grant-created` | `comment` | `issue:github.com/acme/widgets#7` | `authority;next_action` | A new decision comment on the decision issue: the creation fires the issue's token, which the authority fact carries; nothing else in the snapshot reads that issue. |
+| `base-move` | `base-move` | `ref:github.com/acme/widgets/master` | `head;next_action` | master moves under the pull request: the head fact (its base commit) is stale; review, checks and acceptance at the HEAD stand. |
+| `base-switch` | `metadata` | `pull_request:github.com/acme/widgets#42` | `work_unit,head,review;next_action` | The pull request's base branch is switched while both tips stand: pull-request metadata fires, and the head fact carries the pull request's token. |
 | `gate-edit` | `metadata` | `issue:github.com/acme/widgets#41` | `placement,graph,acceptance;next_action` | The implemented issue's metadata changes: placement, graph and the acceptance contract read from it are stale. |
 | `ruleset` | `ruleset` | `ruleset:github.com/acme/widgets` | `checks;next_action` | The repository's rulesets change: the checks fact is stale (which checks are required may have changed). |
 | `repository` | `repository` | `repository:github.com/acme/widgets` | `repository;next_action` | Repository settings change: the repository fact is stale; authority stands (it rests on decision records, not permissions). |
@@ -173,6 +200,12 @@ the behavioral suite checks the two never drift.
 - **F11** Cached or inferred capability never becomes authority (R5). An
   authority fact changes only through its decision records; a permission change
   makes reads UNKNOWN, it grants nothing.
+- **F12** Every event that can change a fact's value reaches the fact through a
+  token it carries: the depends record of each class names those events, and the
+  matrix cell for each is stale or re-read (derived for the derived class). A
+  fact whose value depends on which records a node carries lists the node
+  itself, so a record created after the fact was read fires a token the fact
+  already has.
 
 ## Relation to the rest of the model
 

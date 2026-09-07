@@ -93,7 +93,12 @@ or a released contract resolves either.
 - Consumers gain a derivable staleness test: tokens and versions in the
   snapshot, no history.
 - The suite is a second cross-authority check on the fact model: every example
-  fact must carry only the kinds its class declares.
+  fact must carry only the kinds its class declares, and every event that can
+  change a class's value must reach it. Writing that check exposed two gaps the
+  fact model now closes in R17 and R14: a fact whose value depends on which
+  records a node carries lists the node itself (a review its pull request, an
+  authority fact the node of its decision records, a head fact its pull request),
+  and a record carrying a field twice is malformed before parsing.
 - Until the compiler lands, nothing reads this contract at runtime; the measured
   system stays frozen for the AFTER comparison.
 

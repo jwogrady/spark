@@ -304,6 +304,13 @@ fi
 VAL="$WORK/validate.py"
 cat > "$VAL" <<'PY'
 import json, re, sys
+def no_dupes(pairs):
+    """a record carrying the same field twice is malformed; a parser keeping first or last would choose silently (R14)"""
+    d = {}
+    for k, v in pairs:
+        if k in d: raise ValueError(f"field {k} appears twice in one record — malformed, rejected before parsing (R14)")
+        d[k] = v
+    return d
 tsv, doc = sys.argv[1], sys.argv[2]
 rows = [l.rstrip("\n").split("\t") for l in open(tsv) if l.strip() and not l.startswith("#")]
 classes = {r[1]: r[2] for r in rows if r[0] == "class"}
@@ -519,6 +526,17 @@ def check_fact(f):
         for cand in f["detail"]["candidates"]:
             if ids["comment"].fullmatch(cand) and f"comment:{cand}" not in f["invalidators"]: fail(f"a CONFLICT naming comment {cand} as a candidate lists it as a comment: invalidator (R17)")
     if c == "head" and f["source"]["type"] == "github-api" and f["status"] != "NOT_APPLICABLE" and not ids["work-unit"].fullmatch(ident): fail(f"head read from GitHub names a work unit, not {ident} (R17)")
+    # a fact whose value depends on which records a node carries lists the node, so a record created later reaches it (R17)
+    if c == "review" and f["status"] != "NOT_APPLICABLE":
+        one_wu_token(f, ident if ids["work-unit"].fullmatch(ident) else ident.split("/comment/")[0], "review (the pull request whose comments hold the verdicts)")
+    if c == "authority":
+        decs = {ident}
+        if f["status"] == "ESTABLISHED": decs |= {g["decision"] for g in f["value"].get("grants", []) if isinstance(g, dict) and "decision" in g} | {h["decision"] for h in f["value"].get("human_boundaries", []) if isinstance(h, dict) and "decision" in h}
+        elif isinstance(f.get("detail"), dict): decs |= {x for x in f["detail"].get("candidates", []) if isinstance(x, str)}
+        for d in sorted(decs):
+            if ids["comment"].fullmatch(d): one_wu_token(f, d.split("/comment/")[0], f"authority (the node carrying decision record {d})")
+    if c == "head" and f["source"]["type"] == "github-api" and f["status"] != "NOT_APPLICABLE" and ids["work-unit"].fullmatch(ident):
+        one_wu_token(f, ident, "head (the pull request whose base selection it read)")
     if c == "checks" and f["status"] != "NOT_APPLICABLE":   # NOT_APPLICABLE checks name their work unit like every HEAD-bound class (R7)
         if not ids["repository"].fullmatch(ident): fail(f"checks name the repository whose rulesets require them, not {ident} (R17)")
         if f"ruleset:{ident}" not in f["invalidators"]: fail(f"checks do not list ruleset:{ident} — required checks change with the rulesets (R17)")
@@ -682,7 +700,7 @@ def examples_from_doc(text):
     """(kind, facts) per example, kind read from the heading marker: complete snapshot | fragment."""
     out = []
     for m in re.finditer(r"^### Example \d+ — [^\n]*\((complete snapshot|fragment)\)\n(.*?)```json\n(.*?)\n```", text, flags=re.S | re.M):
-        out.append((m.group(1), json.loads(m.group(3))))
+        out.append((m.group(1), json.loads(m.group(3), object_pairs_hook=no_dupes)))
     return out
 
 mode = sys.argv[3] if len(sys.argv) > 3 else "doc"
@@ -699,14 +717,14 @@ if mode == "doc":
     print(f"snapshots={len(exs)} complete={sum(1 for k,_ in exs if k=='complete snapshot')} facts={n} unknown={kinds['UNKNOWN']} conflict={kinds['CONFLICT']} not_applicable={kinds['NOT_APPLICABLE']}")
 elif mode == "set":
     # snapshot-level control: stdin = {"complete": bool, "facts": [...]}
-    d = json.load(sys.stdin)
+    d = json.load(sys.stdin, object_pairs_hook=no_dupes)
     try:
         for f in d["facts"]: check_fact(f)
         check_set(d["facts"], d["complete"]); print("accepted")
     except (ValueError, KeyError, TypeError) as e: print(f"rejected: {e}"); sys.exit(1)
 else:
     # mutation control: read one fact JSON from stdin; exit 0 if it validates, 1 if rejected
-    try: check_fact(json.load(sys.stdin)); print("accepted")
+    try: check_fact(json.load(sys.stdin, object_pairs_hook=no_dupes)); print("accepted")
     except (ValueError, KeyError, TypeError) as e: print(f"rejected: {e}"); sys.exit(1)
 PY
 if out="$(python3 "$VAL" "$TSV" "$DOC" doc 2>&1)"; then ok; else bad "every example on the page validates: $out"; fi
@@ -714,7 +732,7 @@ case "$out" in *"snapshots=9 complete=2 "*) ok ;; *) bad "nine examples parsed, 
 case "$out" in *"unknown=2 conflict=1 not_applicable=6"*) ok ;; *) bad "examples include exactly two UNKNOWN, one CONFLICT and six NOT_APPLICABLE facts: $out" ;; esac
 
 # ======================== mutation controls: the validator discriminates ========================
-base='{"schema_version":"1","key":"review.independent","class":"review","status":"ESTABLISHED","value":{"verdict":"PASS","head":"0123456789abcdef0123456789abcdef01234567","reviewer":"login:github-actions[bot]","record":"github.com/acme/widgets#42/comment/9100"},"source":{"type":"github-api","identity":"github.com/acme/widgets#42/comment/9100","version":"2026-09-06T11:58:00Z"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["head:0123456789abcdef0123456789abcdef01234567","comment:github.com/acme/widgets#42/comment/9100"],"provenance":"https://github.com/acme/widgets/pull/42#issuecomment-9100"}'
+base='{"schema_version":"1","key":"review.independent","class":"review","status":"ESTABLISHED","value":{"verdict":"PASS","head":"0123456789abcdef0123456789abcdef01234567","reviewer":"login:github-actions[bot]","record":"github.com/acme/widgets#42/comment/9100"},"source":{"type":"github-api","identity":"github.com/acme/widgets#42/comment/9100","version":"2026-09-06T11:58:00Z"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["head:0123456789abcdef0123456789abcdef01234567","comment:github.com/acme/widgets#42/comment/9100","pull_request:github.com/acme/widgets#42"],"provenance":"https://github.com/acme/widgets/pull/42#issuecomment-9100"}'
 # m <fact-json> <python-statements> [<arg>] — one fact, mutated: the statements see it as `f` (and the arg as sys.argv[2])
 m() { printf '%s' "$1" | python3 -c "import json,sys; f=json.load(sys.stdin); exec(sys.argv[1]); print(json.dumps(f))" "$2" "${3:-}"; }
 # snap <facts-json> — a complete-snapshot envelope for sets()
@@ -758,17 +776,17 @@ def cell(cls, status):
     if cls == "graph": return fact(cls, status, {"parent": "none", "children": [], "blocked_by": []}, gh(ISS), ["issue:" + ISS], conf(ISS, R + "#40") if C else None)
     if cls == "authority":
         return fact(cls, status, {"grants": [], "human_boundaries": []}, {"type": "human-decision", "identity": DEC, "version": ISO},
-                    ["comment:" + DEC] + (["comment:" + DEC2] if C else []), conf(DEC, DEC2) if C else None)
+                    ["comment:" + DEC] + (["comment:" + DEC2] if C else []) + ["issue:" + n for n in sorted({d.split("/comment/")[0] for d in ([DEC, DEC2] if C else [DEC])})], conf(DEC, DEC2) if C else None)
     if cls == "acceptance":
         if N: return fact(cls, status, None, gh(WU), ["pull_request:" + WU])
         return fact(cls, status, {"contract": ISS, "head": A, "items": []}, gh(ISS), ["issue:" + ISS, "head:" + A], conf(ISS, R + "#40") if C else None)
     if cls == "head":
         if N: return fact(cls, status, None, gh(WU), ["pull_request:" + WU])
-        return fact(cls, status, {"head": A, "base_ref": "master", "base": B, "current": True}, gh(WU, A if E else ISO), ["head:" + A, "ref:" + R + "/master"], conf(WU, R + "#43") if C else None)
+        return fact(cls, status, {"head": A, "base_ref": "master", "base": B, "current": True}, gh(WU, A if E else ISO), ["head:" + A, "ref:" + R + "/master", "pull_request:" + WU], conf(WU, R + "#43") if C else None)
     if cls == "review":
         if N: return fact(cls, status, None, gh(WU), ["pull_request:" + WU])
-        if C: return fact(cls, status, None, gh(WU), ["head:" + A, "comment:" + C1, "comment:" + C2], conf(C1, C2))
-        return fact(cls, status, {"verdict": "PASS", "head": A, "reviewer": "login:reviewer", "record": C1}, gh(C1), ["head:" + A, "comment:" + C1])
+        if C: return fact(cls, status, None, gh(WU), ["head:" + A, "comment:" + C1, "comment:" + C2, "pull_request:" + WU], conf(C1, C2))
+        return fact(cls, status, {"verdict": "PASS", "head": A, "reviewer": "login:reviewer", "record": C1}, gh(C1), ["head:" + A, "comment:" + C1, "pull_request:" + WU])
     if cls == "checks":
         if N: return fact(cls, status, None, gh(WU), ["pull_request:" + WU])
         return fact(cls, status, {"head": A, "required": ["doctor"], "results": [{"name": "doctor", "state": "success"}]}, gh(R, A if E else ISO), ["head:" + A, "ruleset:" + R], conf(R, "github.com/acme/program") if C else None)
@@ -841,7 +859,7 @@ rej base 'f["provenance"]={"url":"https://github.com/acme/widgets/pull/42"}' "an
 acc base 'f["status"]="UNKNOWN"; del f["value"]; f["detail"]={"reason":"403","candidates":[]}' "control: an UNKNOWN review observed against one HEAD is accepted (R7)"
 rej base 'f["status"]="UNKNOWN"; del f["value"]; f["detail"]={"reason":"403","candidates":[]}; f["invalidators"]=[i for i in f["invalidators"] if not i.startswith("comment:")]' "an UNKNOWN review read from a comment that does not list it must be rejected (R17)"
 rej base 'f["status"]="CONFLICT"; del f["value"]; f["source"]["identity"]="github.com/acme/widgets#42"; f["detail"]={"reason":"two trusted verdicts disagree","candidates":["github.com/acme/widgets#42/comment/9300","github.com/acme/widgets#42/comment/9301"]}; f["invalidators"]=["head:0123456789abcdef0123456789abcdef01234567"]' "a CONFLICT review naming two comment candidates but listing neither as an invalidator must be rejected — an edited verdict would not go stale (R17)"
-acc base 'f["status"]="CONFLICT"; del f["value"]; f["source"]["identity"]="github.com/acme/widgets#42"; f["detail"]={"reason":"two trusted verdicts disagree","candidates":["github.com/acme/widgets#42/comment/9300","github.com/acme/widgets#42/comment/9301"]}; f["invalidators"]=["head:0123456789abcdef0123456789abcdef01234567","comment:github.com/acme/widgets#42/comment/9300","comment:github.com/acme/widgets#42/comment/9301"]' "control: a CONFLICT review listing both conflicting comments is accepted (Example 4's form)"
+acc base 'f["status"]="CONFLICT"; del f["value"]; f["source"]["identity"]="github.com/acme/widgets#42"; f["detail"]={"reason":"two trusted verdicts disagree","candidates":["github.com/acme/widgets#42/comment/9300","github.com/acme/widgets#42/comment/9301"]}; f["invalidators"]=["head:0123456789abcdef0123456789abcdef01234567","comment:github.com/acme/widgets#42/comment/9300","comment:github.com/acme/widgets#42/comment/9301","pull_request:github.com/acme/widgets#42"]' "control: a CONFLICT review listing both conflicting comments and its pull request is accepted (Example 4's form)"
 rej base 'f["status"]="UNKNOWN"; del f["value"]; f["detail"]={"reason":"403","candidates":[]}; f["invalidators"]=["pull_request:github.com/acme/widgets#42"]' "an UNKNOWN HEAD-bound fact with no observed HEAD must be rejected (R7)"
 rej base 'f["status"]="UNKNOWN"; del f["value"]; f["detail"]={"reason":"403","candidates":[]}; f["invalidators"].append("head:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")' "an UNKNOWN HEAD-bound fact naming two HEADs is ambiguous and must be rejected (R7)"
 acc base 'f["status"]="NOT_APPLICABLE"; del f["value"]; f["source"]["identity"]="github.com/acme/widgets#41"; f["invalidators"]=["issue:github.com/acme/widgets#41"]' "control: a NOT_APPLICABLE review read from its issue and invalidated by it is accepted (R7)"
@@ -901,6 +919,13 @@ rej base 'f["value"]["conclusion"]="looks fine"' "an extra key in a review value
 # the source identity is the node the value describes (R17); repository names are one lower-case spelling
 rej base 'f["value"]["record"]="github.com/acme/widgets#42/comment/9101"; f["invalidators"].append("comment:github.com/acme/widgets#42/comment/9101")' "a review whose record is not the comment its source names must be rejected (R17)"
 rej base 'f["invalidators"]=[i for i in f["invalidators"] if not i.startswith("comment:")]' "a review that does not list its record as a comment: invalidator must be rejected (R17)"
+rej base 'f["invalidators"]=[i for i in f["invalidators"] if not i.startswith("pull_request:")]' "a review that does not list the pull request whose comments hold the verdicts must be rejected — a verdict record created later would never reach it (R17)"
+rej base 'f["invalidators"].append("issue:github.com/acme/widgets#42")' "a review listing its pull request under both kinds must be rejected — one canonical token (R17)"
+dup="$(printf '%s' "$base" | sed 's/"key":"review.independent"/"key":"review.independent","key":"review.independent"/')"
+[ "$dup" != "$base" ] && ok || bad "control: the duplicate-field mutation did not apply"
+printf '%s' "$dup" | python3 "$VAL" "$TSV" "$DOC" one >/dev/null 2>&1 && bad "a record carrying the same field twice must be rejected before parsing — keeping first or last would choose silently (R14)" || ok
+dup2="$(printf '%s' "$base" | sed 's/"status":"ESTABLISHED"/"status":"ESTABLISHED","status":"UNKNOWN"/')"
+printf '%s' "$dup2" | python3 "$VAL" "$TSV" "$DOC" one >/dev/null 2>&1 && bad "a record with two disagreeing copies of one field must be rejected, not resolved by position (R14)" || ok
 rej base 'f["value"]["record"]="github.com/Acme/Widgets#42/comment/9100"; f["source"]["identity"]=f["value"]["record"]; f["invalidators"]=["head:0123456789abcdef0123456789abcdef01234567","comment:"+f["value"]["record"]]' "a mixed-case owner/name is a projection, never the identity (R1)"
 wu='{"schema_version":"1","key":"work_unit.identity","class":"work_unit","status":"ESTABLISHED","value":{"kind":"pull_request","id":"github.com/acme/widgets#42","implements":"github.com/acme/widgets#41"},"source":{"type":"github-api","identity":"github.com/acme/widgets#42","version":"2026-09-06T12:00:00Z"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["pull_request:github.com/acme/widgets#42"],"provenance":"https://github.com/acme/widgets/pull/42"}'
 accepts "$wu" && ok || bad "control: a canonical work_unit fact is accepted"
@@ -946,10 +971,11 @@ rej acc 'f["value"]["items"].append({"id":"a1","state":"NOT_MET"})' "duplicate a
 rej acc 'f["value"]["items"][0]["id"]={"body":"raw prose"}' "an object as an acceptance item id must be rejected (R2/R14)"
 rej acc 'f["value"]["items"][0]["id"]=""' "an empty acceptance item id must be rejected (R14)"
 rej acc 'f["value"]["items"][0]["id"]="the first criterion, roughly"' "a prose acceptance item id must be rejected (R14)"
-auth='{"schema_version":"1","key":"authority.standing","class":"authority","status":"ESTABLISHED","value":{"grants":[{"decision":"github.com/acme/widgets#7/comment/9001","target":"github.com/acme/widgets","scopes":["merge:routine"]}],"human_boundaries":[{"decision":"github.com/acme/widgets#7/comment/9001","target":"github.com/acme/widgets","boundary":"release:approve"}]},"source":{"type":"human-decision","identity":"github.com/acme/widgets#7/comment/9001","version":"2026-09-01T09:00:00Z"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["comment:github.com/acme/widgets#7/comment/9001"],"provenance":"https://github.com/acme/widgets/issues/7"}'
+auth='{"schema_version":"1","key":"authority.standing","class":"authority","status":"ESTABLISHED","value":{"grants":[{"decision":"github.com/acme/widgets#7/comment/9001","target":"github.com/acme/widgets","scopes":["merge:routine"]}],"human_boundaries":[{"decision":"github.com/acme/widgets#7/comment/9001","target":"github.com/acme/widgets","boundary":"release:approve"}]},"source":{"type":"human-decision","identity":"github.com/acme/widgets#7/comment/9001","version":"2026-09-01T09:00:00Z"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["comment:github.com/acme/widgets#7/comment/9001","issue:github.com/acme/widgets#7"],"provenance":"https://github.com/acme/widgets/issues/7"}'
 accepts "$auth" && ok || bad "control: a canonical authority fact is accepted"
 rej auth 'f["source"]["type"]="github-api"' "authority from a non-human-decision source must be rejected (R5)"
 rej auth 'f["invalidators"]=["repository:github.com/acme/widgets"]' "an authority recorded in a comment that does not list that comment as an invalidator must be rejected — an edited decision would never go stale (R17)"
+rej auth 'f["invalidators"]=["comment:github.com/acme/widgets#7/comment/9001"]' "an authority fact that does not list the node carrying its decision record must be rejected — a grant or revocation posted there later would never reach it (R17)"
 acc auth 'f["status"]="UNKNOWN"; del f["value"]; f["detail"]={"reason":"403","candidates":[]}' "control: an UNKNOWN authority fact from its decision record is accepted"
 rej auth 'f["status"]="UNKNOWN"; del f["value"]; f["detail"]={"reason":"403","candidates":[]}; f["inferred"]=True' "an UNKNOWN authority fact marked inferred must be rejected — never inferred, whatever the status (R5)"
 rej auth 'f["status"]="UNKNOWN"; del f["value"]; f["detail"]={"reason":"403","candidates":[]}; f["source"]={"type":"github-api","identity":"github.com/acme/widgets#7","version":"2026-09-01T09:00:00Z"}; f["invalidators"]=["issue:github.com/acme/widgets#7"]' "an UNKNOWN authority fact from a non-decision source must be rejected (R5)"
@@ -966,7 +992,7 @@ rej auth 'f["source"]["identity"]="the maintainer approved this in chat"' "a hum
 rej auth 'f["source"]["version"]="9001"' "a decision recorded in a comment versioned by the comment id must be rejected — comments are edited, ids are not (R14)"
 acc auth 'f["source"]["version"]="2026-09-03T10:00:00Z"' "control: an edited decision carries the new updated_at as its version"
 # git and repository-file sources: the commit in the identity IS the version observed
-hd0='{"schema_version":"1","key":"head.exact","class":"head","status":"ESTABLISHED","value":{"head":"0123456789abcdef0123456789abcdef01234567","base_ref":"master","base":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","current":true},"source":{"type":"github-api","identity":"github.com/acme/widgets#42","version":"0123456789abcdef0123456789abcdef01234567"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["head:0123456789abcdef0123456789abcdef01234567","ref:github.com/acme/widgets/master"],"provenance":"https://github.com/acme/widgets/pull/42/commits"}'
+hd0='{"schema_version":"1","key":"head.exact","class":"head","status":"ESTABLISHED","value":{"head":"0123456789abcdef0123456789abcdef01234567","base_ref":"master","base":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","current":true},"source":{"type":"github-api","identity":"github.com/acme/widgets#42","version":"0123456789abcdef0123456789abcdef01234567"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["head:0123456789abcdef0123456789abcdef01234567","ref:github.com/acme/widgets/master","pull_request:github.com/acme/widgets#42"],"provenance":"https://github.com/acme/widgets/pull/42/commits"}'
 rf='{"schema_version":"1","key":"acceptance.contract","class":"acceptance","status":"ESTABLISHED","value":{"contract":"github.com/acme/widgets#41","head":"0123456789abcdef0123456789abcdef01234567","items":[{"id":"a1","state":"MET"}]},"source":{"type":"repository-file","identity":"github.com/acme/widgets@0123456789abcdef0123456789abcdef01234567:docs/acceptance/41.md","version":"0123456789abcdef0123456789abcdef01234567"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["head:0123456789abcdef0123456789abcdef01234567","ref:github.com/acme/widgets/master","issue:github.com/acme/widgets#41"],"provenance":"https://github.com/acme/widgets/blob/0123456789abcdef0123456789abcdef01234567/docs/acceptance/41.md"}'
 accepts "$rf" && ok || bad "control: a repository-file source with a path identity is accepted (the grammar is Python-compatible)"
 rmut() { printf '%s' "$rf" | python3 -c "import json,sys; f=json.load(sys.stdin); exec(sys.argv[1]); print(json.dumps(f))" "$1" "${2:-}"; }
@@ -1027,10 +1053,11 @@ acc hd0 'f["value"]["base_ref"]="release/v1.2.x"; f["invalidators"][1]="ref:gith
 for r in 'feat/x+y' 'user@host' 'a#b' 'x=1' 'v1.0{rc}' "a'b" 'q"q' 'x]y' 'k=v,w;z' '%20' 'ba`ck'; do
   accepts "$(m "$hd0" 'f["value"]["base_ref"]=sys.argv[2]; f["invalidators"][1]="ref:github.com/acme/widgets/"+sys.argv[2]' "$r")" && ok || bad "control: valid Git branch name '$r' is a valid ref"
 done
-hd='{"schema_version":"1","key":"head.exact","class":"head","status":"ESTABLISHED","value":{"head":"0123456789abcdef0123456789abcdef01234567","base_ref":"master","base":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","current":true},"source":{"type":"github-api","identity":"github.com/acme/widgets#42","version":"0123456789abcdef0123456789abcdef01234567"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["head:0123456789abcdef0123456789abcdef01234567","ref:github.com/acme/widgets/master"],"provenance":"https://github.com/acme/widgets/pull/42/commits"}'
+hd='{"schema_version":"1","key":"head.exact","class":"head","status":"ESTABLISHED","value":{"head":"0123456789abcdef0123456789abcdef01234567","base_ref":"master","base":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","current":true},"source":{"type":"github-api","identity":"github.com/acme/widgets#42","version":"0123456789abcdef0123456789abcdef01234567"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["head:0123456789abcdef0123456789abcdef01234567","ref:github.com/acme/widgets/master","pull_request:github.com/acme/widgets#42"],"provenance":"https://github.com/acme/widgets/pull/42/commits"}'
 accepts "$hd" && ok || bad "control: a head fact listing its HEAD and base ref is accepted"
 rej hd 'f["invalidators"]=["head:0123456789abcdef0123456789abcdef01234567"]' "a head fact without ref:<repository>/<base_ref> must be rejected — the base moves without the HEAD moving (R17)"
 rej hd 'f["invalidators"][1]="ref:github.com/acme/widgets/main"' "a head fact whose ref: invalidator names a different branch than base_ref must be rejected (R17)"
+rej hd 'f["invalidators"]=[i for i in f["invalidators"] if not i.startswith("pull_request:")]' "a head fact that does not list its pull request must be rejected — a base-branch switch is pull-request metadata and moves no branch tip (R17)"
 rej gr 'f["value"]["blocked_by"].append({"kind":"issue","id":"github.com/acme/widgets#39","state":"open"})' "one blocker listed as both closed and open must be rejected (R14)"
 rej gr 'f["value"]["children"]=[{"kind":"issue","id":"github.com/acme/widgets#42","state":"open"},{"kind":"issue","id":"github.com/acme/widgets#42","state":"open"}]; f["invalidators"].append("issue:github.com/acme/widgets#42")' "a child listed twice must be rejected (R14)"
 rej gr 'del f["value"]["parent"]["kind"]' "a relationship without its kind must be rejected — the kind fixes the one canonical invalidator (R14/R17)"
@@ -1071,7 +1098,7 @@ srej 'w=[f for f in s if f["class"]=="work_unit"][0]; w["value"]["implements"]="
 srej 'g=[f for f in s if f["class"]=="graph"][0]; g["value"]["blocked_by"][0]["state"]="open"' "merge while a native blocker is open must be rejected (R15)"
 srej 'p=[f for f in s if f["class"]=="placement"][0]; p["invalidators"]=["pull_request:" + i.split(":",1)[1] if i.startswith("issue:github.com/acme/widgets#41") else i for i in p["invalidators"]]' "a placement naming the implemented issue under pull_request: must be rejected — the set knows its kind (R17)"
 # a stop derived from a CONFLICT consults only the conflicting fact, whether or not a head fact is present in the set
-conflict_stop='r=[f for f in s if f["class"]=="review"][0]; r["status"]="CONFLICT"; del r["value"]; r["detail"]={"reason":"two trusted verdicts disagree","candidates":["github.com/acme/widgets#42/comment/9100","github.com/acme/widgets#42/comment/9101"]}; r["invalidators"]=[i for i in r["invalidators"] if i.startswith("head:")]+["comment:github.com/acme/widgets#42/comment/9100","comment:github.com/acme/widgets#42/comment/9101"]; n=[f for f in s if f["class"]=="next_action"][0]; n["value"]={"action":"stop-decision-required","because":["review.independent"],"boundary":"none"}; n["inputs"]=["review.independent"]; n["source"]["version"]="1;review.independent@"+r["source"]["version"]'
+conflict_stop='r=[f for f in s if f["class"]=="review"][0]; r["status"]="CONFLICT"; del r["value"]; r["detail"]={"reason":"two trusted verdicts disagree","candidates":["github.com/acme/widgets#42/comment/9100","github.com/acme/widgets#42/comment/9101"]}; r["invalidators"]=[i for i in r["invalidators"] if i.startswith("head:") or i.startswith("pull_request:")]+["comment:github.com/acme/widgets#42/comment/9100","comment:github.com/acme/widgets#42/comment/9101"]; n=[f for f in s if f["class"]=="next_action"][0]; n["value"]={"action":"stop-decision-required","because":["review.independent"],"boundary":"none"}; n["inputs"]=["review.independent"]; n["source"]["version"]="1;review.independent@"+r["source"]["version"]'
 sets "$(snap "$(smut "$conflict_stop")")" && ok || bad "control: in a complete snapshot, a stop derived from a CONFLICT lists exactly the conflicting fact as its input (R15)"
 sets "$(snap "$(smut "$conflict_stop"'; h=[f for f in s if f["class"]=="head"][0]; n["inputs"]=["head.exact","review.independent"]; n["source"]["version"]="1;head.exact@"+h["source"]["version"]+";review.independent@"+r["source"]["version"]')")" && bad "a conflict stop that lists the unrelated head as an input must be rejected — HEAD is consulted only by derivations that depend on it (R15)" || ok
 # a CONFLICT in any class — not only review — derives the stop, with exactly that fact as the input

@@ -26,17 +26,18 @@ assert_eq "written against fact-model schema version 1" "1" "$(rec schema | cut 
 assert_eq "the fact model on this tree is schema version 1" "1" "$(grep -v '^#' "$FM_TSV" | awk -F'\t' '$1=="version"{print $2}')"
 assert_eq "ten event classes" "10" "$(rec event | wc -l | tr -d ' ')"
 assert_eq "one kinds record per fact class" "10" "$(rec kinds | wc -l | tr -d ' ')"
+assert_eq "one depends record per fact class" "10" "$(rec depends | wc -l | tr -d ' ')"
 assert_eq "five effects" "5" "$(rec effect | wc -l | tr -d ' ')"
 assert_eq "one matrix row per fact class" "10" "$(rec matrix | wc -l | tr -d ' ')"
-assert_eq "six conflict situations" "6" "$(rec conflict | wc -l | tr -d ' ')"
+assert_eq "seven conflict situations" "7" "$(rec conflict | wc -l | tr -d ' ')"
 assert_eq "five unreadable failures" "5" "$(rec unreadable | wc -l | tr -d ' ')"
 assert_eq "one migration rule" "1" "$(rec migration | wc -l | tr -d ' ')"
-assert_eq "seven executable scenarios" "7" "$(rec scenario | wc -l | tr -d ' ')"
-assert_eq "eleven rules" "11" "$(rec rule | wc -l | tr -d ' ')"
+assert_eq "ten executable scenarios" "10" "$(rec scenario | wc -l | tr -d ' ')"
+assert_eq "twelve rules" "12" "$(rec rule | wc -l | tr -d ' ')"
 # the record kinds the header comment declares are exactly the kinds present
-assert_eq "record kinds present" "conflict effect event kinds matrix migration rule scenario schema unreadable version" "$(grep -v '^#' "$TSV" | cut -f1 | sort -u | tr '\n' ' ' | sed 's/ $//')"
+assert_eq "record kinds present" "conflict depends effect event kinds matrix migration rule scenario schema unreadable version" "$(grep -v '^#' "$TSV" | cut -f1 | sort -u | tr '\n' ' ' | sed 's/ $//')"
 # every record kind's field count is constant
-for k in event kinds effect matrix conflict unreadable migration scenario rule; do
+for k in event kinds depends effect matrix conflict unreadable migration scenario rule; do
   n="$(rec "$k" | awk -F'\t' '{print NF}' | sort -u | wc -l | tr -d ' ')"; [ "$n" = 1 ] && ok || bad "record kind $k has rows of differing width"
 done
 # shipped docs carry no bare issue-number references (doctor's tier boundary)
@@ -75,7 +76,7 @@ say(fired_union == fm_kinds, f"every fact-model invalidator kind is fired by som
 say(sum(1 for e in events if not fires[e[1]]) == 3, "exactly three events fire no token (check-run, schema, unreadable)")
 say({e[1] for e in events if not fires[e[1]]} == {"check-run", "schema", "unreadable"}, "the tokenless events are check-run, schema and unreadable")
 for c in recs("conflict"):
-    say(c[2] in fm_status or c[2] in ("canonicalized", "historical"), f"conflict {c[1]} outcome {c[2]} is a fact-model status or a non-fact outcome")
+    say(c[2] in fm_status or c[2] in ("canonicalized", "historical", "malformed"), f"conflict {c[1]} outcome {c[2]} is a fact-model status or a non-fact outcome")
 for u in recs("unreadable"):
     say(u[2] in fm_status and all(u[2] in fm_admits[cl] for cl in fm_classes), f"unreadable {u[1]} yields {u[2]}, a status every class admits")
 say(all(c[2] != "CONFLICT" or all("CONFLICT" in fm_admits[cl] for cl in fm_classes if cl != "next_action") for c in recs("conflict")), "CONFLICT outcomes apply to source-read classes, each of which admits CONFLICT")
@@ -93,6 +94,16 @@ for m in recs("matrix"):
     say(got == want, f"matrix row {m[1]} is derived from kinds × fires: {m[2]}" + ("" if got == want else f" (derived: {','.join(want)})"))
     say(all(x in effects for x in got), f"matrix row {m[1]} uses only the effect vocabulary")
 say(all(effect("next_action", e) == ("unknown" if e in ("schema", "unreadable") else "derived") for e in ev_names), "next_action re-derives on every event that moves any input (every event moves some class)")
+# --- every event that can change a class's value reaches it (F12): the category the reviewer's findings belong to
+dep = recs("depends"); say([d[1] for d in dep] == fm_classes, "the depends records name exactly the fact model's classes, in order")
+for d in dep:
+    evs = d[2].split(",")
+    say(all(e in ev_names for e in evs), f"depends {d[1]}: every named event exists ({d[2]})")
+    for e in evs:
+        cell = effect(d[1], e); want = ("derived",) if d[1] == "next_action" else ("stale", "re-read")
+        say(cell in want, f"depends {d[1]}: a {e} event reaches the fact — matrix cell {cell}")
+say(all(e in {x for d in dep for x in d[2].split(",")} for e in ev_names if fires[e] or e == "check-run"), "every token-firing event (and check-run) changes some class's value")
+say({d[1] for d in dep if "comment" in d[2].split(",")} == {"authority", "review", "next_action"}, "the classes whose value a comment can change are authority, review and the derived action — each carries the node a new comment lands on")
 
 # --- every fact on the fact-model page agrees with the declared kinds
 facts = []
@@ -101,12 +112,16 @@ for blk in re.findall(r"```json\n(.*?)```", fm_doc, flags=re.S):
     except Exception: continue
     facts += [f for f in (obj if isinstance(obj, list) else [obj]) if isinstance(f, dict) and "class" in f]
 say(len(facts) >= 40, f"{len(facts)} example facts read from the fact-model page")
+dupf = [c for c in recs("conflict") if c[1] == "duplicate-fields"]
+say(len(dupf) == 1 and dupf[0][2] == "malformed" and "UNKNOWN" in dupf[0][3] and "CONFLICT" in dupf[0][3], "duplicate fields are classified as malformed with both the alone and the beside-valid outcomes named")
+say("R14" in dupf[0][4] and any(r[0] == "rule" and r[1] == "R14" and "same field twice" in r[2] for r in fm), "the fact model's R14 states the duplicate-field rule the contract relies on")
+say(any(r[0] == "rule" and r[1] == "R17" and "lists that node too" in r[2] for r in fm), "the fact model's R17 states the node-listing rule the contract relies on")
 seen = collections.defaultdict(set)
 for f in facts:
     ks = {t.split(":")[0] for t in f.get("invalidators", [])}; seen[f["class"]] |= ks
     if ck[f["class"]] is not None:
         say(ks <= ck[f["class"]], f"{f['class']} fact ({f['status']}, {f['source']['identity']}) carries only declared kinds {sorted(ks)}")
-unexercised = {"graph": {"pull_request"}}  # R17 lists a pull-request parent, child or blocker under its kind; the page's graphs relate issues only
+unexercised = {"graph": {"pull_request"}, "authority": {"pull_request"}}  # R17 admits a pull-request parent/child/blocker and a decision recorded on a pull request; the page's examples use issues
 for k in kinds:
     if ck[k[1]] is not None: say(ck[k[1]] - unexercised.get(k[1], set()) <= seen[k[1]], f"every declared kind of {k[1]} appears on some example fact (declared {sorted(ck[k[1]])}, seen {sorted(seen[k[1]])}, admitted unexercised {sorted(unexercised.get(k[1], set()))})")
     if ck[k[1]] is not None: say(not (unexercised.get(k[1], set()) & seen[k[1]]), f"the unexercised list for {k[1]} names only kinds no example shows")
@@ -133,8 +148,14 @@ for s in recs("scenario"):
     say(all(mrow[c] == "stale" for c in stale), f"scenario {name}: every stale fact's class is 'stale' in the matrix column for {ev}")
     say(all(mrow[c] in ("stale", "re-read") for c in stale) and (not derived or mrow["next_action"] == "derived"), f"scenario {name}: the matrix admits the observed effects")
     say(stale, f"scenario {name}: at least one fact is stale (a scenario that moves nothing proves nothing)")
-say(len({s[3] for s in recs("scenario")}) == len(recs("scenario")), "every scenario fires a distinct token")
+say(len({(s[2], s[3]) for s in recs("scenario")}) == len(recs("scenario")), "every scenario is a distinct event and token pair")
 say({s[2] for s in recs("scenario")} >= {"push", "comment", "base-move", "metadata", "ruleset", "repository"}, "the scenarios cover the token-firing events except relationship (Example 1 lists no other work unit's relationship to move)")
+# the three findings of round 1, as scenarios: a created verdict, a created grant, a base-branch switch
+by_name = {s[1]: s for s in recs("scenario")}
+say("review" in by_name["verdict-created"][4].split(";")[0].split(","), "a verdict comment created on the pull request reaches the review fact")
+say(by_name["grant-created"][4].split(";")[0] == "authority", "a decision comment created on the decision issue reaches exactly the authority fact")
+say("head" in by_name["base-switch"][4].split(";")[0].split(","), "a base-branch switch (pull-request metadata, no tip moves) reaches the head fact")
+say(by_name["base-switch"][2] == "metadata" and by_name["verdict-created"][2] == "comment", "the base switch is a metadata event and the created verdict a comment event")
 
 # --- parity: the page renders exactly the authority
 def norm(x): return re.sub(r"\s+", " ", x.replace("\\|", "|").replace("`", "")).strip()
@@ -151,6 +172,7 @@ def exact(header, k, cols, label):
     return t
 exact("| Event | Fires |", "event", [1, 2, 3, 4], "event")
 exact("| Class | Invalidator kinds |", "kinds", [1, 2, 3], "kinds")
+exact("| Class | Value changes on |", "depends", [1, 2, 3], "depends")
 exact("| Effect | Meaning |", "effect", [1, 2], "effect")
 exact("| Situation | Outcome |", "conflict", [1, 2, 3, 4], "conflict")
 exact("| Failure | Status |", "unreadable", [1, 2, 3, 4], "unreadable")
@@ -167,7 +189,7 @@ rules_md = doc[doc.index("## Rules"):doc.index("## Relation to the rest of the m
 found = re.findall(r"^- \*\*(F\d+)\*\* (.*?)(?=^- \*\*F|\Z)", rules_md, flags=re.S | re.M)
 say([f[0] for f in found] == [r[1] for r in recs("rule")], "the rules list has exactly the TSV's rules, in order")
 for r, f in zip(recs("rule"), found): say(norm(f[1]) == norm(r[2]), f"rule {r[1]} statement is the TSV's, verbatim")
-covered = {"version": {1}, "schema": {1}, "event": {1, 2, 3, 4}, "kinds": {1, 2, 3}, "effect": {1, 2}, "matrix": {1, 2}, "conflict": {1, 2, 3, 4}, "unreadable": {1, 2, 3, 4}, "migration": {1, 2, 3}, "scenario": {1, 2, 3, 4, 5}, "rule": {1, 2}}
+covered = {"version": {1}, "schema": {1}, "event": {1, 2, 3, 4}, "kinds": {1, 2, 3}, "depends": {1, 2, 3}, "effect": {1, 2}, "matrix": {1, 2}, "conflict": {1, 2, 3, 4}, "unreadable": {1, 2, 3, 4}, "migration": {1, 2, 3}, "scenario": {1, 2, 3, 4, 5}, "rule": {1, 2}}
 unchecked = sorted({f"{r[0]}[{i}]" for r in rows for i in range(1, len(r)) if i not in covered.get(r[0], set())})
 say(not unchecked, f"every column of every record kind is rendered on the page and compared: {unchecked or 'none unchecked'}")
 for blk in re.findall(r"(?:^\|.*\n)+", doc, flags=re.M):
