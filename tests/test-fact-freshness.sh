@@ -1,0 +1,203 @@
+#!/usr/bin/env bash
+# Behavioral suite for the freshness, invalidation and conflict contract (contract v1, over fact-model schema v1):
+# the authority (preferences/fact-freshness.tsv) parses and is complete and agrees with the fact model (every kind
+# it names is a fact-model invalidator kind, every class a fact-model class, every status an admitted status);
+# the class × event matrix is derived from the event and class records, never hand-edited; every fact on the
+# fact-model page carries only the kinds its class declares; every scenario executes against Example 1 of the fact
+# model and yields the stale set the page states; and the page renders exactly the authority (every column of every
+# record kind, one row per record, none extra; every rule verbatim).
+set -euo pipefail
+. "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+sandbox_init
+
+PLUGIN="$(cd "$(dirname "$SPARK")/.." && pwd)"
+TSV="$PLUGIN/preferences/fact-freshness.tsv"
+DOC="$PLUGIN/docs/reference/fact-freshness.md"
+FM_TSV="$PLUGIN/preferences/fact-model.tsv"
+FM_DOC="$PLUGIN/docs/reference/fact-model.md"
+
+assert_eq() { local desc="$1" want="$2" got="$3"; if [ "$got" = "$want" ]; then ok; else bad "$desc — want '$want', got '$got'"; fi; }
+
+# ======================== the authority parses and is complete ========================
+for f in "$TSV" "$DOC" "$FM_TSV" "$FM_DOC"; do [ -f "$f" ] && ok || bad "missing shipped file $f"; done
+rec() { grep -v '^#' "$TSV" | awk -F'\t' -v k="$1" '$1==k'; }
+assert_eq "contract version is 1" "1" "$(rec version | cut -f2)"
+assert_eq "written against fact-model schema version 1" "1" "$(rec schema | cut -f2)"
+assert_eq "the fact model on this tree is schema version 1" "1" "$(grep -v '^#' "$FM_TSV" | awk -F'\t' '$1=="version"{print $2}')"
+assert_eq "ten event classes" "10" "$(rec event | wc -l | tr -d ' ')"
+assert_eq "one kinds record per fact class" "10" "$(rec kinds | wc -l | tr -d ' ')"
+assert_eq "five effects" "5" "$(rec effect | wc -l | tr -d ' ')"
+assert_eq "one matrix row per fact class" "10" "$(rec matrix | wc -l | tr -d ' ')"
+assert_eq "six conflict situations" "6" "$(rec conflict | wc -l | tr -d ' ')"
+assert_eq "five unreadable failures" "5" "$(rec unreadable | wc -l | tr -d ' ')"
+assert_eq "one migration rule" "1" "$(rec migration | wc -l | tr -d ' ')"
+assert_eq "seven executable scenarios" "7" "$(rec scenario | wc -l | tr -d ' ')"
+assert_eq "eleven rules" "11" "$(rec rule | wc -l | tr -d ' ')"
+# the record kinds the header comment declares are exactly the kinds present
+assert_eq "record kinds present" "conflict effect event kinds matrix migration rule scenario schema unreadable version" "$(grep -v '^#' "$TSV" | cut -f1 | sort -u | tr '\n' ' ' | sed 's/ $//')"
+# every record kind's field count is constant
+for k in event kinds effect matrix conflict unreadable migration scenario rule; do
+  n="$(rec "$k" | awk -F'\t' '{print NF}' | sort -u | wc -l | tr -d ' ')"; [ "$n" = 1 ] && ok || bad "record kind $k has rows of differing width"
+done
+# shipped docs carry no bare issue-number references (doctor's tier boundary)
+if grep -qE '(^|[^A-Za-z0-9/])#[0-9]+' "$DOC"; then bad "doc contains a bare issue reference"; else ok; fi
+
+command -v python3 >/dev/null 2>&1 || { echo "  (python3 absent — cross-authority, matrix, scenario and parity checks skipped)"; finish "fact freshness (#732)"; }
+
+# ======================== agreement with the fact model, derivation, scenarios, parity ========================
+last=""
+while IFS= read -r line; do
+  last="$line"; case "$line" in OK*) ok ;; *) bad "$line" ;; esac
+done <<EOF
+$(python3 - "$TSV" "$DOC" "$FM_TSV" "$FM_DOC" 2>&1 <<'PY'
+import re, sys, json, collections
+tsv, doc, fm_tsv, fm_doc = (open(p).read() for p in sys.argv[1:5])
+rows = [l.split("\t") for l in tsv.split("\n") if l.strip() and not l.startswith("#")]
+fm = [l.split("\t") for l in fm_tsv.split("\n") if l.strip() and not l.startswith("#")]
+def say(okk, what): print(("OK " if okk else "BAD ") + what)
+def recs(k): return [r for r in rows if r[0] == k]
+fm_classes = [r[1] for r in fm if r[0] == "class"]; fm_kinds = {r[1] for r in fm if r[0] == "invalidator"}
+fm_status = {r[1] for r in fm if r[0] == "status"}; fm_admits = {r[1]: set(r[2].split(",")) for r in fm if r[0] == "class-status"}
+events = recs("event"); kinds = recs("kinds"); effects = [r[1] for r in recs("effect")]
+ev_names = [e[1] for e in events]
+fires = {e[1]: (set() if e[2] == "none" else set(e[2].split(","))) for e in events}
+ck = {k[1]: (None if k[2] == "inputs" else set(k[2].split(","))) for k in kinds}
+
+# --- names the fact model knows
+say([k[1] for k in kinds] == fm_classes, "the kinds records name exactly the fact model's classes, in the model's order")
+say([r[1] for r in recs("matrix")] == fm_classes, "the matrix rows are exactly the fact model's classes, in the model's order")
+for e in events: say(fires[e[1]] <= fm_kinds, f"event {e[1]} fires only fact-model invalidator kinds ({e[2]})")
+for k in kinds:
+    if ck[k[1]] is not None: say(ck[k[1]] <= fm_kinds, f"class {k[1]} declares only fact-model invalidator kinds ({k[2]})")
+say(sum(1 for k in kinds if ck[k[1]] is None) == 1 and ck["next_action"] is None, "exactly the derived class declares its kinds as its inputs' union")
+fired_union = set().union(*fires.values())
+say(fired_union == fm_kinds, f"every fact-model invalidator kind is fired by some event (unfired: {sorted(fm_kinds - fired_union) or 'none'})")
+say(sum(1 for e in events if not fires[e[1]]) == 3, "exactly three events fire no token (check-run, schema, unreadable)")
+say({e[1] for e in events if not fires[e[1]]} == {"check-run", "schema", "unreadable"}, "the tokenless events are check-run, schema and unreadable")
+for c in recs("conflict"):
+    say(c[2] in fm_status or c[2] in ("canonicalized", "historical"), f"conflict {c[1]} outcome {c[2]} is a fact-model status or a non-fact outcome")
+for u in recs("unreadable"):
+    say(u[2] in fm_status and all(u[2] in fm_admits[cl] for cl in fm_classes), f"unreadable {u[1]} yields {u[2]}, a status every class admits")
+say(all(c[2] != "CONFLICT" or all("CONFLICT" in fm_admits[cl] for cl in fm_classes if cl != "next_action") for c in recs("conflict")), "CONFLICT outcomes apply to source-read classes, each of which admits CONFLICT")
+say(set(effects) == {"stale", "re-read", "derived", "unknown", "none"}, "the effect vocabulary is closed: stale, re-read, derived, unknown, none")
+
+# --- the matrix is derived (F2)
+def effect(cls, ev):
+    if ev in ("schema", "unreadable"): return "unknown"
+    if cls == "next_action": return "derived" if any(effect(c, ev) in ("stale", "re-read") for c in ck if c != "next_action") else "none"
+    if fires[ev] & ck[cls]: return "stale"
+    if ev == "check-run" and cls == "checks": return "re-read"
+    return "none"
+for m in recs("matrix"):
+    want = [effect(m[1], e) for e in ev_names]; got = m[2].split(",")
+    say(got == want, f"matrix row {m[1]} is derived from kinds × fires: {m[2]}" + ("" if got == want else f" (derived: {','.join(want)})"))
+    say(all(x in effects for x in got), f"matrix row {m[1]} uses only the effect vocabulary")
+say(all(effect("next_action", e) == ("unknown" if e in ("schema", "unreadable") else "derived") for e in ev_names), "next_action re-derives on every event that moves any input (every event moves some class)")
+
+# --- every fact on the fact-model page agrees with the declared kinds
+facts = []
+for blk in re.findall(r"```json\n(.*?)```", fm_doc, flags=re.S):
+    try: obj = json.loads(blk)
+    except Exception: continue
+    facts += [f for f in (obj if isinstance(obj, list) else [obj]) if isinstance(f, dict) and "class" in f]
+say(len(facts) >= 40, f"{len(facts)} example facts read from the fact-model page")
+seen = collections.defaultdict(set)
+for f in facts:
+    ks = {t.split(":")[0] for t in f.get("invalidators", [])}; seen[f["class"]] |= ks
+    if ck[f["class"]] is not None:
+        say(ks <= ck[f["class"]], f"{f['class']} fact ({f['status']}, {f['source']['identity']}) carries only declared kinds {sorted(ks)}")
+unexercised = {"graph": {"pull_request"}}  # R17 lists a pull-request parent, child or blocker under its kind; the page's graphs relate issues only
+for k in kinds:
+    if ck[k[1]] is not None: say(ck[k[1]] - unexercised.get(k[1], set()) <= seen[k[1]], f"every declared kind of {k[1]} appears on some example fact (declared {sorted(ck[k[1]])}, seen {sorted(seen[k[1]])}, admitted unexercised {sorted(unexercised.get(k[1], set()))})")
+    if ck[k[1]] is not None: say(not (unexercised.get(k[1], set()) & seen[k[1]]), f"the unexercised list for {k[1]} names only kinds no example shows")
+allk = set().union(*(ck[c] for c in ck if ck[c] is not None))
+say(seen["next_action"] <= allk, "the derived fact's tokens are drawn from its inputs' kinds")
+
+# --- scenarios execute against Example 1
+ex1 = fm_doc[fm_doc.index("### Example 1"):fm_doc.index("### Example 2")]
+snap = []
+for blk in re.findall(r"```json\n(.*?)```", ex1, flags=re.S):
+    obj = json.loads(blk); snap += obj if isinstance(obj, list) else [obj]
+say(len(snap) == 10 and {f["class"] for f in snap} == set(fm_classes), "Example 1 is the complete snapshot: one fact per class")
+by = {f["class"]: f for f in snap}; key_of = {r[1]: r[2] for r in fm if r[0] == "key"}
+for s in recs("scenario"):
+    name, ev, tok, expect, note = s[1:6]
+    stale_part, derived_part = (expect.split(";") + [""])[:2]
+    stale = {f["class"] for f in snap if tok in f.get("invalidators", []) and f["class"] != "next_action"}
+    derived = {"next_action"} if any(key_of[c] in by["next_action"].get("inputs", []) for c in stale) else set()
+    want_stale = set(stale_part.split(",")) if stale_part else set(); want_derived = set(derived_part.split(",")) if derived_part else set()
+    say(tok in fires and False or tok.split(":")[0] in fires[ev], f"scenario {name}: the fired token's kind {tok.split(':')[0]} is one the {ev} event fires")
+    say(stale == want_stale, f"scenario {name}: facts carrying {tok} are exactly {sorted(want_stale)} (got {sorted(stale)})")
+    say(derived == want_derived, f"scenario {name}: the derived fact follows ({sorted(derived)})")
+    col = ev_names.index(ev); mrow = {m[1]: m[2].split(",")[col] for m in recs("matrix")}
+    say(all(mrow[c] == "stale" for c in stale), f"scenario {name}: every stale fact's class is 'stale' in the matrix column for {ev}")
+    say(all(mrow[c] in ("stale", "re-read") for c in stale) and (not derived or mrow["next_action"] == "derived"), f"scenario {name}: the matrix admits the observed effects")
+    say(stale, f"scenario {name}: at least one fact is stale (a scenario that moves nothing proves nothing)")
+say(len({s[3] for s in recs("scenario")}) == len(recs("scenario")), "every scenario fires a distinct token")
+say({s[2] for s in recs("scenario")} >= {"push", "comment", "base-move", "metadata", "ruleset", "repository"}, "the scenarios cover the token-firing events except relationship (Example 1 lists no other work unit's relationship to move)")
+
+# --- parity: the page renders exactly the authority
+def norm(x): return re.sub(r"\s+", " ", x.replace("\\|", "|").replace("`", "")).strip()
+def cells(line): return [c.strip() for c in line.strip().strip("|").split(" | ")]
+def table(header):
+    i = doc.index(header); body = doc[doc.index("\n", doc.index("\n", i) + 1) + 1:]
+    return [cells(l) for l in body.split("\n\n")[0].split("\n") if l.startswith("|")]
+def exact(header, k, cols, label):
+    """every row of the table is a record of kind k with the listed TSV columns, in order, and nothing else"""
+    t = table(header); want = recs(k)
+    say(len(t) == len(want), f"the {label} table has one row per {k} record ({len(t)} rows, {len(want)} records)")
+    for r, c in zip(want, t):
+        say([norm(x) for x in c] == [norm(r[i]) for i in cols], f"{label} row {r[1]} is the TSV's text, column for column")
+    return t
+exact("| Event | Fires |", "event", [1, 2, 3, 4], "event")
+exact("| Class | Invalidator kinds |", "kinds", [1, 2, 3], "kinds")
+exact("| Effect | Meaning |", "effect", [1, 2], "effect")
+exact("| Situation | Outcome |", "conflict", [1, 2, 3, 4], "conflict")
+exact("| Failure | Status |", "unreadable", [1, 2, 3, 4], "unreadable")
+exact("| From | To |", "migration", [1, 2, 3], "migration")
+exact("| Scenario | Event |", "scenario", [1, 2, 3, 4, 5], "scenario")
+mt = table("| Class | `push` |")
+hdr = cells(doc[doc.index("| Class | `push` |"):].split("\n")[0])
+say([norm(h) for h in hdr[1:]] == ev_names, "the matrix columns are the events, in event order")
+say(len(mt) == len(recs("matrix")), "the matrix table has one row per matrix record")
+for r, c in zip(recs("matrix"), mt):
+    say(norm(c[0]) == r[1] and [norm(x) for x in c[1:]] == r[2].split(","), f"matrix row {r[1]} on the page is the TSV's, cell for cell")
+say(re.search(r"contract version 1, written against fact-model\s+schema version 1", doc) is not None, "the page names the contract version and the schema version it binds to")
+rules_md = doc[doc.index("## Rules"):doc.index("## Relation to the rest of the model")]
+found = re.findall(r"^- \*\*(F\d+)\*\* (.*?)(?=^- \*\*F|\Z)", rules_md, flags=re.S | re.M)
+say([f[0] for f in found] == [r[1] for r in recs("rule")], "the rules list has exactly the TSV's rules, in order")
+for r, f in zip(recs("rule"), found): say(norm(f[1]) == norm(r[2]), f"rule {r[1]} statement is the TSV's, verbatim")
+covered = {"version": {1}, "schema": {1}, "event": {1, 2, 3, 4}, "kinds": {1, 2, 3}, "effect": {1, 2}, "matrix": {1, 2}, "conflict": {1, 2, 3, 4}, "unreadable": {1, 2, 3, 4}, "migration": {1, 2, 3}, "scenario": {1, 2, 3, 4, 5}, "rule": {1, 2}}
+unchecked = sorted({f"{r[0]}[{i}]" for r in rows for i in range(1, len(r)) if i not in covered.get(r[0], set())})
+say(not unchecked, f"every column of every record kind is rendered on the page and compared: {unchecked or 'none unchecked'}")
+for blk in re.findall(r"(?:^\|.*\n)+", doc, flags=re.M):
+    ls = blk.strip("\n").split("\n"); h = cells(ls[0]); n = len(h)
+    sep = [c.strip() for c in ls[1].strip().strip("|").split("|")]
+    off = [l for l in ls[2:] if len(cells(l)) != n]
+    say(not off and len(sep) == n and all(c and set(c) <= set("-:") for c in sep), f"table '{h[0]}' has {n} columns in every row")
+print("OK the python block ran to completion")
+PY
+)
+EOF
+[ "$last" = "OK the python block ran to completion" ] && ok || bad "the python block did not run to completion (an exception would otherwise pass silently)"
+
+# ======================== the derivation is discriminating: a hand-edited matrix cell fails ========================
+mtsv="$WORK/mutant-freshness.tsv"
+sed 's/^matrix\trepository\tnone,none,none,none,none,none,none,stale/matrix\trepository\tnone,none,none,none,none,none,none,none/' "$TSV" > "$mtsv"
+cmp -s "$TSV" "$mtsv" && bad "control: the mutation did not change the repository matrix row" || ok
+if python3 - "$mtsv" <<'PY' 2>/dev/null
+import sys
+rows = [l.split("\t") for l in open(sys.argv[1]).read().split("\n") if l.strip() and not l.startswith("#")]
+ev = [r[1] for r in rows if r[0] == "event"]; fires = {r[1]: (set() if r[2] == "none" else set(r[2].split(","))) for r in rows if r[0] == "event"}
+ck = {r[1]: (None if r[2] == "inputs" else set(r[2].split(","))) for r in rows if r[0] == "kinds"}
+m = {r[1]: r[2].split(",") for r in rows if r[0] == "matrix"}
+def eff(c, e):
+    if e in ("schema", "unreadable"): return "unknown"
+    if c == "next_action": return "derived" if any(eff(x, e) in ("stale", "re-read") for x in ck if x != "next_action") else "none"
+    if fires[e] & ck[c]: return "stale"
+    return "re-read" if (e == "check-run" and c == "checks") else "none"
+sys.exit(0 if all(m[c] == [eff(c, e) for e in ev] for c in m) else 1)
+PY
+then bad "a hand-edited matrix cell (repository unaffected by a repository event) must fail the derivation check"; else ok; fi
+
+finish "fact freshness (#732)"

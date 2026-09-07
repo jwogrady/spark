@@ -1,0 +1,96 @@
+# Spark — freshness, invalidation and conflict contract for operative facts (contract version 1)
+#
+# This file is the machine-readable authority for how an operative fact (preferences/fact-model.tsv,
+# schema version 1) becomes stale, what a consumer does when a source cannot be re-read, and how
+# conflicting evidence resolves. reference/fact-freshness.md renders the same records for a reader and
+# is checked against this data by the behavioral suite tests/test-fact-freshness.sh; prose is never
+# the contract.
+#
+# Record kinds (tab-separated; a line starting with # is a comment):
+#   version     <n>                                      this contract's version
+#   schema      <n>                                      the fact-model schema version it is written against
+#   event       <name> <fires> <observed-as> <meaning>   an invalidation event class; fires = invalidator kinds (or none)
+#   kinds       <class> <invalidator kinds> <why>        the tokens a class's facts may carry (inputs = the union of a derived fact's inputs)
+#   effect      <token> <meaning>                        the closed vocabulary of the matrix cells
+#   matrix      <class> <effect per event, in event order, comma-separated>   derived from kinds × fires (F2); the suite recomputes it
+#   conflict    <situation> <outcome> <detail> <rule>    deterministic outcome for conflicting or duplicate evidence
+#   unreadable  <failure> <status> <reason-form> <rule>  status when a source cannot be re-read
+#   migration   <from> <to> <rule>                       the schema/compiler version rule
+#   scenario    <name> <event> <fired token> <stale classes;derived> <note>   executable: applied to Example 1 of the fact model
+#   rule        <id> <statement>                         the rules a consumer must honor, verbatim on the page
+version	1
+schema	1
+# --- Events: what changes, which invalidator kinds fire, how a consumer observes it
+event	push	head	the pull request's head commit differs from the head: token	A pull request's HEAD moves — a new commit, a rebase or a force-push. Every fact carrying head:<old> is stale; nothing judged on the old HEAD is reused for the new one.
+event	base-move	ref	the base branch's target commit differs from the head fact's base	The base branch the work unit targets moves. Facts carrying ref:<repository>/<base_ref> are stale: the head fact's base commit and the merge picture change while the HEAD stands.
+event	metadata	issue,pull_request	the node's updated_at is later than the fact's source.version, or the node is closed, reopened, transferred or deleted	An issue's or pull request's title, body, state, labels, assignees, milestone or native relationships change. Facts carrying issue:/pull_request:<that node> are stale.
+event	comment	comment	the comment's updated_at is later than the fact's source.version, or the comment is gone	A comment that records a verdict or a decision is created, edited or deleted. Facts carrying comment:<that comment> are stale; a new comment is also a metadata event of its node.
+event	relationship	issue,pull_request,milestone	a parent, child, blocker or milestone listed by the fact changes state or membership	A parent, child, blocker or milestone relationship changes. The graph and placement facts that list the related node or the milestone are stale.
+event	check-run	none	the check-runs listing for the HEAD (latest per name) differs from results, or any result is non-terminal	A check run or workflow run at the HEAD completes, is re-run or is requested. No token changes — the HEAD is the same — so the checks fact is re-read on observation: a non-terminal result is never carried forward and a terminal one is re-read when a merge decision is derived.
+event	ruleset	ruleset	the repository's rulesets or the required-check set differ from required	The repository's rulesets change which checks are required. The checks fact for every open work unit carries ruleset:<repository> and is stale.
+event	repository	repository	the repository's updated_at, default branch, settings or the observing identity's permission differ from what was read	Repository settings, default branch or permissions change. Facts carrying repository:<repository> are stale; a permission loss also makes the next read of any node UNKNOWN (unreadable records).
+event	schema	none	the snapshot's schema_version differs from the consumer's fact-model version, or the compiler that derived a fact changed its version	The fact model's schema version or the compiler's interpretation changes. Every fact of the snapshot is UNKNOWN to that consumer (R9); the snapshot is recompiled, never migrated in place.
+event	unreadable	none	a read of the source fails: permission denied, not found, rate-limited, timed out, or malformed	An authoritative source cannot be re-read. The fact takes the status the unreadable record assigns, with detail.reason naming the failure; the previous value is never reused as authority.
+# --- Class kinds: the invalidator kinds each class's facts may carry (the fact model's R7/R17, machine-readable)
+kinds	work_unit	issue,pull_request	its own node, under the node's kind (R17)
+kinds	repository	repository	the repository node it describes (R17)
+kinds	placement	issue,pull_request,milestone	the work unit it was read from and the milestone it is placed in
+kinds	graph	issue,pull_request	the node it was read from and every parent, child and blocker it represents, each under its kind (R17)
+kinds	authority	comment	the decision record each grant and boundary rests on (R5, R17); permissions are not a source of authority
+kinds	acceptance	head,issue	the exact HEAD it was judged on (R7) and the contract's node
+kinds	head	head,ref,issue	the exact HEAD (R7), the base branch whose target the merge picture depends on, and — with no HEAD — the issue it was read from
+kinds	review	head,comment,issue	the exact HEAD (R7), the verdict record (R17), and — with no HEAD — the issue
+kinds	checks	head,ruleset,issue	the exact HEAD (R7), the rulesets that decide which checks are required, and — with no HEAD — the issue
+kinds	next_action	inputs	derived: it may carry any token of its inputs' kinds — at least the HEAD it was derived at — and it re-derives when any input's version changes, because its own version binds every input's (R4, R15)
+# --- Effects: the closed vocabulary of the class × event matrix
+effect	stale	an event fires a token the fact carries: the fact is not usable until re-read from its source
+effect	re-read	no token changes but the source can have changed at the same identity: the fact is re-read on observation
+effect	derived	an input of the derived fact is stale or re-read: the fact is re-derived from re-read inputs (R4, R15), never patched
+effect	unknown	the fact is UNKNOWN to the consumer until the source is re-read or the snapshot recompiled (R9, unreadable records)
+effect	none	the event cannot change the fact: no token it carries fires
+# --- Matrix: derived — for each class, the effect of each event in event order (F2)
+matrix	work_unit	none,none,stale,none,stale,none,none,none,unknown,unknown
+matrix	repository	none,none,none,none,none,none,none,stale,unknown,unknown
+matrix	placement	none,none,stale,none,stale,none,none,none,unknown,unknown
+matrix	graph	none,none,stale,none,stale,none,none,none,unknown,unknown
+matrix	authority	none,none,none,stale,none,none,none,none,unknown,unknown
+matrix	acceptance	stale,none,stale,none,stale,none,none,none,unknown,unknown
+matrix	head	stale,stale,stale,none,stale,none,none,none,unknown,unknown
+matrix	review	stale,none,stale,stale,stale,none,none,none,unknown,unknown
+matrix	checks	stale,none,stale,none,stale,re-read,stale,none,unknown,unknown
+matrix	next_action	derived,derived,derived,derived,derived,derived,derived,derived,unknown,unknown
+# --- Conflicts: deterministic outcomes (R8); a human or a released contract resolves a CONFLICT, never the model
+conflict	disagreeing-authorities	CONFLICT	reason names the disagreement; candidates list every record's identity	Two authoritative inputs disagree (two trusted verdict records for one HEAD, two decision records for one grant): CONFLICT with both named; no first-write, last-write or plausibility rule chooses (R8).
+conflict	malformed-beside-valid	CONFLICT	reason names the malformation; candidates list the malformed and the valid record	A record that does not parse or does not canonicalize stands beside a valid one for the same fact: CONFLICT, because the model cannot know which the author meant (status CONFLICT).
+conflict	duplicates-agree	ESTABLISHED	no detail; source.identity is the earliest record; every duplicate is listed as an invalidator	Two or more records for one fact say the same thing: ESTABLISHED from the earliest durable record, every duplicate carried as a comment: token so an edit to any of them fires.
+conflict	noncanonical-identity	canonicalized	no detail; the fact carries the canonical spelling	A source spells an identity in a projection (upper-case owner, refs/heads/ prefix, .git suffix, a bare issue number): the compiler emits the one canonical representation (R1); a record whose identity does not canonicalize to one representation is malformed evidence.
+conflict	other-head	historical	no fact of the current snapshot; the record stays reachable through provenance	Evidence judged on another HEAD (a PASS for head:A when the HEAD is B) is historical: its head: token names the other HEAD, it never enters the current fact and it never conflicts with current evidence (Example 3 of the fact model).
+conflict	other-work-unit	historical	no fact of the current snapshot; the record stays reachable through provenance	Evidence that belongs to another work unit (a grant targeting another repository, a review on another pull request) is historical for this snapshot: it is distinguishable by its work-unit token and confers nothing here (Example 6 of the fact model).
+# --- Unreadable sources: the status a failed re-read yields; the old value is never authority again
+unreadable	permission-denied	UNKNOWN	HTTP 401 or 403 for the observing identity, with the endpoint	The observing identity may not read the source: UNKNOWN, never a permissive default and never the previous value (Example 7 of the fact model).
+unreadable	not-found	UNKNOWN	HTTP 404 with the node or record identity	The node or record is gone, transferred or never existed: UNKNOWN; a decision or verdict whose record is gone confers nothing.
+unreadable	rate-limited	UNKNOWN	HTTP 429, or 403 with a rate-limit header, with the reset time	The source refused the read for now: UNKNOWN until a later read; the consumer schedules the retry, the fact does not pretend.
+unreadable	timeout	UNKNOWN	the transport error, with the endpoint	The read did not complete: UNKNOWN; a partial response is no response.
+unreadable	malformed-alone	UNKNOWN	the parse or canonicalization failure, with the record identity in candidates	The only record for a fact does not parse or does not canonicalize: UNKNOWN with the record named, so an auditor can drill down; beside a valid record it is a CONFLICT instead.
+# --- Migration: schema and compiler version changes
+migration	1	1	A consumer at fact-model schema version 1 reads only snapshots with schema_version 1. Any other version makes every fact UNKNOWN to it (R9). Nothing is migrated in place: a snapshot is recompiled by a compiler of the consumer's version. A compiler change that alters how a fact is interpreted is a new schema version, so the version string of every derived fact changes with it (R4).
+# --- Scenarios: executable against Example 1 of reference/fact-model.md (the suite applies each fired token)
+scenario	push	push	head:0123456789abcdef0123456789abcdef01234567	acceptance,head,review,checks;next_action	Example 1 after a new commit: the four HEAD-bound facts are stale and next_action is re-derived; work_unit, repository, placement, graph and authority stand.
+scenario	verdict-edit	comment	comment:github.com/acme/widgets#42/comment/9100	review;next_action	The verdict record is edited: only the review fact is stale (and the derived action); the HEAD, checks and acceptance stand.
+scenario	decision-edit	comment	comment:github.com/acme/widgets#7/comment/9001	authority;next_action	The standing decision record is edited: the authority fact is stale and the derived action with it; nothing HEAD-bound moves.
+scenario	base-move	base-move	ref:github.com/acme/widgets/master	head;next_action	master moves under the pull request: the head fact (its base commit) is stale; the review, checks and acceptance at the HEAD stand.
+scenario	gate-edit	metadata	issue:github.com/acme/widgets#41	placement,graph,acceptance;next_action	The implemented issue's metadata changes: placement, graph and the acceptance contract read from it are stale.
+scenario	ruleset	ruleset	ruleset:github.com/acme/widgets	checks;next_action	The repository's rulesets change: the checks fact is stale (which checks are required may have changed).
+scenario	repository	repository	repository:github.com/acme/widgets	repository;next_action	Repository settings change: the repository fact is stale; authority stands (it rests on decision records, not permissions).
+# --- Rules
+rule	F1	Freshness is decided by identity, never by age. A fact is current while every token it carries names an unchanged node and its source.version is the source's current version; a time-based check may trigger a re-read but never keeps a fact current.
+rule	F2	An event fires the invalidator kinds its event record lists. A fact is stale exactly when an event fires a token it carries; the class × event matrix is derived from the class kinds and the event kinds and is never edited by hand.
+rule	F3	A stale fact is not usable as authority. It is re-read from its source, and the re-read yields ESTABLISHED, UNKNOWN, CONFLICT or NOT_APPLICABLE per the fact model; the previous value survives only as provenance.
+rule	F4	A derived fact is re-derived whenever any input is stale or re-read (R4, R15); it is never patched, and its version string changes with any input's version.
+rule	F5	A source that cannot be re-read yields the status its unreadable record assigns, with detail.reason naming the failure and detail.candidates naming what could be seen. The old value never survives as authority: there is no stale authoritative reuse.
+rule	F6	Conflicts resolve only by the conflict records: both candidates named, no first-write, no last-write, no plausibility (R8). A released contract may add a precedence rule; the model never infers one.
+rule	F7	Evidence for another HEAD or another work unit is historical, distinguishable by its head: or work-unit token; it never enters the current fact and never competes with current evidence.
+rule	F8	A schema or compiler version mismatch makes every fact UNKNOWN to the consumer (R9). There is no in-place migration in this version; a snapshot is recompiled.
+rule	F9	Provenance is a pointer (R2, R3, R16). Deciding freshness reads tokens and versions in the snapshot, never history; drill-down loads the source on demand.
+rule	F10	Checks are observation-fresh at a HEAD: a non-terminal result is never carried into a snapshot that decides an action, and a terminal result is re-read when a merge decision is derived, because a check can be re-run at the same HEAD without any token changing.
+rule	F11	Cached or inferred capability never becomes authority (R5). An authority fact changes only through its decision records; a permission change makes reads UNKNOWN, it grants nothing.

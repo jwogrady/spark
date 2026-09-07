@@ -65,6 +65,7 @@ other way round.
 | **Evaluation formats** — the TSV contracts under `evaluations/`, the evidence index, rubric/rate tables | **Internal** | Repository-governance and research surfaces, not a consumer API; they can change with the governance that owns them |
 | **Governance and internal repository files** — ADRs, the product Constitution, `docs/` (dev docs, never shipped), CI scripts under `.github/` | **Internal** | Belong to this repository's own engineering; they carry no external compatibility promise |
 | **Operative fact model** — `preferences/fact-model.tsv` and [fact-model.md](fact-model.md), schema version 1 | **Experimental** | The contract between fact sources and their consumers while snapshot work is validated; it carries its own version and evolution rule, and a new version may land in a minor release |
+| **Fact freshness contract** — `preferences/fact-freshness.tsv` and [fact-freshness.md](fact-freshness.md), contract version 1 | **Experimental** | When an operative fact is stale, what an unreadable source yields and how conflicts resolve; versioned with the fact model, so a new schema version is a new contract version |
 | Anything explicitly labeled experimental in its own docs | **Experimental** | May change or be withdrawn in any release; opt in knowingly |
 
 ## Known limitations (stated, not hidden)
