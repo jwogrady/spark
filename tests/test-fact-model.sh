@@ -127,6 +127,10 @@ def kind(k, *cols):
     """each parity loop declares the TSV columns it compares (1 = the record's name); the last check proves every column of every record kind is on the page"""
     seen.setdefault(k, set()).update(cols); return [r for r in rows if r[0] == k]
 def raw(c): return c.strip().strip("`").replace("\\|", "|")
+def exact(header, k, label=None):
+    """the table renders exactly the TSV's records of kind k: as many rows, each first cell unique"""
+    t = table(header); keys = [norm(c[0]) for c in t]; want = [r[1] for r in rows if r[0] == k]
+    say(len(t) == len(want) and len(set(keys)) == len(keys) and set(keys) == set(want), f"the {label or k} table renders exactly the {len(want)} {k} records: {len(t)} rows, {len(set(keys))} distinct, none extra")
 keyof = {r[1]: r[2] for r in kind("key", 1, 2)}
 cls = {norm(c[0]): c for c in table("| Class | Canonical key |")}
 for r in kind("class", 1, 2, 3, 4):
@@ -171,6 +175,14 @@ found = {m.group(1): norm(m.group(2)) for m in re.finditer(r"^- \*\*(R\d+)\*\* (
 for r in kind("rule", 1, 2):
     say(found.get(r[1]) == norm(r[2]), f"rule {r[1]} statement is the TSV's, verbatim")
 say(len(found) == len([r for r in rows if r[0] == "rule"]), "the page states no rule the TSV lacks")
+for header, k, label in (("| Class | Canonical key |", "class", "class"), ("| Field | Required |", "field", "envelope"), ("| Kind | Canonical form |", "identifier", "identifier"),
+                         ("| Kind | Grammar (ERE) |", "invalidator", "invalidator"), ("| Status | `value` allowed |", "status", "status"), ("| Source type | What it is |", "source", "source"),
+                         ("| Boundary | Evidence fact |", "boundary-evidence", "boundary"), ("| Facet | Fields |", "facet", "facet"), ("| Class | Admitted statuses |", "class-status", "class-status"),
+                         ("| Object | Shape |", "shape", "shape")):
+    exact(header, k, label)
+say(sorted(keyof) == sorted(r[1] for r in rows if r[0] == "class"), "one key record per class, no more")
+say(sorted(sidr) == sorted(r[1] for r in rows if r[0] == "source") == sorted(sverr), "one source-identity and one source-version record per source type, no more")
+say(len(re.findall(r"^- \*\*R\d+\*\* ", rules_md, flags=re.M)) == len([r for r in rows if r[0] == "rule"]), "the rules list has exactly one entry per rule record, no duplicate")
 unchecked = sorted({f"{r[0]}[{i}]" for r in rows for i in range(1, len(r)) if i not in seen.get(r[0], set())})
 say(not unchecked, f"every column of every record kind in the TSV is rendered on the page and compared: {unchecked or 'none unchecked'}")
 for blk in re.findall(r"(?:^\|.*\n)+", doc, flags=re.M):
@@ -908,7 +920,11 @@ for x in 'github.com./acme/widgets' 'github..com/acme/widgets' '-github.com/acme
          'github.com/acme/.' 'github.com/acme/..' 'github.com/acme/' "github.com/$(printf 'a%.0s' $(seq 40))/widgets" "github.com/acme/$(printf 'a%.0s' $(seq 101))"; do
   accepts "$(m "$rp" 'x=sys.argv[2]; f["value"]["id"]=x; f["source"]["identity"]=x; f["invalidators"]=["repository:"+x]' "$x")" && bad "repository spelling '$x' must be rejected — not a GitHub identity (R1/R14)" || ok
 done
-for x in 'github.com/acme/.github' 'ghe.example.internal/acme-2/my_repo.v2' 'github.com/acme/..dots' "github.com/$(printf 'a%.0s' $(seq 39))/widgets" "github.com/acme/$(printf 'a%.0s' $(seq 100))"; do
+l63="$(printf 'a%.0s' $(seq 63))"; l61="$(printf 'a%.0s' $(seq 61))"
+for x in "${l63}a.com/acme/widgets" "$l63.$l63.$l63.$l63/acme/widgets" "www.${l63}a.com/acme/widgets"; do
+  accepts "$(m "$rp" 'x=sys.argv[2]; f["value"]["id"]=x; f["source"]["identity"]=x; f["invalidators"]=["repository:"+x]' "$x")" && bad "host '$x' must be rejected — a DNS label is at most 63 characters, a hostname 253" || ok
+done
+for x in 'github.com/acme/.github' 'ghe.example.internal/acme-2/my_repo.v2' 'github.com/acme/..dots' "github.com/$(printf 'a%.0s' $(seq 39))/widgets" "github.com/acme/$(printf 'a%.0s' $(seq 100))" "$l63.com/acme/widgets" "$l63.$l63.$l63.$l61/acme/widgets"; do
   accepts "$(m "$rp" 'x=sys.argv[2]; f["value"]["id"]=x; f["source"]["identity"]=x; f["invalidators"]=["repository:"+x]' "$x")" && ok || bad "control: GitHub identity '$x' is a valid repository"
 done
 accepts "$rp" && ok || bad "control: a canonical repository fact is accepted"
