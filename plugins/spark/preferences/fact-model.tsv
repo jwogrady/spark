@@ -131,7 +131,7 @@ status	NOT_APPLICABLE	no	The fact class does not apply to this work unit: a HEAD
 # engine read them identically. Every class is positive (letters, digits, enumerated
 # punctuation), so whitespace and control characters are outside every grammar by construction.
 # --- Canonical identifiers: one representation; anything else is a projection
-identifier	repository	^(([a-z0-9][a-z0-9-]*)?[a-z0-9]\.)+([a-z0-9][a-z0-9-]*)?[a-z0-9]/[a-z0-9]+(-[a-z0-9]+)*/([a-z0-9_-][a-z0-9_.-]*|\.[a-z0-9_-][a-z0-9_.-]*|\.\.[a-z0-9_.-]+)$	<host>/<owner>/<name>, all lower-case (GitHub compares owner and name case-insensitively, so one spelling is the identity), no scheme: the host is DNS labels (letters, digits, inner hyphens) with at least one dot and no trailing dot; the owner is a GitHub login (alphanumerics joined by single hyphens, at most 39 characters by constraint); the name is GitHub's (letters, digits, . _ -; never exactly . or ..; at most 100 characters by constraint) and never ends in .git — that is the clone URL's spelling, a projection
+identifier	repository	^(([a-z0-9][a-z0-9-]*)?[a-z0-9]\.)+([a-z0-9][a-z0-9-]*)?[a-z0-9]/[a-z0-9]+(-[a-z0-9]+)*/([a-z0-9_-][a-z0-9_.-]*|\.[a-z0-9_-][a-z0-9_.-]*|\.\.[a-z0-9_.-]+)$	<host>/<owner>/<name>, all lower-case (GitHub compares owner and name case-insensitively, so one spelling is the identity), no scheme: the host is DNS labels (letters, digits, inner hyphens; each at most 63 characters and the whole at most 253, by constraint) with at least one dot and no trailing dot; the owner is a GitHub login (alphanumerics joined by single hyphens, at most 39 characters by constraint); the name is GitHub's (letters, digits, . _ -; never exactly . or ..; at most 100 characters by constraint) and never ends in .git — that is the clone URL's spelling, a projection
 identifier	work-unit	^(([a-z0-9][a-z0-9-]*)?[a-z0-9]\.)+([a-z0-9][a-z0-9-]*)?[a-z0-9]/[a-z0-9]+(-[a-z0-9]+)*/([a-z0-9_-][a-z0-9_.-]*|\.[a-z0-9_-][a-z0-9_.-]*|\.\.[a-z0-9_.-]+)#[1-9][0-9]*$	<repository>#<number>; a bare #<number> is a projection, never an identity
 identifier	comment	^(([a-z0-9][a-z0-9-]*)?[a-z0-9]\.)+([a-z0-9][a-z0-9-]*)?[a-z0-9]/[a-z0-9]+(-[a-z0-9]+)*/([a-z0-9_-][a-z0-9_.-]*|\.[a-z0-9_-][a-z0-9_.-]*|\.\.[a-z0-9_.-]+)#[1-9][0-9]*/comment/[1-9][0-9]*$	<work-unit>/comment/<comment id>
 identifier	milestone	^(([a-z0-9][a-z0-9-]*)?[a-z0-9]\.)+([a-z0-9][a-z0-9-]*)?[a-z0-9]/[a-z0-9]+(-[a-z0-9]+)*/([a-z0-9_-][a-z0-9_.-]*|\.[a-z0-9_-][a-z0-9_.-]*|\.\.[a-z0-9_.-]+)/milestone/[1-9][0-9]*$	<repository>/milestone/<number>
@@ -167,15 +167,15 @@ invalidator	ruleset	^ruleset:(([a-z0-9][a-z0-9-]*)?[a-z0-9]\.)+([a-z0-9][a-z0-9-
 # (portable ERE, as every grammar in this file — see the grammar dialect note).
 # A value is canonical only when it matches its grammar AND none of its constraints.
 constraint	repository	\.git$	the name never carries the clone URL's .git suffix
-constraint	repository	^[a-z0-9.-]+/([a-z0-9-]{40}|[a-z0-9-]+/[a-z0-9_.-]{101})	an owner is at most 39 characters and a name at most 100 (GitHub's limits)
+constraint	repository	^([a-z0-9.-]{254}|([a-z0-9-]+\.)*[a-z0-9-]{64}|[a-z0-9.-]+/([a-z0-9-]{40}|[a-z0-9-]+/[a-z0-9_.-]{101}))	a host label is at most 63 characters and a host 253 (DNS); an owner is at most 39 and a name 100 (GitHub)
 constraint	work-unit	\.git#	the repository name inside a work-unit locator never carries .git
-constraint	work-unit	^[a-z0-9.-]+/([a-z0-9-]{40}|[a-z0-9-]+/[a-z0-9_.-]{101})	an owner is at most 39 characters and a name at most 100 (GitHub's limits)
+constraint	work-unit	^([a-z0-9.-]{254}|([a-z0-9-]+\.)*[a-z0-9-]{64}|[a-z0-9.-]+/([a-z0-9-]{40}|[a-z0-9-]+/[a-z0-9_.-]{101}))	a host label is at most 63 characters and a host 253 (DNS); an owner is at most 39 and a name 100 (GitHub)
 constraint	comment	\.git#	the repository name inside a comment locator never carries .git
-constraint	comment	^[a-z0-9.-]+/([a-z0-9-]{40}|[a-z0-9-]+/[a-z0-9_.-]{101})	an owner is at most 39 characters and a name at most 100 (GitHub's limits)
+constraint	comment	^([a-z0-9.-]{254}|([a-z0-9-]+\.)*[a-z0-9-]{64}|[a-z0-9.-]+/([a-z0-9-]{40}|[a-z0-9-]+/[a-z0-9_.-]{101}))	a host label is at most 63 characters and a host 253 (DNS); an owner is at most 39 and a name 100 (GitHub)
 constraint	milestone	\.git/	the repository name inside a milestone locator never carries .git
-constraint	milestone	^[a-z0-9.-]+/([a-z0-9-]{40}|[a-z0-9-]+/[a-z0-9_.-]{101})	an owner is at most 39 characters and a name at most 100 (GitHub's limits)
+constraint	milestone	^([a-z0-9.-]{254}|([a-z0-9-]+\.)*[a-z0-9-]{64}|[a-z0-9.-]+/([a-z0-9-]{40}|[a-z0-9-]+/[a-z0-9_.-]{101}))	a host label is at most 63 characters and a host 253 (DNS); an owner is at most 39 and a name 100 (GitHub)
 constraint	decision-record	\.git(#|@)	the repository name inside a decision record never carries .git
-constraint	decision-record	^[a-z0-9.-]+/([a-z0-9-]{40}|[a-z0-9-]+/[a-z0-9_.-]{101})	an owner is at most 39 characters and a name at most 100 (GitHub's limits)
+constraint	decision-record	^([a-z0-9.-]{254}|([a-z0-9-]+\.)*[a-z0-9-]{64}|[a-z0-9.-]+/([a-z0-9-]{40}|[a-z0-9-]+/[a-z0-9_.-]{101}))	a host label is at most 63 characters and a host 253 (DNS); an owner is at most 39 and a name 100 (GitHub)
 constraint	login	^login:[a-z0-9-]{40}	a GitHub login is at most 39 characters
 constraint	ref	^refs/	a ref is the branch name, never the refs/ path
 constraint	ref	\.\.	no .. anywhere in a ref
@@ -186,15 +186,15 @@ constraint	ref	^@$	the single name @ is not a branch (Git reserves it for HEAD)
 constraint	provenance	(^|/)\.\.?(/|$)	a path is normalized: no . or .. components
 constraint	source-identity/repository-file	(:|/)\.\.?(/|$)	the path after the commit is normalized: no . or .. components
 constraint	source-identity/git	\.git(@|$)	the repository name never carries .git
-constraint	source-identity/git	^[a-z0-9.-]+/([a-z0-9-]{40}|[a-z0-9-]+/[a-z0-9_.-]{101})	an owner is at most 39 characters and a name at most 100 (GitHub's limits)
+constraint	source-identity/git	^([a-z0-9.-]{254}|([a-z0-9-]+\.)*[a-z0-9-]{64}|[a-z0-9.-]+/([a-z0-9-]{40}|[a-z0-9-]+/[a-z0-9_.-]{101}))	a host label is at most 63 characters and a host 253 (DNS); an owner is at most 39 and a name 100 (GitHub)
 constraint	source-identity/github-api	\.git(#|/|$)	the repository name never carries .git
-constraint	source-identity/github-api	^[a-z0-9.-]+/([a-z0-9-]{40}|[a-z0-9-]+/[a-z0-9_.-]{101})	an owner is at most 39 characters and a name at most 100 (GitHub's limits)
+constraint	source-identity/github-api	^([a-z0-9.-]{254}|([a-z0-9-]+\.)*[a-z0-9-]{64}|[a-z0-9.-]+/([a-z0-9-]{40}|[a-z0-9-]+/[a-z0-9_.-]{101}))	a host label is at most 63 characters and a host 253 (DNS); an owner is at most 39 and a name 100 (GitHub)
 constraint	source-identity/repository-file	\.git@	the repository name never carries .git
-constraint	source-identity/repository-file	^[a-z0-9.-]+/([a-z0-9-]{40}|[a-z0-9-]+/[a-z0-9_.-]{101})	an owner is at most 39 characters and a name at most 100 (GitHub's limits)
+constraint	source-identity/repository-file	^([a-z0-9.-]{254}|([a-z0-9-]+\.)*[a-z0-9-]{64}|[a-z0-9.-]+/([a-z0-9-]{40}|[a-z0-9-]+/[a-z0-9_.-]{101}))	a host label is at most 63 characters and a host 253 (DNS); an owner is at most 39 and a name 100 (GitHub)
 constraint	source-identity/human-decision	\.git(#|@)	the repository name never carries .git
-constraint	source-identity/human-decision	^[a-z0-9.-]+/([a-z0-9-]{40}|[a-z0-9-]+/[a-z0-9_.-]{101})	an owner is at most 39 characters and a name at most 100 (GitHub's limits)
+constraint	source-identity/human-decision	^([a-z0-9.-]{254}|([a-z0-9-]+\.)*[a-z0-9-]{64}|[a-z0-9.-]+/([a-z0-9-]{40}|[a-z0-9-]+/[a-z0-9_.-]{101}))	a host label is at most 63 characters and a host 253 (DNS); an owner is at most 39 and a name 100 (GitHub)
 constraint	invalidator	\.git(#|/|$)	the repository name inside any invalidator never carries .git
-constraint	invalidator	^[a-z_]+:[a-z0-9.-]+/([a-z0-9-]{40}|[a-z0-9-]+/[a-z0-9_.-]{101})	an owner is at most 39 characters and a name at most 100 (GitHub's limits)
+constraint	invalidator	^[a-z_]+:([a-z0-9.-]{254}|([a-z0-9-]+\.)*[a-z0-9-]{64}|[a-z0-9.-]+/([a-z0-9-]{40}|[a-z0-9-]+/[a-z0-9_.-]{101}))	a host label is at most 63 characters and a host 253 (DNS); an owner is at most 39 and a name 100 (GitHub)
 constraint	invalidator/ref	\.\.	the embedded ref has no ..
 constraint	invalidator/ref	@\{	the embedded ref has no @{
 constraint	invalidator/ref	\.lock(/|$)	no component of the embedded ref ends in .lock

@@ -140,7 +140,7 @@ both `grep -E` and a second engine.
 
 | Kind | Canonical form | Grammar (ERE) | Example |
 |---|---|---|---|
-| repository | <host>/<owner>/<name>, all lower-case (GitHub compares owner and name case-insensitively, so one spelling is the identity), no scheme: the host is DNS labels (letters, digits, inner hyphens) with at least one dot and no trailing dot; the owner is a GitHub login (alphanumerics joined by single hyphens, at most 39 characters by constraint); the name is GitHub's (letters, digits, . _ -; never exactly . or ..; at most 100 characters by constraint) and never ends in .git — that is the clone URL's spelling, a projection | `^(([a-z0-9][a-z0-9-]*)?[a-z0-9]\.)+([a-z0-9][a-z0-9-]*)?[a-z0-9]/[a-z0-9]+(-[a-z0-9]+)*/([a-z0-9_-][a-z0-9_.-]*\|\.[a-z0-9_-][a-z0-9_.-]*\|\.\.[a-z0-9_.-]+)$` | `github.com/acme/widgets` |
+| repository | <host>/<owner>/<name>, all lower-case (GitHub compares owner and name case-insensitively, so one spelling is the identity), no scheme: the host is DNS labels (letters, digits, inner hyphens; each at most 63 characters and the whole at most 253, by constraint) with at least one dot and no trailing dot; the owner is a GitHub login (alphanumerics joined by single hyphens, at most 39 characters by constraint); the name is GitHub's (letters, digits, . _ -; never exactly . or ..; at most 100 characters by constraint) and never ends in .git — that is the clone URL's spelling, a projection | `^(([a-z0-9][a-z0-9-]*)?[a-z0-9]\.)+([a-z0-9][a-z0-9-]*)?[a-z0-9]/[a-z0-9]+(-[a-z0-9]+)*/([a-z0-9_-][a-z0-9_.-]*\|\.[a-z0-9_-][a-z0-9_.-]*\|\.\.[a-z0-9_.-]+)$` | `github.com/acme/widgets` |
 | work-unit | <repository>#<number>; a bare #<number> is a projection, never an identity | `^(([a-z0-9][a-z0-9-]*)?[a-z0-9]\.)+([a-z0-9][a-z0-9-]*)?[a-z0-9]/[a-z0-9]+(-[a-z0-9]+)*/([a-z0-9_-][a-z0-9_.-]*\|\.[a-z0-9_-][a-z0-9_.-]*\|\.\.[a-z0-9_.-]+)#[1-9][0-9]*$` | `github.com/acme/widgets#42` |
 | comment | <work-unit>/comment/<comment id> | `^(([a-z0-9][a-z0-9-]*)?[a-z0-9]\.)+([a-z0-9][a-z0-9-]*)?[a-z0-9]/[a-z0-9]+(-[a-z0-9]+)*/([a-z0-9_-][a-z0-9_.-]*\|\.[a-z0-9_-][a-z0-9_.-]*\|\.\.[a-z0-9_.-]+)#[1-9][0-9]*/comment/[1-9][0-9]*$` | `github.com/acme/widgets#42/comment/9001` |
 | milestone | <repository>/milestone/<number> | `^(([a-z0-9][a-z0-9-]*)?[a-z0-9]\.)+([a-z0-9][a-z0-9-]*)?[a-z0-9]/[a-z0-9]+(-[a-z0-9]+)*/([a-z0-9_-][a-z0-9_.-]*\|\.[a-z0-9_-][a-z0-9_.-]*\|\.\.[a-z0-9_.-]+)/milestone/[1-9][0-9]*$` | `github.com/acme/widgets/milestone/7` |
@@ -174,15 +174,15 @@ consumer applies them rather than reconstructing them from prose.
 | Scope | Forbidden (ERE) | Meaning |
 |---|---|---|
 | `repository` | `\.git$` | the name never carries the clone URL's .git suffix |
-| `repository` | `^[a-z0-9.-]+/([a-z0-9-]{40}\|[a-z0-9-]+/[a-z0-9_.-]{101})` | an owner is at most 39 characters and a name at most 100 (GitHub's limits) |
+| `repository` | `^([a-z0-9.-]{254}\|([a-z0-9-]+\.)*[a-z0-9-]{64}\|[a-z0-9.-]+/([a-z0-9-]{40}\|[a-z0-9-]+/[a-z0-9_.-]{101}))` | a host label is at most 63 characters and a host 253 (DNS); an owner is at most 39 and a name 100 (GitHub) |
 | `work-unit` | `\.git#` | the repository name inside a work-unit locator never carries .git |
-| `work-unit` | `^[a-z0-9.-]+/([a-z0-9-]{40}\|[a-z0-9-]+/[a-z0-9_.-]{101})` | an owner is at most 39 characters and a name at most 100 (GitHub's limits) |
+| `work-unit` | `^([a-z0-9.-]{254}\|([a-z0-9-]+\.)*[a-z0-9-]{64}\|[a-z0-9.-]+/([a-z0-9-]{40}\|[a-z0-9-]+/[a-z0-9_.-]{101}))` | a host label is at most 63 characters and a host 253 (DNS); an owner is at most 39 and a name 100 (GitHub) |
 | `comment` | `\.git#` | the repository name inside a comment locator never carries .git |
-| `comment` | `^[a-z0-9.-]+/([a-z0-9-]{40}\|[a-z0-9-]+/[a-z0-9_.-]{101})` | an owner is at most 39 characters and a name at most 100 (GitHub's limits) |
+| `comment` | `^([a-z0-9.-]{254}\|([a-z0-9-]+\.)*[a-z0-9-]{64}\|[a-z0-9.-]+/([a-z0-9-]{40}\|[a-z0-9-]+/[a-z0-9_.-]{101}))` | a host label is at most 63 characters and a host 253 (DNS); an owner is at most 39 and a name 100 (GitHub) |
 | `milestone` | `\.git/` | the repository name inside a milestone locator never carries .git |
-| `milestone` | `^[a-z0-9.-]+/([a-z0-9-]{40}\|[a-z0-9-]+/[a-z0-9_.-]{101})` | an owner is at most 39 characters and a name at most 100 (GitHub's limits) |
+| `milestone` | `^([a-z0-9.-]{254}\|([a-z0-9-]+\.)*[a-z0-9-]{64}\|[a-z0-9.-]+/([a-z0-9-]{40}\|[a-z0-9-]+/[a-z0-9_.-]{101}))` | a host label is at most 63 characters and a host 253 (DNS); an owner is at most 39 and a name 100 (GitHub) |
 | `decision-record` | `\.git(#\|@)` | the repository name inside a decision record never carries .git |
-| `decision-record` | `^[a-z0-9.-]+/([a-z0-9-]{40}\|[a-z0-9-]+/[a-z0-9_.-]{101})` | an owner is at most 39 characters and a name at most 100 (GitHub's limits) |
+| `decision-record` | `^([a-z0-9.-]{254}\|([a-z0-9-]+\.)*[a-z0-9-]{64}\|[a-z0-9.-]+/([a-z0-9-]{40}\|[a-z0-9-]+/[a-z0-9_.-]{101}))` | a host label is at most 63 characters and a host 253 (DNS); an owner is at most 39 and a name 100 (GitHub) |
 | `login` | `^login:[a-z0-9-]{40}` | a GitHub login is at most 39 characters |
 | `ref` | `^refs/` | a ref is the branch name, never the refs/ path |
 | `ref` | `\.\.` | no .. anywhere in a ref |
@@ -193,15 +193,15 @@ consumer applies them rather than reconstructing them from prose.
 | `provenance` | `(^\|/)\.\.?(/\|$)` | a path is normalized: no . or .. components |
 | `source-identity/repository-file` | `(:\|/)\.\.?(/\|$)` | the path after the commit is normalized: no . or .. components |
 | `source-identity/git` | `\.git(@\|$)` | the repository name never carries .git |
-| `source-identity/git` | `^[a-z0-9.-]+/([a-z0-9-]{40}\|[a-z0-9-]+/[a-z0-9_.-]{101})` | an owner is at most 39 characters and a name at most 100 (GitHub's limits) |
+| `source-identity/git` | `^([a-z0-9.-]{254}\|([a-z0-9-]+\.)*[a-z0-9-]{64}\|[a-z0-9.-]+/([a-z0-9-]{40}\|[a-z0-9-]+/[a-z0-9_.-]{101}))` | a host label is at most 63 characters and a host 253 (DNS); an owner is at most 39 and a name 100 (GitHub) |
 | `source-identity/github-api` | `\.git(#\|/\|$)` | the repository name never carries .git |
-| `source-identity/github-api` | `^[a-z0-9.-]+/([a-z0-9-]{40}\|[a-z0-9-]+/[a-z0-9_.-]{101})` | an owner is at most 39 characters and a name at most 100 (GitHub's limits) |
+| `source-identity/github-api` | `^([a-z0-9.-]{254}\|([a-z0-9-]+\.)*[a-z0-9-]{64}\|[a-z0-9.-]+/([a-z0-9-]{40}\|[a-z0-9-]+/[a-z0-9_.-]{101}))` | a host label is at most 63 characters and a host 253 (DNS); an owner is at most 39 and a name 100 (GitHub) |
 | `source-identity/repository-file` | `\.git@` | the repository name never carries .git |
-| `source-identity/repository-file` | `^[a-z0-9.-]+/([a-z0-9-]{40}\|[a-z0-9-]+/[a-z0-9_.-]{101})` | an owner is at most 39 characters and a name at most 100 (GitHub's limits) |
+| `source-identity/repository-file` | `^([a-z0-9.-]{254}\|([a-z0-9-]+\.)*[a-z0-9-]{64}\|[a-z0-9.-]+/([a-z0-9-]{40}\|[a-z0-9-]+/[a-z0-9_.-]{101}))` | a host label is at most 63 characters and a host 253 (DNS); an owner is at most 39 and a name 100 (GitHub) |
 | `source-identity/human-decision` | `\.git(#\|@)` | the repository name never carries .git |
-| `source-identity/human-decision` | `^[a-z0-9.-]+/([a-z0-9-]{40}\|[a-z0-9-]+/[a-z0-9_.-]{101})` | an owner is at most 39 characters and a name at most 100 (GitHub's limits) |
+| `source-identity/human-decision` | `^([a-z0-9.-]{254}\|([a-z0-9-]+\.)*[a-z0-9-]{64}\|[a-z0-9.-]+/([a-z0-9-]{40}\|[a-z0-9-]+/[a-z0-9_.-]{101}))` | a host label is at most 63 characters and a host 253 (DNS); an owner is at most 39 and a name 100 (GitHub) |
 | `invalidator` | `\.git(#\|/\|$)` | the repository name inside any invalidator never carries .git |
-| `invalidator` | `^[a-z_]+:[a-z0-9.-]+/([a-z0-9-]{40}\|[a-z0-9-]+/[a-z0-9_.-]{101})` | an owner is at most 39 characters and a name at most 100 (GitHub's limits) |
+| `invalidator` | `^[a-z_]+:([a-z0-9.-]{254}\|([a-z0-9-]+\.)*[a-z0-9-]{64}\|[a-z0-9.-]+/([a-z0-9-]{40}\|[a-z0-9-]+/[a-z0-9_.-]{101}))` | a host label is at most 63 characters and a host 253 (DNS); an owner is at most 39 and a name 100 (GitHub) |
 | `invalidator/ref` | `\.\.` | the embedded ref has no .. |
 | `invalidator/ref` | `@\{` | the embedded ref has no @{ |
 | `invalidator/ref` | `\.lock(/\|$)` | no component of the embedded ref ends in .lock |
