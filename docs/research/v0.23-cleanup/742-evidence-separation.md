@@ -2,7 +2,7 @@
 
 **Model.** `current fact → provenance/index pointer → historical evidence on demand`, never
 `historical evidence → agent reconstruction → current fact`. The pointer is `docs/ops/evidence-index.tsv`:
-every evidence artifact of the repository — 126 files, 919,022 bytes, 15,350 lines under
+every evidence artifact of the repository — 126 files, 921,459 bytes, 15,379 lines under
 `docs/research`, `docs/releases`, `docs/governance`, the three evidence pages under `docs/ops`, `evaluations`
 and `.spark` — is one row or one family member, with a retention class, an explicit *operative now* answer,
 the release/HEAD/work unit it concerned, the fact it supported, who loads or cites it today, and why it is
@@ -21,7 +21,7 @@ are computed from the index and re-checked by the suite.
 
 | Class | Files | Bytes | Lines |
 |---|---|---|---|
-| `active-current` | 33 | 108,496 | 1,887 |
+| `active-current` | 33 | 110,933 | 1,916 |
 | `historical-retained` | 68 | 403,154 | 6,728 |
 | `do-not-delete` | 25 | 407,372 | 6,735 |
 
@@ -40,7 +40,7 @@ reasoning path, and every deletion candidate failed the "independent retention v
 | `docs/ops` | 3 | 138,568 | 2,550 |
 | `docs/releases` | 13 | 103,829 | 1,849 |
 | `docs/research` | 2 | 7,056 | 101 |
-| `docs/research/v0.23-cleanup` | 14 | 172,399 | 2,361 |
+| `docs/research/v0.23-cleanup` | 14 | 174,836 | 2,390 |
 | `docs/research/v0.23-optimization-baseline` | 46 | 385,106 | 6,360 |
 | `evaluations` | 43 | 79,685 | 1,606 |
 
@@ -54,14 +54,14 @@ link counts here. From the index's readers column:
 |---|---|---|---|
 | `docs/research/v0.23-cleanup/741-canonical-truth.md` | `active-current` | yes | `tests/test-doc-roles.sh` |
 | `docs/releases/README.md` | `active-current` | yes | `tests/test-state-docs-chronology.sh` |
-| `docs/releases/v0.1*.md;docs/releases/v0.2[0-2].md` | `do-not-delete` | no | `.github/scripts/ledger-truth-check.sh`; `tests/test-docs-impact.sh`; `tests/test-readme-product-truth.sh`; `tests/test-reconcile-apply.sh`; `tests/test-state-docs-chronology.sh` |
+| `docs/releases/v0.1*.md;docs/releases/v0.2[0-2].md` | `do-not-delete` | yes | `.github/scripts/ledger-truth-check.sh`; `tests/test-docs-impact.sh`; `tests/test-readme-product-truth.sh`; `tests/test-reconcile-apply.sh`; `tests/test-state-docs-chronology.sh` |
 | `docs/governance/capability-evaluation.md` | `active-current` | yes | `plugins/spark/docs/reference/release-docs-checklist.md` |
-| `docs/ops/v0.21-dogfood-evaluation.md` | `do-not-delete` | no | `.github/scripts/ledger-truth-check.sh` |
-| `docs/ops/telemetry-baseline.md` | `do-not-delete` | no | `tests/test-run-telemetry.sh` |
+| `docs/ops/v0.21-dogfood-evaluation.md` | `do-not-delete` | yes | `.github/scripts/ledger-truth-check.sh` |
+| `docs/ops/telemetry-baseline.md` | `do-not-delete` | yes | `tests/test-run-telemetry.sh` |
 | `evaluations/lib/*;evaluations/evidence-index.tsv;evaluations/orchestration/run.sh;evaluations/orchestration/rates.tsv;evaluations/skill-routing/run.sh;evaluations/skill-routing/rates.tsv` | `active-current` | yes | `tests/test-eval-lib.sh`; `tests/test-skill-descriptions.sh` |
 | `.spark/state.json;.spark/preferences.json` | `do-not-delete` | yes | `plugins/spark/bin/spark`; `plugins/spark/docs/README.md`; `plugins/spark/docs/how-to/get-started.md`; `plugins/spark/docs/how-to/resume.md`; `plugins/spark/docs/reference/cli.md`; `plugins/spark/docs/reference/compatibility.md`; `plugins/spark/docs/reference/engineering-preferences.md`; `plugins/spark/docs/reference/fact-freshness.md`; `plugins/spark/docs/reference/fact-model.md`; `plugins/spark/docs/reference/hooks.md`; `plugins/spark/docs/reference/project-standards.md`; `plugins/spark/docs/reference/stability.md`; `plugins/spark/docs/reference/state.md`; `plugins/spark/docs/tutorials/adopt-an-existing-repo.md`; `plugins/spark/docs/tutorials/scaffold-a-new-project.md`; `plugins/spark/preferences/fact-model.tsv`; `plugins/spark/preferences/templates/standards/conventions.md`; `plugins/spark/preferences/templates/standards/engineering-standards.md`; `plugins/spark/skills/bootstrap/SKILL.md`; `plugins/spark/skills/bootstrap/references/profiles.md`; `plugins/spark/skills/codify/SKILL.md`; `plugins/spark/skills/ideate/SKILL.md`; `plugins/spark/skills/knowledge/references/operator-knowledge.md`; `plugins/spark/skills/onboard/SKILL.md`; `plugins/spark/skills/plan/SKILL.md`; `plugins/spark/skills/ship/SKILL.md`; `plugins/spark/skills/validate/SKILL.md`; `tests/bench-memo.sh`; `tests/test-apply-permissions.sh`; `tests/test-brief-resume.sh`; `tests/test-course-derivation.sh`; `tests/test-doctor-standards-boundary.sh`; `tests/test-first-run.sh`; `tests/test-governance-contract.sh`; `tests/test-governance-integration.sh`; `tests/test-governance-schema.sh`; `tests/test-hot-path-memo.sh`; `tests/test-hub.sh`; `tests/test-labels.sh`; `tests/test-merge-strategy.sh`; `tests/test-orient.sh`; `tests/test-preferences.sh`; `tests/test-reconcile-apply.sh`; `tests/test-reconcile-slate.sh`; `tests/test-setup-profiles.sh`; `tests/test-state.sh`; `tests/test-triage-truth.sh` |
 
-**23 files, 244,492 bytes** of the 126-file, 919,022-byte corpus are referenced by code,
+**23 files, 244,492 bytes** of the 126-file, 921,459-byte corpus are referenced by code,
 tests or CI (26 % by bytes). The suite holds this list to the tree: a shipped surface that
 starts naming a non-operative artifact fails until the index lists it.
 
@@ -144,36 +144,65 @@ capture was taken. On any machine with `strace` the suite additionally re-observ
 committed rows back, unbroken; `SPARK_SKIP_OBSERVE=1` is the documented escape for a sandbox that forbids
 `ptrace`, and the suite prints that it skipped rather than passing quietly.
 
-## Two leaks: non-operative evidence on the active path
+## Three current-state dependencies on historical records
 
-| Artifact | Why it is on the path |
-|---|---|
-| `docs/releases/v0.1*.md;docs/releases/v0.2[0-2].md` | the runtime enumerates docs/releases/v*.md for dispositions (reconcile) and its readers are computed over the directory; deleting a record changes reconcile output |
-| `docs/ops/v0.21-dogfood-evaluation.md` | LEAK: the live CI script defaults to this v0.21 record as its ledger; a proposed CI change is recorded in the manifest, not applied |
-| `docs/ops/telemetry-baseline.md` | a test pins the path |
+Separation is proven for the path a session reasons on, and it is not complete for the repository: three closed
+records are read by current-state surfaces today. They are classified `operative-now = yes`, because they are —
+the classification follows the behaviour, not the intent — and each one names the owner who can end the
+dependency. Repairing them here would mean editing CI (human-approved in this repository) and changing verb and
+suite behaviour that belongs to other work units; recording them with owners is this unit's honest boundary.
 
-- **`docs/ops/v0.21-dogfood-evaluation.md`** — `.github/scripts/ledger-truth-check.sh` uses this v0.21
-  record as its *default* ledger (and `docs/releases/v0.21.md` as its default record); the suite that tests
-  the script always passes `--ledger`/`--record` explicitly, so the defaults are never exercised. The fix is a
-  CI change — make the two arguments required, or default them from the current release record — and CI
-  edits are human-approved in this repository, so the change is proposed here and not applied:
+| Artifact | Class | Operative now | Why it is on the current path |
+|---|---|---|---|
+| `docs/releases/v0.1*.md;docs/releases/v0.2[0-2].md` | `do-not-delete` | yes | `spark reconcile`'s release-record residue loop globs `docs/releases/v*.md` and reads each record's `Disposition:` line against the published tags, so every closed record is read by a current-state verb and deleting one changes its output |
+| `docs/ops/v0.21-dogfood-evaluation.md` | `do-not-delete` | yes | the live CI script defaults its ledger to this v0.21 record, so a release two versions old is the fallback truth of a current check |
+| `docs/ops/telemetry-baseline.md` | `do-not-delete` | yes | tests/test-run-telemetry.sh pins this path, so a closed baseline is load-bearing for a suite that runs on every change |
 
-  ```
-  # .github/scripts/ledger-truth-check.sh — proposed
-  -[ -n "$ledger" ] || ledger="$root/docs/ops/v0.21-dogfood-evaluation.md"
-  -[ -n "$record" ] || record="$root/docs/releases/v0.21.md"
-  +[ -n "$ledger" ] || { echo "--ledger is required: the current release's ledger" >&2; exit 2; }
-  +[ -n "$record" ] || { echo "--record is required: the current release's record" >&2; exit 2; }
-  ```
-- **`.spark/state.json`** — the committed work state is a current-truth artifact by definition (ADR-0031),
-  but its narrative (`updated 2026-08-30`) names work long closed (#474, #484, #616, PR #617). It is
-  operative — the runtime reads it — and stale; the state verbs own it, so it is flagged for the next
-  `spark` state update rather than edited by hand here.
+- **`docs/releases/v0.1*.md;docs/releases/v0.2[0-2].md`** — concerns v0.10 – v0.22, one record each; it supported what each release shipped and its disposition. Owner: the reconcile slate (#467); repairing it means giving reconcile the current release record by name instead of the directory
+- **`docs/ops/v0.21-dogfood-evaluation.md`** — concerns milestone #18 (v0.21) driven by v0.20.0; fd407c72; it supported the v0.21 dogfood ledger. Owner: the human who approves CI edits in this repository; the exact diff is proposed on the manifest and deliberately not applied here
+- **`docs/ops/telemetry-baseline.md`** — concerns #574; base 20eabbb; it supported the run-telemetry baseline for #558, #575, #576. Owner: the #558 telemetry lane; repairing it means the suite asserting against a fixture it owns rather than a released baseline
+
+The CI default is the one with a diff ready, and it is deliberately not applied — CI edits are human-approved
+in this repository:
+
+```
+# .github/scripts/ledger-truth-check.sh — proposed
+-[ -n "$ledger" ] || ledger="$root/docs/ops/v0.21-dogfood-evaluation.md"
+-[ -n "$record" ] || record="$root/docs/releases/v0.21.md"
++[ -n "$ledger" ] || { echo "--ledger is required: the current release's ledger" >&2; exit 2; }
++[ -n "$record" ] || { echo "--record is required: the current release's record" >&2; exit 2; }
+```
+
+## One stale current artifact
+
+`.spark/state.json` is a current-truth artifact by definition (ADR-0031) and operative — the runtime reads it —
+but its narrative (`updated 2026-08-30`) names work long closed (#474, #484, #616, PR #617). That is staleness,
+not a dependency on history, so it is listed separately: the state verbs own the file and it is flagged for the
+next `spark` state update rather than edited by hand here.
+
+## Footprint before and after this work unit
+
+Physical, over the same roots, against `29e4f4e` — the commit this branch left:
+
+| | Files | Bytes | Lines |
+|---|---|---|---|
+| before | 123 | 888,064 | 14,913 |
+| after | 126 | 921,459 | 15,379 |
+| delta | +3 | +33,395 | +466 |
+
+The corpus grew, and this page is part of the growth: the index, this manifest, the observation capture and the
+tool that regenerates it are themselves evidence, and they are indexed like everything else. Nothing was moved
+or deleted, so every byte of the delta is new material, not relocation. The reference footprint grew the same
+way: 23 files before this unit, 23 after, the difference being this unit's own artifacts
+becoming readable by name.
 
 ## What is not claimed
 
-No read-count reduction: nothing on the hot path changed in this work unit, so the #730 workload figures would
-be unchanged by construction. No claim that nothing reads the corpus, either — `doctor`'s link validator reads
+The separation claim is narrow and exact: historical evidence is off the path a session reasons on, measured
+verb by verb. It is not a claim that nothing current touches history — three named records are still read by a
+verb, a suite and a CI default, listed above with their owners. No read-count reduction is claimed either:
+nothing on the hot path changed in this work unit, so the #730 workload figures would be unchanged by
+construction, and the corpus grew by this unit's own artifacts, reported above. No claim that nothing reads the corpus, either — `doctor`'s link validator reads
 every Markdown surface it finds, measured above and left in place deliberately, because it is the check that
 keeps this index's pointers valid. What is claimed is machine-checked:
 every evidence artifact is classified and reachable through one index row; a shipped surface that starts naming a

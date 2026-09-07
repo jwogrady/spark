@@ -77,6 +77,34 @@ while IFS=$'\t' read -r fam cls op files bytes lines concerns fact readers why; 
   fi
 done < <(rows)
 
+# --- classification follows behaviour: a family a shipped verb, a suite or a CI script reads is operative now,
+# and a *historical* record in that position is a named dependency, not a footnote
+DEP_MARK="CURRENT DEPENDENCY ON A HISTORICAL RECORD"
+while IFS=$'\t' read -r fam cls op files bytes lines concerns fact readers why; do
+  case "$readers" in
+    *plugins/*|*tests/*|*.github/*)
+      assert_eq "family $fam is read by code, so it is operative now" "yes" "$op"
+      # a record kept for the record, read by current code, is a dependency and must say so; current material is not
+      case "$cls" in
+        do-not-delete|historical-retained)
+          case "$fam" in
+            .spark/*) ;;   # the runtime's own committed state is current by definition (ADR-0031)
+            *) case "$why" in "$DEP_MARK"*) ok ;; *) bad "family $fam is a closed record read by current code but is not marked '$DEP_MARK'" ;; esac ;;
+          esac ;;
+      esac ;;
+  esac
+done < <(rows)
+ndep="$(rows | awk -F'\t' -v m="$DEP_MARK" 'index($10, m) == 1 {n++} END {print n+0}')"
+case "$ndep" in
+  1) word=One ;; 2) word=Two ;; 3) word=Three ;; 4) word=Four ;; 5) word=Five ;; *) word="$ndep" ;;
+esac
+grep -qF -- "## $word current-state dependencies on historical records" "$MAN" && ok || bad "the manifest's dependency heading does not name $ndep"
+assert_eq "the dependency table has one row per dependency" "$ndep" \
+  "$(awk '/^## .* current-state dependencies on historical records$/ {sec=1; next} /^## / {sec=0} sec && /^\| `/ {n++} END {print n+0}' "$MAN")"
+while IFS=$'\t' read -r fam _cls _op _f _b _l _c _fact _r why; do
+  case "$why" in "$DEP_MARK"*) grep -qF -- "- **\`$fam\`**" "$MAN" && ok || bad "the manifest has no bullet for the dependency $fam" ;; esac
+done < <(rows)
+
 # --- the hot-path claim: a shipped surface, test or CI script referencing a non-operative artifact must be a listed reader
 while IFS=$'\t' read -r fam cls op files bytes lines concerns fact readers why; do
   [ "$op" = "no" ] || continue
@@ -197,4 +225,14 @@ assert_eq "manifest names the corpus size" "1" "$(grep -c -- "— $total_files f
 hot_files="$(rows | awk -F'\t' '$9 ~ /(^|;)(plugins\/|tests\/|\.github\/)/ {s+=$4} END {print s+0}')"
 assert_eq "manifest names the reference-footprint file count" "1" "$(grep -c -- "\*\*$hot_files files, " "$MAN")"
 grep -q "labelled as references, not loads" "$MAN" && ok || bad "the manifest labels the static footprint as references"
+# --- before/after: the after figures are the tree's, and the before figures are the base commit's when it is here
+base_sha="$(sed -nE 's/^Physical, over the same roots, against `([0-9a-f]{7})` .*/\1/p' "$MAN" | head -1)"
+[ -n "$base_sha" ] && ok || bad "the manifest does not name the commit it measures against"
+assert_eq "the manifest's after row is the tree's" "1" "$(grep -c "^| after | $total_files | $(printf '%s' "$total_bytes" | sed ':a;s/\B[0-9]\{3\}\>/,&/;ta') | " "$MAN")"
+if [ -n "$base_sha" ] && (cd "$ROOT" && git cat-file -e "$base_sha^{commit}" 2>/dev/null); then
+  bf="$(cd "$ROOT" && git ls-tree -r --name-only "$base_sha" -- docs/research docs/releases docs/governance docs/ops/v0.21-dogfood-evaluation.md docs/ops/telemetry-baseline.md docs/ops/evaluation.md evaluations .spark | grep -c .)"
+  assert_eq "the manifest's before row is the base commit's file count" "1" "$(grep -c "^| before | $bf | " "$MAN")"
+else
+  echo "  · before-figure check skipped: the base commit is not in this checkout"
+fi
 finish "evidence index (#742)"
