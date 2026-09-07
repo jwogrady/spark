@@ -55,7 +55,10 @@ against fact-model schema version 1), rendered by
   duplicate carried as a token; noncanonical spellings are canonicalized; evidence
   for another HEAD or work unit is historical and never competes.
 - **Unreadable** sources yield UNKNOWN with the failure named in `detail`; the
-  old value never survives as authority. A schema or compiler version mismatch
+  old value never survives as authority. Readability is a property of the
+  snapshot: a repository event — including the observing identity's permission
+  — re-reads every source-read fact of the set, so a permission loss cannot
+  leave a cached fact usable. A schema or compiler version mismatch
   makes every fact UNKNOWN; nothing is migrated in place.
 - **Scenarios** are executable: the suite applies each fired token to Example 1
   of the fact model and checks the stale set against the page and the matrix.
@@ -98,7 +101,10 @@ or a released contract resolves either.
   fact model now closes in R17 and R14: a fact whose value depends on which
   records a node carries lists the node itself (a review its pull request, an
   authority fact the node of its decision records, a head fact its pull request),
-  and a record carrying a field twice is malformed before parsing.
+  and a record carrying a field twice is malformed before parsing. Both change
+  which schema-v1 records are valid; R19 states why that is allowed: a version
+  identifies a shipped contract, and v1 has not shipped, so it is corrected in
+  place and v0.23 fixes it.
 - Until the compiler lands, nothing reads this contract at runtime; the measured
   system stays frozen for the AFTER comparison.
 

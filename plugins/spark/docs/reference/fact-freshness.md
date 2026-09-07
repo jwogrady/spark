@@ -31,7 +31,7 @@ fact — a schema change and an unreadable source.
 | `relationship` | `issue,pull_request,milestone` | a parent, child, blocker or milestone listed by the fact changes state or membership | A parent, child, blocker or milestone relationship changes. The graph and placement facts that list the related node or the milestone are stale. |
 | `check-run` | `none` | the check-runs listing for the HEAD (latest per name) differs from results, or any result is non-terminal | A check run or workflow run at the HEAD completes, is re-run or is requested. No token changes — the HEAD is the same — so the checks fact is re-read on observation: a non-terminal result is never carried forward and a terminal one is re-read when a merge decision is derived. |
 | `ruleset` | `ruleset` | the repository's rulesets or the required-check set differ from required | The repository's rulesets change which checks are required. The checks fact for every open work unit carries ruleset:<repository> and is stale. |
-| `repository` | `repository` | the repository's updated_at, default branch, settings or the observing identity's permission differ from what was read | Repository settings, default branch or permissions change. Facts carrying repository:<repository> are stale; a permission loss also makes the next read of any node UNKNOWN (unreadable records). |
+| `repository` | `repository` | the repository's updated_at, default branch, settings or the observing identity's permission differ from what was read | Repository settings, the default branch or the observing identity's permission change. Facts carrying repository:<repository> are stale, and every other source-read fact of the set is re-read (F13): readability was a property of the snapshot, and after a permission loss each re-read yields UNKNOWN (unreadable records). |
 | `schema` | `none` | the snapshot's schema_version differs from the consumer's fact-model version, or the compiler that derived a fact changed its version | The fact model's schema version or the compiler's interpretation changes. Every fact of the snapshot is UNKNOWN to that consumer (R9); the snapshot is recompiled, never migrated in place. |
 | `unreadable` | `none` | a read of the source fails: permission denied, not found, rate-limited, timed out, or malformed | An authoritative source cannot be re-read. The fact takes the status the unreadable record assigns, with detail.reason naming the failure; the previous value is never reused as authority. |
 
@@ -82,7 +82,7 @@ created after the fact was read fires a token the fact already carries.
 | Effect | Meaning |
 |---|---|
 | `stale` | an event fires a token the fact carries: the fact is not usable until re-read from its source |
-| `re-read` | no token changes but the source can have changed at the same identity: the fact is re-read on observation |
+| `re-read` | no token of the fact fires, but the source can have changed at the same identity (a check run at the HEAD) or the set's readability has changed (a repository event, F13): the fact is re-read before it is used |
 | `derived` | an input of the derived fact is stale or re-read: the fact is re-derived from re-read inputs (R4, R15), never patched |
 | `unknown` | the fact is UNKNOWN to the consumer until the source is re-read or the snapshot recompiled (R9, unreadable records) |
 | `none` | the event cannot change the fact: no token it carries fires |
@@ -97,15 +97,15 @@ event and class records and fails on any hand edit.
 
 | Class | `push` | `base-move` | `metadata` | `comment` | `relationship` | `check-run` | `ruleset` | `repository` | `schema` | `unreadable` |
 |---|---|---|---|---|---|---|---|---|---|---|
-| `work_unit` | `none` | `none` | `stale` | `stale` | `stale` | `none` | `none` | `none` | `unknown` | `unknown` |
+| `work_unit` | `none` | `none` | `stale` | `stale` | `stale` | `none` | `none` | `re-read` | `unknown` | `unknown` |
 | `repository` | `none` | `none` | `none` | `none` | `none` | `none` | `none` | `stale` | `unknown` | `unknown` |
-| `placement` | `none` | `none` | `stale` | `stale` | `stale` | `none` | `none` | `none` | `unknown` | `unknown` |
-| `graph` | `none` | `none` | `stale` | `stale` | `stale` | `none` | `none` | `none` | `unknown` | `unknown` |
-| `authority` | `none` | `none` | `stale` | `stale` | `stale` | `none` | `none` | `none` | `unknown` | `unknown` |
-| `acceptance` | `stale` | `none` | `stale` | `stale` | `stale` | `none` | `none` | `none` | `unknown` | `unknown` |
-| `head` | `stale` | `stale` | `stale` | `stale` | `stale` | `none` | `none` | `none` | `unknown` | `unknown` |
-| `review` | `stale` | `none` | `stale` | `stale` | `stale` | `none` | `none` | `none` | `unknown` | `unknown` |
-| `checks` | `stale` | `none` | `stale` | `stale` | `stale` | `re-read` | `stale` | `none` | `unknown` | `unknown` |
+| `placement` | `none` | `none` | `stale` | `stale` | `stale` | `none` | `none` | `re-read` | `unknown` | `unknown` |
+| `graph` | `none` | `none` | `stale` | `stale` | `stale` | `none` | `none` | `re-read` | `unknown` | `unknown` |
+| `authority` | `none` | `none` | `stale` | `stale` | `stale` | `none` | `none` | `re-read` | `unknown` | `unknown` |
+| `acceptance` | `stale` | `none` | `stale` | `stale` | `stale` | `none` | `none` | `re-read` | `unknown` | `unknown` |
+| `head` | `stale` | `stale` | `stale` | `stale` | `stale` | `none` | `none` | `re-read` | `unknown` | `unknown` |
+| `review` | `stale` | `none` | `stale` | `stale` | `stale` | `none` | `none` | `re-read` | `unknown` | `unknown` |
+| `checks` | `stale` | `none` | `stale` | `stale` | `stale` | `re-read` | `stale` | `re-read` | `unknown` | `unknown` |
 | `next_action` | `derived` | `derived` | `derived` | `derived` | `derived` | `derived` | `derived` | `derived` | `unknown` | `unknown` |
 
 ## Conflicting and duplicate evidence
@@ -134,29 +134,30 @@ event and class records and fails on any hand edit.
 
 | From | To | Rule |
 |---|---|---|
-| `1` | `1` | A consumer at fact-model schema version 1 reads only snapshots with schema_version 1. Any other version makes every fact UNKNOWN to it (R9). Nothing is migrated in place: a snapshot is recompiled by a compiler of the consumer's version. A compiler change that alters how a fact is interpreted is a new schema version, so the version string of every derived fact changes with it (R4). |
+| `1` | `1` | A consumer at fact-model schema version 1 reads only snapshots with schema_version 1. Any other version makes every fact UNKNOWN to it (R9). Nothing is migrated in place: a snapshot is recompiled by a compiler of the consumer's version. Once a version has shipped in a Spark release, a compiler change that alters how a fact is interpreted is a new schema version, so the version string of every derived fact changes with it (R4); until it ships, the version is corrected in place and the release that ships it fixes it (fact model R19). |
 
 ## Scenarios
 
 Each scenario applies one fired token to Example 1 of the fact model — the
 complete snapshot of a normal pull request — and lists the facts that become
-stale, then the derived fact that follows because a stale fact is among its inputs.
+stale, the facts re-read under F13, then the derived fact that follows because a
+moved fact is among its inputs.
 The stale sets are computed from the example when the page is built, never typed. The suite executes them: it loads the
 example, marks every fact carrying the fired token, checks the set against this
 table, and checks it against the matrix column for the event.
 
-| Scenario | Event | Fired token | Stale; derived | Note |
+| Scenario | Event | Fired token | Stale; re-read; derived | Note |
 |---|---|---|---|---|
-| `push` | `push` | `head:0123456789abcdef0123456789abcdef01234567` | `acceptance,head,review,checks;next_action` | A new commit: the four HEAD-bound facts are stale and next_action is re-derived; work_unit, repository, placement, graph and authority stand. |
-| `verdict-edit` | `comment` | `comment:github.com/acme/widgets#42/comment/9100` | `review;next_action` | The verdict record is edited: the review fact is stale and the derived action with it; HEAD, checks and acceptance stand. |
-| `verdict-created` | `comment` | `pull_request:github.com/acme/widgets#42` | `work_unit,head,review;next_action` | A new verdict comment on the pull request: no fact carries the new comment's token, so the creation fires the pull request's own token — the review fact carries it and is stale, as are the other facts read from the pull request. |
-| `decision-edit` | `comment` | `comment:github.com/acme/widgets#7/comment/9001` | `authority;next_action` | The standing decision record is edited: the authority fact is stale and the derived action with it; nothing HEAD-bound moves. |
-| `grant-created` | `comment` | `issue:github.com/acme/widgets#7` | `authority;next_action` | A new decision comment on the decision issue: the creation fires the issue's token, which the authority fact carries; nothing else in the snapshot reads that issue. |
-| `base-move` | `base-move` | `ref:github.com/acme/widgets/master` | `head;next_action` | master moves under the pull request: the head fact (its base commit) is stale; review, checks and acceptance at the HEAD stand. |
-| `base-switch` | `metadata` | `pull_request:github.com/acme/widgets#42` | `work_unit,head,review;next_action` | The pull request's base branch is switched while both tips stand: pull-request metadata fires, and the head fact carries the pull request's token. |
-| `gate-edit` | `metadata` | `issue:github.com/acme/widgets#41` | `placement,graph,acceptance;next_action` | The implemented issue's metadata changes: placement, graph and the acceptance contract read from it are stale. |
-| `ruleset` | `ruleset` | `ruleset:github.com/acme/widgets` | `checks;next_action` | The repository's rulesets change: the checks fact is stale (which checks are required may have changed). |
-| `repository` | `repository` | `repository:github.com/acme/widgets` | `repository;next_action` | Repository settings change: the repository fact is stale; authority stands (it rests on decision records, not permissions). |
+| `push` | `push` | `head:0123456789abcdef0123456789abcdef01234567` | `acceptance,head,review,checks;;next_action` | A new commit: the four HEAD-bound facts are stale and next_action is re-derived; work_unit, repository, placement, graph and authority stand. |
+| `verdict-edit` | `comment` | `comment:github.com/acme/widgets#42/comment/9100` | `review;;next_action` | The verdict record is edited: the review fact is stale and the derived action with it; HEAD, checks and acceptance stand. |
+| `verdict-created` | `comment` | `pull_request:github.com/acme/widgets#42` | `work_unit,head,review;;next_action` | A new verdict comment on the pull request: no fact carries the new comment's token, so the creation fires the pull request's own token — the review fact carries it and is stale, as are the other facts read from the pull request. |
+| `decision-edit` | `comment` | `comment:github.com/acme/widgets#7/comment/9001` | `authority;;next_action` | The standing decision record is edited: the authority fact is stale and the derived action with it; nothing HEAD-bound moves. |
+| `grant-created` | `comment` | `issue:github.com/acme/widgets#7` | `authority;;next_action` | A new decision comment on the decision issue: the creation fires the issue's token, which the authority fact carries; nothing else in the snapshot reads that issue. |
+| `base-move` | `base-move` | `ref:github.com/acme/widgets/master` | `head;;next_action` | master moves under the pull request: the head fact (its base commit) is stale; review, checks and acceptance at the HEAD stand. |
+| `base-switch` | `metadata` | `pull_request:github.com/acme/widgets#42` | `work_unit,head,review;;next_action` | The pull request's base branch is switched while both tips stand: pull-request metadata fires, and the head fact carries the pull request's token. |
+| `gate-edit` | `metadata` | `issue:github.com/acme/widgets#41` | `placement,graph,acceptance;;next_action` | The implemented issue's metadata changes: placement, graph and the acceptance contract read from it are stale. |
+| `ruleset` | `ruleset` | `ruleset:github.com/acme/widgets` | `checks;;next_action` | The repository's rulesets change: the checks fact is stale (which checks are required may have changed). |
+| `permission-loss` | `repository` | `repository:github.com/acme/widgets` | `repository;work_unit,placement,graph,authority,acceptance,head,review,checks;next_action` | The observing identity loses read access (a repository event): the repository fact is stale and, under F13, every other source-read fact is re-read before use; each re-read answers 403 and yields UNKNOWN (Example 7 of the fact model), so nothing cached stays authoritative. |
 
 ## Rules
 
@@ -200,6 +201,13 @@ the behavioral suite checks the two never drift.
 - **F11** Cached or inferred capability never becomes authority (R5). An
   authority fact changes only through its decision records; a permission change
   makes reads UNKNOWN, it grants nothing.
+- **F13** Readability is a property of the snapshot. Every source-read fact of a
+  set was read by one observing identity under the set's repository's
+  permissions, and every such fact belongs to that repository (R17). A
+  repository event — settings, default branch or the observing identity's
+  permission — makes the repository fact stale and re-reads every other
+  source-read fact of the set, so a permission loss cannot leave a cached fact
+  usable: the re-read yields UNKNOWN through the unreadable records.
 - **F12** Every event that can change a fact's value reaches the fact through a
   token it carries: the depends record of each class names those events, and the
   matrix cell for each is stale or re-read (derived for the derived class). A

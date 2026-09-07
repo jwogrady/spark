@@ -33,7 +33,7 @@ assert_eq "seven conflict situations" "7" "$(rec conflict | wc -l | tr -d ' ')"
 assert_eq "five unreadable failures" "5" "$(rec unreadable | wc -l | tr -d ' ')"
 assert_eq "one migration rule" "1" "$(rec migration | wc -l | tr -d ' ')"
 assert_eq "ten executable scenarios" "10" "$(rec scenario | wc -l | tr -d ' ')"
-assert_eq "twelve rules" "12" "$(rec rule | wc -l | tr -d ' ')"
+assert_eq "thirteen rules" "13" "$(rec rule | wc -l | tr -d ' ')"
 # the record kinds the header comment declares are exactly the kinds present
 assert_eq "record kinds present" "conflict depends effect event kinds matrix migration rule scenario schema unreadable version" "$(grep -v '^#' "$TSV" | cut -f1 | sort -u | tr '\n' ' ' | sed 's/ $//')"
 # every record kind's field count is constant
@@ -88,12 +88,15 @@ def effect(cls, ev):
     if cls == "next_action": return "derived" if any(effect(c, ev) in ("stale", "re-read") for c in ck if c != "next_action") else "none"
     if fires[ev] & ck[cls]: return "stale"
     if ev == "check-run" and cls == "checks": return "re-read"
+    if ev == "repository": return "re-read"   # F13
     return "none"
 for m in recs("matrix"):
     want = [effect(m[1], e) for e in ev_names]; got = m[2].split(",")
     say(got == want, f"matrix row {m[1]} is derived from kinds × fires: {m[2]}" + ("" if got == want else f" (derived: {','.join(want)})"))
     say(all(x in effects for x in got), f"matrix row {m[1]} uses only the effect vocabulary")
 say(all(effect("next_action", e) == ("unknown" if e in ("schema", "unreadable") else "derived") for e in ev_names), "next_action re-derives on every event that moves any input (every event moves some class)")
+say(all(effect(c, "repository") != "none" for c in ck), "a repository event — including the observing identity's permission — reaches every class (F13): no cached fact survives a permission loss")
+say(sorted(c for c in ck if effect(c, "repository") == "re-read") == sorted(c for c in ck if c not in ("repository", "next_action")), "under F13 every source-read class other than repository is re-read on a repository event")
 # --- every event that can change a class's value reaches it (F12): the category the reviewer's findings belong to
 dep = recs("depends"); say([d[1] for d in dep] == fm_classes, "the depends records name exactly the fact model's classes, in order")
 for d in dep:
@@ -116,6 +119,7 @@ dupf = [c for c in recs("conflict") if c[1] == "duplicate-fields"]
 say(len(dupf) == 1 and dupf[0][2] == "malformed" and "UNKNOWN" in dupf[0][3] and "CONFLICT" in dupf[0][3], "duplicate fields are classified as malformed with both the alone and the beside-valid outcomes named")
 say("R14" in dupf[0][4] and any(r[0] == "rule" and r[1] == "R14" and "same field twice" in r[2] for r in fm), "the fact model's R14 states the duplicate-field rule the contract relies on")
 say(any(r[0] == "rule" and r[1] == "R17" and "lists that node too" in r[2] for r in fm), "the fact model's R17 states the node-listing rule the contract relies on")
+say(any(r[0] == "rule" and r[1] == "R19" and "shipped contract" in r[2] for r in fm) and "R19" in [m for m in recs("migration")][0][3], "the migration record's in-place correction of an unshipped version rests on the fact model's R19")
 seen = collections.defaultdict(set)
 for f in facts:
     ks = {t.split(":")[0] for t in f.get("invalidators", [])}; seen[f["class"]] |= ks
@@ -135,21 +139,30 @@ for blk in re.findall(r"```json\n(.*?)```", ex1, flags=re.S):
     obj = json.loads(blk); snap += obj if isinstance(obj, list) else [obj]
 say(len(snap) == 10 and {f["class"] for f in snap} == set(fm_classes), "Example 1 is the complete snapshot: one fact per class")
 by = {f["class"]: f for f in snap}; key_of = {r[1]: r[2] for r in fm if r[0] == "key"}
+def mrow_of(ev):
+    col = ev_names.index(ev); return {m[1]: m[2].split(",")[col] for m in recs("matrix")}
 for s in recs("scenario"):
     name, ev, tok, expect, note = s[1:6]
-    stale_part, derived_part = (expect.split(";") + [""])[:2]
+    stale_part, reread_part, derived_part = (expect.split(";") + ["", ""])[:3]
     stale = {f["class"] for f in snap if tok in f.get("invalidators", []) and f["class"] != "next_action"}
-    derived = {"next_action"} if any(key_of[c] in by["next_action"].get("inputs", []) for c in stale) else set()
+    reread = {f["class"] for f in snap if f["class"] not in stale and f["class"] != "next_action"} if "repository" in stale else set()   # F13
+    derived = {"next_action"} if any(key_of[c] in by["next_action"].get("inputs", []) for c in stale | reread) else set()
     want_stale = set(stale_part.split(",")) if stale_part else set(); want_derived = set(derived_part.split(",")) if derived_part else set()
+    want_reread = set(reread_part.split(",")) if reread_part else set()
+    say(reread == want_reread, f"scenario {name}: facts re-read under F13 are exactly {sorted(want_reread)} (got {sorted(reread)})")
+    say(all(mrow_of(ev)[c] == "re-read" for c in reread), f"scenario {name}: every re-read fact's class is 're-read' in the matrix column for {ev}")
     say(tok in fires and False or tok.split(":")[0] in fires[ev], f"scenario {name}: the fired token's kind {tok.split(':')[0]} is one the {ev} event fires")
     say(stale == want_stale, f"scenario {name}: facts carrying {tok} are exactly {sorted(want_stale)} (got {sorted(stale)})")
     say(derived == want_derived, f"scenario {name}: the derived fact follows ({sorted(derived)})")
-    col = ev_names.index(ev); mrow = {m[1]: m[2].split(",")[col] for m in recs("matrix")}
+    mrow = mrow_of(ev)
     say(all(mrow[c] == "stale" for c in stale), f"scenario {name}: every stale fact's class is 'stale' in the matrix column for {ev}")
     say(all(mrow[c] in ("stale", "re-read") for c in stale) and (not derived or mrow["next_action"] == "derived"), f"scenario {name}: the matrix admits the observed effects")
     say(stale, f"scenario {name}: at least one fact is stale (a scenario that moves nothing proves nothing)")
 say(len({(s[2], s[3]) for s in recs("scenario")}) == len(recs("scenario")), "every scenario is a distinct event and token pair")
 say({s[2] for s in recs("scenario")} >= {"push", "comment", "base-move", "metadata", "ruleset", "repository"}, "the scenarios cover the token-firing events except relationship (Example 1 lists no other work unit's relationship to move)")
+pl = [s for s in recs("scenario") if s[1] == "permission-loss"]
+say(len(pl) == 1 and pl[0][4].split(";")[0] == "repository" and set(pl[0][4].split(";")[1].split(",")) == set(fm_classes) - {"repository", "next_action"}, "the permission-loss scenario re-reads every source-read fact of the snapshot")
+say(any(u[1] == "permission-denied" and u[2] == "UNKNOWN" for u in recs("unreadable")), "the re-read after a permission loss has a closed outcome: UNKNOWN")
 # the three findings of round 1, as scenarios: a created verdict, a created grant, a base-branch switch
 by_name = {s[1]: s for s in recs("scenario")}
 say("review" in by_name["verdict-created"][4].split(";")[0].split(","), "a verdict comment created on the pull request reaches the review fact")

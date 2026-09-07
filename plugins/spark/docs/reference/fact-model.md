@@ -390,13 +390,21 @@ behavioral suite checks the two never drift.
   updated_at — is the one timestamp grammar, whose regex encodes the calendar
   itself (month lengths and leap years), so an impossible instant is outside the
   schema with no validator beyond the regex.
+- **R19** A schema version identifies a shipped contract. Once a Spark release
+  ships a version, any change to a rule, shape, grammar, constraint or
+  vocabulary that alters which facts are valid is a new version, and a consumer
+  treats another version as UNKNOWN (R9). Until a version ships, its rules may
+  be corrected in place and the release that ships it fixes them; the stability
+  register marks the model Experimental while that is so.
 
 ## Versioning
 
 `schema_version` is the `version` record of `preferences/fact-model.tsv`.
 Nothing is added, removed or changed under an existing version: any new field,
 class, status token or vocabulary member, and any change to the meaning, type
-or requiredness of an existing one, is a new version. A consumer therefore
+or requiredness of an existing one, is a new version — once the version has
+shipped in a Spark release (R19); until then its rules may be corrected in
+place, and the release that ships it fixes them. A consumer therefore
 rejects every field and class it does not know for the version it reads (R9
 applies to the whole fact), which is exactly what the behavioral suite's
 validator does, and an older consumer can never accept a snapshot it cannot
