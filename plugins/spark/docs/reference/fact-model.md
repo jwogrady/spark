@@ -299,20 +299,21 @@ behavioral suite checks the two never drift.
   Neither carries prose, so freshness and drill-down are machine-normalized.
 - **R17** A fact's source identity is the node its value describes: work_unit
   and repository name their own id; review names its record and lists it as a
-  comment: invalidator; an authority recorded in a comment lists that comment as
-  a comment: invalidator, so an edited decision goes stale; acceptance read from
-  GitHub names its contract, lists it as an invalidator, and within one set that
-  contract is the work unit itself or the issue it implements; the work unit
-  belongs to the set's repository; placement and graph name the work-unit node
-  they were read from — within one set, the work unit itself or the issue it
-  implements, never an unrelated node — and list it as an invalidator; head read
-  from GitHub names a work unit and checks name a repository — within one set,
-  the work unit's own node and the repository's; a NOT_APPLICABLE HEAD-bound
-  fact names the work unit it was read from and lists it as an invalidator. A
-  work-unit invalidator has one canonical form — issue: for an issue,
-  pull_request: for a pull request — and never both. A graph lists every parent,
-  child and blocker whose state it represents as an invalidator of that
-  relationship's kind; head lists its base as ref:<repository>/<base_ref>;
+  comment: invalidator; any fact whose source is a comment lists that comment as
+  a comment: invalidator, and a CONFLICT lists every comment it names as a
+  candidate, so an edited record goes stale; acceptance read from GitHub names
+  its contract — a work-unit node, listed once as an invalidator whatever the
+  status — and within one set that contract is the work unit itself or the issue
+  it implements; the work unit belongs to the set's repository; placement and
+  graph name the work-unit node they were read from — within one set, the work
+  unit itself or the issue it implements, never an unrelated node — and list it
+  as an invalidator; head read from GitHub names a work unit and checks name a
+  repository — within one set, the work unit's own node and the repository's; a
+  NOT_APPLICABLE HEAD-bound fact names the work unit it was read from and lists
+  it as an invalidator. A work-unit invalidator has one canonical form — issue:
+  for an issue, pull_request: for a pull request — and never both. A graph lists
+  every parent, child and blocker whose state it represents as an invalidator of
+  that relationship's kind; head lists its base as ref:<repository>/<base_ref>;
   checks list ruleset:<repository> for the repository whose rulesets require
   them. inputs and because list each key once. These source and invalidator
   requirements hold for every status; only the value-dependent ones wait for
