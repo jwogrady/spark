@@ -75,7 +75,7 @@ docs/ops/plugin-manifest.md	current-projection	-	layout reference of the manifes
 docs/ops/read-only-assessment.md	explanation	-	developer operations doc
 docs/ops/reconciliation-runbook.md	explanation	-	developer operations doc
 docs/ops/release-gate-role.md	current-projection	release-gate-placement	operator steps for the governance model's role marker
-docs/ops/release-merge-convention.md	operative-authority	merge-method	this repository's merge convention — contested by practice, see the map
+docs/ops/release-merge-convention.md	operative-authority	merge-method	the governed merge strategy: true merge commits by default, decided 2026-09-07; the strategy preference is its own work unit
 docs/ops/release-token-governance.md	operative-authority	release-token	token policy
 docs/ops/repository-boundary.md	explanation	-	developer operations doc
 docs/ops/telemetry-baseline.md	historical-evidence	-	dated baseline

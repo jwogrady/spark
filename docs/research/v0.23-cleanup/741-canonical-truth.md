@@ -37,8 +37,9 @@ surfaces re-registered under their steady-state role (below).
 counted the same way from the same sweep. "After" counts the operative sources the map names; where a
 concept names two, the map's treatment declares the composite (which aspect each source owns); `non-prose`
 marks an executable CI surface or a GitHub decision record that the map cites as a source without a
-repository page defining it. `tests/test-doc-roles.sh` recomputes both tables from the two data files and
-fails if this page disagrees.
+repository page defining it. `tests/test-doc-roles.sh` recomputes the role counts and the after-column from
+the two data files and fails if this page disagrees; the before-counts are the sweep's, recorded here, and
+the suite checks each is a number.
 
 | Concept | Before | After |
 |---|---|---|
@@ -50,7 +51,7 @@ fails if this page disagrees.
 | `verdict-vocabulary` | 6 | 1 |
 | `parent-dependency` | 7 | 2 |
 | `review-lifecycle` | 6 | 1 + 1 non-prose |
-| `merge-method` | 3 | 0 + 1 non-prose |
+| `merge-method` | 3 | 1 + 1 non-prose |
 
 ## Contradictions found, and what was done
 
@@ -58,7 +59,7 @@ fails if this page disagrees.
 |---|---|---|---|
 | 1 | `AGENTS.md` vs `plugins/spark/docs/explanation/release-ownership.md` | the contract said "the milestone declares the version; Release-As mints it" without qualification; the ownership page says this repository runs Release Please's default bump semantics and only seeded projects use `Release-As` | the contract clause now distinguishes the two and points at the ownership page, the boundary's one full statement (evidence: `release-please-config.json` has no `always-bump-patch`; no `Release-As` trailer on master since the v0.19 certification refresh) |
 | 2 | `docs/product-constitution.md` vs `docs/adr/0026-…` | the constitution calls the Platform Compatibility Review "a permanent release gate"; ADR-0026 records its retirement on 2026-08-11 with the #361 governance deletion test | the paragraph carries a dated superseded marker pointing at the ADR; the constitution keeps its text as the record of what was decided |
-| 3 | `docs/ops/release-merge-convention.md` vs `.github/spark-trunk-ruleset.json`, `plugins/spark/skills/ship/SKILL.md`, practice | the convention prefers true merge commits with plainly titled pull requests; the ruleset allows squash; the ship skill titles conventionally for squash merges; every v0.23 packet landed as a squash merge with a conventional title | **not resolved here** — a human release-policy decision; registered as `merge-method` with the contradiction stated |
+| 3 | `docs/ops/release-merge-convention.md` vs `.github/spark-trunk-ruleset.json`, `plugins/spark/skills/ship/SKILL.md`, practice | the convention prefers true merge commits with plainly titled pull requests; the ruleset allows squash; the ship skill titles conventionally for squash merges; every v0.23 packet landed as a squash merge with a conventional title | **decided by the owner, 2026-09-07 (PR #762):** true merge commits are Spark's default governed merge strategy; the strategy becomes an explicit repository/operator preference, squash and rebase permitted when selected with equivalent exact-HEAD and provenance guarantees (its own work unit); the convention records the decision and the packets already landed as the exception |
 | 4 | `plugins/spark/preferences/fact-model.tsv` (`verdict`) vs `docs/ops/ci-handoff.md`, `.github/scripts/docs-truth.sh`, `docs/ops/bounded-execution.md` | four token sets read as "the verdict vocabulary" | the reviewer's vocabulary is the fact model's `verdict` identifier; ci-handoff.md now names its tokens as handoff states and points there; the docs-truth results and bounded-execution outcomes are distinct vocabularies of their own surfaces and are left as they are |
 | 5 | `plugins/spark/docs/reference/metadata-governance.md` vs `docs/governance/is-state-baseline-pre-v020.md` | "the native graph is the only executable dependency authority" vs "native blocked-by is not yet the sole executable authority" | the baseline (audited master `c9baaa9`, 2026-08-27) carries a historical banner; so does the v0.20 self-conformance audit |
 | 6 | `.github/ISSUE_TEMPLATE/feature.yml`, `bug.yml` vs `spark-default.tsv` | the templates asked authors to write "Blocked by #86" in the body; the model says such a sentence explains a prerequisite and never creates one | the field now says prose explains and the native blocked-by relationship records, keeping the real-number rule |
@@ -98,7 +99,7 @@ measures what a session loads and what the reviewer re-read. The same tool run o
 |---|---|---|
 | `root.contract` (AGENTS.md + CLAUDE.md, auto-loaded every session) | 15,433 bytes / 292 lines | 15,648 bytes / 295 lines |
 | `shipped.docs.spark` | 310,651 bytes / 5,908 lines | 427,680 bytes / 7,072 lines |
-| `devdocs.ops` | 225,751 bytes / 4,286 lines | 253,290 bytes / 4,487 lines |
+| `devdocs.ops` | 225,751 bytes / 4,286 lines | 254,266 bytes / 4,497 lines |
 
 The contract grows by one clause (contradiction 1); the shipped docs shrink by the two duplicated
 paragraphs and grow by the fact-freshness page #732 added between the two measurements — the figures are the
@@ -112,8 +113,8 @@ concept, projections marked) rather than how many bytes a session loads. No read
 - **Surfaces classified by role with evidence** — `docs/ops/doc-roles.tsv`, 165 rows, one role each; the
   evidence per concept is the sweep summarised above and the map's surface lists.
 - **One operative source per concept or an explicit exception** — `docs/ops/canonical-truth.tsv`, nine
-  concepts; one exception (routine merge authority) and one unresolved contradiction (merge method), each
-  stated as such.
+  concepts; one exception (routine merge authority), stated as such; the merge-method contradiction is
+  decided and recorded.
 - **Duplicate current prose treated** — two verbatim duplicates now point at their source; six contradictions
   treated or recorded (table above).
 - **Mutable GitHub state not presented as timeless** — roadmap and release record registered as dated
