@@ -68,7 +68,7 @@ Every fact, whatever its class, has exactly this shape:
 | `source` | required | `object` | The source shape below: what was read, its canonical identity in the grammar of that source type, and the version identity observed |
 | `observed_at` | required | `timestamp` | The instant the source was read, in the timestamp grammar (ISO-8601 UTC, second precision, Z) |
 | `invalidators` | required | `list` | Canonical invalidator tokens, each in one of the invalidator grammars and unique within the fact; a change to any one makes the fact stale |
-| `versions` | required | `object` | The version observed for every invalidator token when the fact was read — token → version, a commit for head: and ref:, the node's updated_at for every other kind (each invalidator record names its version form); a fact is current only while each observed version equals its own node's current version (freshness contract F1), and within one set a node has one observed version |
+| `versions` | required | `object` | The version observed for every invalidator token when the fact was read — token → version, in the one form the token's kind has: a commit for head: and ref:, the collection digest for ruleset:, the node's updated_at for every other kind (each invalidator record names its version form); a fact is current only while each observed version equals its own node's current version (freshness contract F1), and within one set a node has one observed version |
 | `provenance` | required | `provenance` | Pointer to the authoritative record in the provenance grammar (an https URL or a repository-relative path, no whitespace); never the record itself |
 | `inputs` | optional | `list` | Fact keys this fact was derived from; required when source.type is derived |
 | `inferred` | optional | `boolean` | The literal true, present only on a legitimately inferred fact (any other value is rejected); an inferred fact is never authority |
@@ -449,8 +449,9 @@ invented; the situations are the ones a governed work unit actually meets.
 A complete snapshot is an object: `observer` — the login that read it, its
 repository permission and when that was checked (R21) — and `facts`; a fragment
 is a bare list of facts. Every fact carries `versions`, the version it observed
-for each of its invalidator tokens (R20); the freshness contract compares them
-with the sources' current versions.
+for each of its invalidator tokens (R20); the freshness contract compares each
+with its own invalidator node's current version — the node a token names, which
+need not be the fact's source.
 
 ### Example 1 — a normal pull request (complete snapshot)
 
