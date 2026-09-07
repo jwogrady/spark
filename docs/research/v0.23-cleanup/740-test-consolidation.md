@@ -288,14 +288,84 @@ sense (they answer GraphQL snapshots through the caller's jq already, or plain t
 | per-suite pass/fail lines | 92 | 92, **all identical** |
 | full-suite wall clock | 162s | 163s |
 
-## Remaining scope (later packets, in order; packets 1–4 above are done)
+## Final overlap assessment
 
-1. **Same-invariant candidates** (baseline C1–C7). The baseline's own verdicts stand:
-   most groups are layered, not duplicated. The two worth a line-level read are
-   `test-context-budget.sh` vs `test-footprint-budget.sh` (C4: same fixture marketplace,
-   hard-error vs warn — but different functions under test) and the three
-   `release-notes-*` suites' private `gitc`/`seed` fixtures (C7). Neither is touched until
-   its invariant overlap is read line by line; the non-goal "merging unrelated invariants
-   into a giant script" governs.
-2. **Close-out**: the measured totals across every packet against the #737 inventory, and
-   the acceptance checklist evaluated item by item.
+The remaining candidates were inspected at `a2d0ef9`. No additional regression
+is removed or consolidated: their shared names do not establish shared proof.
+
+| Candidate | Distinct proof and fixture | Disposition |
+|---|---|---|
+| `test-context-budget.sh` / `test-footprint-budget.sh` (C4) | The former drives doctor against oversized/missing individual skills and requires a hard failure. The latter drives byte summation and cache-stability helpers against a two-plugin marketplace, then checks that doctor renders a total-footprint breach as a warning. | Keep both suites and all cases. A common budget wrapper would obscure different inputs and exit contracts. |
+| `test-release-notes-check.sh` (C7) | Feeds commit TSV and notes text to the completeness checker; no Git repository, `gitc`, or `seed` fixture. | Keep the pure decision suite. The baseline statement that all three suites have Git fixtures is incorrect. |
+| `test-release-notes-carriers.sh` / `test-release-notes-runner.sh` (C7) | Carriers requires dated commits and a branched/tagged history to prove carrier reachability, ambiguity and cycles. Runner requires component paths/tags and label mappings to prove per-component collection and result aggregation; its `seed` takes no date. | Keep the two small local fixture helpers. Sharing them would need new parameters for different histories without consolidating a behavioral invariant. |
+| Dispatcher setup (B5) | `sandbox_init` and `make_repo` already share setup. Explicit `. "$SPARK"` selects tests of sourced functions rather than CLI dispatch. | Keep the explicit source operation; no new wrapper. |
+| Gate fixtures (B6) | `gate_iss`, `gate_mil`, `gate_cap` and `gov_iss` are already shared. | Keep existing helpers. |
+| Authentication answers (B4) | Some stubs require authenticated access; `test-remote-enforcement.sh` also deliberately returns authentication failure. | Keep answers in the case bodies; the shared writer must not silently grant authentication. |
+
+This completes the selected overlap assessment. B7's state-seeding similarity
+was not established by the baseline; no state fixture was removed or counted
+as a saving. No claim is made that every superficially similar line in the
+repository should be consolidated.
+
+## Combined measurements and acceptance
+
+The frozen inventory and the start of this issue are different baselines.
+Between `921c982` and packet 1's base `c0ef567`, runtime canonicalization added
+`test-canonical-primitives.sh` and changed other tests. Those additions must
+not be attributed to this consolidation, or hidden by comparing unequal work.
+
+| Metric | Frozen inventory `921c982` | Issue start `c0ef567` | Landed packets 1–4 `a2d0ef9` |
+|---|---|---|---|
+| Test suites | 91 | 92 | 92 |
+| Suite lines (`tests/test-*.sh`) | 19,246 | 19,476 | 19,303 |
+| Shared library lines | 254 | 254 | 284 |
+| Runner lines | 182 | 182 | 189 |
+| All text lines under `tests/` | 20,580 | 20,810 | 20,674 |
+| Private `assert_eq` definitions | 22 | 23 | 0 |
+| Calls to shared `stub_gh` | 0 | 0 | 49 |
+
+Reproduce the line counts from each committed tree with `git archive <commit>
+ tests` (on one command line), counting newline bytes in regular files; suite
+selection is `tests/test-*.sh`. Count private definitions anchored at
+`^assert_eq\(\)` and helper calls anchored at `^[[:space:]]*stub_gh `.
+These are static representation measurements, not model-token measurements.
+
+Across this issue, suite representation fell by 173 lines; including the shared
+library and runner, the `tests/` reduction is **136 lines**. Relative to the
+older frozen inventory, `tests/` instead grew by 94 lines because the intervening
+runtime work added proof. Both comparisons are reported; only the former
+isolates this issue's changes.
+
+All four packets retained the same per-suite assertion totals (92/92; 3,908
+passing assertions). Their individual full-run timings above do **not** establish
+a speedup: the initial 159 s and final 163 s runs differ, and there are no repeat
+samples establishing a noise range. Tool/subprocess counts remain NOT ASSESSED.
+The changes establish shared setup and stronger parser coverage, not reduced
+full-suite latency. No new full run was performed merely to restate these results.
+
+Acceptance is supported by the packet mappings and unchanged cases: the baseline
+is identified; no regression was dropped; negative controls and failure messages
+survive; production jq executes for the converted JSON fixtures; the silent-suite
+runner defect was fixed; and representation decreased after shared helpers were
+included. Exact-HEAD independent PASS and green doctor/tests/docs-truth/gate
+checks on `3f9774c97ec2857f87955bcc975265c363fc6ed0` certify packet 4. Its merge
+`a2d0ef9a4159db25412361f6e2879e7cffe6a0f8` has the identical tree. This final
+assessment changes only this manifest; it does not claim new executable coverage
+or an efficiency result for the wider release gate.
+
+## Acceptance, item by item
+
+| Contract item | Evidence | State |
+|---|---|---|
+| Baseline test inventory comes from #737 or a reproducible extension of it | the frozen inventory `921c982` (`agent-test-representation.md`) plus a captured full run per packet at its base and HEAD, with every suite's own `N passed, M failed` line | met |
+| Every removed/consolidated regression maps to surviving proof or an approved removed behaviour | no regression was removed; each packet's mapping table names the surviving proof for every replaced definition or stub | met |
+| No assertion or discriminating case silently dropped | per-suite pass/fail lines identical before and after in every packet (92/92; 3,908 assertions); the runner now fails a suite that prints no summary line, closing the one way a drop could have hidden | met |
+| Mutation/negative controls at least as discriminating | no control changed; the JSON-fixture stubs exercise the production jq the pre-shaped rows had assumed, so the converted scenarios discriminate more, not less | met |
+| Production transports/parsers exercised where mocks assumed their output | packets 2 and 3: five jq programs in the binary and five in the codify preflight now run under test; the remaining stubs answer GraphQL snapshots or `gh issue view` reads through the caller's jq already | met |
+| Failure localization remains useful | identical failure messages; each converted scenario still names its case | met |
+| Test/harness representation reduced where evidence supports it | suite lines 19,476 → 19,303 across the issue; shared library +30, runner +7; net `tests/` −136 against the issue start (+94 against the frozen inventory because the intervening runtime work added proof — both reported) | met |
+| Focused/full verification cost compared | full-run wall clock 159–163 s across packets with no repeat samples: no speedup is claimed; tool/subprocess counts NOT ASSESSED (the runner does not measure them) | met as reported, not as an efficiency win |
+| Required focused/full suites green on the exact candidate HEAD | every packet: doctor and tests green at the reviewed HEAD, exact-HEAD independent PASS before merge | met |
+
+The honest release-gate reading: this issue made the suites safer and their transports
+better covered, and it removed representation; it did not make the full suite faster.
