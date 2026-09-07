@@ -128,15 +128,15 @@ status	NOT_APPLICABLE	no	The fact class does not apply to this work unit: a HEAD
 # source-identity, source-version) is portable ERE — POSIX extended regular expressions
 # with no lookaround, no backslash-letter escape (\s, \d, \x..), no backslash inside a
 # bracket expression and no POSIX character class — so awk, grep -E and every modern
-# engine read them identically. Whitespace is excluded as the literal space; a backslash
-# is excluded by a constraint written outside brackets.
+# engine read them identically. Every class is positive (letters, digits, enumerated
+# punctuation), so whitespace and control characters are outside every grammar by construction.
 # --- Canonical identifiers: one representation; anything else is a projection
 identifier	repository	^[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+$	<host>/<owner>/<name>, all lower-case (GitHub compares owner and name case-insensitively, so one spelling is the identity), no scheme, and the name never ends in .git — that is the clone URL's spelling, a projection
 identifier	work-unit	^[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+#[1-9][0-9]*$	<repository>#<number>; a bare #<number> is a projection, never an identity
 identifier	comment	^[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+#[1-9][0-9]*/comment/[1-9][0-9]*$	<work-unit>/comment/<comment id>
 identifier	milestone	^[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+/milestone/[1-9][0-9]*$	<repository>/milestone/<number>
 identifier	commit	^[0-9a-f]{40}$	Full 40-hex lower-case object id; abbreviations are projections
-identifier	ref	^[^ ~^:?*.[/][^ ~^:?*[/]*(/[^ ~^:?*.[/][^ ~^:?*[/]*)*$	A branch name over Git's full ref domain, without the refs/heads/ prefix: slash-separated components, none empty or dot-led, no space, no ~ ^ : ? * [ or backslash (the backslash by constraint), no .. or @{, never the single name @, no component ending in .lock, never ending in / or .; refs/… and any other spelling of the same branch are projections. Git refuses ASCII control characters in a refname, so a source never reports one and the portable grammar does not restate it
+identifier	ref	^[]!"#$%&'()+,0-9;<=>@A-Z_`a-z{|}-][]!"#$%&'()+,.0-9;<=>@A-Z_`a-z{|}-]*(/[]!"#$%&'()+,0-9;<=>@A-Z_`a-z{|}-][]!"#$%&'()+,.0-9;<=>@A-Z_`a-z{|}-]*)*$	A branch name without the refs/heads/ prefix, in printable ASCII: slash-separated components of letters, digits and the punctuation Git allows, none empty or dot-led; no space or control character, no ~ ^ : ? * [ or backslash, no .. or @{, never the single name @, no component ending in .lock, never ending in / or .; refs/… and any other spelling of the same branch are projections; a branch name outside printable ASCII is not representable in this version
 identifier	release	^v[0-9]+\.[0-9]+\.[0-9]+$	A release tag as published
 identifier	login	^login:[a-z0-9]+(-[a-z0-9]+)*(\[bot\])?$	An actor identity: the GitHub login lower-cased (GitHub compares logins case-insensitively, so one representation per actor, R1), alphanumerics joined by single hyphens, never starting or ending with a hyphen, at most 39 characters (the login constraint), with the [bot] suffix for an app; naming an actor never confers authority
 identifier	verdict	^(PASS|CHANGES REQUIRED|DECISION REQUIRED|NOT ASSESSED)$	The independent reviewer's closed vocabulary
@@ -160,7 +160,7 @@ invalidator	issue	^issue:[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+#[1-9][0-9]*$	issu
 invalidator	comment	^comment:[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+#[1-9][0-9]*/comment/[1-9][0-9]*$	comment:<comment> — the comment that records the verdict or decision
 invalidator	milestone	^milestone:[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+/milestone/[1-9][0-9]*$	milestone:<milestone> — the milestone the placement was read from
 invalidator	repository	^repository:[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+$	repository:<repository> — the repository node (default branch, settings)
-invalidator	ref	^ref:[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+/[^ ~^:?*.[/][^ ~^:?*[/]*(/[^ ~^:?*.[/][^ ~^:?*[/]*)*$	ref:<repository>/<ref> — the branch whose target the fact depends on
+invalidator	ref	^ref:[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+/[]!"#$%&'()+,0-9;<=>@A-Z_`a-z{|}-][]!"#$%&'()+,.0-9;<=>@A-Z_`a-z{|}-]*(/[]!"#$%&'()+,0-9;<=>@A-Z_`a-z{|}-][]!"#$%&'()+,.0-9;<=>@A-Z_`a-z{|}-]*)*$	ref:<repository>/<ref> — the branch whose target the fact depends on
 invalidator	ruleset	^ruleset:[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+$	ruleset:<repository> — the repository's rulesets (which checks are required)
 
 # --- Constraints: what a grammar alone cannot exclude, as machine-readable negatives
@@ -177,7 +177,6 @@ constraint	ref	\.\.	no .. anywhere in a ref
 constraint	ref	@\{	no @{ (reflog syntax) in a ref
 constraint	ref	\.lock(/|$)	no component of a ref ends in .lock (Git reserves the suffix for lock files)
 constraint	ref	\.$	a ref never ends in a dot
-constraint	ref	\\	a ref never contains a backslash
 constraint	ref	^@$	the single name @ is not a branch (Git reserves it for HEAD)
 constraint	provenance	(^|/)\.\.?(/|$)	a path is normalized: no . or .. components
 constraint	source-identity/repository-file	(:|/)\.\.?(/|$)	the path after the commit is normalized: no . or .. components
@@ -190,14 +189,12 @@ constraint	invalidator/ref	\.\.	the embedded ref has no ..
 constraint	invalidator/ref	@\{	the embedded ref has no @{
 constraint	invalidator/ref	\.lock(/|$)	no component of the embedded ref ends in .lock
 constraint	invalidator/ref	\.$	the embedded ref never ends in a dot
-constraint	invalidator/ref	\\	the embedded ref never contains a backslash
 constraint	invalidator/ref	/@$	the embedded ref is never the single name @
 constraint	invalidator/ref	^ref:[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+/refs/	the embedded ref is the branch name, never the refs/ path
 constraint	source-identity/git	@ref/.*\.\.	the embedded ref has no ..
 constraint	source-identity/git	@ref/.*@\{	the embedded ref has no @{
 constraint	source-identity/git	@ref/.*\.lock(/|$)	no component of the embedded ref ends in .lock
 constraint	source-identity/git	@ref/.*\.$	the embedded ref never ends in a dot
-constraint	source-identity/git	@ref/.*\\	the embedded ref never contains a backslash
 constraint	source-identity/git	@ref/@$	the embedded ref is never the single name @
 constraint	source-identity/git	@ref/refs/	the embedded ref is the branch name, never the refs/ path
 
@@ -214,7 +211,7 @@ source	derived	<derived-version>: the schema version, then <input key>@<that inp
 
 # --- Source identity grammar: source.identity is validated per source type ----
 source-identity	github-api	^[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+(#[1-9][0-9]*(/comment/[1-9][0-9]*)?|/milestone/[1-9][0-9]*)?$	A <repository>, <work-unit>, <comment> or <milestone> locator — the GitHub node that was read
-source-identity	git	^[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+@([0-9a-f]{40}|ref/[^ ~^:?*.[/][^ ~^:?*[/]*(/[^ ~^:?*.[/][^ ~^:?*[/]*)*)$	<repository>@<commit> or <repository>@ref/<ref>
+source-identity	git	^[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+@([0-9a-f]{40}|ref/[]!"#$%&'()+,0-9;<=>@A-Z_`a-z{|}-][]!"#$%&'()+,.0-9;<=>@A-Z_`a-z{|}-]*(/[]!"#$%&'()+,0-9;<=>@A-Z_`a-z{|}-][]!"#$%&'()+,.0-9;<=>@A-Z_`a-z{|}-]*)*)$	<repository>@<commit> or <repository>@ref/<ref>
 source-identity	repository-file	^[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+@[0-9a-f]{40}:[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*$	<repository>@<commit>:<path> — a normalized repository-relative path: slash-separated components, none empty, none . or .., no leading slash
 source-identity	human-decision	^([a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+#[1-9][0-9]*/comment/[1-9][0-9]*|[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+@[0-9a-f]{40})$	The <decision-record> itself
 source-identity	derived	^fact-model/[1-9][0-9]*$	fact-model/<schema version>
