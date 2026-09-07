@@ -8,11 +8,8 @@ from issue history. This page defines the fact classes, the envelope every fact
 is carried in, the closed status vocabulary, and the canonical identifier forms.
 
 The machine-readable authority is `preferences/fact-model.tsv` (schema
-version 1); this page renders it, never the other way round. The behavioral
-suite `tests/test-fact-model.sh` that checks the page against the authority is
-delivered by the stacked suite pull request; until it lands, every statement on
-this page about what the suite checks, proves or validates describes that
-suite's contract, not an enforcement already present in this repository. The
+version 1); this page renders it, never the other way round, and the behavioral
+suite `tests/test-fact-model.sh` checks the page against the authority. The
 model is **Experimental**: it is the
 contract between the fact sources and their consumers, and it may still change
 while the snapshot work that consumes it is validated.
@@ -105,7 +102,7 @@ way it would be at the top level.
 Not every status is meaningful for every class. A work unit, its repository, its
 placement, its graph and the standing authority always apply, so they are ESTABLISHED,
 UNKNOWN or CONFLICT; the HEAD-bound classes add NOT_APPLICABLE for a work unit with
-no HEAD; the derived class is ESTABLISHED or UNKNOWN (R18). Once it lands, the behavioral suite builds
+no HEAD; the derived class is ESTABLISHED or UNKNOWN (R18). The behavioral suite builds
 one canonical fact for every class × admitted status and proves it validates, and one
 for every class × excluded status and proves it is rejected, so the matrix is not a
 table of intentions.
@@ -135,8 +132,8 @@ no lookaround, no backslash-letter escape (`\s`, `\d`, `\x..`), no backslash ins
 bracket expression and no POSIX character class, so `awk`, `grep -E` and every modern
 engine read it identically. Every class is positive — letters, digits and enumerated
 punctuation — so whitespace and control characters are outside every grammar by
-construction. The behavioral suite, once it lands, lints every grammar against this dialect and runs each example below through
-both `grep -E` and a second engine.
+construction. The behavioral suite lints every grammar against this dialect and runs
+each example below through both `grep -E` and a second engine.
 
 | Kind | Canonical form | Grammar (ERE) | Example |
 |---|---|---|---|
@@ -262,7 +259,7 @@ of the source type; a role name, a label, a summary, or a word such as
 ## Rules
 
 Rendered verbatim from the `rule` records of `preferences/fact-model.tsv`; the
-behavioral suite, once it lands, checks the two never drift.
+behavioral suite checks the two never drift.
 
 - **R1** Canonical identifiers have one representation; labels, abbreviations
   and pretty names are projections. Each class has exactly one canonical fact
@@ -394,7 +391,7 @@ class, status token or vocabulary member, and any change to the meaning, type
 or requiredness of an existing one, is a new version. A consumer therefore
 rejects every field and class it does not know for the version it reads (R9
 applies to the whole fact), which is exactly what the behavioral suite's
-validator does once it lands, and an older consumer can never accept a snapshot it cannot
+validator does, and an older consumer can never accept a snapshot it cannot
 judge complete. The invalidation and
 migration rules that follow from a version change belong to the freshness
 contract that builds on this page.
@@ -404,7 +401,7 @@ contract that builds on this page.
 Each example is a JSON array of facts. Examples 1 and 9 are **complete
 snapshots** (every required class exactly once — a pull request, and an issue
 with no HEAD); Examples 2–8 are **fragments** that show only the classes the
-situation turns on. Once it lands, the behavioral suite validates every
+situation turns on. The behavioral suite validates every
 fact on this page against the machine-readable schema, enforces the
 snapshot's cardinality and forbids duplicate classes within a fragment, so the
 examples are fixtures, not illustrations. The repository, numbers and ids are

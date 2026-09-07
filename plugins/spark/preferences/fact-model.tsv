@@ -4,9 +4,7 @@
 # classes an agent needs to execute a governed work unit, the envelope every
 # fact is carried in, the closed status vocabulary, and the canonical
 # identifier forms. reference/fact-model.md renders the same facts for a reader
-# and is to be checked against this data by the behavioral suite tests/test-fact-model.sh,
-# delivered by the stacked suite pull request that closes the work unit (until it
-# lands, statements about the suite describe its contract, not present enforcement);
+# and is checked against this data by the behavioral suite tests/test-fact-model.sh;
 # prose is never the schema.
 #
 # This file defines HOW a fact is represented. It is NEVER an authority for
