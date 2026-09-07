@@ -537,16 +537,22 @@ def check_fact(f):
             if k == "head" and v != rest: fail(f"the version observed for {t} is the head itself (R20)")
             if rest == ident and isinstance(f["source"].get("version"), str) and ISO.fullmatch(f["source"]["version"]) and v != f["source"]["version"]: fail(f"the source node's observed version {v} is not the fact's source.version {f['source']['version']} (R20)")
     # a fact whose value depends on which records a node carries lists the node, so a record created later reaches it (R17)
+    def pr_token(node, what):
+        """R17: the node is a pull request and is listed as one — never as an issue, never both"""
+        if f"pull_request:{node}" not in f["invalidators"]: fail(f"{what} lists pull_request:{node} (R17)")
+        if f"issue:{node}" in f["invalidators"]: fail(f"{what} lists {node} as a pull request, never as an issue (R17)")
     if c == "review" and f["status"] != "NOT_APPLICABLE":
-        one_wu_token(f, ident if ids["work-unit"].fullmatch(ident) else ident.split("/comment/")[0], "review (the pull request whose comments hold the verdicts)")
+        pr_token(ident if ids["work-unit"].fullmatch(ident) else ident.split("/comment/")[0], "a review (the pull request whose comments hold the verdicts)")
     if c == "authority":
         decs = {ident}
         if f["status"] == "ESTABLISHED": decs |= {g["decision"] for g in f["value"].get("grants", []) if isinstance(g, dict) and "decision" in g} | {h["decision"] for h in f["value"].get("human_boundaries", []) if isinstance(h, dict) and "decision" in h}
         elif isinstance(f.get("detail"), dict): decs |= {x for x in f["detail"].get("candidates", []) if isinstance(x, str)}
         for d in sorted(decs):
             if ids["comment"].fullmatch(d): one_wu_token(f, d.split("/comment/")[0], f"authority (the node carrying decision record {d})")
+            elif ids["decision-record"].fullmatch(d) and "@" in d:
+                if f"repository:{d.split('@')[0]}" not in f["invalidators"]: fail(f"authority lists the repository carrying decision record {d} as repository:{d.split('@')[0]} (R17)")
     if c == "head" and f["source"]["type"] == "github-api" and f["status"] != "NOT_APPLICABLE" and ids["work-unit"].fullmatch(ident):
-        one_wu_token(f, ident, "head (the pull request whose base selection it read)")
+        pr_token(ident, "a head fact (the pull request whose base selection it read)")
     if c == "checks" and f["status"] != "NOT_APPLICABLE":   # NOT_APPLICABLE checks name their work unit like every HEAD-bound class (R7)
         if not ids["repository"].fullmatch(ident): fail(f"checks name the repository whose rulesets require them, not {ident} (R17)")
         if f"ruleset:{ident}" not in f["invalidators"]: fail(f"checks do not list ruleset:{ident} — required checks change with the rulesets (R17)")
@@ -969,6 +975,7 @@ rej base 'f["value"]["record"]="github.com/acme/widgets#42/comment/9101"; f["inv
 rej base 'f["invalidators"]=[i for i in f["invalidators"] if not i.startswith("comment:")]' "a review that does not list its record as a comment: invalidator must be rejected (R17)"
 rej base 'f["invalidators"]=[i for i in f["invalidators"] if not i.startswith("pull_request:")]' "a review that does not list the pull request whose comments hold the verdicts must be rejected — a verdict record created later would never reach it (R17)"
 rej base 'f["invalidators"].append("issue:github.com/acme/widgets#42")' "a review listing its pull request under both kinds must be rejected — one canonical token (R17)"
+rej base 'f["invalidators"]=[("issue:"+i.split(":",1)[1]) if i.startswith("pull_request:") else i for i in f["invalidators"]]' "a review listing its pull request as an issue must be rejected — the pull request is the node whose comments hold the verdicts (R17)"
 # versions: tokens say what, versions say as of when (R20)
 rej base 'NOSYNC=True; del f["versions"]' "a fact without versions must be rejected — nothing could compare it with the source (R20)"
 rej base 'NOSYNC=True; del f["versions"]["comment:github.com/acme/widgets#42/comment/9100"]' "versions must name every token the fact carries (R20)"
@@ -1032,6 +1039,12 @@ accepts "$auth" && ok || bad "control: a canonical authority fact is accepted"
 rej auth 'f["source"]["type"]="github-api"' "authority from a non-human-decision source must be rejected (R5)"
 rej auth 'f["invalidators"]=["repository:github.com/acme/widgets"]' "an authority recorded in a comment that does not list that comment as an invalidator must be rejected — an edited decision would never go stale (R17)"
 rej auth 'f["invalidators"]=["comment:github.com/acme/widgets#7/comment/9001"]' "an authority fact that does not list the node carrying its decision record must be rejected — a grant or revocation posted there later would never reach it (R17)"
+# a decision recorded at a commit: the repository carries the record
+at_commit='D="github.com/acme/widgets@0123456789abcdef0123456789abcdef01234567"
+for g in f["value"]["grants"]+f["value"]["human_boundaries"]: g["decision"]=D
+f["source"]={"type":"human-decision","identity":D,"version":"0123456789abcdef0123456789abcdef01234567"}'
+acc auth "$at_commit"'; f["invalidators"]=["repository:github.com/acme/widgets"]' "control: an authority fact whose decision is recorded at a commit lists the repository carrying it (R17)"
+rej auth "$at_commit"'; f["invalidators"]=["issue:github.com/acme/widgets#7"]' "an authority fact whose decision is recorded at a commit and that does not list the repository must be rejected (R17)"
 acc auth 'f["status"]="UNKNOWN"; del f["value"]; f["detail"]={"reason":"403","candidates":[]}' "control: an UNKNOWN authority fact from its decision record is accepted"
 rej auth 'f["status"]="UNKNOWN"; del f["value"]; f["detail"]={"reason":"403","candidates":[]}; f["inferred"]=True' "an UNKNOWN authority fact marked inferred must be rejected — never inferred, whatever the status (R5)"
 rej auth 'f["status"]="UNKNOWN"; del f["value"]; f["detail"]={"reason":"403","candidates":[]}; f["source"]={"type":"github-api","identity":"github.com/acme/widgets#7","version":"2026-09-01T09:00:00Z"}; f["invalidators"]=["issue:github.com/acme/widgets#7"]' "an UNKNOWN authority fact from a non-decision source must be rejected (R5)"
@@ -1114,6 +1127,7 @@ accepts "$hd" && ok || bad "control: a head fact listing its HEAD and base ref i
 rej hd 'f["invalidators"]=["head:0123456789abcdef0123456789abcdef01234567"]' "a head fact without ref:<repository>/<base_ref> must be rejected — the base moves without the HEAD moving (R17)"
 rej hd 'f["invalidators"][1]="ref:github.com/acme/widgets/main"' "a head fact whose ref: invalidator names a different branch than base_ref must be rejected (R17)"
 rej hd 'f["invalidators"]=[i for i in f["invalidators"] if not i.startswith("pull_request:")]' "a head fact that does not list its pull request must be rejected — a base-branch switch is pull-request metadata and moves no branch tip (R17)"
+rej hd 'f["invalidators"]=[("issue:"+i.split(":",1)[1]) if i.startswith("pull_request:") else i for i in f["invalidators"]]' "a head fact listing its pull request as an issue must be rejected (R17)"
 rej gr 'f["value"]["blocked_by"].append({"kind":"issue","id":"github.com/acme/widgets#39","state":"open"})' "one blocker listed as both closed and open must be rejected (R14)"
 rej gr 'f["value"]["children"]=[{"kind":"issue","id":"github.com/acme/widgets#42","state":"open"},{"kind":"issue","id":"github.com/acme/widgets#42","state":"open"}]; f["invalidators"].append("issue:github.com/acme/widgets#42")' "a child listed twice must be rejected (R14)"
 rej gr 'del f["value"]["parent"]["kind"]' "a relationship without its kind must be rejected — the kind fixes the one canonical invalidator (R14/R17)"

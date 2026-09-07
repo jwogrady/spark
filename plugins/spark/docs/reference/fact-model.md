@@ -378,11 +378,13 @@ behavioral suite checks the two never drift.
   NOT_APPLICABLE). inputs and because list each key once. These source and
   invalidator requirements hold for every status; only the value-dependent ones
   wait for ESTABLISHED. A fact whose value depends on which records a node
-  carries lists that node too — a review lists the work unit whose comments hold
-  the verdicts, an authority fact lists the node of every decision record it
-  names or considers, a head fact lists the pull request it was read from —
-  under the node's kind, so a record created after the fact was read, or a
-  base-branch switch, fires a token the fact already carries.
+  carries lists that node too — a review lists the pull request whose comments
+  hold the verdicts and a head fact the pull request it was read from, each as
+  pull_request:; an authority fact lists the node of every decision record it
+  names or considers — the issue or pull request carrying a decision comment
+  under its kind, the repository for a decision recorded at a commit — so a
+  record created after the fact was read, or a base-branch switch, fires a token
+  the fact already carries.
 - **R18** Each class admits exactly the statuses its class-status record lists:
   work unit, repository, placement, graph and authority are always applicable
   (ESTABLISHED, UNKNOWN or CONFLICT); the HEAD-bound classes add NOT_APPLICABLE
