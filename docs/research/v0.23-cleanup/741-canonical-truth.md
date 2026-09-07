@@ -40,14 +40,14 @@ surfaces re-registered under their steady-state role (below).
 (prose only — not explanation, not history, and CI code excluded); the two concepts the audit added are
 counted the same way from the same sweep. "After" counts the operative sources the map names; where a
 concept names two, the map's treatment declares the composite (which aspect each source owns); `non-prose`
-marks an executable CI surface or a GitHub decision record that the map cites as a source without a
-repository page defining it. `tests/test-doc-roles.sh` recomputes the role counts and the after-column from
+marks an executable CI surface, the shipped runtime that derives an instance at read time, or GitHub state
+(a decision record, the milestone list) that the map cites as a source without a repository page defining it. `tests/test-doc-roles.sh` recomputes the role counts and the after-column from
 the two data files and fails if this page disagrees; the before-counts are the sweep's, recorded here, and
 the suite checks each is a number.
 
 | Concept | Before | After |
 |---|---|---|
-| `release-gate-placement` | 8 | 3 |
+| `release-gate-placement` | 8 | 3 + 2 non-prose |
 | `version-minting` | 4 | 1 + 1 non-prose |
 | `authority-boundaries` | 9 | 2 |
 | `routine-merge-authority` | 9 | 1 + 1 non-prose |
@@ -105,7 +105,7 @@ what the reviewer re-read, as tracked bytes and lines:
 |---|---|---|
 | `root.contract` (AGENTS.md + CLAUDE.md, auto-loaded every session) | 15,433 bytes / 292 lines | 15,648 bytes / 295 lines |
 | `shipped.docs.spark` | 310,651 bytes / 5,908 lines | 427,680 bytes / 7,072 lines |
-| `devdocs.ops` | 225,751 bytes / 4,286 lines | 256,236 bytes / 4,502 lines |
+| `devdocs.ops` | 225,751 bytes / 4,286 lines | 256,730 bytes / 4,503 lines |
 
 The contract grows by one clause (contradiction 1); the shipped docs shrink by the two duplicated
 paragraphs and grow by the fact-freshness page #732 added between the two measurements — the figures are the

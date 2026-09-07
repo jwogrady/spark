@@ -41,8 +41,9 @@ while IFS=$'\t' read -r concept sources projections historical risk treatment; d
   fi
   for s in "${srcs[@]}"; do
     case "$s" in
-      github:*) printf '%s' "$s" | grep -qE '^github:[a-z0-9.-]+/[a-z0-9_.-]+#[1-9][0-9]*$' && ok || bad "$concept: $s is not a canonical GitHub decision-record locator" ;;
+      github:*) printf '%s' "$s" | grep -qE '^github:[a-z0-9.-]+/[a-z0-9_.-]+(#[1-9][0-9]*|/milestones)$' && ok || bad "$concept: $s is not a canonical GitHub locator (a decision record or the milestone list)" ;;
       ci:*) [ -f "$ROOT/${s#ci:}" ] && ok || bad "$concept: CI surface ${s#ci:} does not exist" ;;
+      code:*) [ -f "$ROOT/${s#code:}" ] && ok || bad "$concept: runtime surface ${s#code:} does not exist" ;;
       *) [ -f "$ROOT/$s" ] && ok || bad "$concept: operative source $s does not exist"
          case "$s" in
            *.tsv|*.json) ok ;;   # machine-readable authorities are data, not registered prose
@@ -65,7 +66,7 @@ while IFS=$'\t' read -r concept sources projections historical risk treatment; d
 done < <(mrows)
 # every surface a map row names carries that concept in the register (map/register consistency)
 while IFS=$'\t' read -r concept sources projections historical _r _t; do
-  for p in $(printf '%s;%s;%s' "$sources" "$projections" "$historical" | tr ';' '\n' | grep -vE '^(-|ci:.*|github:.*|.*\.tsv|.*\.json)$'); do
+  for p in $(printf '%s;%s;%s' "$sources" "$projections" "$historical" | tr ';' '\n' | grep -vE '^(-|ci:.*|code:.*|github:.*|.*\.tsv|.*\.json)$'); do
     cs="$(rows | awk -F'\t' -v p="$p" '$1 == p {print $3}')"
     case ",$cs," in *",$concept,"*) ok ;; *) bad "$p is named by the $concept row but its register concepts are '$cs'" ;; esac
   done
@@ -93,7 +94,7 @@ for role in operative-authority current-projection explanation historical-eviden
   assert_eq "manifest role count for $role is the register's" "$want" "$got"
 done
 while IFS=$'\t' read -r concept sources _p _h _r _t; do
-  prose="$(printf '%s' "$sources" | tr ';' '\n' | grep -cvE '^(ci|github):' || true)"; other="$(printf '%s' "$sources" | tr ';' '\n' | grep -cE '^(ci|github):' || true)"
+  prose="$(printf '%s' "$sources" | tr ';' '\n' | grep -cvE '^(ci|github|code):' || true)"; other="$(printf '%s' "$sources" | tr ';' '\n' | grep -cE '^(ci|github|code):' || true)"
   want="$prose"; [ "$other" -gt 0 ] && want="$prose + $other non-prose"
   got="$(grep -E "^\| \`$concept\` \| [^|]+ \| [^|]+ \|$" "$MAN" | sed -E 's/^\| `[a-z-]+` \| [^|]+ \| ([^|]+) \|$/\1/')"
   assert_eq "manifest after-count for $concept is the map's" "$want" "$got"
