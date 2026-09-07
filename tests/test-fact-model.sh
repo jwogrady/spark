@@ -122,44 +122,91 @@ def table(header):
     i = doc.index(header); body = doc[doc.index("\n", doc.index("\n", i) + 1) + 1:]
     return [cells(l) for l in body.split("\n\n")[0].split("\n") if l.startswith("|")]
 def say(okk, what): print(("OK " if okk else "BAD ") + what)
-keyof = {r[1]: r[2] for r in rows if r[0] == "key"}
+seen = set()
+def kind(k):
+    """every parity loop registers the record kind it covers; the last check proves no kind is left unchecked"""
+    seen.add(k); return [r for r in rows if r[0] == k]
+keyof = {r[1]: r[2] for r in kind("key")}
 cls = {norm(c[0]): c for c in table("| Class | Canonical key |")}
-for r in (r for r in rows if r[0] == "class"):
+for r in kind("class"):
     c = cls.get(r[1]); say(c is not None and [norm(x) for x in c[1:]] == [keyof[r[1]], r[2], norm(r[3]), norm(r[4])], f"class {r[1]} row is the TSV's key, requiredness, shape and description")
 flds = {norm(c[0]): c for c in table("| Field | Required |")}
-for r in (r for r in rows if r[0] == "field"):
+for r in kind("field"):
     c = flds.get(r[1]); say(c is not None and [norm(x) for x in c[1:]] == [r[2], norm(r[4])], f"field {r[1]} row is the TSV's requiredness and description")
 ident = {c[0]: c for c in table("| Kind | Canonical form |")}
-for r in (r for r in rows if r[0] == "identifier"):
+for r in kind("identifier"):
     c = ident.get(r[1]); say(c is not None and norm(c[1]) == norm(r[3]), f"identifier {r[1]} canonical form is the TSV's")
 inv = {norm(c[0]): c for c in table("| Kind | Token form and meaning |")}
-for r in (r for r in rows if r[0] == "invalidator"):
+for r in kind("invalidator"):
     c = inv.get(r[1]); say(c is not None and norm(c[1]) == norm(r[3]), f"invalidator {r[1]} form is the TSV's")
 sta = {norm(c[0]): c for c in table("| Status | `value` allowed |")}
-for r in (r for r in rows if r[0] == "status"):
+for r in kind("status"):
     c = sta.get(r[1]); say(c is not None and [norm(x) for x in c[1:]] == [r[2], norm(r[3])], f"status {r[1]} row is the TSV's value-allowed flag and meaning")
-sidr = {r[1]: r for r in rows if r[0] == "source-identity"}; sverr = {r[1]: r for r in rows if r[0] == "source-version"}
+sidr = {r[1]: r for r in kind("source-identity")}; sverr = {r[1]: r for r in kind("source-version")}
 srcr = {norm(c[0]): c for c in table("| Source type | What it is |")}
-for r in (r for r in rows if r[0] == "source"):
+for r in kind("source"):
     c = srcr.get(r[1]); say(c is not None and [norm(x) for x in c[1:]] == [norm(r[3]), norm(r[2]), norm(sidr[r[1]][3]), norm(sverr[r[1]][3])], f"source {r[1]} row is the TSV's description, version identity, identity form and version grammar")
 bev = {norm(c[0]): c for c in table("| Boundary | Evidence fact |")}
-for r in (r for r in rows if r[0] == "boundary-evidence"):
+for r in kind("boundary-evidence"):
     c = bev.get(r[1]); say(c is not None and [norm(x) for x in c[1:]] == [r[2], r[3], r[4], norm(r[5])], f"boundary-evidence {r[1]} row is the TSV's fact, field, condition and meaning")
+fac = {norm(c[0]): c for c in table("| Facet | Fields |")}
+for r in kind("facet"):
+    c = fac.get(r[1]); say(c is not None and [norm(x) for x in c[1:]] == [norm(r[2]), norm(r[3])], f"facet {r[1]} row is the TSV's fields and meaning")
+ver = kind("version")[0][1]
+say(re.search(r"\bversion " + re.escape(ver) + r"\)", doc) is not None, "the page names the TSV's schema version")
 cst = {norm(c[0]): c for c in table("| Class | Admitted statuses |")}
-for r in (r for r in rows if r[0] == "class-status"):
+for r in kind("class-status"):
     c = cst.get(r[1]); say(c is not None and norm(c[1]).replace(", ", ",") == r[2], f"class-status {r[1]} row lists the TSV's admitted statuses")
 con = [c for c in table("| Scope | Forbidden (ERE) |")]
-want = [[r[1], r[2], r[3]] for r in rows if r[0] == "constraint"]
+want = [[r[1], r[2], r[3]] for r in kind("constraint")]
 got = [[norm(c[0]), c[1].strip("`").replace("\\|", "|"), norm(c[2])] for c in con]
 say(got == [[w[0], w[1], norm(w[2])] for w in want], "every constraint row is the TSV's scope, regex and meaning, in order")
 shp = {norm(c[0]): c for c in table("| Object | Shape |")}
-for r in (r for r in rows if r[0] == "shape"):
+for r in kind("shape"):
     c = shp.get(r[1]); say(c is not None and norm(c[1]) == norm(r[2]), f"envelope shape {r[1]} is the TSV's")
 rules_md = doc[doc.index("## Rules"):doc.index("## Versioning")]
 found = {m.group(1): norm(m.group(2)) for m in re.finditer(r"^- \*\*(R\d+)\*\* (.*?)(?=^- \*\*R|\Z)", rules_md, flags=re.S | re.M)}
-for r in (r for r in rows if r[0] == "rule"):
+for r in kind("rule"):
     say(found.get(r[1]) == norm(r[2]), f"rule {r[1]} statement is the TSV's, verbatim")
-say(len(found) == len([r for r in rows if r[0] == "rule"]), "the page states no rule the TSV lacks")
+say(len(found) == len(kind("rule")), "the page states no rule the TSV lacks")
+say(seen == {r[0] for r in rows}, f"every record kind in the TSV has a row-by-row parity check: {sorted({r[0] for r in rows} - seen) or 'none unchecked'}")
+PY
+)
+EOF
+fi
+# the timestamp grammar encodes the calendar itself (R18): every candidate date of eight centuries, leap centuries
+# included, is accepted exactly when the calendar has it; the two timestamp-bearing source versions carry that grammar
+if command -v python3 >/dev/null 2>&1; then
+  while IFS= read -r line; do
+    case "$line" in OK*) ok ;; *) bad "timestamp grammar: $line" ;; esac
+  done <<EOF
+$(python3 - "$TSV" <<'PY'
+import re, sys, datetime
+rows = [l.rstrip("\n").split("\t") for l in open(sys.argv[1]) if l.strip() and not l.startswith("#")]
+ids = {r[1]: r[2] for r in rows if r[0] == "identifier"}; sver = {r[1]: r[2] for r in rows if r[0] == "source-version"}
+ts = ids["timestamp"]; rx = re.compile(ts); inner = ts[1:-1]
+def say(okk, what): print(("OK " if okk else "BAD ") + what)
+say(ts.startswith("^") and ts.endswith("$"), "the timestamp grammar is anchored")
+for st in ("github-api", "human-decision"):
+    say(sver[st].startswith("^(" + inner + "|"), f"the {st} version grammar's timestamp alternative is the timestamp grammar, byte for byte")
+bad = n = 0
+for y in range(1600, 2401):
+    for mo in range(0, 14):
+        for d in range(0, 33):
+            v = f"{y:04d}-{mo:02d}-{d:02d}T00:00:00Z"; n += 1
+            try: datetime.datetime.strptime(v, "%Y-%m-%dT%H:%M:%SZ"); real = True
+            except ValueError: real = False
+            if bool(rx.fullmatch(v)) != real: bad += 1
+say(bad == 0, f"the grammar and the calendar agree on all {n} candidate dates of 1600-2400 ({bad} disagreements)")
+tb = 0
+for h in range(0, 100):
+    for mi in (0, 30, 59, 60, 99):
+        for se in (0, 30, 59, 60, 99):
+            v = f"2026-09-06T{h:02d}:{mi:02d}:{se:02d}Z"
+            if bool(rx.fullmatch(v)) != (h < 24 and mi < 60 and se < 60): tb += 1
+say(tb == 0, "the grammar admits exactly hours 00-23 and minutes and seconds 00-59")
+for v in ("2026-09-06T12:00:05.123Z", "2026-09-06T12:00:05+00:00", "2026-09-06 12:00:05Z", "2026-9-6T12:00:05Z", "2026-09-06T12:00:05"):
+    say(rx.fullmatch(v) is None, f"{v} is outside the grammar (second precision, Z suffix, zero-padded)")
 PY
 )
 EOF
@@ -294,11 +341,6 @@ def one_wu_token(f, wid, what):
     if len(have) != 1: fail(f"{what} lists {wid} as an invalidator exactly once, as issue: or pull_request: (R17)")
 FORBIDDEN_KEYS = {"body", "comments", "timeline", "prose", "summary", "history"}
 ISO = ids["timestamp"]
-import datetime
-def real_instant(v, where):
-    """the grammar bounds each field; the calendar (30-day months, leap years) needs a parse (R18)"""
-    try: datetime.datetime.strptime(v, "%Y-%m-%dT%H:%M:%SZ")
-    except ValueError: fail(f"{where} = {v!r} is not a real calendar instant (R18)")
 
 def fail(msg): raise ValueError(msg)
 
@@ -316,7 +358,6 @@ def check_fact(f):
             if t not in ids: fail(f"field {k} is typed by an undeclared identifier kind {t}")
             if not isinstance(f[k], str) or not ids[t].fullmatch(f[k]): fail(f"field {k} = {f[k]!r} is not in the {t} grammar (R14/R18)")
             constrained(t, f[k], k)
-            if t == "timestamp": real_instant(f[k], k)
     if f["schema_version"] != version: fail("schema_version mismatch")
     if not ids["fact-key"].fullmatch(f["key"]): fail(f"key not canonical: {f['key']}")
     if f["class"] not in classes: fail(f"unknown class {f['class']}")
@@ -340,7 +381,6 @@ def check_fact(f):
     constrained(f"source-identity/{src['type']}", str(src["identity"]), "source.identity")
     if not src["version"]: fail("source.version empty")
     if not sver[src["type"]].fullmatch(str(src["version"])): fail(f"source.version {src['version']!r} is not in the {src['type']} version grammar (R14)")
-    if ISO.fullmatch(str(src["version"])): real_instant(str(src["version"]), "source.version")
     # a github-api commit version is only ever a HEAD-bound fact keyed by its own HEAD (R14): for any other class
     # an unrelated commit would never change when the node's metadata does
     if src["type"] == "github-api" and re.fullmatch(r"[0-9a-f]{40}", str(src["version"])):
@@ -757,11 +797,13 @@ for ts in '2026-99-99T99:99:99Z' '2026-13-01T00:00:00Z' '2026-00-10T00:00:00Z' '
   rej base "f[\"observed_at\"]=\"$ts\"" "observed_at $ts is outside the calendar ranges the grammar encodes (R18)"
   rej base "f[\"source\"][\"version\"]=\"$ts\"" "a github-api updated_at of $ts is outside the timestamp grammar (R18)"
 done
-for ts in '2026-02-30T00:00:00Z' '2026-04-31T00:00:00Z' '2025-02-29T00:00:00Z'; do
-  rej base "f[\"observed_at\"]=\"$ts\"" "observed_at $ts passes the ranges but is not a real calendar date and must be rejected (R18)"
-  rej base "f[\"source\"][\"version\"]=\"$ts\"" "a github-api updated_at of $ts is not a real calendar date (R18)"
+for ts in '2026-02-30T00:00:00Z' '2026-02-31T12:00:00Z' '2026-04-31T00:00:00Z' '2025-02-29T00:00:00Z' '2100-02-29T00:00:00Z'; do
+  rej base "f[\"observed_at\"]=\"$ts\"" "observed_at $ts is not a calendar date; the grammar alone rejects it (R18)"
+  rej base "f[\"source\"][\"version\"]=\"$ts\"" "a github-api updated_at of $ts is not a calendar date; the grammar alone rejects it (R18)"
 done
-acc base 'f["observed_at"]="2024-02-29T23:59:59Z"' "control: a leap-day instant at the last second of the day is a real instant"
+acc base 'f["observed_at"]="2024-02-29T23:59:59Z"' "control: a leap-day instant at the last second of the day is in the grammar"
+acc base 'f["observed_at"]="2000-02-29T00:00:00Z"' "control: the leap day of a leap century is in the grammar"
+acc base 'f["source"]["version"]="2000-02-29T00:00:00Z"' "control: the same instant is a valid github-api updated_at version"
 rej base 'f["schema_version"]="01"' "a schema_version outside the schema-version grammar must be rejected (R18)"
 rej base 'f["invalidators"]="head:0123456789abcdef0123456789abcdef01234567"' "invalidators as a string must be rejected: the field record says list (R14)"
 rej base 'f["provenance"]=["https://github.com/acme/widgets/pull/42"]' "provenance as a list must be rejected: the field record says string (R14)"
@@ -812,7 +854,7 @@ rej auth 'f["value"]["grants"][0]["decision"]="github.com/acme/widgets#7/comment
 rej auth 'f["value"]["human_boundaries"][0]["decision"]="github.com/acme/widgets#8/comment/9100"' "a boundary naming a decision the fact's source does not back must be rejected (R5)"
 rej auth 'f["inferred"]=True' "an inferred authority fact must be rejected (R5)"
 for ts in '2026-99-99T99:99:99Z' '2026-02-30T00:00:00Z' '2025-02-29T00:00:00Z'; do
-  rej auth "f[\"source\"][\"version\"]=\"$ts\"" "a decision comment's updated_at of $ts is not a real calendar instant (R18)"
+  rej auth "f[\"source\"][\"version\"]=\"$ts\"" "a decision comment's updated_at of $ts is not a calendar instant; the grammar alone rejects it (R18)"
 done
 rej auth 'f["inferred"]=False' "inferred: false on authority must be rejected (never a representation)"
 rej auth 'f["source"]["identity"]="role:owner"' "a human-decision source whose identity is a role must be rejected (R5/R14)"
