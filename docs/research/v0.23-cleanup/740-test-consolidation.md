@@ -243,7 +243,7 @@ any difference.
 
 | | BEFORE (branch base `dcda139`) | AFTER |
 |---|---|---|
-| suites with pre-shaped `gh` answers assuming a caller's jq | 1 (`test-codify-prereqs.sh`, 10 stubs) | 0 |
+| suites with pre-shaped `gh` answers assuming a caller's jq | 1 (`test-codify-prereqs.sh`, eleven stubs: `mk_gh` plus ten inline) | 0 |
 | production jq programs newly exercised | — | 5 (`.full_name`, blocked-by row, `.body`, `.state`, closing references) |
 | stubs written through `stub_gh` | 0 | 13 (eleven in codify-prereqs — `mk_gh` plus ten inline — and one each in the packet-2 suites) |
 | `chmod +x`/shebang restatements removed | — | 13 |
@@ -260,9 +260,11 @@ sweep with no discrimination change — packet 4 below, so its per-suite proof s
 
 ## Packet 4 — the `stub_gh` sweep (baseline B3)
 
-**What changed.** Every remaining hand-written `gh` stub — 36 stubs in 15 suites — is now
-written through `stub_gh`: the `cat > "$dir/gh" <<TAG` + shebang opener becomes
-`stub_gh "$dir/gh" <<TAG`, and the `chmod +x` that followed each heredoc is gone. Stub
+**What changed.** Every remaining hand-written `gh` stub — 36 heredoc/shebang openers in 15
+suites, 24 of which were followed by their own `chmod +x` (the other 12 reused a directory
+whose file was already executable) — is now written through `stub_gh`: the
+`cat > "$dir/gh" <<TAG` + shebang opener becomes `stub_gh "$dir/gh" <<TAG`, and each
+per-stub `chmod +x` is gone. Stub
 *bodies* are untouched: this sweep is scaffolding only, so the answers each suite gives
 stay exactly where they were and mean exactly what they meant. Every stub now also carries
 the prelude (`GH_JQ`, `answer_json`), which a later change can use to answer with JSON
@@ -272,13 +274,13 @@ sense (they answer GraphQL snapshots through the caller's jq already, or plain t
 
 | Existing test/case | Invariant proved | Surviving test/case | Same/stronger discrimination? | Validation |
 |---|---|---|---|---|
-| 36 hand-written stubs (shebang + heredoc + chmod) in 15 suites | each suite's own scenarios | the same 36 stubs via `stub_gh`, bodies unchanged | **Same** by construction — bodies identical, PATH ordering unchanged | per-suite pass/fail lines identical (92/92); the runner's silent-suite guard (packet 3) would fail any stub whose heredoc did not terminate |
+| 36 hand-written stubs (heredoc + shebang openers, 24 with a per-stub chmod) in 15 suites | each suite's own scenarios | the same 36 stubs via `stub_gh`, bodies unchanged | **Same** by construction — bodies identical, PATH ordering unchanged | per-suite pass/fail lines identical (92/92); the runner's silent-suite guard (packet 3) would fail any stub whose heredoc did not terminate |
 
 **Before / after (this packet).**
 
 | | BEFORE (branch base `a504e2c`) | AFTER |
 |---|---|---|
-| hand-written `gh` stubs (`cat > … <<TAG` + shebang + chmod) | 36 in 15 suites | 0 |
+| hand-written `gh` stubs (`cat > … <<TAG` + shebang openers; 24 with a per-stub chmod) | 36 in 15 suites | 0 |
 | stubs written through `stub_gh` | 13 | 49 (13 + 36) |
 | scaffolding lines removed (shebang + `chmod +x`) | — | 60 (36 shebang lines, 24 chmod lines; the remaining converted stubs reused a directory whose file was already executable) |
 | test LOC (`tests/test-*.sh`) | 19,363 | 19,303 |
