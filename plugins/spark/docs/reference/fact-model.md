@@ -303,11 +303,12 @@ behavioral suite checks the two never drift.
   a comment: invalidator, and a CONFLICT lists every comment it names as a
   candidate, so an edited record goes stale; acceptance read from GitHub names
   its contract — a work-unit node, listed once as an invalidator whatever the
-  status — and within one set that contract is the work unit itself or the issue
-  it implements; the work unit belongs to the set's repository; placement and
-  graph name the work-unit node they were read from — within one set, the work
-  unit itself or the issue it implements, never an unrelated node — and list it
-  as an invalidator; head read from GitHub names a work unit and checks name a
+  status — and within one set that contract (the value's when ESTABLISHED, the
+  source node otherwise) is the work unit itself or the issue it implements; the
+  work unit belongs to the set's repository; placement and graph name the
+  work-unit node they were read from — within one set, the work unit itself or
+  the issue it implements, never an unrelated node — and list it as an
+  invalidator; head read from GitHub names a work unit and checks name a
   repository — within one set, the work unit's own node and the repository's; a
   NOT_APPLICABLE HEAD-bound fact names the work unit it was read from and lists
   it as an invalidator. A work-unit invalidator has one canonical form — issue:
