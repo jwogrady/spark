@@ -131,10 +131,10 @@ status	NOT_APPLICABLE	no	The fact class does not apply to this work unit: a HEAD
 # engine read them identically. Every class is positive (letters, digits, enumerated
 # punctuation), so whitespace and control characters are outside every grammar by construction.
 # --- Canonical identifiers: one representation; anything else is a projection
-identifier	repository	^[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+$	<host>/<owner>/<name>, all lower-case (GitHub compares owner and name case-insensitively, so one spelling is the identity), no scheme, and the name never ends in .git — that is the clone URL's spelling, a projection
-identifier	work-unit	^[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+#[1-9][0-9]*$	<repository>#<number>; a bare #<number> is a projection, never an identity
-identifier	comment	^[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+#[1-9][0-9]*/comment/[1-9][0-9]*$	<work-unit>/comment/<comment id>
-identifier	milestone	^[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+/milestone/[1-9][0-9]*$	<repository>/milestone/<number>
+identifier	repository	^(([a-z0-9][a-z0-9-]*)?[a-z0-9]\.)+([a-z0-9][a-z0-9-]*)?[a-z0-9]/[a-z0-9]+(-[a-z0-9]+)*/([a-z0-9_-][a-z0-9_.-]*|\.[a-z0-9_-][a-z0-9_.-]*|\.\.[a-z0-9_.-]+)$	<host>/<owner>/<name>, all lower-case (GitHub compares owner and name case-insensitively, so one spelling is the identity), no scheme: the host is DNS labels (letters, digits, inner hyphens) with at least one dot and no trailing dot; the owner is a GitHub login (alphanumerics joined by single hyphens, at most 39 characters by constraint); the name is GitHub's (letters, digits, . _ -; never exactly . or ..; at most 100 characters by constraint) and never ends in .git — that is the clone URL's spelling, a projection
+identifier	work-unit	^(([a-z0-9][a-z0-9-]*)?[a-z0-9]\.)+([a-z0-9][a-z0-9-]*)?[a-z0-9]/[a-z0-9]+(-[a-z0-9]+)*/([a-z0-9_-][a-z0-9_.-]*|\.[a-z0-9_-][a-z0-9_.-]*|\.\.[a-z0-9_.-]+)#[1-9][0-9]*$	<repository>#<number>; a bare #<number> is a projection, never an identity
+identifier	comment	^(([a-z0-9][a-z0-9-]*)?[a-z0-9]\.)+([a-z0-9][a-z0-9-]*)?[a-z0-9]/[a-z0-9]+(-[a-z0-9]+)*/([a-z0-9_-][a-z0-9_.-]*|\.[a-z0-9_-][a-z0-9_.-]*|\.\.[a-z0-9_.-]+)#[1-9][0-9]*/comment/[1-9][0-9]*$	<work-unit>/comment/<comment id>
+identifier	milestone	^(([a-z0-9][a-z0-9-]*)?[a-z0-9]\.)+([a-z0-9][a-z0-9-]*)?[a-z0-9]/[a-z0-9]+(-[a-z0-9]+)*/([a-z0-9_-][a-z0-9_.-]*|\.[a-z0-9_-][a-z0-9_.-]*|\.\.[a-z0-9_.-]+)/milestone/[1-9][0-9]*$	<repository>/milestone/<number>
 identifier	commit	^[0-9a-f]{40}$	Full 40-hex lower-case object id; abbreviations are projections
 identifier	ref	^[]!"#$%&'()+,0-9;<=>@A-Z_`a-z{|}-][]!"#$%&'()+,.0-9;<=>@A-Z_`a-z{|}-]*(/[]!"#$%&'()+,0-9;<=>@A-Z_`a-z{|}-][]!"#$%&'()+,.0-9;<=>@A-Z_`a-z{|}-]*)*$	A branch name without the refs/heads/ prefix, in printable ASCII: slash-separated components of letters, digits and the punctuation Git allows, none empty or dot-led; no space or control character, no ~ ^ : ? * [ or backslash, no .. or @{, never the single name @, no component ending in .lock, never ending in / or .; refs/… and any other spelling of the same branch are projections; a branch name outside printable ASCII is not representable in this version
 identifier	release	^v[0-9]+\.[0-9]+\.[0-9]+$	A release tag as published
@@ -151,26 +151,31 @@ identifier	check-state	^(success|failure|pending|missing)$	Normalized state of o
 identifier	scope	^(merge:routine|close:issue|metadata:labels|metadata:hierarchy|evidence:publish|branch:push)$	What a standing grant permits; the closed scope vocabulary
 identifier	boundary	^(release:approve|authority:grant|settings:repository|action:destructive|placement:release|semantics:product)$	What a human reserves; the closed boundary vocabulary
 identifier	derived-version	^[1-9][0-9]*(;[a-z_]+\.[a-z_]+@[A-Za-z0-9._:/"-]+)+$	<schema version>;<input key>@<input source.version>;… — one entry per input, sorted by key; a source version is written in the characters of the source version grammars
-identifier	decision-record	^([a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+#[1-9][0-9]*/comment/[1-9][0-9]*|[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+@[0-9a-f]{40})$	A durable human decision: a <comment> locator or <repository>@<commit>; never a role, label or summary
+identifier	decision-record	^((([a-z0-9][a-z0-9-]*)?[a-z0-9]\.)+([a-z0-9][a-z0-9-]*)?[a-z0-9]/[a-z0-9]+(-[a-z0-9]+)*/([a-z0-9_-][a-z0-9_.-]*|\.[a-z0-9_-][a-z0-9_.-]*|\.\.[a-z0-9_.-]+)#[1-9][0-9]*/comment/[1-9][0-9]*|(([a-z0-9][a-z0-9-]*)?[a-z0-9]\.)+([a-z0-9][a-z0-9-]*)?[a-z0-9]/[a-z0-9]+(-[a-z0-9]+)*/([a-z0-9_-][a-z0-9_.-]*|\.[a-z0-9_-][a-z0-9_.-]*|\.\.[a-z0-9_.-]+)@[0-9a-f]{40})$	A durable human decision: a <comment> locator or <repository>@<commit>; never a role, label or summary
 
 # --- Invalidators: the closed token grammars a fact may name as what makes it stale
 invalidator	head	^head:[0-9a-f]{40}$	head:<commit> — the exact HEAD a HEAD-bound fact was judged on (ESTABLISHED) or observed against (UNKNOWN, CONFLICT)
-invalidator	pull_request	^pull_request:[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+#[1-9][0-9]*$	pull_request:<work-unit> — the pull request whose metadata or head the fact was read from
-invalidator	issue	^issue:[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+#[1-9][0-9]*$	issue:<work-unit> — the issue whose metadata or relationships the fact was read from
-invalidator	comment	^comment:[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+#[1-9][0-9]*/comment/[1-9][0-9]*$	comment:<comment> — the comment that records the verdict or decision
-invalidator	milestone	^milestone:[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+/milestone/[1-9][0-9]*$	milestone:<milestone> — the milestone the placement was read from
-invalidator	repository	^repository:[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+$	repository:<repository> — the repository node (default branch, settings)
-invalidator	ref	^ref:[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+/[]!"#$%&'()+,0-9;<=>@A-Z_`a-z{|}-][]!"#$%&'()+,.0-9;<=>@A-Z_`a-z{|}-]*(/[]!"#$%&'()+,0-9;<=>@A-Z_`a-z{|}-][]!"#$%&'()+,.0-9;<=>@A-Z_`a-z{|}-]*)*$	ref:<repository>/<ref> — the branch whose target the fact depends on
-invalidator	ruleset	^ruleset:[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+$	ruleset:<repository> — the repository's rulesets (which checks are required)
+invalidator	pull_request	^pull_request:(([a-z0-9][a-z0-9-]*)?[a-z0-9]\.)+([a-z0-9][a-z0-9-]*)?[a-z0-9]/[a-z0-9]+(-[a-z0-9]+)*/([a-z0-9_-][a-z0-9_.-]*|\.[a-z0-9_-][a-z0-9_.-]*|\.\.[a-z0-9_.-]+)#[1-9][0-9]*$	pull_request:<work-unit> — the pull request whose metadata or head the fact was read from
+invalidator	issue	^issue:(([a-z0-9][a-z0-9-]*)?[a-z0-9]\.)+([a-z0-9][a-z0-9-]*)?[a-z0-9]/[a-z0-9]+(-[a-z0-9]+)*/([a-z0-9_-][a-z0-9_.-]*|\.[a-z0-9_-][a-z0-9_.-]*|\.\.[a-z0-9_.-]+)#[1-9][0-9]*$	issue:<work-unit> — the issue whose metadata or relationships the fact was read from
+invalidator	comment	^comment:(([a-z0-9][a-z0-9-]*)?[a-z0-9]\.)+([a-z0-9][a-z0-9-]*)?[a-z0-9]/[a-z0-9]+(-[a-z0-9]+)*/([a-z0-9_-][a-z0-9_.-]*|\.[a-z0-9_-][a-z0-9_.-]*|\.\.[a-z0-9_.-]+)#[1-9][0-9]*/comment/[1-9][0-9]*$	comment:<comment> — the comment that records the verdict or decision
+invalidator	milestone	^milestone:(([a-z0-9][a-z0-9-]*)?[a-z0-9]\.)+([a-z0-9][a-z0-9-]*)?[a-z0-9]/[a-z0-9]+(-[a-z0-9]+)*/([a-z0-9_-][a-z0-9_.-]*|\.[a-z0-9_-][a-z0-9_.-]*|\.\.[a-z0-9_.-]+)/milestone/[1-9][0-9]*$	milestone:<milestone> — the milestone the placement was read from
+invalidator	repository	^repository:(([a-z0-9][a-z0-9-]*)?[a-z0-9]\.)+([a-z0-9][a-z0-9-]*)?[a-z0-9]/[a-z0-9]+(-[a-z0-9]+)*/([a-z0-9_-][a-z0-9_.-]*|\.[a-z0-9_-][a-z0-9_.-]*|\.\.[a-z0-9_.-]+)$	repository:<repository> — the repository node (default branch, settings)
+invalidator	ref	^ref:(([a-z0-9][a-z0-9-]*)?[a-z0-9]\.)+([a-z0-9][a-z0-9-]*)?[a-z0-9]/[a-z0-9]+(-[a-z0-9]+)*/([a-z0-9_-][a-z0-9_.-]*|\.[a-z0-9_-][a-z0-9_.-]*|\.\.[a-z0-9_.-]+)/[]!"#$%&'()+,0-9;<=>@A-Z_`a-z{|}-][]!"#$%&'()+,.0-9;<=>@A-Z_`a-z{|}-]*(/[]!"#$%&'()+,0-9;<=>@A-Z_`a-z{|}-][]!"#$%&'()+,.0-9;<=>@A-Z_`a-z{|}-]*)*$	ref:<repository>/<ref> — the branch whose target the fact depends on
+invalidator	ruleset	^ruleset:(([a-z0-9][a-z0-9-]*)?[a-z0-9]\.)+([a-z0-9][a-z0-9-]*)?[a-z0-9]/[a-z0-9]+(-[a-z0-9]+)*/([a-z0-9_-][a-z0-9_.-]*|\.[a-z0-9_-][a-z0-9_.-]*|\.\.[a-z0-9_.-]+)$	ruleset:<repository> — the repository's rulesets (which checks are required)
 
 # --- Constraints: what a grammar alone cannot exclude, as machine-readable negatives
 # (portable ERE, as every grammar in this file — see the grammar dialect note).
 # A value is canonical only when it matches its grammar AND none of its constraints.
 constraint	repository	\.git$	the name never carries the clone URL's .git suffix
+constraint	repository	^[a-z0-9.-]+/([a-z0-9-]{40}|[a-z0-9-]+/[a-z0-9_.-]{101})	an owner is at most 39 characters and a name at most 100 (GitHub's limits)
 constraint	work-unit	\.git#	the repository name inside a work-unit locator never carries .git
+constraint	work-unit	^[a-z0-9.-]+/([a-z0-9-]{40}|[a-z0-9-]+/[a-z0-9_.-]{101})	an owner is at most 39 characters and a name at most 100 (GitHub's limits)
 constraint	comment	\.git#	the repository name inside a comment locator never carries .git
+constraint	comment	^[a-z0-9.-]+/([a-z0-9-]{40}|[a-z0-9-]+/[a-z0-9_.-]{101})	an owner is at most 39 characters and a name at most 100 (GitHub's limits)
 constraint	milestone	\.git/	the repository name inside a milestone locator never carries .git
+constraint	milestone	^[a-z0-9.-]+/([a-z0-9-]{40}|[a-z0-9-]+/[a-z0-9_.-]{101})	an owner is at most 39 characters and a name at most 100 (GitHub's limits)
 constraint	decision-record	\.git(#|@)	the repository name inside a decision record never carries .git
+constraint	decision-record	^[a-z0-9.-]+/([a-z0-9-]{40}|[a-z0-9-]+/[a-z0-9_.-]{101})	an owner is at most 39 characters and a name at most 100 (GitHub's limits)
 constraint	login	^login:[a-z0-9-]{40}	a GitHub login is at most 39 characters
 constraint	ref	^refs/	a ref is the branch name, never the refs/ path
 constraint	ref	\.\.	no .. anywhere in a ref
@@ -181,16 +186,21 @@ constraint	ref	^@$	the single name @ is not a branch (Git reserves it for HEAD)
 constraint	provenance	(^|/)\.\.?(/|$)	a path is normalized: no . or .. components
 constraint	source-identity/repository-file	(:|/)\.\.?(/|$)	the path after the commit is normalized: no . or .. components
 constraint	source-identity/git	\.git(@|$)	the repository name never carries .git
+constraint	source-identity/git	^[a-z0-9.-]+/([a-z0-9-]{40}|[a-z0-9-]+/[a-z0-9_.-]{101})	an owner is at most 39 characters and a name at most 100 (GitHub's limits)
 constraint	source-identity/github-api	\.git(#|/|$)	the repository name never carries .git
+constraint	source-identity/github-api	^[a-z0-9.-]+/([a-z0-9-]{40}|[a-z0-9-]+/[a-z0-9_.-]{101})	an owner is at most 39 characters and a name at most 100 (GitHub's limits)
 constraint	source-identity/repository-file	\.git@	the repository name never carries .git
+constraint	source-identity/repository-file	^[a-z0-9.-]+/([a-z0-9-]{40}|[a-z0-9-]+/[a-z0-9_.-]{101})	an owner is at most 39 characters and a name at most 100 (GitHub's limits)
 constraint	source-identity/human-decision	\.git(#|@)	the repository name never carries .git
+constraint	source-identity/human-decision	^[a-z0-9.-]+/([a-z0-9-]{40}|[a-z0-9-]+/[a-z0-9_.-]{101})	an owner is at most 39 characters and a name at most 100 (GitHub's limits)
 constraint	invalidator	\.git(#|/|$)	the repository name inside any invalidator never carries .git
+constraint	invalidator	^[a-z_]+:[a-z0-9.-]+/([a-z0-9-]{40}|[a-z0-9-]+/[a-z0-9_.-]{101})	an owner is at most 39 characters and a name at most 100 (GitHub's limits)
 constraint	invalidator/ref	\.\.	the embedded ref has no ..
 constraint	invalidator/ref	@\{	the embedded ref has no @{
 constraint	invalidator/ref	\.lock(/|$)	no component of the embedded ref ends in .lock
 constraint	invalidator/ref	\.$	the embedded ref never ends in a dot
 constraint	invalidator/ref	/@$	the embedded ref is never the single name @
-constraint	invalidator/ref	^ref:[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+/refs/	the embedded ref is the branch name, never the refs/ path
+constraint	invalidator/ref	^ref:(([a-z0-9][a-z0-9-]*)?[a-z0-9]\.)+([a-z0-9][a-z0-9-]*)?[a-z0-9]/[a-z0-9]+(-[a-z0-9]+)*/([a-z0-9_-][a-z0-9_.-]*|\.[a-z0-9_-][a-z0-9_.-]*|\.\.[a-z0-9_.-]+)/refs/	the embedded ref is the branch name, never the refs/ path
 constraint	source-identity/git	@ref/.*\.\.	the embedded ref has no ..
 constraint	source-identity/git	@ref/.*@\{	the embedded ref has no @{
 constraint	source-identity/git	@ref/.*\.lock(/|$)	no component of the embedded ref ends in .lock
@@ -210,10 +220,10 @@ source	human-decision	the recording comment's updated_at (a comment can be edite
 source	derived	<derived-version>: the schema version, then <input key>@<that input's source.version> for every input, sorted by key	A conclusion computed from other facts (requires inputs); the version changes whenever any input's version does
 
 # --- Source identity grammar: source.identity is validated per source type ----
-source-identity	github-api	^[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+(#[1-9][0-9]*(/comment/[1-9][0-9]*)?|/milestone/[1-9][0-9]*)?$	A <repository>, <work-unit>, <comment> or <milestone> locator — the GitHub node that was read
-source-identity	git	^[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+@([0-9a-f]{40}|ref/[]!"#$%&'()+,0-9;<=>@A-Z_`a-z{|}-][]!"#$%&'()+,.0-9;<=>@A-Z_`a-z{|}-]*(/[]!"#$%&'()+,0-9;<=>@A-Z_`a-z{|}-][]!"#$%&'()+,.0-9;<=>@A-Z_`a-z{|}-]*)*)$	<repository>@<commit> or <repository>@ref/<ref>
-source-identity	repository-file	^[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+@[0-9a-f]{40}:[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*$	<repository>@<commit>:<path> — a normalized repository-relative path: slash-separated components, none empty, none . or .., no leading slash
-source-identity	human-decision	^([a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+#[1-9][0-9]*/comment/[1-9][0-9]*|[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+@[0-9a-f]{40})$	The <decision-record> itself
+source-identity	github-api	^(([a-z0-9][a-z0-9-]*)?[a-z0-9]\.)+([a-z0-9][a-z0-9-]*)?[a-z0-9]/[a-z0-9]+(-[a-z0-9]+)*/([a-z0-9_-][a-z0-9_.-]*|\.[a-z0-9_-][a-z0-9_.-]*|\.\.[a-z0-9_.-]+)(#[1-9][0-9]*(/comment/[1-9][0-9]*)?|/milestone/[1-9][0-9]*)?$	A <repository>, <work-unit>, <comment> or <milestone> locator — the GitHub node that was read
+source-identity	git	^(([a-z0-9][a-z0-9-]*)?[a-z0-9]\.)+([a-z0-9][a-z0-9-]*)?[a-z0-9]/[a-z0-9]+(-[a-z0-9]+)*/([a-z0-9_-][a-z0-9_.-]*|\.[a-z0-9_-][a-z0-9_.-]*|\.\.[a-z0-9_.-]+)@([0-9a-f]{40}|ref/[]!"#$%&'()+,0-9;<=>@A-Z_`a-z{|}-][]!"#$%&'()+,.0-9;<=>@A-Z_`a-z{|}-]*(/[]!"#$%&'()+,0-9;<=>@A-Z_`a-z{|}-][]!"#$%&'()+,.0-9;<=>@A-Z_`a-z{|}-]*)*)$	<repository>@<commit> or <repository>@ref/<ref>
+source-identity	repository-file	^(([a-z0-9][a-z0-9-]*)?[a-z0-9]\.)+([a-z0-9][a-z0-9-]*)?[a-z0-9]/[a-z0-9]+(-[a-z0-9]+)*/([a-z0-9_-][a-z0-9_.-]*|\.[a-z0-9_-][a-z0-9_.-]*|\.\.[a-z0-9_.-]+)@[0-9a-f]{40}:[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*$	<repository>@<commit>:<path> — a normalized repository-relative path: slash-separated components, none empty, none . or .., no leading slash
+source-identity	human-decision	^((([a-z0-9][a-z0-9-]*)?[a-z0-9]\.)+([a-z0-9][a-z0-9-]*)?[a-z0-9]/[a-z0-9]+(-[a-z0-9]+)*/([a-z0-9_-][a-z0-9_.-]*|\.[a-z0-9_-][a-z0-9_.-]*|\.\.[a-z0-9_.-]+)#[1-9][0-9]*/comment/[1-9][0-9]*|(([a-z0-9][a-z0-9-]*)?[a-z0-9]\.)+([a-z0-9][a-z0-9-]*)?[a-z0-9]/[a-z0-9]+(-[a-z0-9]+)*/([a-z0-9_-][a-z0-9_.-]*|\.[a-z0-9_-][a-z0-9_.-]*|\.\.[a-z0-9_.-]+)@[0-9a-f]{40})$	The <decision-record> itself
 source-identity	derived	^fact-model/[1-9][0-9]*$	fact-model/<schema version>
 
 # --- Source version grammar: source.version is validated per source type ------
