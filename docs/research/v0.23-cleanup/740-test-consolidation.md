@@ -217,7 +217,7 @@ skill script's jq programs ran under test.
 
 **What changed.** `tests/lib.sh` gains `stub_gh <path>`: shebang, `gh_stub_prelude`, the
 suite's case-body from stdin, `chmod +x`, in one call. The two packet-2 suites adopt it.
-All ten codify-prereqs stubs are written through it and every pre-shaped answer becomes
+All eleven codify-prereqs stubs (`mk_gh` plus ten inline) are written through it and every pre-shaped answer becomes
 the JSON GitHub returns, shaped by the preflight's own jq: the repository node
 (`{"full_name": …}`), blocker rows (`{"number", "repository_url"}`, an unknown owner as an
 absent field, "no blockers" as `[]`), issue bodies and states as `{"body"}`/`{"state"}`,
@@ -236,7 +236,7 @@ any difference.
 
 | Existing test/case | Invariant proved | Surviving test/case | Same/stronger discrimination? | Validation |
 |---|---|---|---|---|
-| ten inline codify-prereqs stubs with pre-shaped answers | the preflight's READY / BLOCKED / NOT ASSESSED verdicts across 15 end-to-end scenarios | the same ten stubs written with `stub_gh`, answering GitHub's JSON through the skill script's own jq | **Stronger** — `.full_name`, the blocked-by row jq (`.number`, `.repository_url // ""`), `.body`, `.state` and the closing-reference jq (`select(.merged) \| .mergeCommit.oid // empty`) now execute on every scenario; a jq regression in the preflight fails here | suite assertions unchanged; per-suite counts identical |
+| eleven codify-prereqs stubs (`mk_gh` plus ten inline) with pre-shaped answers | the preflight's READY / BLOCKED / NOT ASSESSED verdicts across 15 end-to-end scenarios | the same eleven stubs written with `stub_gh`, answering GitHub's JSON through the skill script's own jq | **Stronger** — `.full_name`, the blocked-by row jq (`.number`, `.repository_url // ""`), `.body`, `.state` and the closing-reference jq (`select(.merged) \| .mergeCommit.oid // empty`) now execute on every scenario; a jq regression in the preflight fails here | suite assertions unchanged; per-suite counts identical |
 | scaffolding in the two packet-2 suites | — | `stub_gh` | **Same** by construction | per-suite counts identical |
 
 **Before / after (this packet).**
@@ -245,8 +245,8 @@ any difference.
 |---|---|---|
 | suites with pre-shaped `gh` answers assuming a caller's jq | 1 (`test-codify-prereqs.sh`, 10 stubs) | 0 |
 | production jq programs newly exercised | — | 5 (`.full_name`, blocked-by row, `.body`, `.state`, closing references) |
-| stubs written through `stub_gh` | 0 | 12 (ten in codify-prereqs, one each in the packet-2 suites) |
-| `chmod +x`/shebang restatements removed | — | 12 |
+| stubs written through `stub_gh` | 0 | 13 (eleven in codify-prereqs — `mk_gh` plus ten inline — and one each in the packet-2 suites) |
+| `chmod +x`/shebang restatements removed | — | 13 |
 | suites the runner would pass while printing no summary line | any (a silent suite counted as passed) | 0 — `tests/run.sh` now fails a suite with no `N passed, M failed` line |
 | assertions, full run | 3908 passed, 0 failed | 3908 passed, 0 failed |
 | per-suite pass/fail lines | 92 | 92, **all identical** |
@@ -279,7 +279,7 @@ sense (they answer GraphQL snapshots through the caller's jq already, or plain t
 | | BEFORE (branch base `a504e2c`) | AFTER |
 |---|---|---|
 | hand-written `gh` stubs (`cat > … <<TAG` + shebang + chmod) | 36 in 15 suites | 0 |
-| stubs written through `stub_gh` | 12 | 49 (12 + 36) |
+| stubs written through `stub_gh` | 13 | 49 (13 + 36) |
 | scaffolding lines removed (shebang + `chmod +x`) | — | 60 (36 shebang lines, 24 chmod lines; the remaining converted stubs reused a directory whose file was already executable) |
 | test LOC (`tests/test-*.sh`) | 19,363 | 19,303 |
 | assertions, full run | 3908 passed, 0 failed | 3908 passed, 0 failed |
