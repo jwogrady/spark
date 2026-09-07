@@ -2,7 +2,7 @@
 
 **Model.** `current fact → provenance/index pointer → historical evidence on demand`, never
 `historical evidence → agent reconstruction → current fact`. The pointer is `docs/ops/evidence-index.tsv`:
-every evidence artifact of the repository — 126 files, 924,571 bytes, 15,408 lines under
+every evidence artifact of the repository — 132 files, 1,036,043 bytes, 16,756 lines under
 `docs/research`, `docs/releases`, `docs/governance`, the three evidence pages under `docs/ops`, `evaluations`
 and `.spark` — is one row or one family member, with a retention class, an explicit *operative now* answer,
 the release/HEAD/work unit it concerned, the fact it supported, who loads or cites it today, and why it is
@@ -21,8 +21,8 @@ are computed from the index and re-checked by the suite.
 
 | Class | Files | Bytes | Lines |
 |---|---|---|---|
-| `active-current` | 45 | 312,083 | 5,580 |
-| `historical-retained` | 68 | 403,154 | 6,728 |
+| `active-current` | 52 | 429,338 | 7,012 |
+| `historical-retained` | 67 | 397,371 | 6,644 |
 | `do-not-delete` | 13 | 209,334 | 3,100 |
 
 No artifact is classified `redundant`. Two identical blobs exist (`evaluations/orchestration/rates.tsv` and
@@ -40,7 +40,7 @@ reasoning path, and every deletion candidate failed the "independent retention v
 | `docs/ops` | 3 | 138,568 | 2,550 |
 | `docs/releases` | 13 | 103,829 | 1,849 |
 | `docs/research` | 2 | 7,056 | 101 |
-| `docs/research/v0.23-cleanup` | 14 | 177,948 | 2,419 |
+| `docs/research/v0.23-cleanup` | 20 | 289,420 | 3,767 |
 | `docs/research/v0.23-optimization-baseline` | 46 | 385,106 | 6,360 |
 | `evaluations` | 43 | 79,685 | 1,606 |
 
@@ -57,6 +57,10 @@ evidence rather than the index's references to itself. From the readers column:
 | Family | Class | Operative now | Referenced by |
 |---|---|---|---|
 | `docs/research/v0.23-cleanup/741-canonical-truth.md` | `active-current` | yes | `tests/test-doc-roles.sh` |
+| `docs/research/v0.23-cleanup/743-responsibilities.tsv` | `active-current` | yes | `tests/test-runtime-responsibilities.sh` |
+| `docs/research/v0.23-cleanup/743-responsibilities-before.tsv` | `active-current` | yes | `tests/test-runtime-responsibilities.sh` |
+| `docs/research/v0.23-cleanup/743-runtime-surface.md` | `active-current` | yes | `tests/test-runtime-responsibilities.sh` |
+| `docs/research/v0.23-cleanup/tools/evidence-reads.sh;docs/research/v0.23-cleanup/tools/build-responsibilities.py;docs/research/v0.23-cleanup/tools/classification.py;docs/research/v0.23-cleanup/tools/classification_modules.py` | `active-current` | yes | `tests/test-runtime-responsibilities.sh` |
 | `docs/releases/README.md` | `active-current` | yes | `tests/test-state-docs-chronology.sh` |
 | `docs/releases/v0.1*.md;docs/releases/v0.2[0-2].md` | `active-current` | yes | `.github/scripts/ledger-truth-check.sh`; `tests/test-docs-impact.sh`; `tests/test-readme-product-truth.sh`; `tests/test-reconcile-apply.sh`; `tests/test-state-docs-chronology.sh` |
 | `docs/governance/capability-evaluation.md` | `active-current` | yes | `plugins/spark/docs/reference/release-docs-checklist.md` |
@@ -65,8 +69,8 @@ evidence rather than the index's references to itself. From the readers column:
 | `evaluations/lib/*;evaluations/evidence-index.tsv;evaluations/orchestration/run.sh;evaluations/orchestration/rates.tsv;evaluations/skill-routing/run.sh;evaluations/skill-routing/rates.tsv` | `active-current` | yes | `tests/test-eval-lib.sh`; `tests/test-skill-descriptions.sh` |
 | `.spark/state.json;.spark/preferences.json` | `do-not-delete` | yes | `plugins/spark/bin/spark`; `plugins/spark/docs/README.md`; `plugins/spark/docs/how-to/get-started.md`; `plugins/spark/docs/how-to/resume.md`; `plugins/spark/docs/reference/cli.md`; `plugins/spark/docs/reference/compatibility.md`; `plugins/spark/docs/reference/engineering-preferences.md`; `plugins/spark/docs/reference/fact-freshness.md`; `plugins/spark/docs/reference/fact-model.md`; `plugins/spark/docs/reference/hooks.md`; `plugins/spark/docs/reference/project-standards.md`; `plugins/spark/docs/reference/stability.md`; `plugins/spark/docs/reference/state.md`; `plugins/spark/docs/tutorials/adopt-an-existing-repo.md`; `plugins/spark/docs/tutorials/scaffold-a-new-project.md`; `plugins/spark/preferences/fact-model.tsv`; `plugins/spark/preferences/templates/standards/conventions.md`; `plugins/spark/preferences/templates/standards/engineering-standards.md`; `plugins/spark/skills/bootstrap/SKILL.md`; `plugins/spark/skills/bootstrap/references/profiles.md`; `plugins/spark/skills/codify/SKILL.md`; `plugins/spark/skills/ideate/SKILL.md`; `plugins/spark/skills/knowledge/references/operator-knowledge.md`; `plugins/spark/skills/onboard/SKILL.md`; `plugins/spark/skills/plan/SKILL.md`; `plugins/spark/skills/ship/SKILL.md`; `plugins/spark/skills/validate/SKILL.md`; `tests/bench-memo.sh`; `tests/test-apply-permissions.sh`; `tests/test-brief-resume.sh`; `tests/test-course-derivation.sh`; `tests/test-doctor-standards-boundary.sh`; `tests/test-first-run.sh`; `tests/test-governance-contract.sh`; `tests/test-governance-integration.sh`; `tests/test-governance-schema.sh`; `tests/test-hot-path-memo.sh`; `tests/test-hub.sh`; `tests/test-labels.sh`; `tests/test-merge-strategy.sh`; `tests/test-orient.sh`; `tests/test-preferences.sh`; `tests/test-reconcile-apply.sh`; `tests/test-reconcile-slate.sh`; `tests/test-setup-profiles.sh`; `tests/test-state.sh`; `tests/test-triage-truth.sh` |
 
-**23 files, 244,492 bytes** of the 126-file, 924,571-byte corpus are referenced by code,
-tests or CI outside this index's own machinery (26 % by bytes; the exclusion and its
+**30 files, 361,048 bytes** of the 132-file, 1,036,043-byte corpus are referenced by code,
+tests or CI outside this index's own machinery (34 % by bytes; the exclusion and its
 reason are stated under the footprint section below). The suite holds this list to the tree: a shipped surface
 that starts naming a non-operative artifact fails until the index lists it.
 
@@ -85,14 +89,14 @@ What the verbs opened:
 
 | Verb | Corpus files opened | `historical-retained` | `do-not-delete` | `active-current` | Directories traversed | Non-corpus files opened |
 |---|---|---|---|---|---|---|
-| `doctor` | 49 | 18 | 5 | 26 | 0 | 15 |
+| `doctor` | 50 | 18 | 5 | 27 | 0 | 15 |
 | `brief` | 2 | 0 | 2 | 0 | 34 | 0 |
 | `footprint` | 2 | 0 | 2 | 0 | 34 | 0 |
 | `preferences` | 1 | 0 | 1 | 0 | 0 | 0 |
 | `profiles` | 0 | 0 | 0 | 0 | 0 | 0 |
 | `list-skills` | 0 | 0 | 0 | 0 | 0 | 0 |
 
-`spark doctor` opens **49** indexed corpus artifacts, **23** of them non-operative. The session path opens **2** corpus files, both the runtime's own committed state. Across the six read-only verbs, **24** non-operative evidence files are opened by default.
+`spark doctor` opens **50** indexed corpus artifacts, **23** of them non-operative. The session path opens **2** corpus files, both the runtime's own committed state. Across the six read-only verbs, **24** non-operative evidence files are opened by default.
 
 The session path's files are `.spark/preferences.json`, `.spark/state.json`, and it opens nothing else under the evidence roots.
 
@@ -189,23 +193,23 @@ next `spark` state update rather than edited by hand here.
 
 ## Footprint before and after this work unit
 
-Physical, over the same roots, against `29e4f4e` — the commit this branch left:
+Physical, over the same roots, against `efbdb47` — the commit this branch left:
 
 | | Files | Bytes | Lines |
 |---|---|---|---|
-| before | 123 | 888,064 | 14,913 |
-| after | 126 | 924,571 | 15,408 |
-| delta | +3 | +36,507 | +495 |
+| before | 129 | 998,837 | 16,256 |
+| after | 132 | 1,036,043 | 16,756 |
+| delta | +3 | +37,206 | +500 |
 
 The corpus grew, and this page is part of the growth: this manifest, the observation capture and the tool that
 regenerates it are themselves evidence, and they are indexed like everything else. Nothing was moved or deleted,
-so every byte of the delta is new material, not relocation. The reference footprint did not move: 23 files before
-this unit and 23 after, because this unit's own five files are excluded as readers and no other surface
-started naming evidence. The corpus grew and the count of referenced files did not, so the share of the corpus that any surface names by path fell.
+so every byte of the delta is new material, not relocation. The reference footprint did not move: 29 files before
+this unit and 30 after, because this unit's own five files are excluded as readers and no other surface
+started naming evidence. The change is this unit's own artifacts becoming readable by name.
 
 The hot path moved too, and by exactly the amount this unit added to it. `doctor`'s link validator opens every
-Markdown surface under these roots, so its read set is the tree's Markdown: **62 files before this
-unit, 63 after**, a delta of **+1** — this unit adds `docs/research/v0.23-cleanup/742-evidence-separation.md`. That is a measurement, not an
+Markdown surface under these roots, so its read set is the tree's Markdown: **63 files before this
+unit, 64 after**, a delta of **+1** — this unit adds `docs/research/v0.23-cleanup/742-evidence-separation.md`. That is a measurement, not an
 argument from construction: both figures come from the same roots, the after figure is the committed capture's
 own `doctor` rows, and the suite recomputes the delta from the base commit whenever it is present. No other
 verb's read set changed, because the session path opens no evidence file at either commit.
@@ -242,7 +246,7 @@ table above is the accounting.
 
 ## Acceptance, item by item
 
-- **Evidence families classified with retention rationale** — `docs/ops/evidence-index.tsv`, 32 rows, one
+- **Evidence families classified with retention rationale** — `docs/ops/evidence-index.tsv`, 36 rows, one
   class and one rationale each.
 - **Historical material pointable by release/HEAD/work unit/fact** — every historical-retained and
   do-not-delete row names an identity and the fact it supported; the suite checks both.

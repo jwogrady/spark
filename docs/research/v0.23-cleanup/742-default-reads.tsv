@@ -1,4 +1,4 @@
-# observed default reads — clean checkout of 9857bfe1ecf8b371fa094b9d624106c939ebee58 — strace -- version 6.19 — 2026-09-07T21:49:30Z
+# observed default reads — clean checkout of 90404b3467b3ed4c548b4ac496e72e16a8c343f9 — strace -- version 6.19 — 2026-09-07T22:05:54Z
 # roots: docs/research docs/releases docs/governance docs/ops evaluations .spark
 # git index verified warm before tracing (a bare git status opened no evidence path), so no read below is git re-hashing a fresh checkout
 # doctor exit 0
@@ -50,6 +50,7 @@ doctor	file	docs/research/v0.23-cleanup/739-semantic-map.md	1
 doctor	file	docs/research/v0.23-cleanup/740-test-consolidation.md	1
 doctor	file	docs/research/v0.23-cleanup/741-canonical-truth.md	1
 doctor	file	docs/research/v0.23-cleanup/742-evidence-separation.md	1
+doctor	file	docs/research/v0.23-cleanup/743-runtime-surface.md	1
 doctor	file	docs/research/v0.23-optimization-baseline/README.md	1
 doctor	file	docs/research/v0.23-optimization-baseline/raw/FINDINGS-TEXT.md	1
 doctor	file	docs/research/v0.23-optimization-baseline/raw/agent-docs-governance-truth.md	1

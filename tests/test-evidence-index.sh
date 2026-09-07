@@ -111,7 +111,16 @@ done < <(rows)
 # --- the hot-path claim: a shipped surface, test or CI script referencing a non-operative artifact must be a listed reader
 while IFS=$'\t' read -r fam cls op files bytes lines concerns fact readers why; do
   [ "$op" = "no" ] || continue
-  IFS=';' read -ra pats <<<"$fam"; for pat in "${pats[@]}"; do
+  # A family that carves paths out of a glob must be searched by the paths it covers: its directory fragment also
+  # matches the excluded siblings, and their readers would be reported as this family's leak.
+  case "$fam" in
+    *'!'*)
+      scan=""
+      while IFS= read -r p; do family_covers "$fam" "$p" && scan="$scan $p"; done <<<"$tree"
+      ;;
+    *) scan="$(printf '%s' "$fam" | tr ';' ' ')" ;;
+  esac
+  for pat in $scan; do
     frag="${pat%/\*\*}"; frag="${frag%/\*}"; frag="${frag%%[*?[]*}"; frag="${frag%/}"
     [ "${#frag}" -ge 12 ] || continue
     refs="$(cd "$ROOT" && git grep -l -F -- "$frag" -- 'plugins/**' 'tests/*.sh' 'tests/lib.sh' 'tests/run.sh' '.github/**' 2>/dev/null | grep -v '^docs/\|^tests/test-evidence-index.sh$' || true)"
