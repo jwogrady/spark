@@ -858,5 +858,5 @@ never mirrors it there. The governance model
 ([metadata-governance.md](metadata-governance.md)) defines which label
 families and structures a repository may carry; a `placement` or `graph` fact
 reports what the repository currently has under that model. The freshness,
-invalidation and conflict contract that builds on this envelope is documented
-separately when it lands.
+invalidation and conflict contract that builds on this envelope is
+[fact-freshness.md](fact-freshness.md).
