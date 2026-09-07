@@ -33,7 +33,7 @@ assert_eq "one class-status record per class" "$(rec class | cut -f2 | sort | tr
 assert_eq "exactly one canonical key per class" "$(rec class | cut -f2 | sort | tr '\n' ' ')" "$(rec key | cut -f2 | sort | tr '\n' ' ')"
 assert_eq "every canonical key is prefixed by its class" "" "$(rec key | awk -F'\t' 'index($3, $2 ".") != 1')"
 assert_eq "eight invalidator grammars" "8" "$(rec invalidator | wc -l | tr -d ' ')"
-assert_eq "30 constraint records" "30" "$(rec constraint | wc -l | tr -d ' ')"
+assert_eq "31 constraint records" "31" "$(rec constraint | wc -l | tr -d ' ')"
 while IFS=$'\t' read -r _ scope rx _; do
   if printf 'probe' | grep -qE "$rx" >/dev/null 2>&1; then rc=0; else rc=$?; fi
   [ "$rc" -le 1 ] && ok || bad "constraint regex for $scope compiles as an ERE (no lookaround, so any consumer can apply it)"
@@ -812,6 +812,18 @@ done
 acc base 'f["observed_at"]="2024-02-29T23:59:59Z"' "control: a leap-day instant at the last second of the day is in the grammar"
 acc base 'f["observed_at"]="2000-02-29T00:00:00Z"' "control: the leap day of a leap century is in the grammar"
 acc base 'f["source"]["version"]="2000-02-29T00:00:00Z"' "control: the same instant is a valid github-api updated_at version"
+# a GitHub login has one representation (lower-case: GitHub compares case-insensitively, R1) and GitHub's own validity
+acc base 'f["value"]["reviewer"]="login:dependabot[bot]"' "control: an app login with the [bot] suffix is in the grammar"
+acc base 'f["value"]["reviewer"]="login:a-b-c1"' "control: alphanumerics joined by single hyphens are in the grammar"
+acc base 'f["value"]["reviewer"]="login:" + "a"*39' "control: a 39-character login is in the grammar"
+rej base 'f["value"]["reviewer"]="login:Reviewer"' "an upper-case login must be rejected: GitHub compares logins case-insensitively, one representation (R1)"
+rej base 'f["value"]["reviewer"]="login:github-actions[BOT]"' "an upper-case [BOT] suffix must be rejected (R1)"
+rej base 'f["value"]["reviewer"]="login:-foo"' "a login starting with a hyphen is not a GitHub login"
+rej base 'f["value"]["reviewer"]="login:foo-"' "a login ending with a hyphen is not a GitHub login"
+rej base 'f["value"]["reviewer"]="login:foo--bar"' "a login with consecutive hyphens is not a GitHub login"
+rej base 'f["value"]["reviewer"]="login:foo_bar"' "an underscore is not a GitHub login character"
+rej base 'f["value"]["reviewer"]="login:" + "a"*40' "a 40-character login must be rejected (login constraint)"
+rej base 'f["value"]["reviewer"]="login:" + "a"*40 + "[bot]"' "a 40-character app login must be rejected (login constraint)"
 rej base 'f["schema_version"]="01"' "a schema_version outside the schema-version grammar must be rejected (R18)"
 rej base 'f["invalidators"]="head:0123456789abcdef0123456789abcdef01234567"' "invalidators as a string must be rejected: the field record says list (R14)"
 rej base 'f["provenance"]=["https://github.com/acme/widgets/pull/42"]' "provenance as a list must be rejected: the field record says string (R14)"
