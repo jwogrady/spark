@@ -122,54 +122,57 @@ def table(header):
     i = doc.index(header); body = doc[doc.index("\n", doc.index("\n", i) + 1) + 1:]
     return [cells(l) for l in body.split("\n\n")[0].split("\n") if l.startswith("|")]
 def say(okk, what): print(("OK " if okk else "BAD ") + what)
-seen = set()
-def kind(k):
-    """every parity loop registers the record kind it covers; the last check proves no kind is left unchecked"""
-    seen.add(k); return [r for r in rows if r[0] == k]
-keyof = {r[1]: r[2] for r in kind("key")}
+seen = {}
+def kind(k, *cols):
+    """each parity loop declares the TSV columns it compares (1 = the record's name); the last check proves every column of every record kind is on the page"""
+    seen.setdefault(k, set()).update(cols); return [r for r in rows if r[0] == k]
+def raw(c): return c.strip().strip("`").replace("\\|", "|")
+keyof = {r[1]: r[2] for r in kind("key", 1, 2)}
 cls = {norm(c[0]): c for c in table("| Class | Canonical key |")}
-for r in kind("class"):
+for r in kind("class", 1, 2, 3, 4):
     c = cls.get(r[1]); say(c is not None and [norm(x) for x in c[1:]] == [keyof[r[1]], r[2], norm(r[3]), norm(r[4])], f"class {r[1]} row is the TSV's key, requiredness, shape and description")
 flds = {norm(c[0]): c for c in table("| Field | Required |")}
-for r in kind("field"):
-    c = flds.get(r[1]); say(c is not None and [norm(x) for x in c[1:]] == [r[2], norm(r[4])], f"field {r[1]} row is the TSV's requiredness and description")
+for r in kind("field", 1, 2, 3, 4):
+    c = flds.get(r[1]); say(c is not None and [norm(x) for x in c[1:]] == [r[2], r[3], norm(r[4])], f"field {r[1]} row is the TSV's requiredness, type and description")
 ident = {c[0]: c for c in table("| Kind | Canonical form |")}
-for r in kind("identifier"):
-    c = ident.get(r[1]); say(c is not None and norm(c[1]) == norm(r[3]), f"identifier {r[1]} canonical form is the TSV's")
-inv = {norm(c[0]): c for c in table("| Kind | Token form and meaning |")}
-for r in kind("invalidator"):
-    c = inv.get(r[1]); say(c is not None and norm(c[1]) == norm(r[3]), f"invalidator {r[1]} form is the TSV's")
+for r in kind("identifier", 1, 2, 3):
+    c = ident.get(r[1]); say(c is not None and norm(c[1]) == norm(r[3]) and raw(c[2]) == r[2], f"identifier {r[1]} row is the TSV's canonical form and grammar")
+inv = {norm(c[0]): c for c in table("| Kind | Grammar (ERE) |")}
+for r in kind("invalidator", 1, 2, 3):
+    c = inv.get(r[1]); say(c is not None and raw(c[1]) == r[2] and norm(c[2]) == norm(r[3]), f"invalidator {r[1]} row is the TSV's grammar and token form")
 sta = {norm(c[0]): c for c in table("| Status | `value` allowed |")}
-for r in kind("status"):
+for r in kind("status", 1, 2, 3):
     c = sta.get(r[1]); say(c is not None and [norm(x) for x in c[1:]] == [r[2], norm(r[3])], f"status {r[1]} row is the TSV's value-allowed flag and meaning")
-sidr = {r[1]: r for r in kind("source-identity")}; sverr = {r[1]: r for r in kind("source-version")}
+sidr = {r[1]: r for r in kind("source-identity", 1, 2, 3)}; sverr = {r[1]: r for r in kind("source-version", 1, 2, 3)}
 srcr = {norm(c[0]): c for c in table("| Source type | What it is |")}
-for r in kind("source"):
-    c = srcr.get(r[1]); say(c is not None and [norm(x) for x in c[1:]] == [norm(r[3]), norm(r[2]), norm(sidr[r[1]][3]), norm(sverr[r[1]][3])], f"source {r[1]} row is the TSV's description, version identity, identity form and version grammar")
+for r in kind("source", 1, 2, 3):
+    c = srcr.get(r[1]); i, v = sidr[r[1]], sverr[r[1]]
+    say(c is not None and [norm(c[1]), norm(c[2]), norm(c[3]), raw(c[4]), norm(c[5]), raw(c[6])] == [norm(r[3]), norm(r[2]), norm(i[3]), i[2], norm(v[3]), v[2]], f"source {r[1]} row is the TSV's description, version identity, identity form and grammar, version form and grammar")
 bev = {norm(c[0]): c for c in table("| Boundary | Evidence fact |")}
-for r in kind("boundary-evidence"):
+for r in kind("boundary-evidence", 1, 2, 3, 4, 5):
     c = bev.get(r[1]); say(c is not None and [norm(x) for x in c[1:]] == [r[2], r[3], r[4], norm(r[5])], f"boundary-evidence {r[1]} row is the TSV's fact, field, condition and meaning")
 fac = {norm(c[0]): c for c in table("| Facet | Fields |")}
-for r in kind("facet"):
+for r in kind("facet", 1, 2, 3):
     c = fac.get(r[1]); say(c is not None and [norm(x) for x in c[1:]] == [norm(r[2]), norm(r[3])], f"facet {r[1]} row is the TSV's fields and meaning")
-ver = kind("version")[0][1]
+ver = kind("version", 1)[0][1]
 say(re.search(r"\bversion " + re.escape(ver) + r"\)", doc) is not None, "the page names the TSV's schema version")
 cst = {norm(c[0]): c for c in table("| Class | Admitted statuses |")}
-for r in kind("class-status"):
+for r in kind("class-status", 1, 2):
     c = cst.get(r[1]); say(c is not None and norm(c[1]).replace(", ", ",") == r[2], f"class-status {r[1]} row lists the TSV's admitted statuses")
 con = [c for c in table("| Scope | Forbidden (ERE) |")]
-want = [[r[1], r[2], r[3]] for r in kind("constraint")]
-got = [[norm(c[0]), c[1].strip("`").replace("\\|", "|"), norm(c[2])] for c in con]
+want = [[r[1], r[2], r[3]] for r in kind("constraint", 1, 2, 3)]
+got = [[norm(c[0]), raw(c[1]), norm(c[2])] for c in con]
 say(got == [[w[0], w[1], norm(w[2])] for w in want], "every constraint row is the TSV's scope, regex and meaning, in order")
 shp = {norm(c[0]): c for c in table("| Object | Shape |")}
-for r in kind("shape"):
+for r in kind("shape", 1, 2):
     c = shp.get(r[1]); say(c is not None and norm(c[1]) == norm(r[2]), f"envelope shape {r[1]} is the TSV's")
 rules_md = doc[doc.index("## Rules"):doc.index("## Versioning")]
 found = {m.group(1): norm(m.group(2)) for m in re.finditer(r"^- \*\*(R\d+)\*\* (.*?)(?=^- \*\*R|\Z)", rules_md, flags=re.S | re.M)}
-for r in kind("rule"):
+for r in kind("rule", 1, 2):
     say(found.get(r[1]) == norm(r[2]), f"rule {r[1]} statement is the TSV's, verbatim")
-say(len(found) == len(kind("rule")), "the page states no rule the TSV lacks")
-say(seen == {r[0] for r in rows}, f"every record kind in the TSV has a row-by-row parity check: {sorted({r[0] for r in rows} - seen) or 'none unchecked'}")
+say(len(found) == len([r for r in rows if r[0] == "rule"]), "the page states no rule the TSV lacks")
+unchecked = sorted({f"{r[0]}[{i}]" for r in rows for i in range(1, len(r)) if i not in seen.get(r[0], set())})
+say(not unchecked, f"every column of every record kind in the TSV is rendered on the page and compared: {unchecked or 'none unchecked'}")
 PY
 )
 EOF
@@ -205,6 +208,11 @@ for h in range(0, 100):
             v = f"2026-09-06T{h:02d}:{mi:02d}:{se:02d}Z"
             if bool(rx.fullmatch(v)) != (h < 24 and mi < 60 and se < 60): tb += 1
 say(tb == 0, "the grammar admits exactly hours 00-23 and minutes and seconds 00-59")
+import calendar
+lb = sum(1 for y in range(1, 10000) if bool(rx.fullmatch(f"{y:04d}-02-29T00:00:00Z")) != calendar.isleap(y))
+say(lb == 0, f"February 29 is admitted in exactly the leap years of 0001-9999 ({lb} disagreements)")
+say(rx.fullmatch("0000-02-29T00:00:00Z") is not None and rx.fullmatch("0000-02-30T00:00:00Z") is None and rx.fullmatch("0000-01-01T00:00:00Z") is not None,
+    "year 0000 is a leap year as ISO 8601 has it: 02-29 admitted, 02-30 not, 01-01 admitted")
 for v in ("2026-09-06T12:00:05.123Z", "2026-09-06T12:00:05+00:00", "2026-09-06 12:00:05Z", "2026-9-6T12:00:05Z", "2026-09-06T12:00:05"):
     say(rx.fullmatch(v) is None, f"{v} is outside the grammar (second precision, Z suffix, zero-padded)")
 PY
