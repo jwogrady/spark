@@ -71,8 +71,7 @@ stub_path() {
     [ -n "$src" ] && ln -sf "$src" "$d/$t" 2>/dev/null || true
   done
   printf '%s' "$ms" > "$d/snap.json"
-  cat > "$d/gh" <<'GHEOF'
-#!/usr/bin/env bash
+  stub_gh "$d/gh" <<'GHEOF'
 case "${1:-}" in
   auth) exit 0 ;;
   repo) printf 'o/r\n'; exit 0 ;;
@@ -90,7 +89,6 @@ if [ "$isq" = 1 ]; then
 fi
 exit 0
 GHEOF
-  chmod +x "$d/gh"
 }
 
 r="$WORK/repo"
@@ -221,13 +219,11 @@ for t in $tools; do
   src="$(command -v "$t" 2>/dev/null || true)"
   [ -n "$src" ] && ln -sf "$src" "$failgh/$t" 2>/dev/null || true
 done
-cat > "$failgh/gh" <<'GHEOF'
-#!/usr/bin/env bash
+stub_gh "$failgh/gh" <<'GHEOF'
 case "${1:-}" in auth) exit 0 ;; esac
 echo "API rate limit exceeded" >&2
 exit 1
 GHEOF
-chmod +x "$failgh/gh"
 RC=0; OUT="$(cd "$r" && env PATH="$failgh" "$SPARK" course 2>&1)" || RC=$?
 assert_rc "an authenticated reader whose requests fail is NOT ASSESSED" 3 "$RC"
 assert_contains "named as such" "Course: NOT ASSESSED" "$OUT"
@@ -260,8 +256,7 @@ for t in $tools; do
 done
 printf '%s' "$ACTIVE" > "$chggh/first.json"
 printf '%s' "$ONLY_ACTIVE" > "$chggh/rest.json"
-cat > "$chggh/gh" <<'GHEOF'
-#!/usr/bin/env bash
+stub_gh "$chggh/gh" <<'GHEOF'
 case "${1:-}" in
   auth) exit 0 ;;
   repo) printf 'o/r\n'; exit 0 ;;
@@ -280,7 +275,6 @@ if [ "$isq" = 1 ]; then
 fi
 exit 0
 GHEOF
-chmod +x "$chggh/gh"
 export MSFLAG="$WORK/ms.flag"; rm -f "$MSFLAG"
 RC=0; OUT="$(cd "$r" && env PATH="$chggh" MSFLAG="$MSFLAG" "$SPARK" course 2>&1)" || RC=$?
 assert_contains "both milestone facts come from one captured moment" \
@@ -298,8 +292,7 @@ printf '{\n  "next_action": "finish #4242",\n  "blockers": "",\n  "updated": "20
 git -C "$r" add -A; git -C "$r" commit -qm "chore: intent"
 dclosed="$WORK/pclosed"
 stub_path "$dclosed" "$ONLY_ACTIVE"
-cat > "$dclosed/gh" <<'GHEOF'
-#!/usr/bin/env bash
+stub_gh "$dclosed/gh" <<'GHEOF'
 case "${1:-}" in
   auth) exit 0 ;;
   repo) printf 'o/r\n'; exit 0 ;;
@@ -322,7 +315,6 @@ for a in "$@"; do
 done
 exit 0
 GHEOF
-chmod +x "$dclosed/gh"
 RC=0; OUT="$(cd "$r" && env PATH="$dclosed" "$SPARK" course 2>&1)" || RC=$?
 assert_rc "a contradicted course is a repair course" 0 "$RC"
 assert_contains "named as such" "Course: REPAIR CURRENT COURSE" "$OUT"
@@ -547,8 +539,7 @@ for t in $tools; do
 done
 # ISSUES is what `gh issue list` returns; SNAP is the hierarchy snapshot. Both
 # are answered through the --jq the BINARY passes.
-cat > "$abin/gh" <<'AGEOF'
-#!/usr/bin/env bash
+stub_gh "$abin/gh" <<'AGEOF'
 case "${1:-}" in
   auth) exit 0 ;;
   repo) printf 'o/r\n'; exit 0 ;;
@@ -575,7 +566,6 @@ for a in "$@"; do
 done
 exit 0
 AGEOF
-chmod +x "$abin/gh"
 
 # Both carry a COMPLETE governed slate, so the selection turns on the hierarchy
 # rather than on missing metadata: an issue lacking `docs-impact` stops `next`

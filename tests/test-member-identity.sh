@@ -187,8 +187,7 @@ done
 # stub applies the --jq program the BINARY passes, so the read's own shaping is
 # under test — printing pre-shaped TSV here would leave the read unexercised,
 # and re-flattening the labels at that boundary would pass unnoticed.
-cat > "$nxbin/gh" <<'GHEOF'
-#!/usr/bin/env bash
+stub_gh "$nxbin/gh" <<'GHEOF'
 case "${1:-}" in
   auth) exit 0 ;;
   repo) printf 'o/r\n'; exit 0 ;;
@@ -223,7 +222,6 @@ for a in "$@"; do
 done
 exit 0
 GHEOF
-chmod +x "$nxbin/gh"
 
 # js <label>... — the JSON for a gate issue 900 plus issue 901 carrying labels.
 js() {

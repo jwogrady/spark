@@ -217,7 +217,7 @@ skill script's jq programs ran under test.
 
 **What changed.** `tests/lib.sh` gains `stub_gh <path>`: shebang, `gh_stub_prelude`, the
 suite's case-body from stdin, `chmod +x`, in one call. The two packet-2 suites adopt it.
-All ten codify-prereqs stubs are written through it and every pre-shaped answer becomes
+All eleven codify-prereqs stubs (`mk_gh` plus ten inline) are written through it and every pre-shaped answer becomes
 the JSON GitHub returns, shaped by the preflight's own jq: the repository node
 (`{"full_name": …}`), blocker rows (`{"number", "repository_url"}`, an unknown owner as an
 absent field, "no blockers" as `[]`), issue bodies and states as `{"body"}`/`{"state"}`,
@@ -236,17 +236,17 @@ any difference.
 
 | Existing test/case | Invariant proved | Surviving test/case | Same/stronger discrimination? | Validation |
 |---|---|---|---|---|
-| ten inline codify-prereqs stubs with pre-shaped answers | the preflight's READY / BLOCKED / NOT ASSESSED verdicts across 15 end-to-end scenarios | the same ten stubs written with `stub_gh`, answering GitHub's JSON through the skill script's own jq | **Stronger** — `.full_name`, the blocked-by row jq (`.number`, `.repository_url // ""`), `.body`, `.state` and the closing-reference jq (`select(.merged) \| .mergeCommit.oid // empty`) now execute on every scenario; a jq regression in the preflight fails here | suite assertions unchanged; per-suite counts identical |
+| eleven codify-prereqs stubs (`mk_gh` plus ten inline) with pre-shaped answers | the preflight's READY / BLOCKED / NOT ASSESSED verdicts across 15 end-to-end scenarios | the same eleven stubs written with `stub_gh`, answering GitHub's JSON through the skill script's own jq | **Stronger** — `.full_name`, the blocked-by row jq (`.number`, `.repository_url // ""`), `.body`, `.state` and the closing-reference jq (`select(.merged) \| .mergeCommit.oid // empty`) now execute on every scenario; a jq regression in the preflight fails here | suite assertions unchanged; per-suite counts identical |
 | scaffolding in the two packet-2 suites | — | `stub_gh` | **Same** by construction | per-suite counts identical |
 
 **Before / after (this packet).**
 
 | | BEFORE (branch base `dcda139`) | AFTER |
 |---|---|---|
-| suites with pre-shaped `gh` answers assuming a caller's jq | 1 (`test-codify-prereqs.sh`, 10 stubs) | 0 |
+| suites with pre-shaped `gh` answers assuming a caller's jq | 1 (`test-codify-prereqs.sh`, eleven stubs: `mk_gh` plus ten inline) | 0 |
 | production jq programs newly exercised | — | 5 (`.full_name`, blocked-by row, `.body`, `.state`, closing references) |
-| stubs written through `stub_gh` | 0 | 12 (ten in codify-prereqs, one each in the packet-2 suites) |
-| `chmod +x`/shebang restatements removed | — | 12 |
+| stubs written through `stub_gh` | 0 | 13 (eleven in codify-prereqs — `mk_gh` plus ten inline — and one each in the packet-2 suites) |
+| `chmod +x`/shebang restatements removed | — | 13 |
 | suites the runner would pass while printing no summary line | any (a silent suite counted as passed) | 0 — `tests/run.sh` now fails a suite with no `N passed, M failed` line |
 | assertions, full run | 3908 passed, 0 failed | 3908 passed, 0 failed |
 | per-suite pass/fail lines | 92 | 92, **all identical** |
@@ -256,15 +256,46 @@ The remaining ~24 suites with their own shim scaffolding (baseline B3) keep it f
 stub *bodies* are not pre-shaped in the same way, so adopting `stub_gh` there is a mechanical
 sweep with no discrimination change — packet 4 below, so its per-suite proof stands alone.
 
-## Remaining scope (later packets, in order; packets 1–3 above are done)
+---
 
-1. **Adopt `stub_gh` across the remaining suites** (baseline B3): ~24 suites still restate
-   the shim scaffolding; their stub bodies are not pre-shaped in the packet-3 sense, so the
-   sweep is mechanical, with its own per-suite proof.
-2. **Same-invariant candidates** (baseline C1–C7). The baseline's own verdicts stand:
+## Packet 4 — the `stub_gh` sweep (baseline B3)
+
+**What changed.** Every remaining hand-written `gh` stub — 36 heredoc/shebang openers in 15
+suites, 24 of which were followed by their own `chmod +x` (the other 12 reused a directory
+whose file was already executable) — is now written through `stub_gh`: the
+`cat > "$dir/gh" <<TAG` + shebang opener becomes `stub_gh "$dir/gh" <<TAG`, and each
+per-stub `chmod +x` is gone. Stub
+*bodies* are untouched: this sweep is scaffolding only, so the answers each suite gives
+stay exactly where they were and mean exactly what they meant. Every stub now also carries
+the prelude (`GH_JQ`, `answer_json`), which a later change can use to answer with JSON
+where a body still pre-shapes rows; none of the swept bodies does so in the packet-3
+sense (they answer GraphQL snapshots through the caller's jq already, or plain text for
+`gh issue view --json … --jq` reads).
+
+| Existing test/case | Invariant proved | Surviving test/case | Same/stronger discrimination? | Validation |
+|---|---|---|---|---|
+| 36 hand-written stubs (heredoc + shebang openers, 24 with a per-stub chmod) in 15 suites | each suite's own scenarios | the same 36 stubs via `stub_gh`, bodies unchanged | **Same** by construction — bodies identical, PATH ordering unchanged | per-suite pass/fail lines identical (92/92); the runner's silent-suite guard (packet 3) would fail any stub whose heredoc did not terminate |
+
+**Before / after (this packet).**
+
+| | BEFORE (branch base `a504e2c`) | AFTER |
+|---|---|---|
+| hand-written `gh` stubs (`cat > … <<TAG` + shebang openers; 24 with a per-stub chmod) | 36 in 15 suites | 0 |
+| stubs written through `stub_gh` | 13 | 49 (13 + 36) |
+| scaffolding lines removed (shebang + `chmod +x`) | — | 60 (36 shebang lines, 24 chmod lines; the remaining converted stubs reused a directory whose file was already executable) |
+| test LOC (`tests/test-*.sh`) | 19,363 | 19,303 |
+| assertions, full run | 3908 passed, 0 failed | 3908 passed, 0 failed |
+| per-suite pass/fail lines | 92 | 92, **all identical** |
+| full-suite wall clock | 162s | 163s |
+
+## Remaining scope (later packets, in order; packets 1–4 above are done)
+
+1. **Same-invariant candidates** (baseline C1–C7). The baseline's own verdicts stand:
    most groups are layered, not duplicated. The two worth a line-level read are
    `test-context-budget.sh` vs `test-footprint-budget.sh` (C4: same fixture marketplace,
    hard-error vs warn — but different functions under test) and the three
    `release-notes-*` suites' private `gitc`/`seed` fixtures (C7). Neither is touched until
    its invariant overlap is read line by line; the non-goal "merging unrelated invariants
    into a giant script" governs.
+2. **Close-out**: the measured totals across every packet against the #737 inventory, and
+   the acceptance checklist evaluated item by item.

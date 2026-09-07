@@ -246,8 +246,7 @@ grep -q "$(printf 'chore\tdrop the legacy connect config (#304)\t\tbreaking')" "
 # minimal release PR so the full path (mktemp + trap + split + post) runs to
 # completion. Both must exit 0 all the way through process exit.
 stub="$work/stubbin"; mkdir -p "$stub"
-cat > "$stub/gh" <<'STUB'
-#!/usr/bin/env bash
+stub_gh "$stub/gh" <<'STUB'
 case "$1 $2" in
   "pr list")
     if [ -n "${STUB_PR_JSON:-}" ]; then printf '%s' "$STUB_PR_JSON"; fi ;;
@@ -255,7 +254,6 @@ case "$1 $2" in
   *) exit 0 ;;
 esac
 STUB
-chmod +x "$stub/gh"
 rc=0; ( cd "$work" && PATH="$stub:$PATH" GITHUB_REPOSITORY=o/r bash "$runner" >/dev/null 2>&1 ) || rc=$?
 [ "$rc" -eq 0 ] && ok || bad "executed main (no open release PR) must exit 0 through process exit (got $rc)"
 e2e_repo="$work/e2erepo"; mkdir -p "$e2e_repo"

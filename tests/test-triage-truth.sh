@@ -216,8 +216,7 @@ for t in git awk sed grep find sort printf bash env cat wc tr head cut date mkte
   src="$(command -v "$t" 2>/dev/null || true)"
   [ -n "$src" ] && ln -sf "$src" "$wgh/$t" 2>/dev/null || true
 done
-cat > "$wgh/gh" <<'GHEOF'
-#!/usr/bin/env bash
+stub_gh "$wgh/gh" <<'GHEOF'
 # Any write-shaped invocation is recorded. Read-shaped ones return empty.
 for a in "$@"; do
   case "$a" in
@@ -232,7 +231,6 @@ case "${1:-}" in
 esac
 exit 0
 GHEOF
-chmod +x "$wgh/gh"
 export SENTINEL="$WORK/gh-writes.log"
 : > "$SENTINEL"
 ( cd "$ro" && env PATH="$wgh" SENTINEL="$SENTINEL" "$SPARK" triage >/dev/null 2>&1 ) || true
@@ -340,8 +338,7 @@ for t in git awk sed grep find sort printf bash env cat wc tr head cut date mkte
   src="$(command -v "$t" 2>/dev/null || true)"
   [ -n "$src" ] && ln -sf "$src" "$qbin/$t" 2>/dev/null || true
 done
-cat > "$qbin/gh" <<'GHEOF'
-#!/usr/bin/env bash
+stub_gh "$qbin/gh" <<'GHEOF'
 # Log every issue lookup, then answer with whatever QSTATE says.
 if [ "${1:-}" = "api" ]; then
   case "${2:-}" in
@@ -351,7 +348,6 @@ if [ "${1:-}" = "api" ]; then
 fi
 exit 0
 GHEOF
-chmod +x "$qbin/gh"
 
 qrun() { # <intent-text> <state> -> rows, with QLOG holding the queried numbers
   local intent="$1" st="$2" d="$WORK/q$3"

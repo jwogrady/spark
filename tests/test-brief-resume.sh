@@ -80,14 +80,12 @@ cat > "$repo7/.spark/state.json" <<'EOF'
 { "next_action": "push and open the PR", "blockers": "", "updated": "2026-02-02" }
 EOF
 fakebin="$WORK/fakegh"; mkdir -p "$fakebin"
-cat > "$fakebin/gh" <<'EOF'
-#!/usr/bin/env bash
+stub_gh "$fakebin/gh" <<'EOF'
 case "$*" in
   *"pr view"*) printf '7|MERGED\n'; exit 0 ;;
   *) exit 1 ;;
 esac
 EOF
-chmod +x "$fakebin/gh"
 rc=0; out="$(cd "$repo7" && env PATH="$fakebin:$PATH" "$SPARK" resume 2>&1)" || rc=$?
 assert_rc "loop-close resume exits 0" 0 "$rc"
 assert_contains "the merged PR is derived" "#7 (MERGED)" "$out"
@@ -121,15 +119,13 @@ assert_contains "warns a prerequisite may be missing" "prerequisite may be missi
 repo9="$WORK/midpr"; make_repo "$repo9"
 ( cd "$repo9" && git checkout -qb feat/9-thing )
 fakepr="$WORK/fakeghpr"; mkdir -p "$fakepr"
-cat > "$fakepr/gh" <<'EOF'
-#!/usr/bin/env bash
+stub_gh "$fakepr/gh" <<'EOF'
 case "$*" in
   *"pr view"*) printf 'PR #9 — the thing
 ' ;;
   *) exit 1 ;;
 esac
 EOF
-chmod +x "$fakepr/gh"
 rc=0; out="$(cd "$repo9" && env PATH="$fakepr:$PATH" "$SPARK" brief 2>&1)" || rc=$?
 assert_rc "mid-PR brief exits 0" 0 "$rc"
 assert_contains "an open PR outranks the missing statement" "Validate/Ship" "$out"

@@ -219,15 +219,13 @@ done
 # A gh whose issue labels are whatever the caller put in DI_LABELS. `gh auth
 # status` must succeed or the verb short-circuits to NOT ASSESSED and would
 # never reach the rule under test.
-cat > "$shim/gh" <<'GH'
-#!/usr/bin/env bash
+stub_gh "$shim/gh" <<'GH'
 case "$1 $2" in
   "auth status") exit 0 ;;
   "issue view")  printf '%s\n' ${DI_LABELS:-} ; exit 0 ;;
 esac
 exit 1
 GH
-chmod +x "$shim/gh"
 echo "plugins/spark/docs/reference/x.md" > "$WORK/di-paths"
 
 di_cli() {

@@ -50,8 +50,7 @@ gh_stub() {
     [ -n "$src" ] && ln -sf "$src" "$d/$t" 2>/dev/null || true
   done
   printf '%s' "$json" > "$d/cap.json"
-  cat > "$d/gh" <<'GHEOF'
-#!/usr/bin/env bash
+  stub_gh "$d/gh" <<'GHEOF'
 case "${1:-}" in
   auth) exit 0 ;;
   repo) printf 'o/r\n'; exit 0 ;;
@@ -69,7 +68,6 @@ if [ "$isq" = 1 ]; then
 fi
 exit 0
 GHEOF
-  chmod +x "$d/gh"
 }
 
 # rows <response-json> — the gate rows, through the real capture and the real
@@ -322,8 +320,7 @@ nx_stub() {
     src="$(command -v "$t" 2>/dev/null || true)"
     [ -n "$src" ] && ln -sf "$src" "$d/$t" 2>/dev/null || true
   done
-  cat > "$d/gh" <<'GHEOF'
-#!/usr/bin/env bash
+  stub_gh "$d/gh" <<'GHEOF'
 case "${1:-}" in
   auth) exit 0 ;;
   repo) printf 'o/r\n'; exit 0 ;;
@@ -352,7 +349,6 @@ for a in "$@"; do
 done
 exit 0
 GHEOF
-  chmod +x "$d/gh"
 }
 nxb="$WORK/nxb"; nx_stub "$nxb"
 # nx <issue-list-json> <capture-json>

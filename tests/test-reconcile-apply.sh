@@ -129,8 +129,7 @@ done
 # governance surface came back unread, no finding had a disposition, and the
 # assertions below silently skipped — they passed while the defect they exist
 # for was reintroduced.
-cat > "$ggh/gh" <<'GHEOF'
-#!/usr/bin/env bash
+stub_gh "$ggh/gh" <<'GHEOF'
 echo "CALL $*" >> "$GLOG"
 case "${1:-}" in auth) exit 0 ;; esac
 for a in "$@"; do
@@ -141,7 +140,6 @@ for a in "$@"; do
 done
 exit 0
 GHEOF
-chmod +x "$ggh/gh"
 export GLOG="$WORK/gh-calls.log"
 
 # No `exit` in this awk: rec_rows emits far more after the first governance row,
