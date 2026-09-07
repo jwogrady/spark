@@ -1,5 +1,9 @@
 # Spark's IS-state, immediately before v0.20
 
+> **Historical record — superseded as current truth.** Audited master pinned
+> below; current placement and dependency semantics live in the shipped reference
+> pages and the governance model (`docs/ops/canonical-truth.tsv`).
+
 > **The #441 pre-dogfood baseline.** What Spark *is* on the eve of the v0.20
 > orchestration changes, recorded so later certification has something truthful
 > to compare against. A dev-doc — it governs how Spark is built and never ships.

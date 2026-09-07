@@ -1,0 +1,77 @@
+{
+ "source": "this job's Claude Code transcript (job 046f256e), analyzed with docs/research/v0.23-optimization-baseline/tools/analyze-transcript.py; windows = D, the #732 contract rounds, and C, the #741 audit rounds (groups D and C)",
+ "windows": [
+  {
+   "name": "D: #732 freshness contract (rounds 1-9, two PRs)",
+   "start": "2026-09-07T02:55:29Z",
+   "end": "2026-09-07T04:54:44Z",
+   "tool_calls": 184,
+   "read_calls": 2,
+   "bash:shell:read": 55,
+   "paths_all_unique": 2,
+   "paths_all_repeated": 0,
+   "gh_invocations_lower_bound": 87,
+   "api_requests": 80
+  },
+  {
+   "name": "C: #741 canonical-truth audit (rounds 1-4)",
+   "start": "2026-09-07T04:54:44Z",
+   "end": "2026-09-07T12:59:33Z",
+   "tool_calls": 95,
+   "read_calls": 2,
+   "bash:shell:read": 13,
+   "paths_all_unique": 10,
+   "paths_all_repeated": 5,
+   "gh_invocations_lower_bound": 23,
+   "api_requests": 38
+  }
+ ],
+ "surface_touches_by_window": {
+  "D": {
+   "AGENTS.md": 0,
+   "plugins/spark/docs/reference/cli.md": 0,
+   "plugins/spark/skills/ship/SKILL.md": 0,
+   "plugins/spark/docs/explanation/sdlc-doctrine.md": 0,
+   "plugins/spark/docs/reference/metadata-governance.md": 0,
+   "docs/ops/execution-configuration-surface.md": 0,
+   "plugins/spark/lib/execution.sh": 0,
+   "plugins/spark/bin/spark": 0
+  },
+  "C": {
+   "AGENTS.md": 1,
+   "plugins/spark/docs/reference/cli.md": 1,
+   "plugins/spark/skills/ship/SKILL.md": 3,
+   "plugins/spark/docs/explanation/sdlc-doctrine.md": 0,
+   "plugins/spark/docs/reference/metadata-governance.md": 0,
+   "docs/ops/execution-configuration-surface.md": 0,
+   "plugins/spark/lib/execution.sh": 1,
+   "plugins/spark/bin/spark": 2
+  }
+ },
+ "surface_touches_before_by_group": {
+  "AGENTS.md": {
+   "other-session": 0
+  },
+  "plugins/spark/docs/reference/cli.md": {
+   "other-session": 22
+  },
+  "plugins/spark/skills/ship/SKILL.md": {
+   "other-session": 0
+  },
+  "plugins/spark/docs/explanation/sdlc-doctrine.md": {
+   "other-session": 0
+  },
+  "plugins/spark/docs/reference/metadata-governance.md": {
+   "other-session": 0
+  },
+  "docs/ops/execution-configuration-surface.md": {
+   "other-session": 0
+  },
+  "plugins/spark/lib/execution.sh": {
+   "other-session": 0
+  },
+  "plugins/spark/bin/spark": {
+   "other-session": 106
+  }
+ }
+}

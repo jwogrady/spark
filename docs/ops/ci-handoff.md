@@ -29,6 +29,11 @@ evidence about the one that was certified.
 It also writes `pr`, `head_sha`, `certified_at` and `ci_state` into the run's
 `spark telemetry` record, so resuming needs no replay of the episode.
 
+The handoff's states — `READY`, `CHANGES REQUIRED`, `PENDING`, `NOT ASSESSED` — are
+certification states of this boundary, not the independent reviewer's verdict
+vocabulary (`PASS | CHANGES REQUIRED | DECISION REQUIRED | NOT ASSESSED`, the fact
+model's `verdict` identifier); the two shared tokens mean the same in both.
+
 ## The three verdicts, and why two of them are restraint
 
 | Verdict | Exit | Meaning |

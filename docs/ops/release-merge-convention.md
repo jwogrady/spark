@@ -103,6 +103,16 @@ commit — that series is what step-by-step Conventional Commits through
 `codify`/`validate` are *for*. Squashing would remove exactly the history the
 branch was built to preserve.
 
+**Decided 2026-09-07 (owner, on PR #762).** True merge commits are Spark's
+*default governed merge strategy*. The strategy is to become an explicit
+repository/operator preference rather than a convention only: squash and rebase
+are not prohibited, and when one is selected Spark must preserve the equivalent
+exact-HEAD and provenance guarantees that strategy allows (a squash commit
+carries the conventional subject and the governor trailer; a rebase keeps every
+governed commit). Recorded exception: the v0.23 packets that landed before this
+decision (#738–#740, #731, #732) were squash-merged with conventional titles under
+#677 and stay as they are.
+
 Squashing would also fix the duplication, and it is worth being honest that it
 is *lossless for a single-commit branch* — which is what most of the #403-#414
 sweep consisted of. A split rule (squash one-commit branches, merge-commit the

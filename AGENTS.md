@@ -202,7 +202,10 @@ are made from.
 - Do not create releases or tags without explicit user instruction. (Where
   Release Please is configured — config file or workflow — the guard blocks
   hand-cut tags and Releases; the release act is a human merging the Release
-  Please release PR. The milestone declares the version; `Release-As` mints it.)
+  Please release PR. In Spark-seeded projects the milestone declares the version
+  and `Release-As` mints it; this repository runs Release Please's default bump
+  semantics — [`release-ownership.md`](plugins/spark/docs/explanation/release-ownership.md)
+  is the boundary's one full statement.)
 - Do not call GitHub APIs beyond the task's needs, and never change repository
   settings (protection, rulesets) — surfacing drift is Spark's job, applying
   policy is the human's.

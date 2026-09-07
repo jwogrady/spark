@@ -550,10 +550,11 @@ says it is. It recommends and routes; that is the whole of its authority.
 
 ## `spark crossroad <kind> [authority] [surface]`
 
-Classify a proposed stop before handing off to the human. The autonomous
-orchestrator's costliest stop mistake is not running past a real boundary — it
-is inventing one. A genuine Crossroad exists only when the next motion
-needs an authority a durable surface reserves to the human.
+Classify a proposed stop before handing off to the human. What a genuine
+Crossroad is — a missing authority a durable surface reserves to the human,
+never a feeling — is defined once in the
+[doctrine](../explanation/sdlc-doctrine.md) (§ A Crossroad is a missing
+authority, not a feeling); this verb classifies against it.
 
 `crossroad` admits a stop **only** for a recognised boundary kind that also
 **names** the missing authority and **cites** the durable surface reserving it.

@@ -1,0 +1,184 @@
+# Spark — documentation role register (#741)
+#
+# Every documentation surface of this repository (repo-root docs, the shipped plugin docs and skills, the root
+# contract and roadmap, the .github templates — Markdown or YAML) carries exactly one primary role. A surface may link to another role, but it never presents
+# historical state as current authority. tests/test-doc-roles.sh holds this file to the tree and the tree to it.
+#
+# Roles (closed):
+#   operative-authority   the one place a governed concept is defined; a change here changes the rule
+#   current-projection    rendered from a machine-readable authority or the code, checked for parity, or a dated index
+#   explanation           why and how; states rules only by pointing at their source
+#   historical-evidence   dated record (decision, release, audit, research); never current truth
+#   superseded            kept for the record and marked so in its first lines; nothing reads it as current
+#
+# Columns: path <TAB> role <TAB> governed concepts (comma list, or -) <TAB> note
+.github/ISSUE_TEMPLATE/alpha-feedback.yml	operative-authority	issue-template-alpha-feedback	governance prose in YAML: the alpha feedback form
+.github/ISSUE_TEMPLATE/bug.yml	operative-authority	issue-template-bug,parent-dependency	governance prose in YAML: the bug issue form; its Dependencies field says prose explains and the native relationship records (this audit)
+.github/ISSUE_TEMPLATE/config.yml	operative-authority	issue-chooser	GitHub's template chooser configuration: which forms exist, whether blank issues are allowed
+.github/ISSUE_TEMPLATE/feature.yml	operative-authority	issue-template-feature,parent-dependency	governance prose in YAML: the feature issue form; its Dependencies field says prose explains and the native relationship records (this audit)
+.github/ISSUE_TEMPLATE/skill.yml	operative-authority	issue-template-skill	governance prose in YAML: the skill issue form
+.github/PULL_REQUEST_TEMPLATE.md	operative-authority	pr-template	the pull-request body every PR opens with; the plan and ship skills fill it
+AGENTS.md	operative-authority	version-minting,authority-boundaries,parent-dependency,agent-contract	the one agent contract; states other concepts only as projections that point at their sources
+CLAUDE.md	current-projection	agent-contract	imports AGENTS.md
+README.md	explanation	verdict-vocabulary	public positioning
+ROADMAP.md	current-projection	release-gate-placement,routine-merge-authority,parent-dependency	dated projection of intent; placement lives in GitHub — declares so since this audit
+docs/README.md	current-projection	-	index
+docs/adr/0000-template.md	explanation	-	the ADR template
+docs/adr/0001-plugin-not-framework.md	historical-evidence	-	dated decision record; the decision's current form lives in the surface it created
+docs/adr/0002-additive-to-anthropic-spec.md	historical-evidence	-	dated decision record; the decision's current form lives in the surface it created
+docs/adr/0003-zero-dependency-bash-and-enforcement-hooks.md	historical-evidence	-	dated decision record; the decision's current form lives in the surface it created
+docs/adr/0004-cosmic-is-the-generated-unit.md	historical-evidence	-	dated decision record; the decision's current form lives in the surface it created
+docs/adr/0005-cosmics-ship-ci-spark-stays-ci-free.md	historical-evidence	-	dated decision record; the decision's current form lives in the surface it created
+docs/adr/0006-cosmics-use-release-please.md	historical-evidence	version-minting	dated decision record; the decision's current form lives in the surface it created
+docs/adr/0007-default-stack-python-uv.md	historical-evidence	-	dated decision record; the decision's current form lives in the surface it created
+docs/adr/0008-information-architecture.md	historical-evidence	-	dated decision record; the decision's current form lives in the surface it created
+docs/adr/0009-spark-release-mechanism.md	historical-evidence	version-minting	dated decision record; the decision's current form lives in the surface it created
+docs/adr/0010-preferences-source-model.md	historical-evidence	-	dated decision record; the decision's current form lives in the surface it created
+docs/adr/0011-doctor-is-the-validation-gate.md	historical-evidence	-	dated decision record; the decision's current form lives in the surface it created
+docs/adr/0012-setup-is-the-one-command-carry-in.md	historical-evidence	-	dated decision record; the decision's current form lives in the surface it created
+docs/adr/0013-the-plugin-ships-only-carry-surfaces.md	historical-evidence	-	dated decision record; the decision's current form lives in the surface it created
+docs/adr/0014-core-plus-companion-plugins.md	historical-evidence	-	dated decision record; the decision's current form lives in the surface it created
+docs/adr/0015-generated-projects-without-the-cosmic-model.md	historical-evidence	-	dated decision record; the decision's current form lives in the surface it created
+docs/adr/0016-companion-release-path.md	historical-evidence	merge-method	dated decision record; the decision's current form lives in the surface it created
+docs/adr/0017-permission-trust-tiers.md	historical-evidence	-	dated decision record; the decision's current form lives in the surface it created
+docs/adr/0018-behavioral-tests-are-the-second-ci-gate.md	historical-evidence	-	dated decision record; the decision's current form lives in the surface it created
+docs/adr/0019-human-directed-product-model.md	historical-evidence	authority-boundaries	dated decision record; the decision's current form lives in the surface it created
+docs/adr/0020-project-local-prose-standards.md	historical-evidence	-	dated decision record; the decision's current form lives in the surface it created
+docs/adr/0021-first-run-entry-point.md	historical-evidence	-	dated decision record; the decision's current form lives in the surface it created
+docs/adr/0022-orient-first-classification.md	historical-evidence	-	dated decision record; the decision's current form lives in the surface it created
+docs/adr/0023-lifecycle-orchestration-topology.md	historical-evidence	review-lifecycle	dated decision record; the decision's current form lives in the surface it created
+docs/adr/0024-capability-based-model-selection.md	historical-evidence	review-lifecycle	dated decision record; the decision's current form lives in the surface it created
+docs/adr/0025-capability-evaluation-framework.md	historical-evidence	-	dated decision record; the decision's current form lives in the surface it created
+docs/adr/0026-evidence-declaration-and-release-gate.md	historical-evidence	release-gate-placement	dated decision record; the decision's current form lives in the surface it created
+docs/adr/0027-delivery-model.md	historical-evidence	parent-dependency	dated decision record; the decision's current form lives in the surface it created
+docs/adr/0028-cross-project-memory-hubs.md	historical-evidence	-	dated decision record; the decision's current form lives in the surface it created
+docs/adr/0029-four-tier-artifact-separation.md	historical-evidence	-	dated decision record; the decision's current form lives in the surface it created
+docs/adr/0030-governance-model-representation.md	historical-evidence	-	dated decision record; the decision's current form lives in the surface it created
+docs/adr/0031-state-provenance-ownership.md	historical-evidence	-	dated decision record; the decision's current form lives in the surface it created
+docs/adr/0033-operative-fact-model.md	historical-evidence	authority-boundaries,exact-head-stale-evidence,verdict-vocabulary	dated decision record; the decision's current form lives in the surface it created
+docs/adr/0034-fact-freshness-contract.md	historical-evidence	exact-head-stale-evidence,verdict-vocabulary	dated decision record; the decision's current form lives in the surface it created
+docs/alpha/alpha-program.md	operative-authority	alpha-program	the Alpha → Beta → v1.0.0 promotion path
+docs/alpha/coordinator-guide.md	explanation	-	alpha program guide
+docs/alpha/exit-criteria.md	operative-authority	alpha-exit-criteria	the promotion criteria
+docs/alpha/feedback-template.md	explanation	-	alpha program guide
+docs/alpha/pilot-plan.md	explanation	-	alpha program guide
+docs/alpha/testing-guide.md	explanation	-	alpha program guide
+docs/architecture/spark-internals.md	explanation	-	
+docs/governance/capability-evaluation.md	explanation	-	
+docs/governance/is-state-baseline-pre-v020.md	historical-evidence	parent-dependency	banner: historical record, superseded as current truth
+docs/governance/self-conformance-audit-v020.md	historical-evidence	release-gate-placement	banner: historical record, superseded as current truth
+docs/ops/bounded-execution.md	explanation	authority-boundaries	
+docs/ops/ci-handoff.md	explanation	exact-head-stale-evidence	handoff states are not the reviewer verdict vocabulary — says so since this audit
+docs/ops/claude-coding-lane.md	operative-authority	coding-lane	the coding lane's definition — a lane that writes, distinct from the review lifecycle
+docs/ops/context-efficiency.md	explanation	-	developer operations doc
+docs/ops/evaluation.md	explanation	-	developer operations doc
+docs/ops/execution-configuration-surface.md	explanation	routine-merge-authority	cites #677; defines nothing about it
+docs/ops/execution-routing.md	explanation	authority-boundaries	points at the shipped statement of the non-escalatable human boundary since this audit
+docs/ops/existing-implementation.md	explanation	-	developer operations doc
+docs/ops/openai-reviewer-lane.md	operative-authority	exact-head-stale-evidence,verdict-vocabulary,review-lifecycle	the lane's definition; the workflow executes it
+docs/ops/plugin-manifest.md	current-projection	-	layout reference of the manifests
+docs/ops/read-only-assessment.md	explanation	-	developer operations doc
+docs/ops/reconciliation-runbook.md	explanation	-	developer operations doc
+docs/ops/release-gate-role.md	current-projection	release-gate-placement	operator steps for the governance model's role marker
+docs/ops/release-merge-convention.md	operative-authority	merge-method	the governed merge strategy: true merge commits by default, decided 2026-09-07; the strategy preference is its own work unit
+docs/ops/release-token-governance.md	operative-authority	release-token	token policy
+docs/ops/repository-boundary.md	explanation	-	developer operations doc
+docs/ops/telemetry-baseline.md	historical-evidence	-	dated baseline
+docs/ops/v0.21-dogfood-evaluation.md	historical-evidence	-	dated evaluation
+docs/problem-statement.md	historical-evidence	-	self-marked Historical
+docs/product-constitution.md	operative-authority	product-constitution,release-gate-placement	the constitution; its Platform Compatibility Review paragraph is marked superseded (ADR-0026) since this audit
+docs/releases/README.md	current-projection	-	index
+docs/releases/v0.10.md	historical-evidence	-	per-release record
+docs/releases/v0.11.md	historical-evidence	-	per-release record
+docs/releases/v0.14-v0.15-launch-record.md	historical-evidence	-	per-release record
+docs/releases/v0.17-plan.md	historical-evidence	-	per-release record
+docs/releases/v0.17.md	historical-evidence	release-gate-placement	per-release record
+docs/releases/v0.18.md	historical-evidence	-	per-release record
+docs/releases/v0.19.md	historical-evidence	-	per-release record
+docs/releases/v0.20.md	historical-evidence	-	per-release record
+docs/releases/v0.21.md	historical-evidence	-	per-release record
+docs/releases/v0.22.md	historical-evidence	release-gate-placement	per-release record
+docs/releases/v0.23-usage-evidence.md	historical-evidence	routine-merge-authority	report
+docs/releases/v0.23.md	current-projection	release-gate-placement	in-progress release record; becomes historical-evidence at release
+docs/research/v0.12-orchestration-recommendation.md	historical-evidence	-	research and baseline evidence
+docs/research/v0.13-mechanical-offload-audit.md	historical-evidence	-	research and baseline evidence
+docs/research/v0.23-cleanup/738-dead-code-audit.md	historical-evidence	-	research and baseline evidence
+docs/research/v0.23-cleanup/739-semantic-map.md	historical-evidence	-	research and baseline evidence
+docs/research/v0.23-cleanup/740-test-consolidation.md	historical-evidence	-	research and baseline evidence
+docs/research/v0.23-cleanup/741-canonical-truth.md	historical-evidence	-	research and baseline evidence
+docs/research/v0.23-optimization-baseline/README.md	current-projection	-	index
+docs/research/v0.23-optimization-baseline/raw/FINDINGS-TEXT.md	historical-evidence	-	research and baseline evidence
+docs/research/v0.23-optimization-baseline/raw/agent-docs-governance-truth.md	historical-evidence	-	research and baseline evidence
+docs/research/v0.23-optimization-baseline/raw/agent-duplicate-truth-code.md	historical-evidence	-	research and baseline evidence
+docs/research/v0.23-optimization-baseline/raw/agent-test-representation.md	historical-evidence	-	research and baseline evidence
+docs/research/v0.23-optimization-baseline/raw/freeze-comment-730.md	historical-evidence	-	research and baseline evidence
+docs/research/v0.23-optimization-baseline/raw/freeze-comment-737.md	historical-evidence	-	research and baseline evidence
+docs/research/v0.23-optimization-baseline/repository-baseline.md	historical-evidence	-	research and baseline evidence
+docs/research/v0.23-optimization-baseline/tables.md	historical-evidence	-	research and baseline evidence
+plugins/spark-audit/docs/how-to.md	explanation	-	shipped user documentation
+plugins/spark-audit/skills/audit/SKILL.md	operative-authority	skill-audit	the skill's procedure, agent-facing; its concept is the skill itself
+plugins/spark-audit/skills/audit/references/assess-brief.md	explanation	-	progressive-disclosure reference of a skill
+plugins/spark-audit/skills/audit/references/provenance-leakage.md	explanation	-	progressive-disclosure reference of a skill
+plugins/spark-audit/skills/audit/references/purge-protocol.md	explanation	-	progressive-disclosure reference of a skill
+plugins/spark-connect/docs/how-to.md	explanation	-	shipped user documentation
+plugins/spark-connect/skills/connect/SKILL.md	operative-authority	skill-connect	the skill's procedure, agent-facing; its concept is the skill itself
+plugins/spark-connect/skills/connect/references/recipes.md	explanation	-	progressive-disclosure reference of a skill
+plugins/spark-docs/docs/how-to.md	explanation	-	shipped user documentation
+plugins/spark-docs/skills/docit/SKILL.md	operative-authority	skill-docit	the skill's procedure, agent-facing; its concept is the skill itself
+plugins/spark-docs/skills/docit/references/collaboration-protocol.md	explanation	-	progressive-disclosure reference of a skill
+plugins/spark/docs/README.md	current-projection	-	index
+plugins/spark/docs/explanation/additive.md	explanation	-	shipped user documentation
+plugins/spark/docs/explanation/enforcement-model.md	explanation	exact-head-stale-evidence	
+plugins/spark/docs/explanation/identity.md	explanation	-	shipped user documentation
+plugins/spark/docs/explanation/philosophy.md	explanation	-	shipped user documentation
+plugins/spark/docs/explanation/release-ownership.md	operative-authority	version-minting	self-declared: the boundary's one full statement
+plugins/spark/docs/explanation/sdlc-doctrine.md	explanation	version-minting,authority-boundaries,parent-dependency,review-lifecycle	doctrine; the crossroad definition other pages point at
+plugins/spark/docs/glossary.md	explanation	-	vocabulary in prose; the closed vocabularies are the TSVs
+plugins/spark/docs/how-to/agents-md.md	explanation	agent-contract	shipped user documentation
+plugins/spark/docs/how-to/bootstrap.md	explanation	-	shipped user documentation
+plugins/spark/docs/how-to/codify.md	explanation	-	shipped user documentation
+plugins/spark/docs/how-to/get-started.md	explanation	-	shipped user documentation
+plugins/spark/docs/how-to/ideate.md	explanation	-	shipped user documentation
+plugins/spark/docs/how-to/knowledge.md	explanation	-	shipped user documentation
+plugins/spark/docs/how-to/plan.md	explanation	-	shipped user documentation
+plugins/spark/docs/how-to/resume.md	explanation	-	shipped user documentation
+plugins/spark/docs/how-to/ship.md	explanation	routine-merge-authority,merge-method	restates the ship guardrail for users; the skill is the agent-facing statement
+plugins/spark/docs/how-to/validate.md	explanation	verdict-vocabulary,review-lifecycle	the built-in review lane, distinct from the independent reviewer lane
+plugins/spark/docs/reference/cli.md	current-projection	release-gate-placement,authority-boundaries,exact-head-stale-evidence,parent-dependency	VERBS table parity (doctor); the crossroad definition points at the doctrine since this audit
+plugins/spark/docs/reference/codify-readiness.md	current-projection	-	shipped reference page rendering a machine-readable authority or the code
+plugins/spark/docs/reference/compatibility.md	operative-authority	supported-environments	the support statement
+plugins/spark/docs/reference/engineering-preferences.md	current-projection	version-minting	shipped reference page rendering a machine-readable authority or the code
+plugins/spark/docs/reference/fact-freshness.md	current-projection	exact-head-stale-evidence	renders fact-freshness.tsv
+plugins/spark/docs/reference/fact-model.md	current-projection	release-gate-placement,authority-boundaries,routine-merge-authority,exact-head-stale-evidence,verdict-vocabulary,review-lifecycle	renders fact-model.tsv
+plugins/spark/docs/reference/hooks.md	current-projection	-	shipped reference page rendering a machine-readable authority or the code
+plugins/spark/docs/reference/metadata-governance.md	current-projection	release-gate-placement,authority-boundaries,parent-dependency	renders spark-default.tsv
+plugins/spark/docs/reference/project-standards.md	explanation	-	
+plugins/spark/docs/reference/release-docs-checklist.md	operative-authority	release-docs	the pre-release checklist
+plugins/spark/docs/reference/skills.md	current-projection	-	shipped reference page rendering a machine-readable authority or the code
+plugins/spark/docs/reference/stability.md	operative-authority	stability-contract	defines the stability classes; cli-stability.tsv classifies the verbs
+plugins/spark/docs/reference/state.md	current-projection	-	shipped reference page rendering a machine-readable authority or the code
+plugins/spark/docs/tutorials/adopt-an-existing-repo.md	explanation	-	shipped user documentation
+plugins/spark/docs/tutorials/build-your-first-project.md	explanation	-	shipped user documentation
+plugins/spark/docs/tutorials/scaffold-a-new-project.md	explanation	-	shipped user documentation
+plugins/spark/skills/agents-md/SKILL.md	operative-authority	skill-agents-md	the skill's procedure, agent-facing; its concept is the skill itself
+plugins/spark/skills/agents-md/references/contract-and-sections.md	explanation	-	progressive-disclosure reference of a skill
+plugins/spark/skills/agents-md/references/methodology-boundary.md	explanation	-	progressive-disclosure reference of a skill
+plugins/spark/skills/bootstrap/SKILL.md	operative-authority	skill-bootstrap	the skill's procedure, agent-facing; its concept is the skill itself
+plugins/spark/skills/bootstrap/references/profiles.md	explanation	-	progressive-disclosure reference of a skill
+plugins/spark/skills/codify/SKILL.md	operative-authority	skill-codify	the skill's procedure, agent-facing; its concept is the skill itself
+plugins/spark/skills/ideate/SKILL.md	operative-authority	skill-ideate	the skill's procedure, agent-facing; its concept is the skill itself
+plugins/spark/skills/knowledge/SKILL.md	operative-authority	skill-knowledge	the skill's procedure, agent-facing; its concept is the skill itself
+plugins/spark/skills/knowledge/references/collaboration-protocol.md	explanation	-	progressive-disclosure reference of a skill
+plugins/spark/skills/knowledge/references/glossary.md	explanation	-	progressive-disclosure reference of a skill
+plugins/spark/skills/knowledge/references/hub-promotion.md	explanation	-	progressive-disclosure reference of a skill
+plugins/spark/skills/knowledge/references/operator-knowledge.md	explanation	-	progressive-disclosure reference of a skill
+plugins/spark/skills/knowledge/references/templates.md	explanation	-	progressive-disclosure reference of a skill
+plugins/spark/skills/onboard/SKILL.md	operative-authority	skill-onboard	the skill's procedure, agent-facing; its concept is the skill itself
+plugins/spark/skills/plan/SKILL.md	operative-authority	skill-plan	the skill's procedure, agent-facing; its concept is the skill itself
+plugins/spark/skills/plan/references/creating-issues.md	explanation	-	progressive-disclosure reference of a skill
+plugins/spark/skills/plan/references/release-assignment.md	explanation	-	progressive-disclosure reference of a skill
+plugins/spark/skills/ship/SKILL.md	operative-authority	skill-ship,merge-method	the skill's procedure, agent-facing; its concept is the skill itself
+plugins/spark/skills/ship/references/release-fallback.md	explanation	-	progressive-disclosure reference of a skill
+plugins/spark/skills/ship/references/release-please.md	explanation	-	progressive-disclosure reference of a skill
+plugins/spark/skills/validate/SKILL.md	operative-authority	skill-validate	the skill's procedure, agent-facing; its concept is the skill itself
+plugins/spark/skills/validate/references/integration-validation.md	explanation	-	progressive-disclosure reference of a skill
