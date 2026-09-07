@@ -1,5 +1,9 @@
 # Spark's self-conformance audit (v0.20 Phase A)
 
+> **Historical record — superseded as current truth.** Audited master pinned
+> below; current placement and dependency semantics live in the shipped reference
+> pages and the governance model (`docs/ops/canonical-truth.tsv`).
+
 > **The #442 conformance record.** Spark audited against the engineering model
 > it expects downstream repositories to follow, before v0.20 uses Spark to
 > orchestrate another repository. A dev-doc — it governs how Spark is built and

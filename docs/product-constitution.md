@@ -149,7 +149,10 @@ not a break. When a native tool comes to duplicate a Spark club, Spark **retires
 its club**. The identity is stable across delivery vehicles; the plugin is how
 Spark is delivered today, not what it is.
 
-**Platform Compatibility Review — a permanent release gate.** Before **every**
+**Platform Compatibility Review — a permanent release gate.** *Superseded
+2026-08-11: ADR-0026 records that the review enforcing the Evaluation → Release
+seam was removed by the #361 governance deletion test; the paragraph stands as
+the constitution's record of what was decided.* Before **every**
 release, Spark re-runs the Deletion Test against the *current* platform surfaces
 and confirms: no native tool now duplicates a Spark club; every referenced host
 guidance still exists; every enforced mechanism still fires; and every Accepted

@@ -1,7 +1,11 @@
 # Roadmap
 
 This roadmap reflects current intent, not a commitment or timeline.
-Priorities may shift as the project evolves.
+Priorities may shift as the project evolves. Milestones, issues and each
+release gate live in GitHub and move; this file is a dated projection of intent,
+never the operative source of placement — that is the milestone and the
+governance model's release-gate role marker
+(`plugins/spark/preferences/governance-models/spark-default.tsv`).
 
 **Current phase: Alpha (v0.x).** The engineering pipeline is proven and
 `v0.22.0` is the published baseline; the product itself is now being validated

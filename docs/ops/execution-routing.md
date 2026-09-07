@@ -30,10 +30,9 @@ Rank 9 is not a strength tier. It is where routing ends.
 
 ## Two rules that carry the weight
 
-**The human boundary is not escalatable.** `select` on a human-class task names
-no model at all and exits 5; `escalate` refuses both *from* and *to* that class.
-A DECISION REQUIRED that could be escalated into an autonomous attempt is not a
-boundary — it is a speed bump. Escalation otherwise moves exactly one rank, so a
+**The human boundary is not escalatable** — stated once, in the shipped CLI
+reference (`plugins/spark/docs/reference/cli.md`, § The human boundary is not
+escalatable), which this page does not restate. Escalation otherwise moves exactly one rank, so a
 run cannot leap to the strongest class on its first disappointment, and every
 escalation carries a recorded reason. Escalating without a stated cause is just
 starting at the top one step later.

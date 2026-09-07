@@ -49,9 +49,10 @@ body:
     attributes:
       label: Dependencies
       description: >
-        List "Blocked by" / "Blocks" relationships. Dependencies MUST use real
-        GitHub issue numbers (e.g. "Blocked by #86") — never draft-local or
-        slate-local numbering.
+        Explain prerequisites here; the executable dependency is the native
+        blocked-by relationship, recorded on the issue (a "Blocked by #86" sentence
+        explains, it never creates one). Use real GitHub issue numbers — never
+        draft-local or slate-local numbering.
       placeholder: |
         Blocked by: #86
         Blocks: #90
