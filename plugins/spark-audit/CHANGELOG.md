@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.3.0](https://github.com/jwogrady/spark/compare/spark-audit-v0.2.2...spark-audit-v0.3.0) (2026-09-07)
+
+
+### Features
+
+* classify provenance leakage as an audit finding ([c04de15](https://github.com/jwogrady/spark/commit/c04de154801b8091715e9e28937338ca43e985ad))
+* classify provenance leakage as an audit finding ([31088e7](https://github.com/jwogrady/spark/commit/31088e786fbb86f35eb0ab9137c60747326a0edb)), closes [#476](https://github.com/jwogrady/spark/issues/476)
+
+
+### Bug Fixes
+
+* keep the audit SKILL.md within its context budget ([0f7b725](https://github.com/jwogrady/spark/commit/0f7b7258fb293ae10632fa0e33abc7753a3cb13a)), closes [#476](https://github.com/jwogrady/spark/issues/476)
+
 ## [0.2.2](https://github.com/jwogrady/spark/compare/spark-audit-v0.2.1...spark-audit-v0.2.2) (2026-07-23)
 
 
