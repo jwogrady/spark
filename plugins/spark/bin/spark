@@ -316,8 +316,8 @@ PERMISSION_PRESETS="delivery conservative"
 # The closed vocabulary is validated here; each strategy's exact-HEAD/provenance guarantee is stated once, in
 # docs/reference/engineering-preferences.md (Branch hygiene), which doctor points at rather than restates.
 MERGE_STRATEGIES="merge squash rebase"
-merge_strategy_known() { # merge_strategy_known <value> — exit 0 iff the value is one of MERGE_STRATEGIES
-  case " $MERGE_STRATEGIES " in *" $1 "*) return 0 ;; *) return 1 ;; esac
+merge_strategy_known() { # merge_strategy_known <value> — exit 0 iff the value is exactly one of MERGE_STRATEGIES
+  case "$1" in merge|squash|rebase) return 0 ;; *) return 1 ;; esac
 }
 permission_baseline() { # permission_baseline <preset> — echo path, or return 1
   case "$1" in

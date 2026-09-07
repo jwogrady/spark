@@ -48,12 +48,14 @@ if out="$( cd "$repo" && "$SPARK" doctor 2>&1 )"; then rc=0; else rc=$?; fi
 assert_contains "doctor names the drifted key" "'merge.strategy' drifted" "$out"
 [ "$rc" -ne 0 ] && ok || bad "a drifted merge-strategy marker must fail doctor"
 
-# --- a value outside the vocabulary fails closed
-repo="$WORK/invalid"; make_repo "$repo"; mkdir -p "$repo/.spark"
-printf '{"merge.strategy":"fast-forward"}\n' > "$repo/.spark/preferences.json"
-if out="$( cd "$repo" && "$SPARK" doctor 2>&1 )"; then rc=0; else rc=$?; fi
-[ "$rc" -ne 0 ] && ok || bad "a merge strategy outside the vocabulary must fail doctor"
-assert_contains "doctor names the vocabulary" "is not one of: merge squash rebase" "$out"
+# --- a value outside the vocabulary fails closed — exactly one token, not a substring of the list
+for bad_val in "fast-forward" "merge squash" "squash rebase" " merge" "merge " "Merge" "merge,squash" ""; do
+  repo="$WORK/invalid-$(printf '%s' "$bad_val" | tr -c 'a-z' '_')"; make_repo "$repo"; mkdir -p "$repo/.spark"
+  printf '{"merge.strategy":"%s"}\n' "$bad_val" > "$repo/.spark/preferences.json"
+  if out="$( cd "$repo" && "$SPARK" doctor 2>&1 )"; then rc=0; else rc=$?; fi
+  [ "$rc" -ne 0 ] && ok || bad "merge.strategy '$bad_val' must fail doctor — the vocabulary is exact"
+  case "$out" in *"is not one of: merge squash rebase"*|*"does not resolve"*) ok ;; *) bad "doctor names the vocabulary for '$bad_val'" ;; esac
+done
 
 # --- the rule is stated once and pointed at
 ref="$(cat "$PLUGIN/docs/reference/engineering-preferences.md")"
