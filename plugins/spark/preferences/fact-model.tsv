@@ -4,8 +4,9 @@
 # classes an agent needs to execute a governed work unit, the envelope every
 # fact is carried in, the closed status vocabulary, and the canonical
 # identifier forms. reference/fact-model.md renders the same facts for a reader
-# and is checked against this data (tests/test-fact-model.sh); prose is never
-# the schema.
+# and is checked against this data by the behavioral suite tests/test-fact-model.sh
+# (delivered by the stacked suite pull request that closes the work unit); prose
+# is never the schema.
 #
 # This file defines HOW a fact is represented. It is NEVER an authority for
 # WHAT is true: values come from their sources (GitHub, git, the repository,
@@ -20,6 +21,8 @@
 #   key         <class>       <canonical fact key>               (exactly one per class)
 #   facet       <name>        <envelope-field(s)>                <description>
 #   field       <name>        <required>     <type>              <description>
+#               type = string | list | object | boolean | any, or an identifier kind: a string in that grammar
+#   class-status <class>      <admitted statuses, comma-separated>
 #   status      <token>       <value-allowed>                    <description>
 #   identifier  <kind>        <regex>                            <canonical form>
 #   invalidator <kind>        <regex>                            <token form and meaning>
@@ -82,21 +85,34 @@ key	review	review.independent
 key	checks	checks.required
 key	next_action	next_action.governed
 
+# --- Statuses each class admits: NOT_APPLICABLE only where a work unit can lack the
+# fact's subject (the HEAD-bound classes); a derived class is ESTABLISHED or UNKNOWN --
+class-status	work_unit	ESTABLISHED,UNKNOWN,CONFLICT
+class-status	repository	ESTABLISHED,UNKNOWN,CONFLICT
+class-status	placement	ESTABLISHED,UNKNOWN,CONFLICT
+class-status	graph	ESTABLISHED,UNKNOWN,CONFLICT
+class-status	authority	ESTABLISHED,UNKNOWN,CONFLICT
+class-status	acceptance	ESTABLISHED,UNKNOWN,CONFLICT,NOT_APPLICABLE
+class-status	head	ESTABLISHED,UNKNOWN,CONFLICT,NOT_APPLICABLE
+class-status	review	ESTABLISHED,UNKNOWN,CONFLICT,NOT_APPLICABLE
+class-status	checks	ESTABLISHED,UNKNOWN,CONFLICT,NOT_APPLICABLE
+class-status	next_action	ESTABLISHED,UNKNOWN
+
 # --- Facets carried by the envelope rather than as separate facts ----------
 facet	provenance	source, provenance	Source identity and the pointer that lets an auditor drill down
 facet	freshness	source.version, observed_at, invalidators	What was observed, when, and what makes the fact stale
 facet	certainty	status, detail	UNKNOWN / CONFLICT / NOT_APPLICABLE are explicit statuses, never empty values
 
 # --- Envelope fields: every fact carries exactly this shape ------------------
-field	schema_version	required	string	The schema version the fact conforms to (this file's `version`)
-field	key	required	string	The class's one canonical fact key (the key records); one representation per operative fact, so inputs and invalidators address a stable identity
+field	schema_version	required	schema-version	The schema version the fact conforms to (this file's `version`), in the schema-version grammar
+field	key	required	fact-key	The class's one canonical fact key (the key records); one representation per operative fact, so inputs and invalidators address a stable identity
 field	class	required	string	One of the class names above
 field	status	required	string	One of the status tokens below
 field	value	optional	any	Present only when status is ESTABLISHED; its shape is the class's value-shape
 field	source	required	object	The source shape below: what was read, its canonical identity in the grammar of that source type, and the version identity observed
-field	observed_at	required	string	ISO-8601 UTC instant the source was read
+field	observed_at	required	timestamp	The instant the source was read, in the timestamp grammar (ISO-8601 UTC, second precision, Z)
 field	invalidators	required	list	Canonical invalidator tokens, each in one of the invalidator grammars and unique within the fact; a change to any one makes the fact stale
-field	provenance	required	string	Pointer to the authoritative record in the provenance grammar (an https URL or a repository-relative path, no whitespace); never the record itself
+field	provenance	required	provenance	Pointer to the authoritative record in the provenance grammar (an https URL or a repository-relative path, no whitespace); never the record itself
 field	inputs	optional	list	Fact keys this fact was derived from; required when source.type is derived
 field	inferred	optional	boolean	The literal true, present only on a legitimately inferred fact (any other value is rejected); an inferred fact is never authority
 field	detail	optional	object	The detail shape below, present only when status is UNKNOWN or CONFLICT: reason is one non-empty line, candidates is a list (possibly empty) of canonical locators — never prose or a raw record
@@ -105,7 +121,7 @@ field	detail	optional	object	The detail shape below, present only when status is
 status	ESTABLISHED	yes	The source was read and yields one value
 status	UNKNOWN	no	The source could not be read or the fact is outside the observed snapshot; never a permissive default
 status	CONFLICT	no	Two authoritative inputs disagree or evidence is malformed beside valid evidence; a human or a released contract resolves it, never the model
-status	NOT_APPLICABLE	no	The fact class does not apply to this work unit (a repository without a milestone, an issue without a HEAD)
+status	NOT_APPLICABLE	no	The fact class does not apply to this work unit: a HEAD-bound class for a work unit that has no HEAD (an issue no pull request implements yet); every other class always applies
 
 # --- Canonical identifiers: one representation; anything else is a projection
 identifier	repository	^[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+$	<host>/<owner>/<name>, all lower-case (GitHub compares owner and name case-insensitively, so one spelling is the identity), no scheme, and the name never ends in .git — that is the clone URL's spelling, a projection
@@ -120,6 +136,8 @@ identifier	verdict	^(PASS|CHANGES REQUIRED|DECISION REQUIRED|NOT ASSESSED)$	The 
 identifier	action	^(wait-review|repair|merge|stop-decision-required)$	The closed next-action vocabulary: only actions whose derivation rule (R15) this version defines; a new action is a new version
 identifier	item-id	^[A-Za-z0-9][A-Za-z0-9._:/-]{0,79}$	A scalar acceptance item id: one token, no whitespace, unique within its fact
 identifier	provenance	^(https://\S+|[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*)$	A pointer: an https URL, or a normalized repository-relative path (slash-separated components, none empty, none . or .., no leading slash); never the record itself
+identifier	timestamp	^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$	An ISO-8601 UTC instant at second precision, Z suffix; the type of observed_at
+identifier	schema-version	^[1-9][0-9]*$	A schema version: a positive integer; the type of schema_version
 identifier	fact-key	^(work_unit\.identity|repository\.identity|placement\.current|graph\.native|authority\.standing|acceptance\.contract|head\.exact|review\.independent|checks\.required|next_action\.governed)$	the class's one canonical key (the key records)
 identifier	issue-state	^(open|closed)$	Current state of a related work unit; a blocked_by entry is satisfied exactly when closed
 identifier	check-state	^(success|failure|pending|missing)$	Normalized state of one required check on the exact HEAD: missing = required but no run observed
@@ -220,3 +238,4 @@ rule	R14	Every value has an exact shape: only the declared keys, recursively; so
 rule	R15	next_action is derived, never asserted, and its inputs are exactly the facts its derivation consulted — nothing omitted, nothing extra — so R4 re-versions it when any of them changes and one conclusion has one representation: merge only when the review is PASS on the current HEAD, every required check is success on it, every acceptance item is MET on it, the HEAD is current, a grant with scope merge:routine targets the repository or work unit, every blocker in the native graph is closed (the graph fact must be ESTABLISHED), and no reserved boundary targeting the repository or work unit applies — for every boundary-evidence record the fact it names is consulted, must be ESTABLISHED, and must not satisfy the condition (review, checks, acceptance, head, authority, repository, work_unit, graph and every boundary-evidence fact are consulted); repair only on CHANGES REQUIRED for the current HEAD (review, head); wait-review only when no verdict binds the current HEAD or a required check is pending, missing or UNKNOWN (head, review, checks as present); stop-decision-required only when a fact in the set is CONFLICT (every CONFLICT fact is consulted and nothing else), the verdict is DECISION REQUIRED (review consulted), or boundary names a reserved boundary that applies here: the authority fact is in because and carries that boundary token with a target equal to the repository or work unit id (authority, repository, work_unit consulted), and the boundary-evidence record for that token holds on the fact it names, which is in because. boundary is none in every other case; a boundary token with no boundary-evidence record has no derivation in this version.
 rule	R16	Every invalidator is a token in one of the invalidator grammars and appears once per fact; provenance is a pointer in the provenance grammar. Neither carries prose, so freshness and drill-down are machine-normalized.
 rule	R17	A fact's source identity is the node its value describes: work_unit and repository name their own id; review names its record and lists it as a comment: invalidator; any fact whose source is a comment lists that comment as a comment: invalidator, and a CONFLICT lists every comment it names as a candidate, so an edited record goes stale; acceptance read from GitHub names its contract — a work-unit node, listed once as an invalidator whatever the status — and within one set that contract (the value's when ESTABLISHED, the source node otherwise) is the work unit itself or the issue it implements; the work unit belongs to the set's repository; placement and graph name the work-unit node they were read from — within one set, the work unit itself or the issue it implements, never an unrelated node — and list it as an invalidator; head read from GitHub names a work unit and checks name a repository and list ruleset:<repository> — within one set, the work unit's own node and the repository's — except when NOT_APPLICABLE: a NOT_APPLICABLE HEAD-bound fact of any class (head, review, checks, acceptance) names the work unit it was read from and lists it as an invalidator, since with no HEAD there is no required check, verdict or judged contract to name. A work-unit invalidator has one canonical form — issue: for an issue, pull_request: for a pull request — and never both. A graph lists every parent, child and blocker whose state it represents as an invalidator of that relationship's kind; head lists its base as ref:<repository>/<base_ref>; checks list ruleset:<repository> for the repository whose rulesets require them (unless NOT_APPLICABLE). inputs and because list each key once. These source and invalidator requirements hold for every status; only the value-dependent ones wait for ESTABLISHED.
+rule	R18	Each class admits exactly the statuses its class-status record lists: work unit, repository, placement, graph and authority are always applicable (ESTABLISHED, UNKNOWN or CONFLICT); the HEAD-bound classes add NOT_APPLICABLE for a work unit with no HEAD; a derived class is ESTABLISHED or UNKNOWN. Every envelope field whose type is an identifier kind is a string in that grammar, so no field's canonical form lives only in prose.

@@ -9,7 +9,8 @@ is carried in, the closed status vocabulary, and the canonical identifier forms.
 
 The machine-readable authority is `preferences/fact-model.tsv` (schema
 version 1); this page renders it and is checked against it by the behavioral
-suite, never the other way round. The model is **Experimental**: it is the
+suite `tests/test-fact-model.sh` (delivered by the stacked suite pull request),
+never the other way round. The model is **Experimental**: it is the
 contract between the fact sources and their consumers, and it may still change
 while the snapshot work that consumes it is validated.
 
@@ -55,13 +56,13 @@ Every fact, whatever its class, has exactly this shape:
 
 | Field | Required | Meaning |
 |---|---|---|
-| `schema_version` | required | The schema version the fact conforms to (this file's `version`) |
+| `schema_version` | required | The schema version the fact conforms to (this file's `version`), in the schema-version grammar |
 | `key` | required | The class's one canonical fact key (the key records); one representation per operative fact, so inputs and invalidators address a stable identity |
 | `class` | required | One of the class names above |
 | `status` | required | One of the status tokens below |
 | `value` | optional | Present only when status is ESTABLISHED; its shape is the class's value-shape |
 | `source` | required | The source shape below: what was read, its canonical identity in the grammar of that source type, and the version identity observed |
-| `observed_at` | required | ISO-8601 UTC instant the source was read |
+| `observed_at` | required | The instant the source was read, in the timestamp grammar (ISO-8601 UTC, second precision, Z) |
 | `invalidators` | required | Canonical invalidator tokens, each in one of the invalidator grammars and unique within the fact; a change to any one makes the fact stale |
 | `provenance` | required | Pointer to the authoritative record in the provenance grammar (an https URL or a repository-relative path, no whitespace); never the record itself |
 | `inputs` | optional | Fact keys this fact was derived from; required when source.type is derived |
@@ -90,7 +91,30 @@ way it would be at the top level.
 | `ESTABLISHED` | yes | The source was read and yields one value |
 | `UNKNOWN` | no | The source could not be read, or the fact lies outside what was observed. Never a permissive default |
 | `CONFLICT` | no | Two authoritative inputs disagree, or malformed evidence sits beside valid evidence. A human or a released contract resolves it; a model never does |
-| `NOT_APPLICABLE` | no | The class does not apply to this work unit (an issue has no HEAD; a repository has no milestone) |
+| `NOT_APPLICABLE` | no | The class does not apply to this work unit: a HEAD-bound class for a work unit that has no HEAD (an issue no pull request implements yet); every other class always applies |
+
+## Statuses per class
+
+Not every status is meaningful for every class. A work unit, its repository, its
+placement, its graph and the standing authority always apply, so they are ESTABLISHED,
+UNKNOWN or CONFLICT; the HEAD-bound classes add NOT_APPLICABLE for a work unit with
+no HEAD; the derived class is ESTABLISHED or UNKNOWN (R18). The behavioral suite builds
+one canonical fact for every class × admitted status and proves it validates, and one
+for every class × excluded status and proves it is rejected, so the matrix is not a
+table of intentions.
+
+| Class | Admitted statuses |
+|---|---|
+| `work_unit` | `ESTABLISHED`, `UNKNOWN`, `CONFLICT` |
+| `repository` | `ESTABLISHED`, `UNKNOWN`, `CONFLICT` |
+| `placement` | `ESTABLISHED`, `UNKNOWN`, `CONFLICT` |
+| `graph` | `ESTABLISHED`, `UNKNOWN`, `CONFLICT` |
+| `authority` | `ESTABLISHED`, `UNKNOWN`, `CONFLICT` |
+| `acceptance` | `ESTABLISHED`, `UNKNOWN`, `CONFLICT`, `NOT_APPLICABLE` |
+| `head` | `ESTABLISHED`, `UNKNOWN`, `CONFLICT`, `NOT_APPLICABLE` |
+| `review` | `ESTABLISHED`, `UNKNOWN`, `CONFLICT`, `NOT_APPLICABLE` |
+| `checks` | `ESTABLISHED`, `UNKNOWN`, `CONFLICT`, `NOT_APPLICABLE` |
+| `next_action` | `ESTABLISHED`, `UNKNOWN` |
 
 ## Canonical identifiers
 
@@ -112,6 +136,8 @@ is a projection and is never used to compare or bind.
 | action | The closed next-action vocabulary: only actions whose derivation rule (R15) this version defines; a new action is a new version | `wait-review`, `repair`, `merge`, `stop-decision-required` |
 | item-id | A scalar acceptance item id: one token, no whitespace, unique within its fact | `a1`, `acceptance/3` |
 | provenance | A pointer: an https URL, or a normalized repository-relative path (slash-separated components, none empty, none . or .., no leading slash); never the record itself | `https://github.com/acme/widgets/pull/42#issuecomment-9100`, `preferences/fact-model.tsv` |
+| timestamp | An ISO-8601 UTC instant at second precision, Z suffix; the type of observed_at | `2026-09-06T12:00:05Z` |
+| schema-version | A schema version: a positive integer; the type of schema_version | `1` |
 | fact-key | the class's one canonical key (the key records) | `review.independent` |
 | issue-state | Current state of a related work unit; a blocked_by entry is satisfied exactly when closed | `open`, `closed` |
 | check-state | Normalized state of one required check on the exact HEAD: missing = required but no run observed | `success`, `failure`, `pending`, `missing` (required but no run observed) |
@@ -322,6 +348,12 @@ behavioral suite checks the two never drift.
   NOT_APPLICABLE). inputs and because list each key once. These source and
   invalidator requirements hold for every status; only the value-dependent ones
   wait for ESTABLISHED.
+- **R18** Each class admits exactly the statuses its class-status record lists:
+  work unit, repository, placement, graph and authority are always applicable
+  (ESTABLISHED, UNKNOWN or CONFLICT); the HEAD-bound classes add NOT_APPLICABLE
+  for a work unit with no HEAD; a derived class is ESTABLISHED or UNKNOWN. Every
+  envelope field whose type is an identifier kind is a string in that grammar,
+  so no field's canonical form lives only in prose.
 
 ## Versioning
 

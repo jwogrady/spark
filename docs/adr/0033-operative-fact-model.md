@@ -43,7 +43,9 @@ and a snapshot compiler would have nothing stable to compile into.
 **Spark defines one machine-readable operative fact model, versioned, carried in
 `plugins/spark/preferences/fact-model.tsv` and rendered by
 `plugins/spark/docs/reference/fact-model.md`, whose examples are executable
-fixtures.**
+fixtures once the behavioral suite lands (it is delivered by a pull request
+stacked on the schema, because the independent review lane reads at most
+200,000 bytes of diff and the two together exceed it).**
 
 - Ten fact classes cover what a governed work unit needs: work unit,
   repository, placement, graph, authority, acceptance, head, review, checks, and
@@ -112,7 +114,8 @@ page's examples against the TSV is what keeps prose from becoming the schema.
 - Consumers gain one vocabulary to speak; the freshness, invalidation and
   conflict contract can be written against this envelope rather than against
   each consumer's shape.
-- The doc↔TSV parity and the executable examples add a suite; the shipped
+- The doc↔TSV parity and the executable examples add a suite,
+  `tests/test-fact-model.sh`, delivered by the stacked pull request; the shipped
   reference page must not use issue-number references (the tier boundary), so
   its examples use an invented repository.
 - Until the snapshot work lands, nothing reads this model at runtime. That is
