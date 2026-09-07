@@ -124,19 +124,25 @@ status	UNKNOWN	no	The source could not be read or the fact is outside the observ
 status	CONFLICT	no	Two authoritative inputs disagree or evidence is malformed beside valid evidence; a human or a released contract resolves it, never the model
 status	NOT_APPLICABLE	no	The fact class does not apply to this work unit: a HEAD-bound class for a work unit that has no HEAD (an issue no pull request implements yet); every other class always applies
 
+# --- Grammar dialect: every regex in this file (identifier, invalidator, constraint,
+# source-identity, source-version) is portable ERE — POSIX extended regular expressions
+# with no lookaround, no backslash-letter escape (\s, \d, \x..), no backslash inside a
+# bracket expression and no POSIX character class — so awk, grep -E and every modern
+# engine read them identically. Whitespace is excluded as the literal space; a backslash
+# is excluded by a constraint written outside brackets.
 # --- Canonical identifiers: one representation; anything else is a projection
 identifier	repository	^[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+$	<host>/<owner>/<name>, all lower-case (GitHub compares owner and name case-insensitively, so one spelling is the identity), no scheme, and the name never ends in .git — that is the clone URL's spelling, a projection
 identifier	work-unit	^[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+#[1-9][0-9]*$	<repository>#<number>; a bare #<number> is a projection, never an identity
 identifier	comment	^[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+#[1-9][0-9]*/comment/[1-9][0-9]*$	<work-unit>/comment/<comment id>
 identifier	milestone	^[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+/milestone/[1-9][0-9]*$	<repository>/milestone/<number>
 identifier	commit	^[0-9a-f]{40}$	Full 40-hex lower-case object id; abbreviations are projections
-identifier	ref	^[^\s~^:?*\[\\/.\x00-\x1f\x7f][^\s~^:?*\[\\/\x00-\x1f\x7f]*(/[^\s~^:?*\[\\/.\x00-\x1f\x7f][^\s~^:?*\[\\/\x00-\x1f\x7f]*)*$	A branch name over Git's full ref domain, without the refs/heads/ prefix: slash-separated components, none empty or dot-led, no whitespace or ASCII control characters, no ~ ^ : ? * [ or backslash, no .. or @{, never the single name @, no component ending in .lock, never ending in / or .; refs/… and any other spelling of the same branch are projections
+identifier	ref	^[^ ~^:?*.[/][^ ~^:?*[/]*(/[^ ~^:?*.[/][^ ~^:?*[/]*)*$	A branch name over Git's full ref domain, without the refs/heads/ prefix: slash-separated components, none empty or dot-led, no space, no ~ ^ : ? * [ or backslash (the backslash by constraint), no .. or @{, never the single name @, no component ending in .lock, never ending in / or .; refs/… and any other spelling of the same branch are projections. Git refuses ASCII control characters in a refname, so a source never reports one and the portable grammar does not restate it
 identifier	release	^v[0-9]+\.[0-9]+\.[0-9]+$	A release tag as published
 identifier	login	^login:[a-z0-9]+(-[a-z0-9]+)*(\[bot\])?$	An actor identity: the GitHub login lower-cased (GitHub compares logins case-insensitively, so one representation per actor, R1), alphanumerics joined by single hyphens, never starting or ending with a hyphen, at most 39 characters (the login constraint), with the [bot] suffix for an app; naming an actor never confers authority
 identifier	verdict	^(PASS|CHANGES REQUIRED|DECISION REQUIRED|NOT ASSESSED)$	The independent reviewer's closed vocabulary
 identifier	action	^(wait-review|repair|merge|stop-decision-required)$	The closed next-action vocabulary: only actions whose derivation rule (R15) this version defines; a new action is a new version
 identifier	item-id	^[A-Za-z0-9][A-Za-z0-9._:/-]{0,79}$	A scalar acceptance item id: one token, no whitespace, unique within its fact
-identifier	provenance	^(https://\S+|[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*)$	A pointer: an https URL, or a normalized repository-relative path (slash-separated components, none empty, none . or .., no leading slash); never the record itself
+identifier	provenance	^(https://[A-Za-z0-9._~:/?#@!$&'()*+,;=%-]+|[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*)$	A pointer: an https URL in RFC 3986 characters (anything beyond them percent-encoded), or a normalized repository-relative path (slash-separated components, none empty, none . or .., no leading slash); never the record itself
 identifier	timestamp	^([0-9]{4}-((0[13578]|1[02])-(0[1-9]|[12][0-9]|3[01])|(0[469]|11)-(0[1-9]|[12][0-9]|30)|02-(0[1-9]|1[0-9]|2[0-8]))|([0-9]{2}(0[48]|[2468][048]|[13579][26])|([02468][048]|[13579][26])00)-02-29)T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z$	An ISO-8601 UTC instant at second precision with Z suffix whose grammar encodes the calendar itself — 31-day and 30-day months, February to the 28th and the 29th only in a leap year (divisible by 4, or by 400 among century years; year 0000 is a leap year, as ISO 8601 has it), hours 00–23, minutes and seconds 00–59 — so a consumer needs nothing beyond the regex; the type of observed_at and the one form every timestamp-bearing source version takes
 identifier	schema-version	^[1-9][0-9]*$	A schema version: a positive integer; the type of schema_version
 identifier	fact-key	^(work_unit\.identity|repository\.identity|placement\.current|graph\.native|authority\.standing|acceptance\.contract|head\.exact|review\.independent|checks\.required|next_action\.governed)$	the class's one canonical key (the key records)
@@ -144,7 +150,7 @@ identifier	issue-state	^(open|closed)$	Current state of a related work unit; a b
 identifier	check-state	^(success|failure|pending|missing)$	Normalized state of one required check on the exact HEAD: missing = required but no run observed
 identifier	scope	^(merge:routine|close:issue|metadata:labels|metadata:hierarchy|evidence:publish|branch:push)$	What a standing grant permits; the closed scope vocabulary
 identifier	boundary	^(release:approve|authority:grant|settings:repository|action:destructive|placement:release|semantics:product)$	What a human reserves; the closed boundary vocabulary
-identifier	derived-version	^[1-9][0-9]*(;[a-z_]+\.[a-z_]+@[^;\s]+)+$	<schema version>;<input key>@<input source.version>;… — one entry per input, sorted by key
+identifier	derived-version	^[1-9][0-9]*(;[a-z_]+\.[a-z_]+@[A-Za-z0-9._:/"-]+)+$	<schema version>;<input key>@<input source.version>;… — one entry per input, sorted by key; a source version is written in the characters of the source version grammars
 identifier	decision-record	^([a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+#[1-9][0-9]*/comment/[1-9][0-9]*|[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+@[0-9a-f]{40})$	A durable human decision: a <comment> locator or <repository>@<commit>; never a role, label or summary
 
 # --- Invalidators: the closed token grammars a fact may name as what makes it stale
@@ -154,11 +160,11 @@ invalidator	issue	^issue:[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+#[1-9][0-9]*$	issu
 invalidator	comment	^comment:[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+#[1-9][0-9]*/comment/[1-9][0-9]*$	comment:<comment> — the comment that records the verdict or decision
 invalidator	milestone	^milestone:[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+/milestone/[1-9][0-9]*$	milestone:<milestone> — the milestone the placement was read from
 invalidator	repository	^repository:[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+$	repository:<repository> — the repository node (default branch, settings)
-invalidator	ref	^ref:[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+/[^\s~^:?*\[\\/.\x00-\x1f\x7f][^\s~^:?*\[\\/\x00-\x1f\x7f]*(/[^\s~^:?*\[\\/.\x00-\x1f\x7f][^\s~^:?*\[\\/\x00-\x1f\x7f]*)*$	ref:<repository>/<ref> — the branch whose target the fact depends on
+invalidator	ref	^ref:[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+/[^ ~^:?*.[/][^ ~^:?*[/]*(/[^ ~^:?*.[/][^ ~^:?*[/]*)*$	ref:<repository>/<ref> — the branch whose target the fact depends on
 invalidator	ruleset	^ruleset:[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+$	ruleset:<repository> — the repository's rulesets (which checks are required)
 
 # --- Constraints: what a grammar alone cannot exclude, as machine-readable negatives
-# (extended regular expressions with no lookaround, so any consumer can apply them).
+# (portable ERE, as every grammar in this file — see the grammar dialect note).
 # A value is canonical only when it matches its grammar AND none of its constraints.
 constraint	repository	\.git$	the name never carries the clone URL's .git suffix
 constraint	work-unit	\.git#	the repository name inside a work-unit locator never carries .git
@@ -171,6 +177,7 @@ constraint	ref	\.\.	no .. anywhere in a ref
 constraint	ref	@\{	no @{ (reflog syntax) in a ref
 constraint	ref	\.lock(/|$)	no component of a ref ends in .lock (Git reserves the suffix for lock files)
 constraint	ref	\.$	a ref never ends in a dot
+constraint	ref	\\	a ref never contains a backslash
 constraint	ref	^@$	the single name @ is not a branch (Git reserves it for HEAD)
 constraint	provenance	(^|/)\.\.?(/|$)	a path is normalized: no . or .. components
 constraint	source-identity/repository-file	(:|/)\.\.?(/|$)	the path after the commit is normalized: no . or .. components
@@ -183,12 +190,14 @@ constraint	invalidator/ref	\.\.	the embedded ref has no ..
 constraint	invalidator/ref	@\{	the embedded ref has no @{
 constraint	invalidator/ref	\.lock(/|$)	no component of the embedded ref ends in .lock
 constraint	invalidator/ref	\.$	the embedded ref never ends in a dot
+constraint	invalidator/ref	\\	the embedded ref never contains a backslash
 constraint	invalidator/ref	/@$	the embedded ref is never the single name @
 constraint	invalidator/ref	^ref:[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+/refs/	the embedded ref is the branch name, never the refs/ path
 constraint	source-identity/git	@ref/.*\.\.	the embedded ref has no ..
 constraint	source-identity/git	@ref/.*@\{	the embedded ref has no @{
 constraint	source-identity/git	@ref/.*\.lock(/|$)	no component of the embedded ref ends in .lock
 constraint	source-identity/git	@ref/.*\.$	the embedded ref never ends in a dot
+constraint	source-identity/git	@ref/.*\\	the embedded ref never contains a backslash
 constraint	source-identity/git	@ref/@$	the embedded ref is never the single name @
 constraint	source-identity/git	@ref/refs/	the embedded ref is the branch name, never the refs/ path
 
@@ -205,7 +214,7 @@ source	derived	<derived-version>: the schema version, then <input key>@<that inp
 
 # --- Source identity grammar: source.identity is validated per source type ----
 source-identity	github-api	^[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+(#[1-9][0-9]*(/comment/[1-9][0-9]*)?|/milestone/[1-9][0-9]*)?$	A <repository>, <work-unit>, <comment> or <milestone> locator — the GitHub node that was read
-source-identity	git	^[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+@([0-9a-f]{40}|ref/[^\s~^:?*\[\\/.\x00-\x1f\x7f][^\s~^:?*\[\\/\x00-\x1f\x7f]*(/[^\s~^:?*\[\\/.\x00-\x1f\x7f][^\s~^:?*\[\\/\x00-\x1f\x7f]*)*)$	<repository>@<commit> or <repository>@ref/<ref>
+source-identity	git	^[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+@([0-9a-f]{40}|ref/[^ ~^:?*.[/][^ ~^:?*[/]*(/[^ ~^:?*.[/][^ ~^:?*[/]*)*)$	<repository>@<commit> or <repository>@ref/<ref>
 source-identity	repository-file	^[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+@[0-9a-f]{40}:[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*$	<repository>@<commit>:<path> — a normalized repository-relative path: slash-separated components, none empty, none . or .., no leading slash
 source-identity	human-decision	^([a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+#[1-9][0-9]*/comment/[1-9][0-9]*|[a-z0-9.-]+/[a-z0-9_.-]+/[a-z0-9_.-]+@[0-9a-f]{40})$	The <decision-record> itself
 source-identity	derived	^fact-model/[1-9][0-9]*$	fact-model/<schema version>
@@ -215,7 +224,7 @@ source-version	github-api	^(([0-9]{4}-((0[13578]|1[02])-(0[1-9]|[12][0-9]|3[01])
 source-version	git	^[0-9a-f]{40}$	The commit id observed (a ref target is recorded as the commit it pointed at)
 source-version	repository-file	^[0-9a-f]{40}$	The commit id the file was read at
 source-version	human-decision	^(([0-9]{4}-((0[13578]|1[02])-(0[1-9]|[12][0-9]|3[01])|(0[469]|11)-(0[1-9]|[12][0-9]|30)|02-(0[1-9]|1[0-9]|2[0-8]))|([0-9]{2}(0[48]|[2468][048]|[13579][26])|([02468][048]|[13579][26])00)-02-29)T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z|[0-9a-f]{40})$	The recording comment's updated_at (ISO-8601 Z) for a comment locator, or the commit id for a <repository>@<commit> record — edit-sensitive, so an edited decision re-versions everything derived from it
-source-version	derived	^[1-9][0-9]*(;[a-z_]+\.[a-z_]+@[^;\s]+)+$	The derived-version (schema version, then <input key>@<input source.version> for every input, sorted)
+source-version	derived	^[1-9][0-9]*(;[a-z_]+\.[a-z_]+@[A-Za-z0-9._:/"-]+)+$	The derived-version (schema version, then <input key>@<input source.version> for every input, sorted)
 
 # --- Reserved boundaries this version can derive a stop from -----------------
 # condition: not-none — the named value field is anything but the token none.
