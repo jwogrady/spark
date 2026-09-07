@@ -16,8 +16,9 @@ surrounding lines to classify each hit as an operative definition, a projection,
 historical record. The register was then built from directory defaults (ADRs, releases and research are
 historical evidence; shipped reference pages are projections; the rest is explanation) with per-file
 overrides where a page is the one definition of something or was found stale; every surface a map row
-names carries that concept in the register (derived from the map when the register is built, and the suite
-enforces it). Of the counts below, the role counts and the after-counts are computed from the two data
+names carries that concept in the register, and a register concept is either the surface's own (an operative
+surface for a concept the map does not cover) or a relationship the map names — the map is the one source of
+concept membership, the register derives from it when built, and the suite checks both directions. Of the counts below, the role counts and the after-counts are computed from the two data
 files when this page is built and re-checked by the suite; the before-counts are the sweep's, recorded here
 and checked as numbers.
 
@@ -55,6 +56,7 @@ the suite checks each is a number.
 | `verdict-vocabulary` | 6 | 1 |
 | `parent-dependency` | 7 | 2 |
 | `review-lifecycle` | 6 | 1 + 1 non-prose |
+| `agent-contract` | 1 | 1 |
 | `merge-method` | 3 | 1 + 1 non-prose |
 
 ## Contradictions found, and what was done
@@ -105,7 +107,7 @@ what the reviewer re-read, as tracked bytes and lines:
 |---|---|---|
 | `root.contract` (AGENTS.md + CLAUDE.md, auto-loaded every session) | 15,433 bytes / 292 lines | 15,648 bytes / 295 lines |
 | `shipped.docs.spark` | 310,651 bytes / 5,908 lines | 427,680 bytes / 7,072 lines |
-| `devdocs.ops` | 225,751 bytes / 4,286 lines | 256,730 bytes / 4,503 lines |
+| `devdocs.ops` | 225,751 bytes / 4,286 lines | 257,465 bytes / 4,504 lines |
 
 The contract grows by one clause (contradiction 1); the shipped docs shrink by the two duplicated
 paragraphs and grow by the fact-freshness page #732 added between the two measurements — the figures are the
@@ -142,7 +144,7 @@ of a read-count reduction is made from it.
 
 - **Surfaces classified by role with evidence** — `docs/ops/doc-roles.tsv`, 170 rows, one role each; the
   evidence per concept is the sweep summarised above and the map's surface lists.
-- **One operative source per concept or an explicit exception** — `docs/ops/canonical-truth.tsv`, nine
+- **One operative source per concept or an explicit exception** — `docs/ops/canonical-truth.tsv`, ten
   concepts; one exception (routine merge authority), stated as such; the merge-method contradiction is
   decided and recorded.
 - **Duplicate current prose treated** — two verbatim duplicates now point at their source; six contradictions
@@ -154,7 +156,8 @@ of a read-count reduction is made from it.
 - **Projections state provenance/freshness** — the shipped reference pages are held to their authorities by
   their suites (governance model, fact model, freshness contract, CLI verbs, skills); the roadmap names its
   source and its dated nature.
-- **Before/after counts recorded** — the table above, computed from the map.
+- **Before/after counts recorded** — the table above: after-counts computed from the map and re-checked
+  by the suite, before-counts recorded from the sweep and checked as numbers.
 - **Hot-path reads compared where observable** — the footprint table above; read counts are not claimed.
 - **Docs-truth/governance suites green** — the docs suites, doctor and the new role suite ran green at this
   HEAD (the pull request records the figures).

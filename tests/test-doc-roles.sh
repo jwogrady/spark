@@ -71,6 +71,19 @@ while IFS=$'\t' read -r concept sources projections historical _r _t; do
     case ",$cs," in *",$concept,"*) ok ;; *) bad "$p is named by the $concept row but its register concepts are '$cs'" ;; esac
   done
 done < <(mrows)
+# the reverse direction: every concept a register row carries is either the map's relationship naming this surface or
+# the surface's own concept (an operative surface for a concept the map does not cover)
+mapped_list="$(mrows | cut -f1 | sort -u)"
+while IFS=$'\t' read -r p role concepts note; do
+  [ "$concepts" = "-" ] && continue
+  for c in $(printf '%s' "$concepts" | tr ',' ' '); do
+    if printf '%s\n' "$mapped_list" | grep -qx "$c"; then
+      mrows | awk -F'\t' -v c="$c" '$1 == c {print $2 ";" $3 ";" $4}' | tr ';' '\n' | grep -qx "$p" && ok || bad "$p carries $c but the $c map row does not name it"
+    else
+      [ "$role" = "operative-authority" ] && ok || bad "$p carries $c, which no map row covers, without being its operative surface"
+    fi
+  done
+done < <(rows)
 # one operative source per governed concept: the map's row, or exactly one operative-authority surface
 mapped="$(mrows | cut -f1 | sort -u)"
 for c in $(rows | cut -f3 | tr ',' '\n' | grep -v '^-$' | sort -u); do

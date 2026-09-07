@@ -18,10 +18,10 @@
 .github/ISSUE_TEMPLATE/feature.yml	operative-authority	issue-template-feature,parent-dependency	governance prose in YAML: the feature issue form; its Dependencies field says prose explains and the native relationship records (this audit)
 .github/ISSUE_TEMPLATE/skill.yml	operative-authority	issue-template-skill	governance prose in YAML: the skill issue form
 .github/PULL_REQUEST_TEMPLATE.md	operative-authority	pr-template	the pull-request body every PR opens with; the plan and ship skills fill it
-AGENTS.md	operative-authority	agent-contract,version-minting,authority-boundaries,parent-dependency	the one agent contract; states other concepts only as projections that point at their sources
+AGENTS.md	operative-authority	version-minting,authority-boundaries,parent-dependency,agent-contract	the one agent contract; states other concepts only as projections that point at their sources
 CLAUDE.md	current-projection	agent-contract	imports AGENTS.md
 README.md	explanation	verdict-vocabulary	public positioning
-ROADMAP.md	current-projection	release-gate-placement,parent-dependency,routine-merge-authority	dated projection of intent; placement lives in GitHub — declares so since this audit
+ROADMAP.md	current-projection	release-gate-placement,routine-merge-authority,parent-dependency	dated projection of intent; placement lives in GitHub — declares so since this audit
 docs/README.md	current-projection	-	index
 docs/adr/0000-template.md	explanation	-	the ADR template
 docs/adr/0001-plugin-not-framework.md	historical-evidence	-	dated decision record; the decision's current form lives in the surface it created
@@ -55,8 +55,8 @@ docs/adr/0028-cross-project-memory-hubs.md	historical-evidence	-	dated decision 
 docs/adr/0029-four-tier-artifact-separation.md	historical-evidence	-	dated decision record; the decision's current form lives in the surface it created
 docs/adr/0030-governance-model-representation.md	historical-evidence	-	dated decision record; the decision's current form lives in the surface it created
 docs/adr/0031-state-provenance-ownership.md	historical-evidence	-	dated decision record; the decision's current form lives in the surface it created
-docs/adr/0033-operative-fact-model.md	historical-evidence	authority-boundaries,verdict-vocabulary	dated decision record; the decision's current form lives in the surface it created
-docs/adr/0034-fact-freshness-contract.md	historical-evidence	-	dated decision record; the decision's current form lives in the surface it created
+docs/adr/0033-operative-fact-model.md	historical-evidence	authority-boundaries,exact-head-stale-evidence,verdict-vocabulary	dated decision record; the decision's current form lives in the surface it created
+docs/adr/0034-fact-freshness-contract.md	historical-evidence	exact-head-stale-evidence,verdict-vocabulary	dated decision record; the decision's current form lives in the surface it created
 docs/alpha/alpha-program.md	operative-authority	alpha-program	the Alpha → Beta → v1.0.0 promotion path
 docs/alpha/coordinator-guide.md	explanation	-	alpha program guide
 docs/alpha/exit-criteria.md	operative-authority	alpha-exit-criteria	the promotion criteria
@@ -68,14 +68,14 @@ docs/governance/capability-evaluation.md	explanation	-
 docs/governance/is-state-baseline-pre-v020.md	historical-evidence	parent-dependency	banner: historical record, superseded as current truth
 docs/governance/self-conformance-audit-v020.md	historical-evidence	release-gate-placement	banner: historical record, superseded as current truth
 docs/ops/bounded-execution.md	explanation	authority-boundaries	
-docs/ops/ci-handoff.md	explanation	exact-head-stale-evidence,verdict-vocabulary	handoff states are not the reviewer verdict vocabulary — says so since this audit
+docs/ops/ci-handoff.md	explanation	exact-head-stale-evidence	handoff states are not the reviewer verdict vocabulary — says so since this audit
 docs/ops/claude-coding-lane.md	operative-authority	coding-lane	the coding lane's definition — a lane that writes, distinct from the review lifecycle
 docs/ops/context-efficiency.md	explanation	-	developer operations doc
 docs/ops/evaluation.md	explanation	-	developer operations doc
 docs/ops/execution-configuration-surface.md	explanation	routine-merge-authority	cites #677; defines nothing about it
 docs/ops/execution-routing.md	explanation	authority-boundaries	points at the shipped statement of the non-escalatable human boundary since this audit
 docs/ops/existing-implementation.md	explanation	-	developer operations doc
-docs/ops/openai-reviewer-lane.md	operative-authority	review-lifecycle,exact-head-stale-evidence,verdict-vocabulary	the lane's definition; the workflow executes it
+docs/ops/openai-reviewer-lane.md	operative-authority	exact-head-stale-evidence,verdict-vocabulary,review-lifecycle	the lane's definition; the workflow executes it
 docs/ops/plugin-manifest.md	current-projection	-	layout reference of the manifests
 docs/ops/read-only-assessment.md	explanation	-	developer operations doc
 docs/ops/reconciliation-runbook.md	explanation	-	developer operations doc
@@ -132,9 +132,9 @@ plugins/spark/docs/explanation/enforcement-model.md	explanation	exact-head-stale
 plugins/spark/docs/explanation/identity.md	explanation	-	shipped user documentation
 plugins/spark/docs/explanation/philosophy.md	explanation	-	shipped user documentation
 plugins/spark/docs/explanation/release-ownership.md	operative-authority	version-minting	self-declared: the boundary's one full statement
-plugins/spark/docs/explanation/sdlc-doctrine.md	explanation	authority-boundaries,parent-dependency,version-minting,review-lifecycle	doctrine; the crossroad definition other pages point at
+plugins/spark/docs/explanation/sdlc-doctrine.md	explanation	version-minting,authority-boundaries,parent-dependency,review-lifecycle	doctrine; the crossroad definition other pages point at
 plugins/spark/docs/glossary.md	explanation	-	vocabulary in prose; the closed vocabularies are the TSVs
-plugins/spark/docs/how-to/agents-md.md	explanation	-	shipped user documentation
+plugins/spark/docs/how-to/agents-md.md	explanation	agent-contract	shipped user documentation
 plugins/spark/docs/how-to/bootstrap.md	explanation	-	shipped user documentation
 plugins/spark/docs/how-to/codify.md	explanation	-	shipped user documentation
 plugins/spark/docs/how-to/get-started.md	explanation	-	shipped user documentation
@@ -144,14 +144,14 @@ plugins/spark/docs/how-to/plan.md	explanation	-	shipped user documentation
 plugins/spark/docs/how-to/resume.md	explanation	-	shipped user documentation
 plugins/spark/docs/how-to/ship.md	explanation	routine-merge-authority,merge-method	restates the ship guardrail for users; the skill is the agent-facing statement
 plugins/spark/docs/how-to/validate.md	explanation	verdict-vocabulary,review-lifecycle	the built-in review lane, distinct from the independent reviewer lane
-plugins/spark/docs/reference/cli.md	current-projection	authority-boundaries,parent-dependency,release-gate-placement,exact-head-stale-evidence	VERBS table parity (doctor); the crossroad definition points at the doctrine since this audit
+plugins/spark/docs/reference/cli.md	current-projection	release-gate-placement,authority-boundaries,exact-head-stale-evidence,parent-dependency	VERBS table parity (doctor); the crossroad definition points at the doctrine since this audit
 plugins/spark/docs/reference/codify-readiness.md	current-projection	-	shipped reference page rendering a machine-readable authority or the code
 plugins/spark/docs/reference/compatibility.md	operative-authority	supported-environments	the support statement
 plugins/spark/docs/reference/engineering-preferences.md	current-projection	version-minting	shipped reference page rendering a machine-readable authority or the code
 plugins/spark/docs/reference/fact-freshness.md	current-projection	exact-head-stale-evidence	renders fact-freshness.tsv
-plugins/spark/docs/reference/fact-model.md	current-projection	verdict-vocabulary,exact-head-stale-evidence,authority-boundaries,routine-merge-authority,release-gate-placement,review-lifecycle	renders fact-model.tsv
+plugins/spark/docs/reference/fact-model.md	current-projection	release-gate-placement,authority-boundaries,routine-merge-authority,exact-head-stale-evidence,verdict-vocabulary,review-lifecycle	renders fact-model.tsv
 plugins/spark/docs/reference/hooks.md	current-projection	-	shipped reference page rendering a machine-readable authority or the code
-plugins/spark/docs/reference/metadata-governance.md	current-projection	release-gate-placement,parent-dependency,authority-boundaries	renders spark-default.tsv
+plugins/spark/docs/reference/metadata-governance.md	current-projection	release-gate-placement,authority-boundaries,parent-dependency	renders spark-default.tsv
 plugins/spark/docs/reference/project-standards.md	explanation	-	
 plugins/spark/docs/reference/release-docs-checklist.md	operative-authority	release-docs	the pre-release checklist
 plugins/spark/docs/reference/skills.md	current-projection	-	shipped reference page rendering a machine-readable authority or the code
