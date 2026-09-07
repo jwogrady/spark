@@ -42,6 +42,7 @@ How the layers fit together, and the dated record of why Spark is built this way
 - [adr/0028-cross-project-memory-hubs.md](adr/0028-cross-project-memory-hubs.md) — **Accepted**: a declared memory hub carries durable meaning shared across related repositories, above one spoke and below operator-global knowledge; promotion is explicit and human-approved
 - [adr/0029-four-tier-artifact-separation.md](adr/0029-four-tier-artifact-separation.md) — **Accepted**: every artifact is code, shipped documentation, prose/provenance, or project management; repo-root `docs/` cannot ship structurally and `spark doctor` errors on development-only kinds under `plugins/`
 - [adr/0031-state-provenance-ownership.md](adr/0031-state-provenance-ownership.md) — **Accepted**: the repository owns current state and durable meaning, Git/GitHub own provenance, runtime owns observed truth; durable rationale stays in the tree, chronology stays in the history, and state docs cite evidence rather than transcribing it
+- [adr/0033-operative-fact-model.md](adr/0033-operative-fact-model.md) — **Accepted**: one versioned, machine-readable operative fact model (ten classes, an envelope with explicit UNKNOWN/CONFLICT/NOT_APPLICABLE, canonical identifiers, HEAD-bound invalidators); authority is a human-decision source, facts never live in `.spark/state.json`; ADR-0032 is reserved by the merge-authority decision still in review
 - [adr/0000-template.md](adr/0000-template.md) — the ADR template
 
 ## Governance
