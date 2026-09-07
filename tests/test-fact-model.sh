@@ -29,6 +29,7 @@ assert_eq "schema version is 1" "1" "$(rec version | cut -f2)"
 assert_eq "ten fact classes" "10" "$(rec class | wc -l | tr -d ' ')"
 assert_eq "nine required + one derived class" "9 1" "$(rec class | cut -f3 | sort | uniq -c | awk '{print $1}' | sort -rn | tr '\n' ' ' | sed 's/ $//')"
 assert_eq "three envelope facets" "3" "$(rec facet | wc -l | tr -d ' ')"
+assert_eq "one class-status record per class" "$(rec class | cut -f2 | sort | tr '\n' ' ')" "$(rec class-status | cut -f2 | sort | tr '\n' ' ')"
 assert_eq "exactly one canonical key per class" "$(rec class | cut -f2 | sort | tr '\n' ' ')" "$(rec key | cut -f2 | sort | tr '\n' ' ')"
 assert_eq "every canonical key is prefixed by its class" "" "$(rec key | awk -F'\t' 'index($3, $2 ".") != 1')"
 assert_eq "eight invalidator grammars" "8" "$(rec invalidator | wc -l | tr -d ' ')"
@@ -55,9 +56,9 @@ assert_eq "ESTABLISHED is the only status that may carry a value" "ESTABLISHED" 
 assert_eq "twelve envelope fields" "12" "$(rec field | wc -l | tr -d ' ')"
 assert_eq "value is optional in the envelope (present only when ESTABLISHED)" "optional" "$(rec field | awk -F'\t' '$2=="value"{print $3}')"
 assert_eq "five source types" "5" "$(rec source | wc -l | tr -d ' ')"
-assert_eq "seventeen rules" "17" "$(rec rule | wc -l | tr -d ' ')"
+assert_eq "eighteen rules" "18" "$(rec rule | wc -l | tr -d ' ')"
 assert_eq "one source-version grammar per source type" "$(rec source | cut -f2 | sort | tr '\n' ' ')" "$(rec source-version | cut -f2 | sort | tr '\n' ' ')"
-assert_eq "nineteen identifier kinds" "19" "$(rec identifier | wc -l | tr -d ' ')"
+assert_eq "twenty-one identifier kinds" "21" "$(rec identifier | wc -l | tr -d ' ')"
 for k in issue-state check-state scope boundary decision-record derived-version; do rec identifier | cut -f2 | grep -qx "$k" && ok || bad "closed vocabulary $k declared"; done
 assert_eq "one source-identity grammar per source type" "$(rec source | cut -f2 | sort | tr '\n' ' ')" "$(rec source-identity | cut -f2 | sort | tr '\n' ' ')"
 while IFS=$'\t' read -r _ kind rx _; do
@@ -134,6 +135,13 @@ for r in (r for r in rows if r[0] == "identifier"):
 inv = {norm(c[0]): c for c in table("| Kind | Token form and meaning |")}
 for r in (r for r in rows if r[0] == "invalidator"):
     c = inv.get(r[1]); say(c is not None and norm(c[1]) == norm(r[3]), f"invalidator {r[1]} form is the TSV's")
+cst = {norm(c[0]): c for c in table("| Class | Admitted statuses |")}
+for r in (r for r in rows if r[0] == "class-status"):
+    c = cst.get(r[1]); say(c is not None and norm(c[1]).replace(", ", ",") == r[2], f"class-status {r[1]} row lists the TSV's admitted statuses")
+con = [c for c in table("| Scope | Forbidden (ERE) |")]
+want = [[r[1], r[2], r[3]] for r in rows if r[0] == "constraint"]
+got = [[norm(c[0]), c[1].strip("`").replace("\\|", "|"), norm(c[2])] for c in con]
+say(got == [[w[0], w[1], norm(w[2])] for w in want], "every constraint row is the TSV's scope, regex and meaning, in order")
 shp = {norm(c[0]): c for c in table("| Object | Shape |")}
 for r in (r for r in rows if r[0] == "shape"):
     c = shp.get(r[1]); say(c is not None and norm(c[1]) == norm(r[2]), f"envelope shape {r[1]} is the TSV's")
@@ -174,6 +182,7 @@ sources = {r[1] for r in rows if r[0] == "source"}
 sid = {r[1]: re.compile(r[2]) for r in rows if r[0] == "source-identity"}
 sver = {r[1]: re.compile(r[2]) for r in rows if r[0] == "source-version"}
 canon = {r[1]: r[2] for r in rows if r[0] == "key"}                       # class -> its one canonical key (R1)
+class_status = {r[1]: set(r[2].split(",")) for r in rows if r[0] == "class-status"}   # class -> admitted statuses (R18)
 evidence = {r[1]: (r[2], r[3], r[4]) for r in rows if r[0] == "boundary-evidence"}   # boundary -> (fact key, field, condition)
 # Shapes are READ from the authority, never restated here: the class value-shape column and the
 # envelope `shape` records share one grammar — {k: shape} exact object, [shape] list, a|b alternatives,
@@ -286,7 +295,12 @@ def check_fact(f):
     for k in f:
         if k not in fields: fail(f"unknown field {k}")
         t = ftypes[k]
-        if t != "any" and not (isinstance(f[k], PY_TYPES[t]) and not (t != "boolean" and isinstance(f[k], bool))): fail(f"field {k} must be a {t} (R14)")
+        if t in PY_TYPES:
+            if not (isinstance(f[k], PY_TYPES[t]) and not (t != "boolean" and isinstance(f[k], bool))): fail(f"field {k} must be a {t} (R14)")
+        elif t != "any":
+            if t not in ids: fail(f"field {k} is typed by an undeclared identifier kind {t}")
+            if not isinstance(f[k], str) or not ids[t].fullmatch(f[k]): fail(f"field {k} = {f[k]!r} is not in the {t} grammar (R14/R18)")
+            constrained(t, f[k], k)
     if f["schema_version"] != version: fail("schema_version mismatch")
     if not ids["fact-key"].fullmatch(f["key"]): fail(f"key not canonical: {f['key']}")
     if f["class"] not in classes: fail(f"unknown class {f['class']}")
@@ -294,6 +308,7 @@ def check_fact(f):
     if f["key"] != canon[f["class"]]: fail(f"key {f['key']} is not the canonical key {canon[f['class']]} of class {f['class']} (R1)")
     if "inferred" in f and f["inferred"] is not True: fail("inferred must be the literal true when present")
     if f["status"] not in statuses: fail(f"unknown status {f['status']}")
+    if f["status"] not in class_status[f["class"]]: fail(f"{f['class']} does not admit status {f['status']} (R18)")
     if "value" in f and f["value"] is None: fail("value: null is not a representation of absence; omit the field")
     if statuses[f["status"]] == "no" and "value" in f: fail(f"{f['status']} fact carries a value")
     if f["status"] == "ESTABLISHED" and "value" not in f: fail("ESTABLISHED fact without value")
@@ -330,7 +345,6 @@ def check_fact(f):
         if vkeys != sorted(f["inputs"]): fail("derived-version must list exactly the inputs, sorted by key (R4)")
     if f.get("inputs") is not None and any(not ids["fact-key"].fullmatch(i) for i in f["inputs"]): fail("inputs must be fact keys")
     if f.get("inputs") is not None and len(set(f["inputs"])) != len(f["inputs"]): fail("inputs lists a key twice (R17)")
-    if not ISO.fullmatch(f["observed_at"]): fail("observed_at not ISO-8601 Z")
     if not isinstance(f["invalidators"], list) or not f["invalidators"]: fail("invalidators must be a non-empty list")
     for tok in f["invalidators"]:
         if not isinstance(tok, str) or not any(rx.fullmatch(tok) for rx in invalidator_rx.values()): fail(f"invalidator {tok!r} is in no invalidator grammar (R16)")
@@ -581,6 +595,67 @@ accepts() {
   [ -n "$1" ] || { bad "control produced no fact — the mutation itself failed"; return 1; }
   printf '%s' "$1" | python3 "$VAL" "$TSV" "$DOC" one >/dev/null 2>&1
 }
+
+# ======================== the matrix: every class × every status ========================
+# One canonical fact per cell, built from the rules (not copied from the page): admitted cells must validate,
+# excluded cells must be rejected. A contradiction between two rules shows up here as an unsatisfiable cell.
+MATRIX="$WORK/matrix.py"
+cat > "$MATRIX" <<'PY'
+import json, sys
+tsv = sys.argv[1]
+rows = [l.rstrip("\n").split("\t") for l in open(tsv) if l.strip() and not l.startswith("#")]
+admitted = {r[1]: set(r[2].split(",")) for r in rows if r[0] == "class-status"}
+key = {r[1]: r[2] for r in rows if r[0] == "key"}
+R = "github.com/acme/widgets"; WU = R + "#42"; ISS = R + "#41"; A = "0123456789abcdef0123456789abcdef01234567"; B = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+T = "2026-09-06T12:00:05Z"; ISO = "2026-09-06T11:58:00Z"; C1 = WU + "/comment/9100"; C2 = WU + "/comment/9101"; DEC = R + "#7/comment/9001"; DEC2 = R + "#7/comment/9002"
+gh = lambda ident, ver=ISO: {"type": "github-api", "identity": ident, "version": ver}
+def fact(cls, status, value, src, inv, detail=None, inputs=None):
+    f = {"schema_version": "1", "key": key[cls], "class": cls, "status": status, "source": src, "observed_at": T, "invalidators": inv, "provenance": "https://" + R}
+    if status == "ESTABLISHED": f["value"] = value
+    if status in ("UNKNOWN", "CONFLICT"): f["detail"] = detail or {"reason": "the source answered 403", "candidates": []}
+    if inputs is not None: f["inputs"] = inputs
+    return f
+def cell(cls, status):
+    E, U, C, N = status == "ESTABLISHED", status == "UNKNOWN", status == "CONFLICT", status == "NOT_APPLICABLE"
+    conf = lambda a, b: {"reason": "two authoritative reads disagree", "candidates": [a, b]}
+    if cls == "work_unit": return fact(cls, status, {"kind": "pull_request", "id": WU, "implements": ISS}, gh(WU), ["pull_request:" + WU], conf(WU, R + "#43") if C else None)
+    if cls == "repository": return fact(cls, status, {"id": R, "default_branch": "master"}, gh(R), ["repository:" + R], conf(R, "github.com/acme/program") if C else None)
+    if cls == "placement": return fact(cls, status, {"milestone": "none", "release": "none", "gate": "none"}, gh(ISS), ["issue:" + ISS], conf(ISS, R + "#40") if C else None)
+    if cls == "graph": return fact(cls, status, {"parent": "none", "children": [], "blocked_by": []}, gh(ISS), ["issue:" + ISS], conf(ISS, R + "#40") if C else None)
+    if cls == "authority":
+        return fact(cls, status, {"grants": [], "human_boundaries": []}, {"type": "human-decision", "identity": DEC, "version": ISO},
+                    ["comment:" + DEC] + (["comment:" + DEC2] if C else []), conf(DEC, DEC2) if C else None)
+    if cls == "acceptance":
+        if N: return fact(cls, status, None, gh(WU), ["pull_request:" + WU])
+        return fact(cls, status, {"contract": ISS, "head": A, "items": []}, gh(ISS), ["issue:" + ISS, "head:" + A], conf(ISS, R + "#40") if C else None)
+    if cls == "head":
+        if N: return fact(cls, status, None, gh(WU), ["pull_request:" + WU])
+        return fact(cls, status, {"head": A, "base_ref": "master", "base": B, "current": True}, gh(WU, A if E else ISO), ["head:" + A, "ref:" + R + "/master"], conf(WU, R + "#43") if C else None)
+    if cls == "review":
+        if N: return fact(cls, status, None, gh(WU), ["pull_request:" + WU])
+        if C: return fact(cls, status, None, gh(WU), ["head:" + A, "comment:" + C1, "comment:" + C2], conf(C1, C2))
+        return fact(cls, status, {"verdict": "PASS", "head": A, "reviewer": "login:reviewer", "record": C1}, gh(C1), ["head:" + A, "comment:" + C1])
+    if cls == "checks":
+        if N: return fact(cls, status, None, gh(WU), ["pull_request:" + WU])
+        return fact(cls, status, {"head": A, "required": ["doctor"], "results": [{"name": "doctor", "state": "success"}]}, gh(R, A if E else ISO), ["head:" + A, "ruleset:" + R], conf(R, "github.com/acme/program") if C else None)
+    if cls == "next_action":
+        src = {"type": "derived", "identity": "fact-model/1", "version": "1;head.exact@" + A}
+        return fact(cls, status, {"action": "wait-review", "because": ["head.exact"], "boundary": "none"}, src, ["head:" + A], conf("head.exact", "review.independent") if C else None, inputs=["head.exact"])
+    raise SystemExit("no cell for " + cls)
+for cls in key:
+    for status in ("ESTABLISHED", "UNKNOWN", "CONFLICT", "NOT_APPLICABLE"):
+        print("\t".join([cls, status, "admit" if status in admitted[cls] else "exclude", json.dumps(cell(cls, status))]))
+PY
+while IFS=$'\t' read -r mcls mstatus mexp mjson; do
+  if [ "$mexp" = "admit" ]; then
+    accepts "$mjson" && ok || bad "matrix: canonical $mstatus $mcls must validate — the rules for this cell contradict each other: $(printf '%s' "$mjson" | python3 "$VAL" "$TSV" "$DOC" one 2>&1 | tail -1)"
+  else
+    accepts "$mjson" && bad "matrix: $mcls does not admit $mstatus and must reject it (R18)" || ok
+  fi
+done <<EOF
+$(python3 "$MATRIX" "$TSV")
+EOF
+
 accepts "$base" && ok || bad "control: the canonical review fact is accepted"
 mut() { printf '%s' "$base" | python3 -c "import json,sys; f=json.load(sys.stdin); exec(sys.argv[1]); print(json.dumps(f))" "$1"; }
 rej base 'f["status"]="UNKNOWN"; f["detail"]={"reason":"x","candidates":[]}' "UNKNOWN with a value must be rejected (R6)"
@@ -646,7 +721,7 @@ grep -q 'rationale: <text>' "$mtsv" && ok || bad "control: the mutant authority 
 if printf '%s' "$base" | python3 "$VAL" "$mtsv" "$DOC" one >/dev/null 2>&1; then bad "the validator must read value shapes from the authority: a shape with an extra key rejects the old fact" ; else ok; fi
 sed 's/^class\treview\trequired\t{verdict: <verdict>, head: <commit>, reviewer: <login>, record: <comment>}/class\treview\trequired\t{verdict: <verdict>, head: <commit>, reviewer: <text>, record: <comment>}/' "$TSV" > "$mtsv"
 if m "$base" 'f["value"]["reviewer"]="whoever ran the lane"' | python3 "$VAL" "$mtsv" "$DOC" one >/dev/null 2>&1; then ok; else bad "control: loosening the authority's shape to <text> is honoured by the validator (it reads the TSV)"; fi
-sed 's/^field\tobserved_at\trequired\tstring\t/field\tobserved_at\trequired\tlist\t/' "$TSV" > "$mtsv"
+sed 's/^field\tobserved_at\trequired\ttimestamp\t/field\tobserved_at\trequired\tlist\t/' "$TSV" > "$mtsv"
 grep -q '^field.observed_at.required.list' "$mtsv" && ok || bad "control: the mutant authority retypes observed_at"
 if printf '%s' "$base" | python3 "$VAL" "$mtsv" "$DOC" one >/dev/null 2>&1; then bad "the validator must read envelope field types from the authority: retyping observed_at to list rejects the old fact"; else ok; fi
 sed 's/^identifier\tlogin\t[^\t]*\t/identifier\tlogin\t^login:[a-z]+$\t/' "$TSV" > "$mtsv"
@@ -658,7 +733,10 @@ rej base 'f["provenance"]="https://github.com/acme/widgets/pull/42\t#issuecommen
 rej base 'f["provenance"]="https://github.com/acme/widgets/pull/42\n"' "a trailing newline in provenance must be rejected (whole-string match)"
 rej base 'f["value"]["head"]="0123456789abcdef0123456789abcdef01234567\n"' "a trailing newline on a commit must be rejected (whole-string match)"
 rej base 'f["source"]["version"]="2026-09-06T11:58:00Z\n"' "a trailing newline on a source version must be rejected (whole-string match)"
-rej base 'f["observed_at"]=["2026-09-06T12:00:05Z"]' "observed_at as a list must be rejected: the field record says string (R14)"
+rej base 'f["observed_at"]=["2026-09-06T12:00:05Z"]' "observed_at as a list must be rejected: the field is typed by the timestamp grammar (R14/R18)"
+rej base 'f["observed_at"]="yesterday"' "observed_at outside the timestamp grammar must be rejected — the canonical form is data, not prose (R18)"
+rej base 'f["observed_at"]="2026-09-06T12:00:05.123Z"' "observed_at with fractional seconds is outside the grammar (R18)"
+rej base 'f["schema_version"]="01"' "a schema_version outside the schema-version grammar must be rejected (R18)"
 rej base 'f["invalidators"]="head:0123456789abcdef0123456789abcdef01234567"' "invalidators as a string must be rejected: the field record says list (R14)"
 rej base 'f["provenance"]=["https://github.com/acme/widgets/pull/42"]' "provenance as a list must be rejected: the field record says string (R14)"
 # exact value shapes, recursively (R14): prose keys nested inside values
