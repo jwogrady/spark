@@ -208,7 +208,13 @@ assert_eq "a nested helper is recorded as a consumer of its sibling" "1" \
 [ -f "$ROOT/docs/research/v0.23-cleanup/tools/classification.py" ] && ok || bad "the dispatcher classification is committed under an importable name"
 [ -f "$ROOT/docs/research/v0.23-cleanup/tools/classification_modules.py" ] && ok || bad "the module classification is committed under an importable name"
 gen_out="$(mktemp -d)"
-if (cd "$ROOT" && python3 "$GEN" "$ROOT" --map-only "--out=$gen_out" >/dev/null 2>&1); then
+# the baseline is a fixed commit, and the map records it: regenerating with anything else would rebuild a
+# different "before" the moment this branch merges and the branch point moves
+pin="$(sed -nE 's/^# observed at ([0-9a-f]{40})$/\1/p' "$MAP_BEFORE" | head -1)"
+[ -n "$pin" ] && ok || bad "the before map does not pin the commit it was observed at"
+assert_eq "the pinned baseline is the commit the manifest names" "$before_sha" "${pin:0:7}"
+(cd "$ROOT" && git cat-file -e "$pin^{commit}" 2>/dev/null) && ok || bad "the pinned baseline commit $pin is not in this repository"
+if (cd "$ROOT" && python3 "$GEN" "$ROOT" "$pin" --map-only "--out=$gen_out" >/dev/null 2>&1); then
   assert_eq "the committed map is what the generator produces" "" \
     "$(diff "$MAP" "$gen_out/docs/research/v0.23-cleanup/743-responsibilities.tsv" | head -5 | tr '\n' ' ')"
   assert_eq "the committed before map is what the generator produces" "" \

@@ -26,6 +26,7 @@
 #
 # function <TAB> file <TAB> scope <TAB> owner <TAB> responsibility <TAB> body lines <TAB> parse lines <TAB>
 # consumer count <TAB> consumers <TAB> verbs
+# observed at 29e4f4e1f1e28c89c3d435d6f38c21d73190164a
 __spark_memo_key	plugins/spark/bin/spark	top-level	-	source-collection	8	2	2	git_root;resolve_prefs	-
 __spark_memo_read	plugins/spark/bin/spark	top-level	-	source-collection	17	1	2	git_root;resolve_prefs	-
 active_in_inventory	plugins/spark/bin/spark	top-level	-	canonicalization	4	1	1	current_milestone	-
