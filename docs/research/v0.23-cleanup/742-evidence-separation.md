@@ -2,7 +2,7 @@
 
 **Model.** `current fact → provenance/index pointer → historical evidence on demand`, never
 `historical evidence → agent reconstruction → current fact`. The pointer is `docs/ops/evidence-index.tsv`:
-every evidence artifact of the repository — 132 files, 1,036,774 bytes, 16,771 lines under
+every evidence artifact of the repository — 132 files, 1,037,359 bytes, 16,776 lines under
 `docs/research`, `docs/releases`, `docs/governance`, the three evidence pages under `docs/ops`, `evaluations`
 and `.spark` — is one row or one family member, with a retention class, an explicit *operative now* answer,
 the release/HEAD/work unit it concerned, the fact it supported, who loads or cites it today, and why it is
@@ -21,7 +21,7 @@ are computed from the index and re-checked by the suite.
 
 | Class | Files | Bytes | Lines |
 |---|---|---|---|
-| `active-current` | 52 | 430,069 | 7,027 |
+| `active-current` | 52 | 430,654 | 7,032 |
 | `historical-retained` | 67 | 397,371 | 6,644 |
 | `do-not-delete` | 13 | 209,334 | 3,100 |
 
@@ -40,7 +40,7 @@ reasoning path, and every deletion candidate failed the "independent retention v
 | `docs/ops` | 3 | 138,568 | 2,550 |
 | `docs/releases` | 13 | 103,829 | 1,849 |
 | `docs/research` | 2 | 7,056 | 101 |
-| `docs/research/v0.23-cleanup` | 20 | 290,151 | 3,782 |
+| `docs/research/v0.23-cleanup` | 20 | 290,736 | 3,787 |
 | `docs/research/v0.23-optimization-baseline` | 46 | 385,106 | 6,360 |
 | `evaluations` | 43 | 79,685 | 1,606 |
 
@@ -48,11 +48,15 @@ reasoning path, and every deletion candidate failed the "independent retention v
 
 The static side. A surface that names an artifact by its repository path — the shipped runtime (`plugins/**`),
 a test, a CI script — is a *reference*, not proof of a load: a citation, a fixture assertion or a documentation
-link counts here. This unit's own five files are excluded by name — `docs/ops/evidence-index.tsv`,
+link counts here. The index's readers column records **every** reader, including this unit's own suite where it genuinely reads an
+artifact: an inventory that hid a real reader would be false, and provenance is what that column is for. The
+*metric* is the narrower question — how much of the corpus the repository names, not how much this index names
+itself — so it is computed with this unit's five files excluded by name: `docs/ops/evidence-index.tsv`,
 `tests/test-evidence-index.sh`, `docs/research/v0.23-cleanup/742-evidence-separation.md`,
 `docs/research/v0.23-cleanup/742-default-reads.tsv` and
-`docs/research/v0.23-cleanup/tools/evidence-reads.sh` — so the metric measures the repository's references to its
-evidence rather than the index's references to itself. From the readers column:
+`docs/research/v0.23-cleanup/tools/evidence-reads.sh`. Both halves are checked: the suite requires the index to
+record itself where it reads, and requires the footprint to leave those five out. From the readers column, minus
+that exclusion:
 
 | Family | Class | Operative now | Referenced by |
 |---|---|---|---|
@@ -64,12 +68,12 @@ evidence rather than the index's references to itself. From the readers column:
 | `docs/releases/README.md` | `active-current` | yes | `tests/test-state-docs-chronology.sh` |
 | `docs/releases/v0.1*.md;docs/releases/v0.2[0-2].md` | `active-current` | yes | `.github/scripts/ledger-truth-check.sh`; `tests/test-docs-impact.sh`; `tests/test-readme-product-truth.sh`; `tests/test-reconcile-apply.sh`; `tests/test-state-docs-chronology.sh` |
 | `docs/governance/capability-evaluation.md` | `active-current` | yes | `plugins/spark/docs/reference/release-docs-checklist.md` |
-| `docs/ops/v0.21-dogfood-evaluation.md` | `active-current` | yes | `.github/scripts/ledger-truth-check.sh` |
-| `docs/ops/telemetry-baseline.md` | `active-current` | yes | `tests/test-run-telemetry.sh` |
+| `docs/ops/v0.21-dogfood-evaluation.md` | `active-current` | yes | `.github/scripts/ledger-truth-check.sh`; `tests/test-evidence-index.sh` |
+| `docs/ops/telemetry-baseline.md` | `active-current` | yes | `tests/test-evidence-index.sh`; `tests/test-run-telemetry.sh` |
 | `evaluations/lib/*;evaluations/evidence-index.tsv;evaluations/orchestration/run.sh;evaluations/orchestration/rates.tsv;evaluations/skill-routing/run.sh;evaluations/skill-routing/rates.tsv` | `active-current` | yes | `tests/test-eval-lib.sh`; `tests/test-skill-descriptions.sh` |
 | `.spark/state.json;.spark/preferences.json` | `do-not-delete` | yes | `plugins/spark/bin/spark`; `plugins/spark/docs/README.md`; `plugins/spark/docs/how-to/get-started.md`; `plugins/spark/docs/how-to/resume.md`; `plugins/spark/docs/reference/cli.md`; `plugins/spark/docs/reference/compatibility.md`; `plugins/spark/docs/reference/engineering-preferences.md`; `plugins/spark/docs/reference/fact-freshness.md`; `plugins/spark/docs/reference/fact-model.md`; `plugins/spark/docs/reference/hooks.md`; `plugins/spark/docs/reference/project-standards.md`; `plugins/spark/docs/reference/stability.md`; `plugins/spark/docs/reference/state.md`; `plugins/spark/docs/tutorials/adopt-an-existing-repo.md`; `plugins/spark/docs/tutorials/scaffold-a-new-project.md`; `plugins/spark/preferences/fact-model.tsv`; `plugins/spark/preferences/templates/standards/conventions.md`; `plugins/spark/preferences/templates/standards/engineering-standards.md`; `plugins/spark/skills/bootstrap/SKILL.md`; `plugins/spark/skills/bootstrap/references/profiles.md`; `plugins/spark/skills/codify/SKILL.md`; `plugins/spark/skills/ideate/SKILL.md`; `plugins/spark/skills/knowledge/references/operator-knowledge.md`; `plugins/spark/skills/onboard/SKILL.md`; `plugins/spark/skills/plan/SKILL.md`; `plugins/spark/skills/ship/SKILL.md`; `plugins/spark/skills/validate/SKILL.md`; `tests/bench-memo.sh`; `tests/test-apply-permissions.sh`; `tests/test-brief-resume.sh`; `tests/test-course-derivation.sh`; `tests/test-doctor-standards-boundary.sh`; `tests/test-first-run.sh`; `tests/test-governance-contract.sh`; `tests/test-governance-integration.sh`; `tests/test-governance-schema.sh`; `tests/test-hot-path-memo.sh`; `tests/test-hub.sh`; `tests/test-labels.sh`; `tests/test-merge-strategy.sh`; `tests/test-orient.sh`; `tests/test-preferences.sh`; `tests/test-reconcile-apply.sh`; `tests/test-reconcile-slate.sh`; `tests/test-setup-profiles.sh`; `tests/test-state.sh`; `tests/test-triage-truth.sh` |
 
-**29 files, 355,265 bytes** of the 132-file, 1,036,774-byte corpus are referenced by code,
+**29 files, 355,265 bytes** of the 132-file, 1,037,359-byte corpus are referenced by code,
 tests or CI outside this index's own machinery (34 % by bytes; the exclusion and its
 reason are stated under the footprint section below). The suite holds this list to the tree: a shipped surface
 that starts naming a non-operative artifact fails until the index lists it.
@@ -213,8 +217,8 @@ Physical, over the same roots, against `efbdb47` — the commit this branch left
 | | Files | Bytes | Lines |
 |---|---|---|---|
 | before | 129 | 998,837 | 16,256 |
-| after | 132 | 1,036,774 | 16,771 |
-| delta | +3 | +37,937 | +515 |
+| after | 132 | 1,037,359 | 16,776 |
+| delta | +3 | +38,522 | +520 |
 
 The corpus grew, and this page is part of the growth: this manifest, the observation capture and the tool that
 regenerates it are themselves evidence, and they are indexed like everything else. Nothing was moved or deleted,
@@ -232,11 +236,12 @@ verb's read set changed, because the session path opens no evidence file at eith
 **What the corpus excludes, and why.** The corpus is evidence *about the repository's past*. The index and its
 machinery are current-truth metadata *about the corpus*, so they are not members of it: `docs/ops/evidence-index.tsv`
 and `tests/test-evidence-index.sh` are outside the counted roots by construction, and the reference footprint
-does not count this unit's own five files — `docs/ops/evidence-index.tsv`, `tests/test-evidence-index.sh`,
+does not *count* this unit's own five files — `docs/ops/evidence-index.tsv`, `tests/test-evidence-index.sh`,
 `docs/research/v0.23-cleanup/742-evidence-separation.md`, `docs/research/v0.23-cleanup/742-default-reads.tsv`
-and `docs/research/v0.23-cleanup/tools/evidence-reads.sh` — as readers, because a metric that counted its own
-machinery would report itself as the repository's dependence on history. The capture is the clearest case: it
-names almost every evidence path, because recording them is its job. The two artifacts of this unit that *are* evidence — this manifest and the observation capture — sit
+and `docs/research/v0.23-cleanup/tools/evidence-reads.sh` — because a metric that counted its own machinery would
+report itself as the repository's dependence on history. The capture is the clearest case: it names almost every
+evidence path, because recording them is its job. They are still *recorded* as readers wherever they read; the
+exclusion is arithmetic on the metric, not a gap in the inventory. The two artifacts of this unit that *are* evidence — this manifest and the observation capture — sit
 under `docs/research` and are indexed like everything else. Both exclusions are checked by the suite, and the
 reference footprint is labelled accordingly: it counts surfaces outside this index's own machinery.
 

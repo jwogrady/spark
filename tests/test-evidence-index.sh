@@ -131,6 +131,7 @@ while IFS=$'\t' read -r fam cls op files bytes lines concerns fact readers why; 
 done < <(rows)
 
 # --- the observed default reads: a committed capture, validated against HEAD's own tree
+SELF_PATH="tests/test-evidence-index.sh"
 CAP="$ROOT/docs/research/v0.23-cleanup/742-default-reads.tsv"
 TOOL="docs/research/v0.23-cleanup/tools/evidence-reads.sh"
 [ -f "$CAP" ] && ok || bad "the observed default-read capture is committed"
@@ -234,7 +235,17 @@ for c in active-current historical-retained do-not-delete; do
 done
 total_files="$(rows | awk -F'\t' '{s+=$4} END {print s}')"; total_bytes="$(rows | awk -F'\t' '{s+=$5} END {print s}')"
 assert_eq "manifest names the corpus size" "1" "$(grep -c -- "— $total_files files, $(printf '%s' "$total_bytes" | sed ':a;s/\B[0-9]\{3\}\>/,&/;ta') bytes" "$MAN")"
-hot_files="$(rows | awk -F'\t' '$9 ~ /(^|;)(plugins\/|tests\/|\.github\/)/ {s+=$4} END {print s+0}')"
+hot_files="$(rows | awk -F'\t' '
+  $9 != "-" {
+    n = split($9, rs, ";"); external = 0
+    for (i = 1; i <= n; i++) {
+      r = rs[i]
+      if (r !~ /^(plugins|tests|\.github)\//) continue
+      if (r == "tests/test-evidence-index.sh") continue      # this unit own machinery is excluded from the metric
+      external = 1
+    }
+    if (external) s += $4
+  } END {print s+0}')"
 assert_eq "manifest names the reference-footprint file count" "1" "$(grep -c -- "\*\*$hot_files files, " "$MAN")"
 grep -q "labelled as references, not loads" "$MAN" && ok || bad "the manifest labels the static footprint as references"
 base_sha="$(sed -nE 's/^Physical, over the same roots, against `([0-9a-f]{7})` .*/\1/p' "$MAN" | head -1)"
@@ -270,8 +281,17 @@ for m in docs/ops/evidence-index.tsv tests/test-evidence-index.sh docs/research/
 done
 assert_eq "the index is not a member of the corpus it indexes" "" "$(printf '%s\n' "$tree" | grep -x 'docs/ops/evidence-index.tsv' || true)"
 assert_eq "the suite is not a member of the corpus it checks" "" "$(printf '%s\n' "$tree" | grep -x 'tests/test-evidence-index.sh' || true)"
-assert_eq "no readers column names this unit's own machinery" "" \
-  "$(rows | awk -F'\t' '$9 ~ /(^|;)(docs\/ops\/evidence-index\.tsv|tests\/test-evidence-index\.sh|docs\/research\/v0\.23-cleanup\/742-evidence-separation\.md|docs\/research\/v0\.23-cleanup\/742-default-reads\.tsv|docs\/research\/v0\.23-cleanup\/tools\/evidence-reads\.sh)(;|$)/ {print $1}' | tr '\n' ' ' | sed 's/ $//')"
+# the inventory is truthful: this suite reads the capture, runs the tool and parses the manifest, so the index
+# records it against each of them. Hiding a real reader to protect a metric would make the provenance column false.
+for artifact in docs/research/v0.23-cleanup/742-default-reads.tsv docs/research/v0.23-cleanup/tools/evidence-reads.sh docs/research/v0.23-cleanup/742-evidence-separation.md; do
+  readers_of="$(rows | awk -F'\t' -v a="$artifact" 'index($1, a) == 1 {print $9}' | head -1)"
+  case ";$readers_of;" in
+    *";$SELF_PATH;"*) ok ;;
+    *) bad "the index does not record $SELF_PATH as a reader of $artifact, which it reads" ;;
+  esac
+done
+# and the metric excludes them: the reference footprint counts a family only when a surface outside this unit's
+# machinery names it
 # --- the hot path, before and after, measured against the base commit when it is here
 md_after_n="$(awk -F'\t' '$1 == "doctor" && $2 == "file" && $3 ~ /\.md$/ {n++} END {print n+0}' "$CAP")"
 grep -qF -- "$md_after_n after**" "$MAN" && ok || bad "the manifest does not state the validator's current read count $md_after_n"
