@@ -239,6 +239,31 @@ assert_eq "manifest names the reference-footprint file count" "1" "$(grep -c -- 
 grep -q "labelled as references, not loads" "$MAN" && ok || bad "the manifest labels the static footprint as references"
 base_sha="$(sed -nE 's/^Physical, over the same roots, against `([0-9a-f]{7})` .*/\1/p' "$MAN" | head -1)"
 [ -n "$base_sha" ] && ok || bad "the manifest does not name the commit it measures against"
+# --- a family's readers must reference every member, not just one: the reference footprint sums whole families,
+# so a row that groups artifacts with different readers counts the unreferenced ones as referenced
+unbacked=""
+while IFS=$'\t' read -r fam _cls _op _f _b _l _c _fact readers _why; do
+  [ "$readers" != "-" ] || continue
+  IFS=';' read -ra rds <<<"$readers"
+  while IFS= read -r p; do
+    family_covers "$fam" "$p" || continue
+    hit=0
+    for r in "${rds[@]}"; do
+      [ -f "$ROOT/$r" ] || continue
+      # the member by its own path, or any directory above it — a reader that names the family's root reaches
+      # every member through it, which is how a fixture directory or a release directory is read
+      probe="$p"
+      while [ "$probe" != "." ] && [ "$probe" != "/" ]; do
+        if grep -qF -- "$probe" "$ROOT/$r" 2>/dev/null; then hit=1; break; fi
+        probe="$(dirname "$probe")"
+      done
+      [ "$hit" = 1 ] && break
+    done
+    [ "$hit" = 1 ] || unbacked="$unbacked $p"
+  done <<<"$tree"
+done < <(rows)
+assert_eq "every member of a family with readers is referenced by one of them" "" "$(printf '%s' "$unbacked" | sed 's/^ //')"
+
 # --- the exclusions this metric depends on, stated and true
 for m in docs/ops/evidence-index.tsv tests/test-evidence-index.sh docs/research/v0.23-cleanup/tools/evidence-reads.sh docs/research/v0.23-cleanup/742-default-reads.tsv docs/research/v0.23-cleanup/742-evidence-separation.md; do
   grep -qF -- "\`$m\`" "$MAN" && ok || bad "the manifest does not name $m as this unit's own machinery"
