@@ -32,7 +32,7 @@ assert_eq "one matrix row per fact class" "10" "$(rec matrix | wc -l | tr -d ' '
 assert_eq "seven conflict situations" "7" "$(rec conflict | wc -l | tr -d ' ')"
 assert_eq "five unreadable failures" "5" "$(rec unreadable | wc -l | tr -d ' ')"
 assert_eq "one migration rule" "1" "$(rec migration | wc -l | tr -d ' ')"
-assert_eq "twenty executable scenarios" "20" "$(rec scenario | wc -l | tr -d ' ')"
+assert_eq "twenty-one executable scenarios" "21" "$(rec scenario | wc -l | tr -d ' ')"
 assert_eq "fifteen rules" "15" "$(rec rule | wc -l | tr -d ' ')"
 # the record kinds the header comment declares are exactly the kinds present
 assert_eq "record kinds present" "collection conflict depends effect event kinds matrix migration rule scenario schema unreadable version" "$(grep -v '^#' "$TSV" | cut -f1 | sort -u | tr '\n' ' ' | sed 's/ $//')"
@@ -149,7 +149,7 @@ for f in snap:
 say(all(len(vs) == 1 for vs in recorded.values()), "within Example 1 every node has one recorded version (R20)")
 recorded = {t: next(iter(vs)) for t, vs in recorded.items()}
 repo_tok = "repository:" + [f for f in snap if f["class"] == "repository"][0]["value"]["id"]
-def digest(members): return hashlib.sha256("".join(m + "\n" for m in sorted(members.split(";"))).encode()).hexdigest()
+def digest(members): return hashlib.sha256("".join(m + "\n" for m in sorted(members.split(";") if members else [])).encode()).hexdigest()
 def detect(obs):
     """fired tokens, derived from the recorded versions and the observation — F1 (versions), F13 (observer), F14 (collections)"""
     fired = set()
@@ -186,6 +186,12 @@ rs_tok = "ruleset:" + [f for f in snap if f["class"] == "repository"][0]["value"
 say(recorded.get(rs_tok) == digest(coll["ruleset"][3]), "Example 1 records the digest of the documented ruleset membership — the two pages agree")
 say(digest("b@2;a@1") == digest("a@1;b@2") and digest("a@1") != digest("a@1;b@2") and digest("a@1;b@2") != digest("a@1;b@3"), "the digest is order-free and changes with membership or a member's version")
 say(hashlib.sha256(b"a@1\nb@2\n").hexdigest() == digest("b@2;a@1"), "the digest is the SHA-256 of the sorted, newline-terminated member lines — what sort and sha256sum compute")
+say(digest("") == hashlib.sha256(b"").hexdigest() and digest("") != digest(""), False) if False else say(digest("") == hashlib.sha256(b"").hexdigest(), "zero members hash zero bytes, not a lone newline")
+import subprocess
+sh = subprocess.run(["bash", "-c", 'for m in "$@"; do printf "%s\\n" "$m"; done | sort | sha256sum | cut -d" " -f1', "_", "b@2", "a@1"], capture_output=True, text=True).stdout.strip()
+sh0 = subprocess.run(["bash", "-c", 'for m in "$@"; do printf "%s\\n" "$m"; done | sort | sha256sum | cut -d" " -f1', "_"], capture_output=True, text=True).stdout.strip()
+say(sh == digest("b@2;a@1") and sh0 == digest(""), "the collection record's shell form computes the same digest as the contract, for members and for none")
+say("zero bytes" in coll["ruleset"][2] and any(r[1] == "F14" and "zero bytes" in r[2] for r in recs("rule")), "the collection record and F14 state the empty-collection case")
 by = {f["class"]: f for f in snap}; key_of = {r[1]: r[2] for r in fm if r[0] == "key"}
 def mrow_of(ev):
     col = ev_names.index(ev); return {m[1]: m[2].split(",")[col] for m in recs("matrix")}
@@ -228,9 +234,10 @@ say(len(pl) == 1 and pl[0][3].startswith("observer.permission=") and pl[0][3].sp
 say(any(s[1] == "base-switch" and s[3].startswith("pull_request:") and "head" in s[4].split(";")[0].split(",") for s in recs("scenario")), "a base-branch switch is detected from the pull request's recorded version and reaches the head fact")
 say(any(s[1] == "verdict-created" and s[3].startswith("pull_request:") and "review" in s[4].split(";")[0].split(",") for s in recs("scenario")), "a created verdict is detected from the pull request's recorded version and reaches the review fact")
 by_name = {s[1]: s for s in recs("scenario")}
-for nm in ("ruleset-created", "ruleset-deleted", "ruleset-edited"):
+for nm in ("ruleset-created", "ruleset-deleted", "ruleset-edited", "rulesets-all-deleted"):
     sc = by_name.get(nm); say(sc is not None and sc[3].startswith(rs_tok + "=digest(") and sc[4].split(";")[0] == "checks", f"{nm}: detected from the membership digest, reaching exactly the checks fact")
 say(by_name["ruleset-deleted"][3].split("digest(")[1].rstrip(")") == "1001@2026-09-01T08:00:00Z" and "1001@2026-09-01T08:00:00Z" in coll["ruleset"][3], "the deleted-ruleset scenario keeps the remaining member's timestamp unchanged and still fires")
+say(by_name["rulesets-all-deleted"][3].endswith("=digest()"), "the sole-ruleset deletion is observed as an empty membership")
 say("ruleset:" in by_name["unchanged"][3] and "digest(" + coll["ruleset"][3] + ")" in by_name["unchanged"][3], "the unchanged control includes the recorded membership, which fires nothing")
 say(any(u[1] == "permission-denied" and u[2] == "UNKNOWN" for u in recs("unreadable")), "the re-read after a permission loss has a closed outcome: UNKNOWN")
 # the three findings of round 1, as scenarios: a created verdict, a created grant, a base-branch switch

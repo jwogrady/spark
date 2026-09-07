@@ -69,7 +69,7 @@ below; the suite recomputes it.
 
 | Token kind | Algorithm | Example 1 membership | Why |
 |---|---|---|---|
-| `ruleset` | SHA-256, hex-encoded, over the sorted lines <ruleset id>@<updated_at>, each newline-terminated (printf '%s\n' … \| sort \| sha256sum) | `1001@2026-09-01T08:00:00Z;1002@2026-08-15T09:00:00Z` | GitHub versions each ruleset, never the set; a digest of the membership with each member's version changes when a ruleset is created, deleted or edited, even when every remaining timestamp stands |
+| `ruleset` | SHA-256, hex-encoded, over the sorted lines <ruleset id>@<updated_at>, each newline-terminated; zero members hash zero bytes (for m in <members>; do printf '%s\n' "$m"; done \| sort \| sha256sum — nothing printed for no members) | `1001@2026-09-01T08:00:00Z;1002@2026-08-15T09:00:00Z` | GitHub versions each ruleset, never the set; a digest of the membership with each member's version changes when a ruleset is created, deleted or edited, even when every remaining timestamp stands |
 
 ## What can change each fact
 
@@ -203,6 +203,7 @@ table, and checks it against the matrix column for the event.
 | `gate-edit` | `metadata` | `issue:github.com/acme/widgets#41=2026-09-06T12:30:00Z` | `placement,graph,acceptance;;next_action` | The implemented issue's updated_at moved: placement, graph and the acceptance contract read from it are stale. |
 | `ruleset-edited` | `ruleset` | `ruleset:github.com/acme/widgets=digest(1001@2026-09-01T08:00:00Z;1002@2026-09-06T12:05:00Z)` | `checks;;next_action` | A ruleset is edited: its updated_at moves, the membership digest differs from the recorded one, and the checks fact is stale (which checks are required may have changed). |
 | `ruleset-created` | `ruleset` | `ruleset:github.com/acme/widgets=digest(1001@2026-09-01T08:00:00Z;1002@2026-08-15T09:00:00Z;1003@2026-09-06T12:05:00Z)` | `checks;;next_action` | A ruleset is created: the two existing rulesets' timestamps stand, the membership grew, the digest differs; the checks fact is stale. |
+| `rulesets-all-deleted` | `ruleset` | `ruleset:github.com/acme/widgets=digest()` | `checks;;next_action` | Every ruleset is deleted: the membership is empty, its digest is the digest of zero bytes, which differs from the recorded one; the checks fact is stale and the re-read finds no required check. |
 | `ruleset-deleted` | `ruleset` | `ruleset:github.com/acme/widgets=digest(1001@2026-09-01T08:00:00Z)` | `checks;;next_action` | A ruleset is deleted: the remaining ruleset's timestamp stands, the membership shrank, the digest differs; the checks fact is stale — a maximum-timestamp rule would have missed this. |
 | `permission-loss` | `repository` | `observer.permission=none` | `repository;work_unit,placement,graph,authority,acceptance,head,review,checks;next_action` | The observer's permission, re-read before use, is not the recorded write: a repository event — the repository fact is stale and, under F13, every other source-read fact is re-read before use; each re-read answers 403 and yields UNKNOWN (Example 7 of the fact model). |
 | `unchanged` | `none` | `pull_request:github.com/acme/widgets#42=2026-09-06T12:00:00Z,observer.permission=write,ruleset:github.com/acme/widgets=digest(1001@2026-09-01T08:00:00Z;1002@2026-08-15T09:00:00Z)` | `;;` | A control: the observation equals the recorded versions and permission, so no token fires and nothing is stale — freshness never expires by age. |
@@ -272,9 +273,11 @@ the behavioral suite checks the two never drift.
   never decides.
 - **F14** A token that names a collection records the collection's digest, not a
   member's timestamp: for ruleset:, the SHA-256 of the sorted lines <ruleset
-  id>@<updated_at>, each newline-terminated (the collection record). Membership
-  changes are therefore detected even when every remaining member's version
-  stands, and any consumer with sort and sha256sum computes the same version.
+  id>@<updated_at>, each newline-terminated, and of zero bytes when the
+  collection is empty (the collection record). Membership changes are therefore
+  detected even when every remaining member's version stands, an emptied
+  collection included, and any consumer with sort and sha256sum computes the
+  same version.
 - **F12** Every event that can change a fact's value reaches the fact through a
   token it carries: the depends record of each class names those events, and the
   matrix cell for each is stale or re-read (derived for the derived class). A
