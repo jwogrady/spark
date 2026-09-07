@@ -56,9 +56,9 @@ assert_eq "ESTABLISHED is the only status that may carry a value" "ESTABLISHED" 
 assert_eq "thirteen envelope fields" "13" "$(rec field | wc -l | tr -d ' ')"
 assert_eq "value is optional in the envelope (present only when ESTABLISHED)" "optional" "$(rec field | awk -F'\t' '$2=="value"{print $3}')"
 assert_eq "five source types" "5" "$(rec source | wc -l | tr -d ' ')"
-assert_eq "twenty-one rules" "21" "$(rec rule | wc -l | tr -d ' ')"
+assert_eq "twenty-two rules" "22" "$(rec rule | wc -l | tr -d ' ')"
 assert_eq "one source-version grammar per source type" "$(rec source | cut -f2 | sort | tr '\n' ' ')" "$(rec source-version | cut -f2 | sort | tr '\n' ' ')"
-assert_eq "twenty-two identifier kinds" "22" "$(rec identifier | wc -l | tr -d ' ')"
+assert_eq "twenty-three identifier kinds" "23" "$(rec identifier | wc -l | tr -d ' ')"
 for k in issue-state check-state scope boundary decision-record derived-version; do rec identifier | cut -f2 | grep -qx "$k" && ok || bad "closed vocabulary $k declared"; done
 assert_eq "one source-identity grammar per source type" "$(rec source | cut -f2 | sort | tr '\n' ' ')" "$(rec source-identity | cut -f2 | sort | tr '\n' ' ')"
 while IFS=$'\t' read -r _ kind rx _; do
@@ -535,7 +535,10 @@ def check_fact(f):
             k, rest = t.split(":", 1)
             if not isinstance(v, str) or not ids[VKIND[k]].fullmatch(v): fail(f"versions[{t}] is not a {VKIND[k]} (R20)")
             if k == "head" and v != rest: fail(f"the version observed for {t} is the head itself (R20)")
-            if rest == ident and isinstance(f["source"].get("version"), str) and ISO.fullmatch(f["source"]["version"]) and v != f["source"]["version"]: fail(f"the source node's observed version {v} is not the fact's source.version {f['source']['version']} (R20)")
+            if rest == ident and VKIND[k] == "timestamp" and isinstance(f["source"].get("version"), str) and ISO.fullmatch(f["source"]["version"]) and v != f["source"]["version"]: fail(f"the source node's observed version {v} is not the fact's source.version {f['source']['version']} (R20)")
+        if c == "head" and isinstance(f.get("value"), dict) and isinstance(f["value"].get("base_ref"), str) and isinstance(f["value"].get("base"), str):
+            rt = [t for t in vers if t.startswith("ref:") and t.endswith("/" + f["value"]["base_ref"])]
+            if rt and vers[rt[0]] != f["value"]["base"]: fail(f"a head fact's observed base-branch version {vers[rt[0]]} is its value.base {f['value']['base']} (R20)")
     # a fact whose value depends on which records a node carries lists the node, so a record created later reaches it (R17)
     def pr_token(node, what):
         """R17: the node is a pull request and is listed as one — never as an issue, never both"""
@@ -727,7 +730,12 @@ def examples_from_doc(text):
     out = []
     for m in re.finditer(r"^### Example \d+ — [^\n]*\((complete snapshot|fragment)\)\n(.*?)```json\n(.*?)\n```", text, flags=re.S | re.M):
         obj = json.loads(m.group(3), object_pairs_hook=no_dupes)
-        out.append((m.group(1), obj["facts"] if isinstance(obj, dict) else obj, obj.get("observer") if isinstance(obj, dict) else None))
+        if m.group(1) == "complete snapshot":
+            if not (isinstance(obj, dict) and set(obj) == {"observer", "facts"} and isinstance(obj["facts"], list)): fail("a complete snapshot is exactly the object {observer, facts} (R22)")
+            out.append((m.group(1), obj["facts"], obj["observer"]))
+        else:
+            if not isinstance(obj, list): fail("a fragment is a bare list of facts (R22)")
+            out.append((m.group(1), obj, None))
     return out
 
 mode = sys.argv[3] if len(sys.argv) > 3 else "doc"
@@ -746,6 +754,8 @@ elif mode == "set":
     # snapshot-level control: stdin = {"complete": bool, "facts": [...]}
     d = json.load(sys.stdin, object_pairs_hook=no_dupes)
     try:
+        if not set(d) <= {"complete", "observer", "facts"}: fail(f"a snapshot carries no key but observer and facts (R22): {sorted(set(d) - {'complete', 'observer', 'facts'})}")
+        if not d["complete"] and "observer" in d: fail("a fragment is a bare list of facts and carries no observer (R22)")
         for f in d["facts"]: check_fact(f)
         check_set(d["facts"], d["complete"], d.get("observer")); print("accepted")
     except (ValueError, KeyError, TypeError) as e: print(f"rejected: {e}"); sys.exit(1)
@@ -769,7 +779,10 @@ def _dflt(f, t):
     if ":" not in t: return None
     k, rest = t.split(":", 1)
     if k == "head": return rest
-    if k == "ref": return "89abcdef0123456789abcdef0123456789abcdef"
+    if k == "ref":
+        v = f.get("value") if isinstance(f.get("value"), dict) else {}
+        return v["base"] if f.get("class") == "head" and isinstance(v.get("base"), str) else "89abcdef0123456789abcdef0123456789abcdef"
+    if k == "ruleset": return "c9f00a0e122890a3e89bcf721cba56fcbaf06229ae3f28e5f0254cd40d6f69d3"
     src = f.get("source") if isinstance(f.get("source"), dict) else {}
     if src.get("identity") == rest and isinstance(src.get("version"), str) and "T" in src["version"]: return src["version"]
     return None
@@ -817,6 +830,7 @@ def fact(cls, status, value, src, inv, detail=None, inputs=None):
         k, rest = t.split(":", 1)
         if k == "head": return rest
         if k == "ref": return B
+        if k == "ruleset": return "c9f00a0e122890a3e89bcf721cba56fcbaf06229ae3f28e5f0254cd40d6f69d3"
         if rest == src["identity"] and "T" in str(src["version"]): return src["version"]
         return T
     f["versions"] = {t: ver(t) for t in inv}
@@ -984,6 +998,7 @@ rej base 'NOSYNC=True; f["versions"]["pull_request:github.com/acme/widgets#42"]=
 rej base 'NOSYNC=True; f["versions"]["head:0123456789abcdef0123456789abcdef01234567"]="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"' "a head token's observed version is the head itself (R20)"
 rej base 'NOSYNC=True; f["versions"]["comment:github.com/acme/widgets#42/comment/9100"]="2026-09-06T11:00:00Z"' "the source node's observed version must be the fact's source.version (R20)"
 acc base 'f["versions"]["pull_request:github.com/acme/widgets#42"]="2026-09-06T12:00:00Z"' "control: a pull request's observed version in the timestamp grammar is accepted (R20)"
+
 dup="$(printf '%s' "$base" | sed 's/"key":"review.independent"/"key":"review.independent","key":"review.independent"/')"
 [ "$dup" != "$base" ] && ok || bad "control: the duplicate-field mutation did not apply"
 printf '%s' "$dup" | python3 "$VAL" "$TSV" "$DOC" one >/dev/null 2>&1 && bad "a record carrying the same field twice must be rejected before parsing — keeping first or last would choose silently (R14)" || ok
@@ -1061,7 +1076,7 @@ rej auth 'f["source"]["identity"]="the maintainer approved this in chat"' "a hum
 rej auth 'f["source"]["version"]="9001"' "a decision recorded in a comment versioned by the comment id must be rejected — comments are edited, ids are not (R14)"
 acc auth 'f["source"]["version"]="2026-09-03T10:00:00Z"' "control: an edited decision carries the new updated_at as its version"
 # git and repository-file sources: the commit in the identity IS the version observed
-hd0='{"schema_version":"1","key":"head.exact","class":"head","status":"ESTABLISHED","value":{"head":"0123456789abcdef0123456789abcdef01234567","base_ref":"master","base":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","current":true},"source":{"type":"github-api","identity":"github.com/acme/widgets#42","version":"0123456789abcdef0123456789abcdef01234567"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["head:0123456789abcdef0123456789abcdef01234567","ref:github.com/acme/widgets/master","pull_request:github.com/acme/widgets#42"],"versions":{"head:0123456789abcdef0123456789abcdef01234567":"0123456789abcdef0123456789abcdef01234567","ref:github.com/acme/widgets/master":"89abcdef0123456789abcdef0123456789abcdef","pull_request:github.com/acme/widgets#42":"2026-09-05T18:00:00Z"},"provenance":"https://github.com/acme/widgets/pull/42/commits"}'
+hd0='{"schema_version":"1","key":"head.exact","class":"head","status":"ESTABLISHED","value":{"head":"0123456789abcdef0123456789abcdef01234567","base_ref":"master","base":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","current":true},"source":{"type":"github-api","identity":"github.com/acme/widgets#42","version":"0123456789abcdef0123456789abcdef01234567"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["head:0123456789abcdef0123456789abcdef01234567","ref:github.com/acme/widgets/master","pull_request:github.com/acme/widgets#42"],"versions":{"head:0123456789abcdef0123456789abcdef01234567":"0123456789abcdef0123456789abcdef01234567","ref:github.com/acme/widgets/master":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","pull_request:github.com/acme/widgets#42":"2026-09-05T18:00:00Z"},"provenance":"https://github.com/acme/widgets/pull/42/commits"}'
 rf='{"schema_version":"1","key":"acceptance.contract","class":"acceptance","status":"ESTABLISHED","value":{"contract":"github.com/acme/widgets#41","head":"0123456789abcdef0123456789abcdef01234567","items":[{"id":"a1","state":"MET"}]},"source":{"type":"repository-file","identity":"github.com/acme/widgets@0123456789abcdef0123456789abcdef01234567:docs/acceptance/41.md","version":"0123456789abcdef0123456789abcdef01234567"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["head:0123456789abcdef0123456789abcdef01234567","ref:github.com/acme/widgets/master","issue:github.com/acme/widgets#41"],"versions":{"head:0123456789abcdef0123456789abcdef01234567":"0123456789abcdef0123456789abcdef01234567","ref:github.com/acme/widgets/master":"89abcdef0123456789abcdef0123456789abcdef","issue:github.com/acme/widgets#41":"2026-09-05T18:00:00Z"},"provenance":"https://github.com/acme/widgets/blob/0123456789abcdef0123456789abcdef01234567/docs/acceptance/41.md"}'
 accepts "$rf" && ok || bad "control: a repository-file source with a path identity is accepted (the grammar is Python-compatible)"
 rmut() { printf '%s' "$rf" | python3 -c "import json,sys; exec(open('$SYNC').read()); f=json.load(sys.stdin); exec(sys.argv[1]); sync(f); print(json.dumps(f))" "$1" "${2:-}"; }
@@ -1090,7 +1105,7 @@ rej auth 'f["value"]["human_boundaries"][0]["boundary"]="release approval"' "a p
 rej auth 'f["value"]["human_boundaries"]=["release:approve"]' "a bare-token boundary without decision and target must be rejected (R13/R14)"
 rej auth 'f["value"]["human_boundaries"][0]["target"]="everywhere"' "a prose boundary target must be rejected (R14)"
 rej auth 'f["value"]["grants"][0]["scopes"]=[]' "a grant with no scopes must be rejected (R13)"
-chk='{"schema_version":"1","key":"checks.required","class":"checks","status":"ESTABLISHED","value":{"head":"0123456789abcdef0123456789abcdef01234567","required":["doctor","tests"],"results":[{"name":"doctor","state":"success"},{"name":"tests","state":"success"}]},"source":{"type":"github-api","identity":"github.com/acme/widgets","version":"0123456789abcdef0123456789abcdef01234567"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["head:0123456789abcdef0123456789abcdef01234567","ruleset:github.com/acme/widgets"],"versions":{"head:0123456789abcdef0123456789abcdef01234567":"0123456789abcdef0123456789abcdef01234567","ruleset:github.com/acme/widgets":"2026-09-05T18:00:00Z"},"provenance":"https://github.com/acme/widgets/commit/0123456789abcdef0123456789abcdef01234567/checks"}'
+chk='{"schema_version":"1","key":"checks.required","class":"checks","status":"ESTABLISHED","value":{"head":"0123456789abcdef0123456789abcdef01234567","required":["doctor","tests"],"results":[{"name":"doctor","state":"success"},{"name":"tests","state":"success"}]},"source":{"type":"github-api","identity":"github.com/acme/widgets","version":"0123456789abcdef0123456789abcdef01234567"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["head:0123456789abcdef0123456789abcdef01234567","ruleset:github.com/acme/widgets"],"versions":{"head:0123456789abcdef0123456789abcdef01234567":"0123456789abcdef0123456789abcdef01234567","ruleset:github.com/acme/widgets":"c9f00a0e122890a3e89bcf721cba56fcbaf06229ae3f28e5f0254cd40d6f69d3"},"provenance":"https://github.com/acme/widgets/commit/0123456789abcdef0123456789abcdef01234567/checks"}'
 accepts "$chk" && ok || bad "control: a covered checks fact is accepted"
 rej chk 'f["value"]["results"]=f["value"]["results"][:1]' "a required check with no result must be rejected (R12)"
 rej chk 'f["value"]["results"][1]["state"]="green"' "a check state outside the vocabulary must be rejected (R12)"
@@ -1098,6 +1113,7 @@ rej chk 'f["value"]["results"][1]["conclusion"]="success"' "checks.results[].con
 rej chk 'f["value"]["results"].append({"name":"tests","state":"failure"})' "a duplicate check result must be rejected (R12)"
 rej chk 'f["source"]["identity"]="github.com/acme/widgets#42"' "checks read from something other than a repository must be rejected (R17)"
 rej chk 'f["invalidators"]=[i for i in f["invalidators"] if not i.startswith("ruleset:")]' "checks without the repository's ruleset: invalidator must be rejected — required checks change with the rulesets (R17)"
+rej chk 'NOSYNC=True; f["versions"]["ruleset:github.com/acme/widgets"]="2026-09-01T08:00:00Z"' "a ruleset collection versioned by a timestamp must be rejected — the collection's version is its digest (R20)"
 rej chk 'f["status"]="UNKNOWN"; del f["value"]; f["detail"]={"reason":"403","candidates":[]}; f["invalidators"]=[i for i in f["invalidators"] if not i.startswith("ruleset:")]' "an UNKNOWN checks fact without its ruleset: invalidator must be rejected — the requirement does not wait for ESTABLISHED (R17)"
 acc chk 'f["status"]="NOT_APPLICABLE"; del f["value"]; f["source"]["identity"]="github.com/acme/widgets#41"; f["source"]["version"]="2026-09-05T18:00:00Z"; f["invalidators"]=["issue:github.com/acme/widgets#41"]' "control: NOT_APPLICABLE checks are read from the work unit and invalidated by it, like every HEAD-bound class (R7/R17)"
 rej chk 'f["status"]="NOT_APPLICABLE"; del f["value"]; f["invalidators"]=["ruleset:github.com/acme/widgets"]' "NOT_APPLICABLE checks in the repository-and-ruleset form must be rejected — one canonical representation (R7/R17)"
@@ -1122,12 +1138,14 @@ acc hd0 'f["value"]["base_ref"]="release/v1.2.x"; f["invalidators"][1]="ref:gith
 for r in 'feat/x+y' 'user@host' 'a#b' 'x=1' 'v1.0{rc}' "a'b" 'q"q' 'x]y' 'k=v,w;z' '%20' 'ba`ck'; do
   accepts "$(m "$hd0" 'f["value"]["base_ref"]=sys.argv[2]; f["invalidators"][1]="ref:github.com/acme/widgets/"+sys.argv[2]' "$r")" && ok || bad "control: valid Git branch name '$r' is a valid ref"
 done
-hd='{"schema_version":"1","key":"head.exact","class":"head","status":"ESTABLISHED","value":{"head":"0123456789abcdef0123456789abcdef01234567","base_ref":"master","base":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","current":true},"source":{"type":"github-api","identity":"github.com/acme/widgets#42","version":"0123456789abcdef0123456789abcdef01234567"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["head:0123456789abcdef0123456789abcdef01234567","ref:github.com/acme/widgets/master","pull_request:github.com/acme/widgets#42"],"versions":{"head:0123456789abcdef0123456789abcdef01234567":"0123456789abcdef0123456789abcdef01234567","ref:github.com/acme/widgets/master":"89abcdef0123456789abcdef0123456789abcdef","pull_request:github.com/acme/widgets#42":"2026-09-05T18:00:00Z"},"provenance":"https://github.com/acme/widgets/pull/42/commits"}'
+hd='{"schema_version":"1","key":"head.exact","class":"head","status":"ESTABLISHED","value":{"head":"0123456789abcdef0123456789abcdef01234567","base_ref":"master","base":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","current":true},"source":{"type":"github-api","identity":"github.com/acme/widgets#42","version":"0123456789abcdef0123456789abcdef01234567"},"observed_at":"2026-09-06T12:00:05Z","invalidators":["head:0123456789abcdef0123456789abcdef01234567","ref:github.com/acme/widgets/master","pull_request:github.com/acme/widgets#42"],"versions":{"head:0123456789abcdef0123456789abcdef01234567":"0123456789abcdef0123456789abcdef01234567","ref:github.com/acme/widgets/master":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","pull_request:github.com/acme/widgets#42":"2026-09-05T18:00:00Z"},"provenance":"https://github.com/acme/widgets/pull/42/commits"}'
 accepts "$hd" && ok || bad "control: a head fact listing its HEAD and base ref is accepted"
 rej hd 'f["invalidators"]=["head:0123456789abcdef0123456789abcdef01234567"]' "a head fact without ref:<repository>/<base_ref> must be rejected — the base moves without the HEAD moving (R17)"
 rej hd 'f["invalidators"][1]="ref:github.com/acme/widgets/main"' "a head fact whose ref: invalidator names a different branch than base_ref must be rejected (R17)"
 rej hd 'f["invalidators"]=[i for i in f["invalidators"] if not i.startswith("pull_request:")]' "a head fact that does not list its pull request must be rejected — a base-branch switch is pull-request metadata and moves no branch tip (R17)"
 rej hd 'f["invalidators"]=[("issue:"+i.split(":",1)[1]) if i.startswith("pull_request:") else i for i in f["invalidators"]]' "a head fact listing its pull request as an issue must be rejected (R17)"
+rej hd 'NOSYNC=True; f["versions"]["ref:github.com/acme/widgets/master"]="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"' "a head fact whose observed base-branch version is not its value.base must be rejected (R20)"
+out="$(m "$hd" 'NOSYNC=True; f["versions"]["ref:github.com/acme/widgets/master"]=f["value"]["base"]' | python3 "$VAL" "$TSV" "$DOC" one 2>&1)"; case "$out" in accepted) ok ;; *) bad "control: a head fact whose ref: version is its base is accepted (R20) — $out" ;; esac
 rej gr 'f["value"]["blocked_by"].append({"kind":"issue","id":"github.com/acme/widgets#39","state":"open"})' "one blocker listed as both closed and open must be rejected (R14)"
 rej gr 'f["value"]["children"]=[{"kind":"issue","id":"github.com/acme/widgets#42","state":"open"},{"kind":"issue","id":"github.com/acme/widgets#42","state":"open"}]; f["invalidators"].append("issue:github.com/acme/widgets#42")' "a child listed twice must be rejected (R14)"
 rej gr 'del f["value"]["parent"]["kind"]' "a relationship without its kind must be rejected — the kind fixes the one canonical invalidator (R14/R17)"
@@ -1158,6 +1176,18 @@ sets "$(printf '{"complete": true, "facts": %s}' "$full")" && bad "a complete sn
 sets "$(printf '{"complete": true, "observer": {"login": "login:acme-orchestrator[bot]", "permission": "owner", "checked_at": "2026-09-06T12:00:05Z"}, "facts": %s}' "$full")" && bad "an observer permission outside GitHub's vocabulary must be rejected (R21)" || ok
 sets "$(printf '{"complete": true, "observer": {"login": "login:acme-orchestrator[bot]", "permission": "write"}, "facts": %s}' "$full")" && bad "an observer without checked_at must be rejected — the permission cannot be compared without knowing when it was read (R21)" || ok
 sets "$(printf '{"complete": true, "observer": {"login": "acme-orchestrator", "permission": "write", "checked_at": "2026-09-06T12:00:05Z"}, "facts": %s}' "$full")" && bad "an observer login outside the login grammar must be rejected (R21)" || ok
+sets "$(printf '{"complete": true, "observer": %s, "facts": %s, "note": "extra"}' "$OBS" "$full")" && bad "a complete snapshot with a key other than observer and facts must be rejected (R22)" || ok
+sets "$(printf '{"complete": false, "observer": %s, "facts": %s}' "$OBS" "$full")" && bad "a fragment carrying an observer must be rejected — a fragment is a bare list (R22)" || ok
+# the page's own blocks have the declared top-level shapes (R22)
+python3 - "$DOC" <<'PY' && ok || bad "every complete snapshot on the page is exactly {observer, facts} and every fragment a bare list (R22)"
+import re, json, sys
+doc = open(sys.argv[1]).read(); n = 0
+for m in re.finditer(r"^### Example \d+ — [^\n]*\((complete snapshot|fragment)\)\n(.*?)```json\n(.*?)\n```", doc, flags=re.S | re.M):
+    o = json.loads(m.group(3)); n += 1
+    ok_ = (isinstance(o, dict) and set(o) == {"observer", "facts"}) if m.group(1) == "complete snapshot" else isinstance(o, list)
+    if not ok_: sys.exit(1)
+sys.exit(0 if n == 9 else 1)
+PY
 srej 'r=[f for f in s if f["class"]=="repository"][0]; r["value"]["id"]="github.com/acme/program"; r["source"]["identity"]="github.com/acme/program"; r["invalidators"]=["repository:github.com/acme/program"]' "a work unit from one repository spliced with another repository's facts must be rejected (R17)"
 srej 'a=[f for f in s if f["class"]=="acceptance"][0]; a["value"]["contract"]="github.com/acme/widgets#40"; a["source"]["identity"]="github.com/acme/widgets#40"; a["invalidators"]=["issue:github.com/acme/widgets#40"]+[i for i in a["invalidators"] if not i.startswith("issue:")]' "acceptance judged against an unrelated issue's contract must be rejected — merge may not rest on it (R17)"
 unk_acc='a=[f for f in s if f["class"]=="acceptance"][0]; a["status"]="UNKNOWN"; del a["value"]; a["detail"]={"reason":"403","candidates":[]}; n=[f for f in s if f["class"]=="next_action"][0]; n["value"]={"action":"wait-review","because":["acceptance.contract"],"boundary":"none"}; n["inputs"]=["acceptance.contract","head.exact","review.independent","checks.required"]; n["source"]["version"]="1;"+";".join(k+"@"+[f for f in s if f["key"]==k][0]["source"]["version"] for k in sorted(n["inputs"]))'
