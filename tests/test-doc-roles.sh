@@ -107,7 +107,8 @@ for role in operative-authority current-projection explanation historical-eviden
   assert_eq "manifest role count for $role is the register's" "$want" "$got"
 done
 while IFS=$'\t' read -r concept sources _p _h _r _t; do
-  prose="$(printf '%s' "$sources" | tr ';' '\n' | grep -cvE '^(ci|github|code):' || true)"; other="$(printf '%s' "$sources" | tr ';' '\n' | grep -cE '^(ci|github|code):' || true)"
+  # prose = a page; everything else — a TSV or JSON authority, CI, the runtime, GitHub state — is non-prose
+  prose="$(printf '%s' "$sources" | tr ';' '\n' | grep -cvE '^(ci|github|code):|\.(tsv|json)$' || true)"; other="$(printf '%s' "$sources" | tr ';' '\n' | grep -cE '^(ci|github|code):|\.(tsv|json)$' || true)"
   want="$prose"; [ "$other" -gt 0 ] && want="$prose + $other non-prose"
   got="$(grep -E "^\| \`$concept\` \| [^|]+ \| [^|]+ \|$" "$MAN" | sed -E 's/^\| `[a-z-]+` \| [^|]+ \| ([^|]+) \|$/\1/')"
   assert_eq "manifest after-count for $concept is the map's" "$want" "$got"
