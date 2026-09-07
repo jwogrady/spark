@@ -33,7 +33,7 @@ assert_eq "seven conflict situations" "7" "$(rec conflict | wc -l | tr -d ' ')"
 assert_eq "five unreadable failures" "5" "$(rec unreadable | wc -l | tr -d ' ')"
 assert_eq "one migration rule" "1" "$(rec migration | wc -l | tr -d ' ')"
 assert_eq "twenty executable scenarios" "20" "$(rec scenario | wc -l | tr -d ' ')"
-assert_eq "fourteen rules" "14" "$(rec rule | wc -l | tr -d ' ')"
+assert_eq "fifteen rules" "15" "$(rec rule | wc -l | tr -d ' ')"
 # the record kinds the header comment declares are exactly the kinds present
 assert_eq "record kinds present" "collection conflict depends effect event kinds matrix migration rule scenario schema unreadable version" "$(grep -v '^#' "$TSV" | cut -f1 | sort -u | tr '\n' ' ' | sed 's/ $//')"
 # every record kind's field count is constant
@@ -162,6 +162,25 @@ def detect(obs):
         if k in recorded and recorded[k] != v: fired.add(k)
     return fired
 coll = {c[1]: c for c in recs("collection")}
+# every invalidator kind has exactly one version form, and F1 names each form once (F1, F14)
+vk = {r[1]: r[4] for r in fm if r[0] == "invalidator"}
+say(set(vk.values()) == {"commit", "timestamp", "digest"}, f"the fact model's invalidator kinds use exactly the three version forms: {sorted(set(vk.values()))}")
+say({k for k, v in vk.items() if v == "digest"} == set(coll), "exactly the kinds with a collection record are versioned by a digest")
+say({k for k, v in vk.items() if v == "commit"} == {"head", "ref"}, "exactly head: and ref: are versioned by a commit")
+f1 = [r for r in recs("rule") if r[1] == "F1"][0][2]
+say("commit for head: and ref:" in f1 and "collection record" in f1 and "updated_at for every other kind" in f1, "F1 names the three version forms and defers collection tokens to their record")
+# agreeing duplicates: the ordering is canonical and tie-free (F15), whatever order the source enumerates
+import itertools
+def select(records):
+    comments = [r for r in records if "/comment/" in r]
+    if comments: return min(comments, key=lambda r: int(r.rsplit("/", 1)[1]))
+    return min(records, key=lambda r: r.split("@")[1])
+sample = ["github.com/acme/widgets#42/comment/9100", "github.com/acme/widgets#42/comment/9099", "github.com/acme/widgets#7/comment/10000", "github.com/acme/widgets@ffffffffffffffffffffffffffffffffffffffff"]
+say(all(select(list(p)) == "github.com/acme/widgets#42/comment/9099" for p in itertools.permutations(sample)), "the agreeing-duplicates selection is the same under every enumeration order (24 permutations)")
+say(select(["github.com/acme/widgets#42/comment/10000", "github.com/acme/widgets#42/comment/9999"]) == "github.com/acme/widgets#42/comment/9999", "comment ids compare as numbers, not strings")
+say(select(["github.com/acme/widgets@ffffffffffffffffffffffffffffffffffffffff", "github.com/acme/widgets@0000000000000000000000000000000000000000"]) == "github.com/acme/widgets@0000000000000000000000000000000000000000", "commit-recorded decisions are ordered by commit id only when no comment record agrees")
+dup = [c for c in recs("conflict") if c[1] == "duplicates-agree"][0]
+say("smallest identity" in dup[3] and "no tie" in dup[3] and any(r[1] == "F15" and "tie-free" in r[2] for r in recs("rule")), "the duplicates-agree record and F15 state the canonical, tie-free ordering")
 say(set(coll) == {"ruleset"}, "exactly the ruleset token names a collection")
 rs_tok = "ruleset:" + [f for f in snap if f["class"] == "repository"][0]["value"]["id"]
 say(recorded.get(rs_tok) == digest(coll["ruleset"][3]), "Example 1 records the digest of the documented ruleset membership — the two pages agree")

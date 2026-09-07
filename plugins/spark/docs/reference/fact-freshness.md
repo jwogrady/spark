@@ -136,7 +136,7 @@ event and class records and fails on any hand edit.
 |---|---|---|---|
 | `disagreeing-authorities` | `CONFLICT` | reason names the disagreement; candidates list every record's identity | Two authoritative inputs disagree (two trusted verdict records for one HEAD, two decision records for one grant): CONFLICT with both named; no first-write, last-write or plausibility rule chooses (R8). |
 | `malformed-beside-valid` | `CONFLICT` | reason names the malformation; candidates list the malformed and the valid record | A record that does not parse or does not canonicalize stands beside a valid one for the same fact: CONFLICT, because the model cannot know which the author meant (status CONFLICT). |
-| `duplicates-agree` | `ESTABLISHED` | no detail; source.identity is the earliest record; every duplicate is listed as an invalidator | Two or more records for one fact say the same thing: ESTABLISHED from the earliest durable record, every duplicate carried as a comment: token so an edit to any of them fires. |
+| `duplicates-agree` | `ESTABLISHED` | no detail; source.identity is the agreeing record with the smallest identity under the record ordering — comment records by their comment id (unique within a repository, so no tie), a commit-recorded decision only when no comment record agrees; every duplicate is listed as an invalidator | Two or more records for one fact say the same thing: ESTABLISHED from the record the ordering selects, whatever order the source enumerated them in, every duplicate carried as its own token so an edit to any of them fires. |
 | `noncanonical-identity` | `canonicalized` | no detail; the fact carries the canonical spelling | A source spells an identity in a projection (upper-case owner, refs/heads/ prefix, .git suffix, a bare issue number): the compiler emits the one canonical representation (R1); a record whose identity does not canonicalize to one representation is malformed evidence. |
 | `other-head` | `historical` | no fact of the current snapshot; the record stays reachable through provenance | Evidence judged on another HEAD (a PASS for head:A when the HEAD is B) is historical: its head: token names the other HEAD, it never enters the current fact and it never conflicts with current evidence (Example 3 of the fact model). |
 | `duplicate-fields` | `malformed` | alone: UNKNOWN with the record in candidates; beside a valid record: CONFLICT | A record that carries the same field twice (two id fields, two status fields) is malformed before parsing, whatever the values: alone it follows the malformed-alone unreadable record, beside a valid record the malformed-beside-valid conflict record. A consumer that keeps the first or the last duplicate is not conforming (fact model R14). |
@@ -214,10 +214,11 @@ the behavioral suite checks the two never drift.
 
 - **F1** Freshness is decided by identity and version, never by age. Every fact
   records, for each token it carries, the version it observed for that node
-  (fact model R20); a fact is current while every recorded version equals the
-  node's current version — the commit for head: and ref:, the updated_at for
-  every other kind — and nothing else keeps it current. A time-based check may
-  trigger the comparison but never replaces it.
+  (fact model R20); a fact is current while each recorded version equals its own
+  node's current version, in the one form the token's kind has: the commit for
+  head: and ref:, the membership digest for a kind with a collection record
+  (F14), the node's updated_at for every other kind. Nothing else keeps a fact
+  current; a time-based check may trigger the comparison but never replaces it.
 - **F2** An event record lists the kinds of token the event can fire; which
   tokens fire is decided by the observation — the tokens whose recorded version
   differs from the current one (F1). A fact is stale exactly when a fired token
@@ -263,6 +264,12 @@ the behavioral suite checks the two never drift.
   the repository fact stale and re-reads every other source-read fact of the
   set, so a permission loss cannot leave a cached fact usable: the re-read
   yields UNKNOWN through the unreadable records.
+- **F15** Record ordering is canonical and tie-free. Among agreeing records,
+  comment records come first, ordered by their comment id as a number (GitHub
+  assigns each comment a unique id within a repository); a decision recorded at
+  a commit is selected only when no comment record agrees, and two commit
+  records for one fact are ordered by commit id as a string. Enumeration order
+  never decides.
 - **F14** A token that names a collection records the collection's digest, not a
   member's timestamp: for ruleset:, the SHA-256 of the sorted lines <ruleset
   id>@<updated_at>, each newline-terminated (the collection record). Membership
