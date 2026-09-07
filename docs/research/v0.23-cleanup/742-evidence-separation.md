@@ -2,7 +2,7 @@
 
 **Model.** `current fact → provenance/index pointer → historical evidence on demand`, never
 `historical evidence → agent reconstruction → current fact`. The pointer is `docs/ops/evidence-index.tsv`:
-every evidence artifact of the repository — 126 files, 923,964 bytes, 15,401 lines under
+every evidence artifact of the repository — 126 files, 924,571 bytes, 15,408 lines under
 `docs/research`, `docs/releases`, `docs/governance`, the three evidence pages under `docs/ops`, `evaluations`
 and `.spark` — is one row or one family member, with a retention class, an explicit *operative now* answer,
 the release/HEAD/work unit it concerned, the fact it supported, who loads or cites it today, and why it is
@@ -21,7 +21,7 @@ are computed from the index and re-checked by the suite.
 
 | Class | Files | Bytes | Lines |
 |---|---|---|---|
-| `active-current` | 45 | 311,476 | 5,573 |
+| `active-current` | 45 | 312,083 | 5,580 |
 | `historical-retained` | 68 | 403,154 | 6,728 |
 | `do-not-delete` | 13 | 209,334 | 3,100 |
 
@@ -40,7 +40,7 @@ reasoning path, and every deletion candidate failed the "independent retention v
 | `docs/ops` | 3 | 138,568 | 2,550 |
 | `docs/releases` | 13 | 103,829 | 1,849 |
 | `docs/research` | 2 | 7,056 | 101 |
-| `docs/research/v0.23-cleanup` | 14 | 177,341 | 2,412 |
+| `docs/research/v0.23-cleanup` | 14 | 177,948 | 2,419 |
 | `docs/research/v0.23-optimization-baseline` | 46 | 385,106 | 6,360 |
 | `evaluations` | 43 | 79,685 | 1,606 |
 
@@ -65,7 +65,7 @@ evidence rather than the index's references to itself. From the readers column:
 | `evaluations/lib/*;evaluations/evidence-index.tsv;evaluations/orchestration/run.sh;evaluations/orchestration/rates.tsv;evaluations/skill-routing/run.sh;evaluations/skill-routing/rates.tsv` | `active-current` | yes | `tests/test-eval-lib.sh`; `tests/test-skill-descriptions.sh` |
 | `.spark/state.json;.spark/preferences.json` | `do-not-delete` | yes | `plugins/spark/bin/spark`; `plugins/spark/docs/README.md`; `plugins/spark/docs/how-to/get-started.md`; `plugins/spark/docs/how-to/resume.md`; `plugins/spark/docs/reference/cli.md`; `plugins/spark/docs/reference/compatibility.md`; `plugins/spark/docs/reference/engineering-preferences.md`; `plugins/spark/docs/reference/fact-freshness.md`; `plugins/spark/docs/reference/fact-model.md`; `plugins/spark/docs/reference/hooks.md`; `plugins/spark/docs/reference/project-standards.md`; `plugins/spark/docs/reference/stability.md`; `plugins/spark/docs/reference/state.md`; `plugins/spark/docs/tutorials/adopt-an-existing-repo.md`; `plugins/spark/docs/tutorials/scaffold-a-new-project.md`; `plugins/spark/preferences/fact-model.tsv`; `plugins/spark/preferences/templates/standards/conventions.md`; `plugins/spark/preferences/templates/standards/engineering-standards.md`; `plugins/spark/skills/bootstrap/SKILL.md`; `plugins/spark/skills/bootstrap/references/profiles.md`; `plugins/spark/skills/codify/SKILL.md`; `plugins/spark/skills/ideate/SKILL.md`; `plugins/spark/skills/knowledge/references/operator-knowledge.md`; `plugins/spark/skills/onboard/SKILL.md`; `plugins/spark/skills/plan/SKILL.md`; `plugins/spark/skills/ship/SKILL.md`; `plugins/spark/skills/validate/SKILL.md`; `tests/bench-memo.sh`; `tests/test-apply-permissions.sh`; `tests/test-brief-resume.sh`; `tests/test-course-derivation.sh`; `tests/test-doctor-standards-boundary.sh`; `tests/test-first-run.sh`; `tests/test-governance-contract.sh`; `tests/test-governance-integration.sh`; `tests/test-governance-schema.sh`; `tests/test-hot-path-memo.sh`; `tests/test-hub.sh`; `tests/test-labels.sh`; `tests/test-merge-strategy.sh`; `tests/test-orient.sh`; `tests/test-preferences.sh`; `tests/test-reconcile-apply.sh`; `tests/test-reconcile-slate.sh`; `tests/test-setup-profiles.sh`; `tests/test-state.sh`; `tests/test-triage-truth.sh` |
 
-**23 files, 244,492 bytes** of the 126-file, 923,964-byte corpus are referenced by code,
+**23 files, 244,492 bytes** of the 126-file, 924,571-byte corpus are referenced by code,
 tests or CI outside this index's own machinery (26 % by bytes; the exclusion and its
 reason are stated under the footprint section below). The suite holds this list to the tree: a shipped surface
 that starts naming a non-operative artifact fails until the index lists it.
@@ -107,9 +107,11 @@ relative link in it, so it reads the evidence pages because they are Markdown, n
 That check is what keeps this index's pointers honest — the acceptance item "current fact/provenance links
 valid" is enforced by it — so narrowing it would trade a guarantee for a read count, and the read is one open of
 each file by a validator that runs on demand, not a load into a session's reasoning context. It is reported here
-as a measured fact rather than repaired, and the suite pins it: the capture's `doctor` rows must equal exactly
-the Markdown surfaces HEAD's tree has under the evidence roots, which is also what makes the committed capture
-valid for HEAD rather than only for the commit it was observed at.
+as a measured fact rather than repaired, and **#768 owns the repair**: bounding that read set is a shipped-runtime
+change, and an index-mediated path is not available to a plugin installed where this index does not exist. The
+suite pins the measurement meanwhile: the capture's `doctor` rows must equal exactly the Markdown surfaces HEAD's
+tree has under the evidence roots, which is also what makes the committed capture valid for HEAD rather than only
+for the commit it was observed at.
 
 **Method correction.** The first capture in this PR was taken on a cold clone, and this page reported git's work
 as Spark's. In a fresh checkout git has no stat data for any file, and entries written in the same second as the
@@ -150,9 +152,12 @@ committed rows back, unbroken; `SPARK_SKIP_OBSERVE=1` is the documented escape f
 
 Separation is proven for the path a session reasons on, and it is not complete for the repository: three closed
 records are read by current-state surfaces today. They are classified `operative-now = yes`, because they are —
-the classification follows the behaviour, not the intent — and each one names the owner who can end the
-dependency. Repairing them here would mean editing CI (human-approved in this repository) and changing verb and
-suite behaviour that belongs to other work units; recording them with owners is this unit's honest boundary.
+the classification follows the behaviour, not the intent — and each names the issue that owns its repair.
+
+The boundary is the repository operator's decision, not this unit's preference. Widening this unit into CI,
+shipped `spark reconcile` behaviour and the telemetry suite was declined; the claim stays narrow and all three
+dependencies move to **#768**, a sub-issue of #729 alongside this one, which keeps them required v0.23 cleanup
+work rather than waiving them. Nothing here declares #729 or #480 complete.
 
 | Artifact | Class | Operative now | Why it is on the current path |
 |---|---|---|---|
@@ -160,9 +165,9 @@ suite behaviour that belongs to other work units; recording them with owners is 
 | `docs/ops/v0.21-dogfood-evaluation.md` | `active-current` | yes | the live CI script defaults its ledger to this v0.21 record, so a release two versions old is the fallback truth of a current check |
 | `docs/ops/telemetry-baseline.md` | `active-current` | yes | tests/test-run-telemetry.sh pins this path, so a closed baseline is load-bearing for a suite that runs on every change |
 
-- **`docs/releases/v0.1*.md;docs/releases/v0.2[0-2].md`** — concerns v0.10 – v0.22, one record each; it supported what each release shipped and its disposition. Owner: the reconcile slate (#467); repairing it means giving reconcile the current release record by name instead of the directory
-- **`docs/ops/v0.21-dogfood-evaluation.md`** — concerns milestone #18 (v0.21) driven by v0.20.0; fd407c72; it supported the v0.21 dogfood ledger. Owner: the human who approves CI edits in this repository; the exact diff is proposed on the manifest and deliberately not applied here
-- **`docs/ops/telemetry-baseline.md`** — concerns #574; base 20eabbb; it supported the run-telemetry baseline for #558, #575, #576. Owner: the #558 telemetry lane; repairing it means the suite asserting against a fixture it owns rather than a released baseline
+- **`docs/releases/v0.1*.md;docs/releases/v0.2[0-2].md`** — concerns v0.10 – v0.22, one record each; it supported what each release shipped and its disposition. Owner: #768, which owns the remaining current dependencies on historical evidence; repairing it means deriving current state from a canonical source while published-release contradictions stay detectable
+- **`docs/ops/v0.21-dogfood-evaluation.md`** — concerns milestone #18 (v0.21) driven by v0.20.0; fd407c72; it supported the v0.21 dogfood ledger. Owner: #768; the exact diff is proposed on this page and applied there, under the human approval a CI change requires here
+- **`docs/ops/telemetry-baseline.md`** — concerns #574; base 20eabbb; it supported the run-telemetry baseline for #558, #575, #576. Owner: #768; repairing it means the suite asserting against a fixture it owns, without reducing discrimination
 
 The CI default is the one with a diff ready, and it is deliberately not applied — CI edits are human-approved
 in this repository:
@@ -189,8 +194,8 @@ Physical, over the same roots, against `29e4f4e` — the commit this branch left
 | | Files | Bytes | Lines |
 |---|---|---|---|
 | before | 123 | 888,064 | 14,913 |
-| after | 126 | 923,964 | 15,401 |
-| delta | +3 | +35,900 | +488 |
+| after | 126 | 924,571 | 15,408 |
+| delta | +3 | +36,507 | +495 |
 
 The corpus grew, and this page is part of the growth: this manifest, the observation capture and the tool that
 regenerates it are themselves evidence, and they are indexed like everything else. Nothing was moved or deleted,
@@ -218,9 +223,11 @@ reference footprint is labelled accordingly: it counts surfaces outside this ind
 
 ## What is not claimed
 
-The separation claim is narrow and exact: historical evidence is off the path a session reasons on, measured
-verb by verb. It is not a claim that nothing current touches history — three named records are still read by a
-verb, a suite and a CI default, listed above with their owners. No read-count reduction is claimed: the hot path grew by
+The separation claim is narrow and exact, and deliberately so: historical evidence is off the path a session
+reasons on, measured verb by verb. It is not a claim that nothing current touches history — three named records
+are still read by a verb, a suite and a CI default, each listed above against #768, which owns ending them. That
+division was the operator's call, taken so this unit keeps its boundary instead of expanding into shipped-runtime
+and CI work. No read-count reduction is claimed: the hot path grew by
 one Markdown surface, this page, measured above rather than argued away, and the corpus grew by this unit's own
 artifacts. A #730 workload re-run would show that one extra open by `doctor` and nothing else. No claim that nothing reads the corpus, either — `doctor`'s link validator reads
 every Markdown surface it finds, measured above and left in place deliberately, because it is the check that
