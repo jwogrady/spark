@@ -41,23 +41,24 @@ surfaces re-registered under their steady-state role (below).
 (prose only — not explanation, not history, and CI code excluded); the two concepts the audit added are
 counted the same way from the same sweep. "After" counts the operative sources the map names; where a
 concept names two, the map's treatment declares the composite (which aspect each source owns); `non-prose`
-marks an executable CI surface, the shipped runtime that derives an instance at read time, or GitHub state
-(a decision record, the milestone list) that the map cites as a source without a repository page defining it. `tests/test-doc-roles.sh` recomputes the role counts and the after-column from
+marks a source that is not prose: a machine-readable authority (a TSV or JSON the runtime reads), an executable CI
+surface, the shipped runtime that derives an instance at read time, or GitHub state (a decision record, the
+milestone list) — the audit's point being that the definition of a governed concept is data wherever it can be. `tests/test-doc-roles.sh` recomputes the role counts and the after-column from
 the two data files and fails if this page disagrees; the before-counts are the sweep's, recorded here, and
 the suite checks each is a number.
 
 | Concept | Before | After |
 |---|---|---|
-| `release-gate-placement` | 8 | 3 + 2 non-prose |
+| `release-gate-placement` | 8 | 0 + 5 non-prose |
 | `version-minting` | 4 | 1 + 1 non-prose |
-| `authority-boundaries` | 9 | 2 |
-| `routine-merge-authority` | 9 | 1 + 1 non-prose |
-| `exact-head-stale-evidence` | 7 | 2 |
-| `verdict-vocabulary` | 6 | 1 |
-| `parent-dependency` | 7 | 2 |
+| `authority-boundaries` | 9 | 0 + 2 non-prose |
+| `routine-merge-authority` | 9 | 0 + 2 non-prose |
+| `exact-head-stale-evidence` | 7 | 0 + 2 non-prose |
+| `verdict-vocabulary` | 6 | 0 + 1 non-prose |
+| `parent-dependency` | 7 | 0 + 2 non-prose |
 | `review-lifecycle` | 6 | 1 + 1 non-prose |
 | `agent-contract` | 1 | 1 |
-| `merge-method` | 3 | 1 + 1 non-prose |
+| `merge-method` | 3 | 1 + 2 non-prose |
 
 ## Contradictions found, and what was done
 
