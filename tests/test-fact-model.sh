@@ -536,9 +536,9 @@ def check_fact(f):
             if not isinstance(v, str) or not ids[VKIND[k]].fullmatch(v): fail(f"versions[{t}] is not a {VKIND[k]} (R20)")
             if k == "head" and v != rest: fail(f"the version observed for {t} is the head itself (R20)")
             if rest == ident and VKIND[k] == "timestamp" and isinstance(f["source"].get("version"), str) and ISO.fullmatch(f["source"]["version"]) and v != f["source"]["version"]: fail(f"the source node's observed version {v} is not the fact's source.version {f['source']['version']} (R20)")
-        if c == "head" and isinstance(f.get("value"), dict) and isinstance(f["value"].get("base_ref"), str) and isinstance(f["value"].get("base"), str):
-            rt = [t for t in vers if t.startswith("ref:") and t.endswith("/" + f["value"]["base_ref"])]
-            if rt and vers[rt[0]] != f["value"]["base"]: fail(f"a head fact's observed base-branch version {vers[rt[0]]} is its value.base {f['value']['base']} (R20)")
+        if c == "head" and isinstance(f.get("value"), dict) and isinstance(f["value"].get("base_ref"), str) and isinstance(f["value"].get("base"), str) and "#" in ident:
+            rt = f"ref:{ident.split('#')[0]}/{f['value']['base_ref']}"   # the exact token R17 requires: the head's own repository and base branch
+            if rt in vers and vers[rt] != f["value"]["base"]: fail(f"a head fact's observed version of {rt}, {vers[rt]}, is its value.base {f['value']['base']} (R20)")
     # a fact whose value depends on which records a node carries lists the node, so a record created later reaches it (R17)
     def pr_token(node, what):
         """R17: the node is a pull request and is listed as one — never as an issue, never both"""
@@ -1145,6 +1145,7 @@ rej hd 'f["invalidators"][1]="ref:github.com/acme/widgets/main"' "a head fact wh
 rej hd 'f["invalidators"]=[i for i in f["invalidators"] if not i.startswith("pull_request:")]' "a head fact that does not list its pull request must be rejected — a base-branch switch is pull-request metadata and moves no branch tip (R17)"
 rej hd 'f["invalidators"]=[("issue:"+i.split(":",1)[1]) if i.startswith("pull_request:") else i for i in f["invalidators"]]' "a head fact listing its pull request as an issue must be rejected (R17)"
 rej hd 'NOSYNC=True; f["versions"]["ref:github.com/acme/widgets/master"]="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"' "a head fact whose observed base-branch version is not its value.base must be rejected (R20)"
+rej hd 'NOSYNC=True; f["invalidators"].insert(0, "ref:github.com/other/repo/master"); f["versions"]={"ref:github.com/other/repo/master": f["value"]["base"], **f["versions"]}; f["versions"]["ref:github.com/acme/widgets/master"]="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"' "a head fact whose own repository's base token carries a different commit must be rejected even when a foreign ref token carries the base first (R20)"
 out="$(m "$hd" 'NOSYNC=True; f["versions"]["ref:github.com/acme/widgets/master"]=f["value"]["base"]' | python3 "$VAL" "$TSV" "$DOC" one 2>&1)"; case "$out" in accepted) ok ;; *) bad "control: a head fact whose ref: version is its base is accepted (R20) — $out" ;; esac
 rej gr 'f["value"]["blocked_by"].append({"kind":"issue","id":"github.com/acme/widgets#39","state":"open"})' "one blocker listed as both closed and open must be rejected (R14)"
 rej gr 'f["value"]["children"]=[{"kind":"issue","id":"github.com/acme/widgets#42","state":"open"},{"kind":"issue","id":"github.com/acme/widgets#42","state":"open"}]; f["invalidators"].append("issue:github.com/acme/widgets#42")' "a child listed twice must be rejected (R14)"
