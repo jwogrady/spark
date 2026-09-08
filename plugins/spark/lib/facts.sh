@@ -24,6 +24,15 @@
 #     succeeded and returned a malformed field still observed the node's version,
 #     so that UNKNOWN conforms and is emitted.
 #
+# EVERY IDENTITY A FACT CARRIES IS ONE THIS COMPILER OBSERVED. Never one it
+# assumed because it asked nicely. Three defects in this module were the same
+# mistake wearing different clothes — an endpoint resolved from gh's own context
+# rather than from the locator, a root issue number requested and never checked,
+# a root repository synthesized from the request — and each one could have bound
+# another node's version and relationships to this work unit's name. So a reply
+# must say which node it is about, and that must match what was asked, before
+# anything it contains becomes a fact.
+#
 # The output is a FRAGMENT, not a snapshot: a bare list of facts (R11, R22). A
 # snapshot is exactly {observer, facts} with every required class present, and
 # this module compiles one class so far, so calling its output a snapshot would

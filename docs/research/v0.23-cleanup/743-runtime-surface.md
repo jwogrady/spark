@@ -53,9 +53,9 @@ actual line count is reported too:
 | `plugins/spark/lib/execution.sh` | 2,182 | 2,203 | +21 |
 | `plugins/spark/lib/planning.sh` | 825 | 825 | +0 |
 | `plugins/spark/lib/repository.sh` | 221 | 234 | +13 |
-| `plugins/spark/lib/facts.sh` | 0 | 740 | +740 |
+| `plugins/spark/lib/facts.sh` | 0 | 749 | +749 |
 
-**12,166 lines before, 12,961 after (+795)**, against
+**12,166 lines before, 12,970 after (+804)**, against
 10,034 and 10,516 body lines. Both grow: this tree adds runtime rather than only redistributing it, and the body lines say so rather than being read out of the file total.
 
 **Argument parsing, measured rather than assigned.** The map is exclusive — one responsibility per function — and

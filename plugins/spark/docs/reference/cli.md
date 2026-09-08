@@ -2313,6 +2313,26 @@ vocabulary all yield **no fact**, for the same reason the repository class does.
 The work unit's own state is not part of this class. The value carries the state
 of each relation; the work unit's belongs to another fact.
 
+### What is verified before a fact is emitted
+
+A fact names nodes, and a consumer acts on those names, so each one is checked
+against the reply rather than assumed from the request:
+
+- the **endpoint and host** come from the repository's own locator, so the node
+  read is the node named;
+- the **root's number and repository** must both come back and must match what
+  was asked for — a reply describing another issue, or the same number in
+  another repository, is refused rather than bound to this work unit's name;
+- each **relation's kind** is read from the node, because an issue and a pull
+  request take different invalidator forms;
+- every **observed version** must satisfy the schema's grammar, and a fact whose
+  version could not be observed is not emitted at all.
+
+A reply that omits a field is not read as that field being empty. A missing
+relationship list, a missing completeness flag, a missing parent key and a
+missing repository each refuse, because a reply that did not answer is not an
+answer of "none".
+
 ### Cost
 
 One request supplies every field of the repository fact, and one more supplies a
