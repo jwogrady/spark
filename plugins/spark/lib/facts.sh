@@ -585,9 +585,13 @@ facts_graph_fact() {
   # which is not a conforming fact at all.
   known=" $wu=ROOT@$self_version"
 
-  # Only walked when the whole set was returned. A truncated read has no value to
-  # build and no relationship it may claim to represent.
-  while [ -z "$truncated" ] && IFS=$'\t' read -r f1 f2 f3 f4 f5 f6; do
+  # Every returned row is walked and validated, whatever the truncation state: a
+  # node the reply DID return is a node it claimed, and a malformed claim makes
+  # the reply malformed. What truncation changes is representation, not
+  # validation — a partial reading may not contribute to the value, the
+  # invalidators or the versions, because the fact would then assert a freshness
+  # contract over a set it admits it could not see.
+  while IFS=$'\t' read -r f1 f2 f3 f4 f5 f6; do
     [ -n "$f1" ] || continue
     case "$f1" in
       self|truncated) continue ;;
@@ -616,9 +620,17 @@ facts_graph_fact() {
           *" $rel_wu=$entry@$f4 "*) ;;
           *" $rel_wu="*) FACTS_REFUSED="malformed"; return 3 ;;
           *) known="$known $rel_wu=$entry@$f4"
-             vers="$vers,\"$(json_escape "$tok")\":\"$(json_escape "$f4")\""
-             inv="$inv $tok" ;;
+             # The identity is remembered so a later contradiction is still
+             # caught, but a truncated reading contributes nothing a consumer
+             # could act on.
+             if [ -z "$truncated" ]; then
+               vers="$vers,\"$(json_escape "$tok")\":\"$(json_escape "$f4")\""
+               inv="$inv $tok"
+             fi ;;
         esac
+
+        # Validated; and represented only when the whole set was returned.
+        [ -z "$truncated" ] || continue
 
         # Membership is then per list, keyed by the work unit, so a node that is
         # both a child and a blocker appears in both — one edge is not a

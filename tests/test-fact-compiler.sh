@@ -1232,4 +1232,47 @@ GO="$(gfact "$("$SPARK" facts --issue 733 2>/dev/null)")"
 assert_contains "an object root still establishes" "ESTABLISHED" \
   "$(printf '%s' "$GO" | jq -r '.status')"
 
+# --- truncation does not excuse a malformed node ---------------------------
+# A node the reply DID return is a node it claimed. Skipping the walk when a
+# list was truncated also skipped validating those claims, so a truncated child
+# list beside a bad parent still emitted UNKNOWN. Validation and representation
+# are different concerns: everything returned is checked, only a complete
+# reading is represented.
+graph_refused '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"updatedAt":"2026-09-08T10:00:00Z",
+  "parent":{"__typename":"Issue","number":728,"state":"MERGED","updatedAt":"2026-09-08T09:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}},
+  "subIssues":{"pageInfo":{"hasNextPage":true},"nodes":[]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
+  "a truncated list does not excuse a parent state outside the vocabulary"
+graph_refused '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"updatedAt":"2026-09-08T10:00:00Z",
+  "parent":{"__typename":"Discussion","number":728,"state":"OPEN","updatedAt":"2026-09-08T09:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}},
+  "subIssues":{"pageInfo":{"hasNextPage":true},"nodes":[]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
+  "nor a kind with no invalidator form"
+graph_refused '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"updatedAt":"2026-09-08T10:00:00Z","parent":null,
+  "subIssues":{"pageInfo":{"hasNextPage":true},"nodes":[
+    {"__typename":"Issue","number":740,"state":"OPEN","updatedAt":"not-an-instant","repository":{"nameWithOwner":"jwogrady/spark"}}]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
+  "nor a returned node whose version is not a version"
+graph_refused '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"updatedAt":"2026-09-08T10:00:00Z","parent":null,
+  "subIssues":{"pageInfo":{"hasNextPage":true},"nodes":[
+    {"__typename":"Issue","number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}}]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
+  "nor the work unit naming itself on a truncated page"
+
+# The control: a truncated reading whose returned nodes are all sound is still
+# the UNKNOWN, and still represents none of them.
+graph_stub '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"updatedAt":"2026-09-08T10:00:00Z",
+  "parent":{"__typename":"Issue","number":728,"state":"OPEN","updatedAt":"2026-09-08T09:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}},
+  "subIssues":{"pageInfo":{"hasNextPage":true},"nodes":[
+    {"__typename":"Issue","number":740,"state":"CLOSED","updatedAt":"2026-09-07T08:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}}]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
+GV="$(gfact "$("$SPARK" facts --issue 733 2>/dev/null)")"
+assert_contains "sound nodes on a truncated page still yield the unknown" "UNKNOWN" \
+  "$(printf '%s' "$GV" | jq -r '.status')"
+[ "$(printf '%s' "$GV" | jq -r '.invalidators | length')" = "1" ] && ok \
+  || bad "and it still represents none of them"
+[ "$(printf '%s' "$GV" | jq -r 'has("value")')" = "false" ] && ok \
+  || bad "and carries no value"
+assert_versions_canonical "$GV" "the validated truncated graph"
+
 finish
