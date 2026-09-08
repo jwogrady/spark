@@ -1215,4 +1215,21 @@ assert_contains "a shared node still establishes" "ESTABLISHED" \
 [ "$(printf '%s' "$GU" | jq -r '.invalidators | length')" = "3" ] && ok \
   || bad "the root, its parent and the shared node are three nodes, not four"
 
+# --- a root that is not an object -----------------------------------------
+# Reaching into a scalar or an array raises a jq error, so the failure arrived as
+# a generic read failure rather than the malformed refusal this path documents.
+# The outcome looked right and the mechanism was wrong, which is the shape of
+# the sentinel bug earlier on this branch — so these assert the REASON, not just
+# that something refused.
+malformed_root '{"data":{"repository":{"issue":[]}}}'      "an array is not an issue"
+malformed_root '{"data":{"repository":{"issue":"733"}}}'   "nor is a string"
+malformed_root '{"data":{"repository":{"issue":733}}}'     "nor a number"
+malformed_root '{"data":{"repository":{"issue":true}}}'    "nor a boolean"
+
+# The control: an object still reaches the field checks and can establish.
+raw_graph_stub '{"data":{"repository":{"issue":{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"updatedAt":"2026-09-08T10:00:00Z","parent":null,"subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},"blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}}}}'
+GO="$(gfact "$("$SPARK" facts --issue 733 2>/dev/null)")"
+assert_contains "an object root still establishes" "ESTABLISHED" \
+  "$(printf '%s' "$GO" | jq -r '.status')"
+
 finish

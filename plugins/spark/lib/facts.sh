@@ -374,6 +374,12 @@ facts_graph_node() {
     elif (.data.repository | type) != "object" then (["partial"] | @tsv)
     elif (.data.repository | has("issue") | not) then (["partial"] | @tsv)
     elif .data.repository.issue == null then (["absent"] | @tsv)
+    # The type guard comes before any field access. Reaching into a scalar or an
+    # array raises a jq error, and the failure then arrives as a generic read
+    # failure rather than the malformed refusal this path documents — the right
+    # outcome by the wrong mechanism, which is how the sentinel rows hid a bug
+    # earlier on this branch.
+    elif (.data.repository.issue | type) != "object" then (["partial"] | @tsv)
     elif (.data.repository.issue
           | ((.number | type) != "number") or (.updatedAt == null)
             or ((.repository.nameWithOwner | type) != "string")
