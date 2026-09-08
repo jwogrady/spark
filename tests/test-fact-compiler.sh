@@ -1275,4 +1275,44 @@ assert_contains "sound nodes on a truncated page still yield the unknown" "UNKNO
   || bad "and carries no value"
 assert_versions_canonical "$GV" "the validated truncated graph"
 
+# --- a relation's shape is the root's standard -----------------------------
+# Related numbers were coerced with tostring before anything looked at them, so
+# "740" was indistinguishable from 740. The root and the pull-request probe
+# already required real integers; a rule applied to two of three identity
+# sources is a rule with a hole in it.
+rel_refused() { # rel_refused <child node json> <label>
+  graph_refused '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"updatedAt":"2026-09-08T10:00:00Z","parent":null,
+    "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":['"$1"']},
+    "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' "$2"
+}
+rel_refused '{"__typename":"Issue","number":"740","state":"OPEN","updatedAt":"2026-09-07T08:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}}' \
+  "a relation number that is a string is not an issue number"
+rel_refused '{"__typename":"Issue","number":740.5,"state":"OPEN","updatedAt":"2026-09-07T08:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}}' \
+  "nor is a fraction"
+rel_refused '{"__typename":"Issue","number":null,"state":"OPEN","updatedAt":"2026-09-07T08:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}}' \
+  "nor a null"
+rel_refused '{"__typename":"Issue","state":"OPEN","updatedAt":"2026-09-07T08:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}}' \
+  "nor a relation with no number at all"
+rel_refused '740' "and a bare scalar is not a relation"
+rel_refused '{"__typename":"Issue","number":740,"state":"OPEN","updatedAt":"2026-09-07T08:00:00Z"}' \
+  "a relation that names no repository has not identified itself"
+
+# The parent is held to it too, not only the lists.
+graph_refused '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"updatedAt":"2026-09-08T10:00:00Z",
+  "parent":{"__typename":"Issue","number":"728","state":"OPEN","updatedAt":"2026-09-08T09:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}},
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
+  "a parent number that is a string is refused like any other"
+
+# The control: real integers still establish, and the identity is canonical.
+graph_stub '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"updatedAt":"2026-09-08T10:00:00Z","parent":null,
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[
+    {"__typename":"Issue","number":740,"state":"OPEN","updatedAt":"2026-09-07T08:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}}]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
+GI="$(gfact "$("$SPARK" facts --issue 733 2>/dev/null)")"
+assert_contains "an integer relation number still establishes" "ESTABLISHED" \
+  "$(printf '%s' "$GI" | jq -r '.status')"
+assert_contains "and is named canonically" "github.com/jwogrady/spark#740" \
+  "$(printf '%s' "$GI" | jq -r '.value.children[0].id')"
+
 finish

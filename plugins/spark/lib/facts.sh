@@ -357,6 +357,16 @@ facts_graph_node() {
         }
       }
     }' --jq '
+    # A relationship node is held to the same standard as the root: an object
+    # carrying a real integer number, not a string that prints like one, and the
+    # strings the projection will read. Coercing first and checking later is how
+    # "740" became 740.
+    def relation_ok:
+      type == "object"
+      and (.number | type) == "number" and (.number == (.number | floor))
+      and (.state | type) == "string" and (.updatedAt | type) == "string"
+      and (.repository.nameWithOwner | type) == "string"
+      and (.__typename | type) == "string";
     # A GraphQL reply can carry errors beside partial data, and a null list is
     # not an empty one. Both are refused here rather than projected into rows
     # that would read as a complete graph with no relationships.
@@ -390,7 +400,10 @@ facts_graph_node() {
             or ((.subIssues.nodes | type) != "array")
             or ((.subIssues.pageInfo.hasNextPage | type) != "boolean")
             or ((.blockedBy.nodes | type) != "array")
-            or ((.blockedBy.pageInfo.hasNextPage | type) != "boolean"))
+            or ((.blockedBy.pageInfo.hasNextPage | type) != "boolean")
+            or (.parent != null and ((.parent | relation_ok) | not))
+            or ([.subIssues.nodes[] | relation_ok] | any(. == false))
+            or ([.blockedBy.nodes[] | relation_ok] | any(. == false)))
       then (["partial"] | @tsv)
     else
       .data.repository.issue as $i
