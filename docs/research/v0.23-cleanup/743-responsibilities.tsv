@@ -120,8 +120,8 @@ ev_write	plugins/spark/lib/execution.sh	top-level	-	domain-semantics	10	1	1	cmd_
 facts_canonical	plugins/spark/lib/facts.sh	top-level	-	canonicalization	12	1	4	cmd_facts;facts_graph_entry;facts_graph_fact;facts_repository_fact	cmd_facts
 facts_envelope_tail	plugins/spark/lib/facts.sh	top-level	-	formatting-reporting	11	1	1	facts_repository_fact	-
 facts_graph_entry	plugins/spark/lib/facts.sh	top-level	-	canonicalization	13	1	1	facts_graph_fact	-
-facts_graph_fact	plugins/spark/lib/facts.sh	top-level	-	evidence-authority	165	4	1	cmd_facts	cmd_facts
-facts_graph_node	plugins/spark/lib/facts.sh	top-level	-	source-collection	70	1	1	facts_graph_fact	-
+facts_graph_fact	plugins/spark/lib/facts.sh	top-level	-	evidence-authority	169	5	1	cmd_facts	cmd_facts
+facts_graph_node	plugins/spark/lib/facts.sh	top-level	-	source-collection	71	1	1	facts_graph_fact	-
 facts_load_grammars	plugins/spark/lib/facts.sh	top-level	-	source-collection	19	2	3	cmd_facts;facts_graph_fact;facts_repository_fact	cmd_facts
 facts_now	plugins/spark/lib/facts.sh	top-level	-	source-collection	1	0	1	cmd_facts	cmd_facts
 facts_record_telemetry	plugins/spark/lib/facts.sh	top-level	-	formatting-reporting	10	0	1	cmd_facts	cmd_facts

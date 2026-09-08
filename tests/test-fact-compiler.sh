@@ -532,7 +532,7 @@ gfact() { printf '%s' "$1" | jq -r '.[] | select(.key=="graph.native")'; }
 
 REL='{"__typename":"Issue","number":%d,"state":"%s","updatedAt":"%s","repository":{"nameWithOwner":"jwogrady/spark"}}'
 
-FULL='{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z",
+FULL='{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z",
   "parent":{"__typename":"Issue","number":728,"state":"OPEN","updatedAt":"2026-09-08T09:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}},
   "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[
     {"__typename":"Issue","number":740,"state":"CLOSED","updatedAt":"2026-09-07T08:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}},
@@ -618,7 +618,7 @@ assert_contains "and each relation's version is that node's" "2026-09-06T07:00:0
 # The truncated page CARRIES nodes, which is what a real truncation looks like.
 # An empty truncated page cannot show the defect this pins: partial nodes must
 # not survive in the invalidators of a fact that says it saw no relationships.
-TRUNC='{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z",
+TRUNC='{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z",
   "parent":{"__typename":"Issue","number":728,"state":"OPEN","updatedAt":"2026-09-08T09:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}},
   "subIssues":{"pageInfo":{"hasNextPage":true},"nodes":[
     {"__typename":"Issue","number":740,"state":"CLOSED","updatedAt":"2026-09-07T08:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}},
@@ -645,7 +645,7 @@ assert_versions_canonical "$GT" "the truncated graph"
   || bad "nor in its versions"
 
 # Both lists truncated is the same answer, and names one of them.
-graph_stub '{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
+graph_stub '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
   "subIssues":{"pageInfo":{"hasNextPage":true},"nodes":[
     {"__typename":"Issue","number":740,"state":"CLOSED","updatedAt":"2026-09-07T08:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}}]},
   "blockedBy":{"pageInfo":{"hasNextPage":true},"nodes":[
@@ -664,7 +664,7 @@ assert_contains "and the second" "children" \
 assert_versions_canonical "$GT2" "the doubly truncated graph"
 
 # --- no parent is 'none', not a missing key ------------------------------
-graph_stub '{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
+graph_stub '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
   "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
   "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
 GN="$(gfact "$("$SPARK" facts --issue 733)")"
@@ -674,7 +674,7 @@ assert_contains "a work unit with no parent says none" "none" \
   || bad "and carries an empty child list"
 
 # --- one node, one state -------------------------------------------------
-DUP_SAME='{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
+DUP_SAME='{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
   "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[
     {"__typename":"Issue","number":740,"state":"CLOSED","updatedAt":"2026-09-07T08:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}},
     {"__typename":"Issue","number":740,"state":"CLOSED","updatedAt":"2026-09-07T08:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}}]},
@@ -684,7 +684,7 @@ GD="$(gfact "$("$SPARK" facts --issue 733)")"
 [ "$(printf '%s' "$GD" | jq -r '.value.children | length')" = "1" ] && ok \
   || bad "a node listed twice with one state appears once"
 
-DUP_DIFF='{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
+DUP_DIFF='{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
   "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[
     {"__typename":"Issue","number":740,"state":"CLOSED","updatedAt":"2026-09-07T08:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}},
     {"__typename":"Issue","number":740,"state":"OPEN","updatedAt":"2026-09-07T08:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}}]},
@@ -705,7 +705,7 @@ graph_refused() { # graph_refused <issue json> <label>
     *) ok ;;
   esac
 }
-graph_refused '{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
+graph_refused '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
   "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[
     {"__typename":"Issue","number":740,"state":"MERGED","updatedAt":"2026-09-07T08:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}}]},
   "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
@@ -716,7 +716,7 @@ graph_refused '{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","
 # state this class does not represent cannot make its graph unreadable —
 # asserting otherwise would be inventing strictness rather than implementing the
 # contract.
-graph_stub '{"number":733,"state":"SOMETHING_ELSE","updatedAt":"2026-09-08T10:00:00Z",
+graph_stub '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"state":"SOMETHING_ELSE","updatedAt":"2026-09-08T10:00:00Z",
   "parent":{"__typename":"Issue","number":728,"state":"OPEN","updatedAt":"2026-09-08T09:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}},
   "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
   "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
@@ -725,11 +725,11 @@ assert_contains "the work unit's own state is not this class's business" "ESTABL
   "$(printf '%s' "$GS" | jq -r '.status')"
 [ -z "$(printf '%s' "$GS" | jq -r '[.. | objects | select(has("state")) | .state] | map(select(. != "open" and . != "closed")) | join(",")')" ] \
   && ok || bad "and no state it does not represent leaks into the value"
-graph_refused '{"number":733,"state":"OPEN","updatedAt":"not-an-instant","parent":null,
+graph_refused '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"state":"OPEN","updatedAt":"not-an-instant","parent":null,
   "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
   "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
   "a node version that is not a version leaves nothing to record"
-graph_refused '{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z",
+graph_refused '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z",
   "parent":{"__typename":"Discussion","number":9,"state":"OPEN","updatedAt":"2026-09-08T09:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}},
   "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
   "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
@@ -740,15 +740,15 @@ graph_refused 'null' "a work unit that does not exist yields no graph"
 # GraphQL can answer with errors beside partial data, and a null list is not an
 # empty one. Compiling either would state that the work unit has no
 # relationships, which is a different fact from not having been able to see them.
-graph_refused '{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
+graph_refused '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
   "subIssues":null,
   "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
   "a null relationship list is not an empty one"
-graph_refused '{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
+graph_refused '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
   "subIssues":{"pageInfo":{"hasNextPage":false}},
   "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
   "a list with no nodes key was not returned, not returned empty"
-graph_refused '{"number":733,"state":"OPEN","updatedAt":null,"parent":null,
+graph_refused '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"state":"OPEN","updatedAt":null,"parent":null,
   "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
   "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
   "a node with no version leaves nothing to record"
@@ -757,7 +757,7 @@ graph_refused '{"number":733,"state":"OPEN","updatedAt":null,"parent":null,
 stub_gh "$WORK/bin/gh" <<STUB
 printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
 case "\$*" in
-  *graphql*) answer_json '{"errors":[{"message":"Something went wrong"}],"data":{"repository":{"issue":{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,"subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},"blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}}}}' ;;
+  *graphql*) answer_json '{"errors":[{"message":"Something went wrong"}],"data":{"repository":{"issue":{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,"subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},"blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}}}}' ;;
   *) answer_json '$NODE' ;;
 esac
 STUB
@@ -820,19 +820,19 @@ assert_contains "and nothing unknown" '"facts_unknown":0' "$TELG"
 # Absence of a completeness signal is not a completeness signal. A list whose
 # hasNextPage is missing, null or the wrong type has not told us it is whole, so
 # it cannot compile as a graph that saw everything.
-graph_refused '{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
+graph_refused '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
   "subIssues":{"pageInfo":{},"nodes":[]},
   "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
   "a pageInfo with no hasNextPage has not said the list is complete"
-graph_refused '{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
+graph_refused '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
   "subIssues":{"pageInfo":{"hasNextPage":null},"nodes":[]},
   "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
   "nor has a null hasNextPage"
-graph_refused '{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
+graph_refused '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
   "subIssues":{"pageInfo":{"hasNextPage":"false"},"nodes":[]},
   "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
   "and a string is not a boolean, whatever it spells"
-graph_refused '{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
+graph_refused '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
   "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
   "blockedBy":{"pageInfo":{},"nodes":[]}}' \
   "the blocker list is held to the same rule"
@@ -840,7 +840,7 @@ graph_refused '{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","
 # --- a node can be both a child and a blocker -----------------------------
 # Membership is per list; identity is global. Tracking uniqueness across the
 # lists would silently drop one of two real edges.
-graph_stub '{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
+graph_stub '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
   "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[
     {"__typename":"Issue","number":740,"state":"OPEN","updatedAt":"2026-09-07T08:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}}]},
   "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[
@@ -860,7 +860,7 @@ assert_contains "a node that is both a child and a blocker is established" "ESTA
 assert_versions_canonical "$GB" "the shared-node graph"
 
 # The same node reported with two different states has no representation.
-graph_refused '{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
+graph_refused '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
   "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[
     {"__typename":"Issue","number":740,"state":"OPEN","updatedAt":"2026-09-07T08:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}}]},
   "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[
@@ -868,7 +868,7 @@ graph_refused '{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","
   "one node cannot be open in one list and closed in another"
 
 # Nor with two different observed versions: one node has one version.
-graph_refused '{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
+graph_refused '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
   "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[
     {"__typename":"Issue","number":740,"state":"OPEN","updatedAt":"2026-09-07T08:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}}]},
   "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[
@@ -876,7 +876,7 @@ graph_refused '{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","
   "and cannot carry two observed versions"
 
 # A node listed twice within ONE list is still one member of it.
-graph_stub '{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
+graph_stub '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
   "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[
     {"__typename":"Issue","number":740,"state":"OPEN","updatedAt":"2026-09-07T08:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}},
     {"__typename":"Issue","number":740,"state":"OPEN","updatedAt":"2026-09-07T08:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}}]},
@@ -890,11 +890,11 @@ GW="$(gfact "$("$SPARK" facts --issue 733)")"
 # --- a list that is not a list ---------------------------------------------
 # Same rule as the null list and the missing hasNextPage: a shape that cannot
 # answer "which nodes" is not an answer of "none".
-graph_refused '{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
+graph_refused '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
   "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":{}},
   "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
   "an object where the node list belongs is not an empty list"
-graph_refused '{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
+graph_refused '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
   "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
   "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":"none"}}' \
   "and neither is a string"
@@ -974,21 +974,21 @@ probe_case 'gh: Internal Server Error (HTTP 500)' 'unreadable'     'and an uncla
 # --- the node returned must be the node asked for --------------------------
 # A response naming a different issue would compile that issue's version and
 # relationships under this work unit's identity: one node wearing another's name.
-graph_refused '{"number":734,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
+graph_refused '{"number":734,"repository":{"nameWithOwner":"jwogrady/spark"},"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
   "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
   "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
   "a graph for another issue must not be compiled under this work unit"
-graph_refused '{"number":null,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
+graph_refused '{"number":null,"repository":{"nameWithOwner":"jwogrady/spark"},"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
   "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
   "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
   "a root with no number names nothing"
-graph_refused '{"number":"733","state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
+graph_refused '{"number":"733","repository":{"nameWithOwner":"jwogrady/spark"},"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
   "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
   "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
   "and a string is not an issue number, whatever it spells"
 
 # The control: the matching number still establishes, so the check discriminates.
-graph_stub '{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
+graph_stub '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
   "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
   "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
 GM="$(gfact "$("$SPARK" facts --issue 733 2>/dev/null)")"
@@ -1062,21 +1062,21 @@ probe_shape '{"number":999}'  "and another pull request is not this one"
 # --- parent gets the same rule as every other relationship field -----------
 # A reply that omits `parent` has not said the work unit has no parent. Reading
 # it as "none" would state a fact about a field the reply never mentioned.
-graph_refused '{"number":733,"updatedAt":"2026-09-08T10:00:00Z",
+graph_refused '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"updatedAt":"2026-09-08T10:00:00Z",
   "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
   "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
   "a reply with no parent field has not said there is no parent"
-graph_refused '{"number":733,"updatedAt":"2026-09-08T10:00:00Z","parent":"none",
+graph_refused '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"updatedAt":"2026-09-08T10:00:00Z","parent":"none",
   "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
   "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
   "and a string is not a parent"
-graph_refused '{"number":733,"updatedAt":"2026-09-08T10:00:00Z","parent":[],
+graph_refused '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"updatedAt":"2026-09-08T10:00:00Z","parent":[],
   "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
   "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
   "nor is an array"
 
 # The control: an explicitly null parent IS "no parent", and establishes.
-graph_stub '{"number":733,"updatedAt":"2026-09-08T10:00:00Z","parent":null,
+graph_stub '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"updatedAt":"2026-09-08T10:00:00Z","parent":null,
   "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
   "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
 GP="$(gfact "$("$SPARK" facts --issue 733 2>/dev/null)")"
@@ -1088,7 +1088,7 @@ assert_contains "and says there is no parent" "none" \
 # --- the root's own state is genuinely outside this class ------------------
 # The reference says so; this proves it rather than trusting the sentence. The
 # field is not read at all, so a reply that omits it entirely still establishes.
-graph_stub '{"number":733,"updatedAt":"2026-09-08T10:00:00Z","parent":null,
+graph_stub '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"updatedAt":"2026-09-08T10:00:00Z","parent":null,
   "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[
     {"__typename":"Issue","number":740,"state":"CLOSED","updatedAt":"2026-09-07T08:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}}]},
   "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
@@ -1099,5 +1099,40 @@ assert_contains "and the relation's state is still canonical" "closed" \
   "$(printf '%s' "$GR" | jq -r '.value.children[0].state')"
 [ -z "$(printf '%s' "$GR" | jq -r '[.. | objects | select(has("state")) | .state] | map(select(. != "open" and . != "closed")) | join(",")')" ] \
   && ok || bad "no state outside the vocabulary may appear"
+
+# --- the root repository is observed, not assumed --------------------------
+# Checking the issue number alone left the repository half of the identity
+# synthesized from the locator that was asked about. A reply from another
+# repository would then have had its issue's version and whole relationship set
+# bound to this repository's name — the third unchecked identity on this branch,
+# after the endpoint resolving from gh's context and the root number.
+graph_refused '{"number":733,"repository":{"nameWithOwner":"someone/else"},"updatedAt":"2026-09-08T10:00:00Z","parent":null,
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
+  "another repository's issue must not be bound to this one"
+graph_refused '{"number":733,"updatedAt":"2026-09-08T10:00:00Z","parent":null,
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
+  "a reply that never named its repository has not identified the node"
+graph_refused '{"number":733,"repository":null,"updatedAt":"2026-09-08T10:00:00Z","parent":null,
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
+  "and neither has a null repository"
+graph_refused '{"number":733,"repository":{"nameWithOwner":42},"updatedAt":"2026-09-08T10:00:00Z","parent":null,
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
+  "nor one whose name is not a name"
+
+# Case is not a mismatch: GitHub compares owner and name case-insensitively, and
+# the locator is canonical lower-case, so the observed identity is folded the
+# same way before it is compared.
+graph_stub '{"number":733,"repository":{"nameWithOwner":"JWOgrady/Spark"},"updatedAt":"2026-09-08T10:00:00Z","parent":null,
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
+GC="$(gfact "$("$SPARK" facts --issue 733 2>/dev/null)")"
+assert_contains "the same repository in another case is the same repository" "ESTABLISHED" \
+  "$(printf '%s' "$GC" | jq -r '.status')"
+assert_contains "and the fact names it canonically" "github.com/jwogrady/spark#733" \
+  "$(printf '%s' "$GC" | jq -r '.source.identity')"
 
 finish

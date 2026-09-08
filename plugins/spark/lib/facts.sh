@@ -312,7 +312,7 @@ facts_repository_fact() {
 # a single request. Sets FACTS_NODE to TSV rows and returns 0, or sets it to the
 # failure output and returns non-zero.
 #
-# Rows: "self <number> <updatedAt>", then "parent|child|blocker <number> <state>
+# Rows: "self <number> <owner/name> <updatedAt>", then "parent|child|blocker <number> <state>
 # <updatedAt> <owner/name>" per related node, then "truncated <which>" for any
 # relationship list GitHub could not return whole.
 #
@@ -320,8 +320,10 @@ facts_repository_fact() {
 # state of each RELATION, and the work unit's own belongs to another fact. An
 # unused field that could gate the fact is worse than no field at all.
 #
-# The root's own number is carried so the caller can check that the node
-# returned is the node asked for.
+# The root's own number AND repository are carried so the caller can check that
+# the node returned is the node asked for. Checking the number alone leaves the
+# repository half of the identity assumed, and a fact that names a repository it
+# never observed is the defect this whole class exists to prevent.
 #
 # One request for the whole graph, for the same reason the repository fact makes
 # one: a request per relationship could observe the graph in three states, and
@@ -339,7 +341,7 @@ facts_graph_node() {
     query($owner:String!,$name:String!,$number:Int!){
       repository(owner:$owner,name:$name){
         issue(number:$number){
-          number updatedAt
+          number updatedAt repository{ nameWithOwner }
           parent{ __typename number state updatedAt repository{ nameWithOwner } }
           subIssues(first:100){ pageInfo{ hasNextPage } nodes{ __typename number state updatedAt repository{ nameWithOwner } } }
           blockedBy(first:100){ pageInfo{ hasNextPage } nodes{ __typename number state updatedAt repository{ nameWithOwner } } }
@@ -365,6 +367,7 @@ facts_graph_node() {
     elif .data.repository.issue == null then (["absent"] | @tsv)
     elif (.data.repository.issue
           | ((.number | type) != "number") or (.updatedAt == null)
+            or ((.repository.nameWithOwner | type) != "string")
             # `parent` gets the same rule as every other relationship field: a
             # reply that omits it has not said the work unit has no parent.
             or (has("parent") | not)
@@ -377,7 +380,7 @@ facts_graph_node() {
     else
       .data.repository.issue as $i
       |
-        (["self", ($i.number | tostring), $i.updatedAt] | @tsv),
+        (["self", ($i.number | tostring), $i.repository.nameWithOwner, $i.updatedAt] | @tsv),
         (if $i.parent != null then
            ["parent", ($i.parent.number|tostring), $i.parent.state, $i.parent.updatedAt,
             $i.parent.repository.nameWithOwner, $i.parent.__typename] | @tsv
@@ -531,13 +534,17 @@ facts_graph_fact() {
   # a different issue would compile that issue's version and relationships under
   # this work unit's identity — one node wearing another's name, which is the
   # failure the identity discipline exists to prevent.
-  local self_number
+  local self_number self_repo
   self_number="$(printf '%s' "$FACTS_NODE" | awk -F'\t' '$1 == "self" { print $2; exit }')"
-  if [ "$self_number" != "$number" ]; then
+  self_repo="$(printf '%s' "$FACTS_NODE" | awk -F'\t' '$1 == "self" { print $3; exit }')"
+  # Both halves of the identity, because checking the number alone leaves the
+  # repository assumed — and a reply from another repository would then have its
+  # issue's version and relationships bound to this repository's name.
+  if [ "$self_number" != "$number" ] || [ "$host/${self_repo,,}" != "$locator" ]; then
     FACTS_REFUSED="malformed"
     return 3
   fi
-  self_version="$(printf '%s' "$FACTS_NODE" | awk -F'\t' '$1 == "self" { print $3; exit }')"
+  self_version="$(printf '%s' "$FACTS_NODE" | awk -F'\t' '$1 == "self" { print $4; exit }')"
   if [ -z "$self_version" ] || ! facts_canonical "$FACTS_RE_TIMESTAMP" "" "$self_version"; then
     FACTS_REFUSED="malformed"
     return 3
