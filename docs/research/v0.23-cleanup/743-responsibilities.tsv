@@ -213,7 +213,7 @@ remote_enforcement_verdict	plugins/spark/bin/spark	top-level	-	evidence-authorit
 repo_authorize	plugins/spark/lib/repository.sh	top-level	-	domain-semantics	9	1	1	cmd_repo	cmd_repo
 repo_bind	plugins/spark/lib/repository.sh	top-level	-	domain-semantics	9	1	1	cmd_repo	cmd_repo
 repo_binding_path	plugins/spark/lib/repository.sh	top-level	-	source-collection	1	1	2	repo_bind;repo_bound_locator	-
-repo_bound_locator	plugins/spark/lib/repository.sh	top-level	-	source-collection	5	2	1	cmd_repo	cmd_repo
+repo_bound_locator	plugins/spark/lib/repository.sh	top-level	-	source-collection	7	2	1	cmd_repo	cmd_repo
 repo_classification	plugins/spark/bin/spark	top-level	-	source-collection	18	4	2	cmd_brief;triage_rows	cmd_brief
 repo_fact	plugins/spark/lib/repository.sh	top-level	-	source-collection	1	1	1	cmd_repo	cmd_repo
 repo_gh_repo_of_command	plugins/spark/lib/repository.sh	top-level	-	source-collection	11	1	0	-	-
