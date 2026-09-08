@@ -1,4 +1,4 @@
-# observed default reads — clean checkout of 2714101289a491ee2534089f44e859ebfb7ba70b — strace -- version 6.19 — 2026-09-08T18:44:47Z
+# observed default reads — clean checkout of 0b87b303e2b5de462bb317d3e9afb26cea569c03 — strace -- version 6.19 — 2026-09-08T18:59:52Z
 # roots: docs/research docs/releases docs/governance docs/ops evaluations .spark
 # git index verified warm before tracing (a bare git status opened no evidence path), so no read below is git re-hashing a fresh checkout
 # doctor exit 0
