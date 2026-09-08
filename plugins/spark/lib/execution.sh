@@ -38,12 +38,27 @@
 # What was not recorded reports as NOT ASSESSED. A missing provider metric is an
 # unknown, and an unknown rendered as a number is a lie the operator would then
 # optimize against.
-TELEMETRY_KEYS="run_id attempt trigger pr head_sha actions_run provider model routing_reason effort preflight_tokens input_tokens output_tokens cache_write_tokens cache_read_tokens cache_reason tool_schema_tokens cost_usd wall_seconds tool_calls api_requests full_suite_runs targeted_checks iterations batch_usage compaction_events context_before context_after failing_before failing_after verdict overhead_ms certified_at ci_state runtime_peak_source_bytes runtime_modules_loaded"
+TELEMETRY_KEYS="run_id attempt trigger pr head_sha actions_run provider model routing_reason effort preflight_tokens input_tokens output_tokens cache_write_tokens cache_read_tokens cache_reason tool_schema_tokens cost_usd wall_seconds tool_calls api_requests full_suite_runs targeted_checks iterations batch_usage compaction_events context_before context_after failing_before failing_after verdict overhead_ms certified_at ci_state runtime_peak_source_bytes runtime_modules_loaded facts_emitted facts_unknown facts_api_calls facts_cache_hits facts_cache_misses"
+
+# The facts_* keys are the fact compiler's efficiency observability (#733): what
+# it read, what it reused, and what it produced. They are COUNTS, deliberately —
+# the value cap admits a short line, so a fact, a payload or a source body could
+# never live here anyway, and the compiler's own output is the place to read a
+# fact from. A compiler that reads one repository node and emits one fact
+# records 1 and 1; the reuse it is meant to prove shows up as cache hits rising
+# while api calls stay flat, which is a comparison across runs rather than a
+# claim inside one.
+#
+# facts_unknown is separate from facts_emitted rather than derived from it: a
+# fact that resolved UNKNOWN was still emitted, and a run whose compiler emitted
+# ten facts of which nine were unreadable is not the same run as one that
+# established ten. Collapsing them would hide exactly the failure the fail-closed
+# contract exists to surface.
 
 # Counts and measurements are integers. A field that must be a number and is not
 # is a recording error: taking it anyway would put a value in a comparison column
 # that cannot be compared.
-TELEMETRY_INT_KEYS="attempt pr preflight_tokens input_tokens output_tokens cache_write_tokens cache_read_tokens tool_schema_tokens wall_seconds tool_calls api_requests full_suite_runs targeted_checks iterations compaction_events context_before context_after failing_before failing_after overhead_ms runtime_peak_source_bytes"
+TELEMETRY_INT_KEYS="attempt pr preflight_tokens input_tokens output_tokens cache_write_tokens cache_read_tokens tool_schema_tokens wall_seconds tool_calls api_requests full_suite_runs targeted_checks iterations compaction_events context_before context_after failing_before failing_after overhead_ms runtime_peak_source_bytes facts_emitted facts_unknown facts_api_calls facts_cache_hits facts_cache_misses"
 
 # The verdict vocabulary is closed and matches the lifecycle's own answers, so a
 # run's outcome is comparable across runs. NOT ASSESSED is a legitimate verdict —
@@ -524,6 +539,14 @@ EOF
       tm_row "failing before/after" "${tmv_failing_before:-NOT ASSESSED} / ${tmv_failing_after:-NOT ASSESSED}"
       tm_row "change"             "$fdelta"
       tm_row "repeated, no progress" "$noprog"
+      echo
+      echo "facts"
+      # Emitted and unknown are reported as a pair on purpose: a compiler that
+      # emitted ten facts of which nine were unreadable has not established ten,
+      # and one number could not say so.
+      tm_row "emitted / unknown"  "${tmv_facts_emitted:-NOT ASSESSED} / ${tmv_facts_unknown:-NOT ASSESSED}"
+      tm_row "source api calls"   "${tmv_facts_api_calls:-NOT ASSESSED}"
+      tm_row "reuse hit / miss"   "${tmv_facts_cache_hits:-NOT ASSESSED} / ${tmv_facts_cache_misses:-NOT ASSESSED}"
       echo
       echo "outcome"
       tm_row "verdict"            "${tmv_verdict:-NOT ASSESSED}"

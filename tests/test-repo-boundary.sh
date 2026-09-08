@@ -63,6 +63,35 @@ assert_contains "ssh and https forms of one repo agree" "github.com/o/n" \
 assert_contains "and so does the https form" "github.com/o/n" \
   "$(repo_locator_normalize 'https://github.com/o/n.git')"
 
+# Case is part of the spelling, and GitHub compares hosts, owners and names
+# case-insensitively — it serves the repository whichever case is asked for. So
+# two cases are one repository, and the canonical locator is lower-case (the
+# form the fact model's <repository> identifier admits).
+assert_contains "an upper-case remote is the same repository" "github.com/o/n" \
+  "$(repo_locator_normalize 'git@GitHub.com:O/N.git')"
+assert_contains "and so is a mixed-case https remote" "github.com/o/n" \
+  "$(repo_locator_normalize 'https://GitHub.COM/o/N')"
+[ "$(repo_locator_normalize 'git@github.com:o/n.git')" \
+  = "$(repo_locator_normalize 'https://GitHub.com/O/N.git')" ] && ok \
+  || bad "two cases of one repository must produce one locator"
+assert_contains "so a case difference alone is not a boundary" "same" \
+  "$(repo_authorize "$(repo_locator_normalize 'git@github.com:x/y.git')" \
+                    "$(repo_locator_normalize 'https://github.com/X/Y')")"
+
+# A binding written before the locator was case-normalized still names the same
+# repository. Reading it through the same normalization is what keeps that true:
+# without it, lower-casing the live locator would turn every mixed-case binding
+# already on disk into a BOUNDARY stop — a refusal to act in the repository the
+# human actually bound.
+mkdir -p "$WORK/A/.spark"
+printf 'locator\tgithub.com/JWOgrady/Project-A\n' > "$WORK/A/.spark/repository"
+[ "$(repo_bound_locator "$WORK/A")" = "github.com/jwogrady/project-a" ] && ok \
+  || bad "a mixed-case binding on disk must read as the canonical locator"
+assert_contains "and still authorizes its own repository" "same" \
+  "$(repo_authorize "$(repo_bound_locator "$WORK/A")" \
+                    "$(repo_fact "$(repo_identity "$WORK/A")" locator)")"
+repo_bind "$WORK/A" "github.com/jwogrady/project-a"
+
 # An unresolvable identity is NOT ASSESSED, and never silently equal.
 assert_contains "a non-repository reports unreadable" "__unreadable__" \
   "$(repo_fact "$(repo_identity "$WORK")" locator)"

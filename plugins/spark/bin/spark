@@ -65,6 +65,40 @@ __spark_memo_read() {
   return 0
 }
 
+# __spark_memo_write <file> <value> — publish a memo entry, or do nothing.
+#
+# The write side of __spark_memo_read, and spelled once: git_root and
+# resolve_prefs carried byte-identical copies of it, so a correction to the
+# atomicity or the ownership encoding had to be made twice or the two memos
+# would drift into different guarantees.
+#
+# Atomic: a writer-unique temp then mv, so a concurrent subshell never reads a
+# half-written entry. $BASHPID differs per subshell (unlike $$, which every
+# subshell inherits), so two concurrent misses for one key never share a temp.
+#
+# Called on the miss path only. A hit reads with the mapfile builtin and forks
+# nothing at all; the miss pays one mv to publish the entry.
+#
+# The whole write is wrapped rather than carrying a trailing 2>/dev/null: bash
+# reports a failed redirect ("File name too long") against stderr as it stands
+# when the redirect is attempted, so the trailing form would arrive too late.
+#
+# An empty file argument means memoization is off for this call — the caller
+# still gets its value, and nothing is written.
+__spark_memo_write() {
+  local f="${1:-}" value="${2-}"
+  [ -n "$f" ] || return 0
+  {
+    local tmp="$f.$BASHPID.$RANDOM.tmp" owner
+    # A newline is a legal character in a directory name, so the ownership
+    # record is encoded to a single line; a raw $PWD would make such a
+    # directory miss its own cache forever and pay the miss path every call.
+    owner="${PWD//\%/%25}"; owner="${owner//$'\n'/%0a}"
+    { printf '%s\n' "$owner"; printf '%s' "$value"; } > "$tmp" \
+      && mv -f "$tmp" "$f" || rm -f "$tmp"
+  } 2>/dev/null || true
+}
+
 # git_root — the repo top-level, or empty when not inside a git repo (#276).
 # The one place the git plumbing is spelled, so callers stop re-deriving it.
 # Memoized per process when $__SPARK_MEMO is set (#722): the repo root does not
@@ -85,27 +119,8 @@ git_root() {
   # straight through. The `printf x` sentinel preserves them exactly.
   rendered="$(git rev-parse --show-toplevel 2>/dev/null; printf x)"
   rendered="${rendered%x}"
-  # Write atomically (writer-unique temp then mv) so a concurrent subshell never
-  # reads a half-written entry. $BASHPID is per-subshell (unlike $$, which every
-  # subshell inherits), so two concurrent misses for one key never share a temp.
-  # Miss-path only. A hit reads with the mapfile builtin, so it costs no
-  # subprocess at all; the miss path pays one mv to publish the entry.
-  # The whole write is wrapped so a failed redirect cannot reach the real stderr:
-  # bash reports an error like "File name too long" against stderr as it stands
-  # when the redirect is attempted, so a trailing 2>/dev/null arrives too late.
-  # The first line records the directory this entry belongs to, so a digest
-  # collision is detected on read instead of returning another path's answer.
-  if [ -n "$f" ]; then
-    {
-      local tmp="$f.$BASHPID.$RANDOM.tmp" owner
-      # A newline is a legal character in a directory name, so the ownership
-      # record is encoded to a single line; a raw $PWD would make such a
-      # directory miss its own cache forever and pay the miss path every call.
-      owner="${PWD//\%/%25}"; owner="${owner//$'\n'/%0a}"
-      { printf '%s\n' "$owner"; printf '%s' "$rendered"; } > "$tmp" \
-        && mv -f "$tmp" "$f" || rm -f "$tmp"
-    } 2>/dev/null || true
-  fi
+  # Miss path only: a hit read the entry with the mapfile builtin and forked nothing.
+  __spark_memo_write "$f" "$rendered"
   printf '%s' "$rendered"
 }
 
@@ -146,7 +161,7 @@ SPARK_LOADED_MODULES=""
 # The module set is DECLARED, not globbed. A glob over a missing lib/ matches
 # nothing and reports success, so an absent runtime would look like a runtime
 # with no modules — the one failure that must never pass quietly.
-SPARK_MODULES="execution planning repository"
+SPARK_MODULES="execution planning repository facts"
 
 # spark_module_for <verb> — the module owning a verb, or empty for a verb the
 # dispatcher implements itself.
@@ -155,6 +170,7 @@ spark_module_for() {
     telemetry|budget|evidence|route|ci|crossroad) printf 'execution' ;;
     plan) printf 'planning' ;;
     repo) printf 'repository' ;;
+    facts) printf 'facts' ;;
   esac
 }
 
@@ -280,6 +296,7 @@ course|cmd_course|Derive which objective is coherent to pursue next; read-only, 
 crossroad|cmd_crossroad|Classify a proposed stop: CONTINUE unless a specific reserved human authority is named and its durable surface cited
 next|cmd_next|Select the next eligible milestone issue from live GitHub metadata
 repo|cmd_repo|Show the bound repository identity, or hand mutation authority to another repository
+facts|cmd_facts|Compile authoritative repository and GitHub truth into normalized facts (a fragment, never a snapshot)
 help|usage|Show this help'
 
 usage() {
@@ -398,24 +415,8 @@ resolve_prefs() {
     printf x
   )"
   rendered="${rendered%x}"
-  # Atomic write on a miss only, with a writer-unique temp ($BASHPID differs per
-  # subshell; $$ does not), so concurrent misses for one key never share a temp
-  # and a reader never observes a half-written entry. A hit reads with the
-  # mapfile builtin and forks nothing at all.
-  # Wrapped so a failed redirect cannot reach the real stderr — a trailing
-  # 2>/dev/null would be applied after bash has already reported the error. The
-  # first line records the directory, so a digest collision is caught on read.
-  if [ -n "$f" ]; then
-    {
-      local tmp="$f.$BASHPID.$RANDOM.tmp" owner
-      # A newline is a legal character in a directory name, so the ownership
-      # record is encoded to a single line; a raw $PWD would make such a
-      # directory miss its own cache forever and pay the miss path every call.
-      owner="${PWD//\%/%25}"; owner="${owner//$'\n'/%0a}"
-      { printf '%s\n' "$owner"; printf '%s' "$rendered"; } > "$tmp" \
-        && mv -f "$tmp" "$f" || rm -f "$tmp"
-    } 2>/dev/null || true
-  fi
+  # Miss path only, as in git_root: a hit forked nothing and has nothing to publish.
+  __spark_memo_write "$f" "$rendered"
   printf '%s' "$rendered"
 }
 

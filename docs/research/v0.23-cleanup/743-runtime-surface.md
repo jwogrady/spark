@@ -2,11 +2,11 @@
 
 **Rule.** An extraction or removal earns its place only by removing dead code, eliminating duplicate semantics,
 creating one canonical primitive with several consumers, lowering change fanout, or making a boundary testable
-with less context. Moving duplication into more files is not one of them, so this unit removes duplicate readers
-and adds no module.
+with less context. Moving duplication into more files is not one of them, so a module earns its place only by
+carrying a domain no verb outside it needs. This tree adds `facts.sh`, whose helpers no verb outside it references.
 
 **The map comes first, and it covers the whole runtime.** `docs/research/v0.23-cleanup/743-responsibilities.tsv`
-assigns every one of the 248 functions in the dispatcher and its three modules to exactly one of the issue's
+assigns every one of the 258 functions in the dispatcher and its four modules to exactly one of the issue's
 eight responsibilities, with its body length, everything in the runtime that references it, and the verbs among
 those. `743-responsibilities-before.tsv` is the same map at `29e4f4e`, the commit this branch left, so the
 before-change baseline is a map and not a pair of totals. Both are generated from `tests/structure.sh --raw` run
@@ -20,26 +20,27 @@ stated rather than smoothed over.
 | Responsibility | Functions before | after | Body lines before | after | What it owns |
 |---|---|---|---|---|---|
 | `argument-parsing` | 1 | 1 | 12 | 12 | reads flags and arguments |
-| `routing-dispatch` | 10 | 10 | 93 | 93 | resolves a verb and loads what it needs |
-| `source-collection` | 86 | 87 | 1,754 | 1,760 | reads a source of truth (git, gh, the filesystem) and returns it unjudged |
-| `canonicalization` | 45 | 45 | 631 | 631 | normalizes what was read into this repository's vocabulary |
-| `domain-semantics` | 66 | 66 | 6,809 | 6,790 | owns a rule about what the facts mean |
-| `evidence-authority` | 19 | 19 | 505 | 505 | decides what the evidence is admissible for |
-| `formatting-reporting` | 20 | 18 | 223 | 221 | renders |
+| `routing-dispatch` | 10 | 10 | 93 | 94 | resolves a verb and loads what it needs |
+| `source-collection` | 86 | 91 | 1,754 | 1,786 | reads a source of truth (git, gh, the filesystem) and returns it unjudged |
+| `canonicalization` | 45 | 47 | 631 | 642 | normalizes what was read into this repository's vocabulary |
+| `domain-semantics` | 66 | 67 | 6,809 | 6,848 | owns a rule about what the facts mean |
+| `evidence-authority` | 19 | 20 | 505 | 562 | decides what the evidence is admissible for |
+| `formatting-reporting` | 20 | 20 | 223 | 242 | renders |
 | `compatibility-fallback` | 2 | 2 | 7 | 7 | keeps an older shape working |
 
 | File | Functions before | after |
 |---|---|---|
-| `plugins/spark/bin/spark` | 158 | 159 |
+| `plugins/spark/bin/spark` | 158 | 160 |
 | `plugins/spark/lib/execution.sh` | 65 | 63 |
 | `plugins/spark/lib/planning.sh` | 16 | 16 |
 | `plugins/spark/lib/repository.sh` | 10 | 10 |
+| `plugins/spark/lib/facts.sh` | 0 | 9 |
 
-Module count is unchanged at three. The runtime holds 248 functions and 10,019 body lines, against
-249 and 10,034 before: -1 functions, -15 body lines.
+Module count goes 3 to 4, adding `facts.sh`. The runtime holds 258 functions and 10,193 body lines, against
+249 and 10,034 before: +9 functions, +159 body lines.
 
-Those totals count **every** definition, nested ones included — 9 of the 248 are nested
-inside another function, against 12 of 249 before. Counted whole, this unit removes 2 definition(s) — `bg_json_escape`, `json_escape_out` — adds 1 — `intent_liveness` — and moves 1 — `json_escape` — from nested to top-level, which is why the total goes 249 to 248. A top-level-only inventory saw none of the removals, because all three escapers were nested, and reported this unit adding two functions.
+Those totals count **every** definition, nested ones included — 9 of the 258 are nested
+inside another function, against 12 of 249 before. Counted whole, this unit removes 2 definition(s) — `bg_json_escape`, `json_escape_out` — adds 11 — `__spark_memo_write`, `cmd_facts`, `facts_canonical`, `facts_envelope_tail`, `facts_load_grammars`, `facts_now`, `facts_record_telemetry`, `facts_repo_node`, `facts_repository_fact`, `facts_unreadable_reason`, `intent_liveness` — and moves 1 — `json_escape` — from nested to top-level, which is why the total goes 249 to 258. A top-level-only inventory saw none of the removals, because all three escapers were nested, and reported this unit adding two functions.
 `tests/structure.sh` reports the top-level half — the right scope for the size of a file — and stays the authority
 for it; the map records each function's scope and, for a nested one, the function that holds it.
 
@@ -48,14 +49,14 @@ actual line count is reported too:
 
 | File | Lines before | after | delta |
 |---|---|---|---|
-| `plugins/spark/bin/spark` | 8,938 | 8,958 | +20 |
-| `plugins/spark/lib/execution.sh` | 2,182 | 2,180 | -2 |
+| `plugins/spark/bin/spark` | 8,938 | 8,959 | +21 |
+| `plugins/spark/lib/execution.sh` | 2,182 | 2,203 | +21 |
 | `plugins/spark/lib/planning.sh` | 825 | 825 | +0 |
-| `plugins/spark/lib/repository.sh` | 221 | 221 | +0 |
+| `plugins/spark/lib/repository.sh` | 221 | 234 | +13 |
+| `plugins/spark/lib/facts.sh` | 0 | 341 | +341 |
 
-**12,166 lines before, 12,184 after (+18)**, against
-10,034 and 10,019 body lines. The file grows while the bodies shrink because each new primitive is
-documented where it lives, at the top level, outside any body.
+**12,166 lines before, 12,562 after (+396)**, against
+10,034 and 10,193 body lines. Both grow: this tree adds runtime rather than only redistributing it, and the body lines say so rather than being read out of the file total.
 
 **Argument parsing, measured rather than assigned.** The map is exclusive — one responsibility per function — and
 that misrepresents parsing, which no function owns: it sits at the head of every verb. Counting the lines of each
@@ -64,19 +65,20 @@ without inventing an owner. It is a line-level heuristic, not a parser:
 
 | File | Parse lines before | after |
 |---|---|---|
-| `plugins/spark/bin/spark` | 531 | 532 |
+| `plugins/spark/bin/spark` | 531 | 533 |
 | `plugins/spark/lib/execution.sh` | 205 | 203 |
 | `plugins/spark/lib/planning.sh` | 61 | 61 |
 | `plugins/spark/lib/repository.sh` | 23 | 23 |
+| `plugins/spark/lib/facts.sh` | 0 | 15 |
 
-212 functions carried parse lines before and 211 do now, in
+212 functions carried parse lines before and 219 do now, in
 820
-and 819
+and 835
 lines respectively. That is why extracting a shared parser is rejected below: the lines are per-verb strings and
 flags, and a shared parser would either normalize what users see or take it all as parameters.
 
-Two buckets hold 153 of 248 functions and
-8,550 of 10,019 body lines. That
+Two buckets hold 158 of 258 functions and
+8,634 of 10,193 body lines. That
 concentration is the issue's premise, and it is also the trap: for `cmd_doctor`, `cmd_next` and `cmd_labels` the
 rules *are* the product, and there is no lower layer to defer them to. Relocating them would move ownership
 without reducing it.
@@ -86,9 +88,9 @@ demonstration, and must not be duplicated back into a module:
 
 | Primitive | Runtime consumers | Responsibility |
 |---|---|---|
-| `red` | 43 | `formatting-reporting` |
-| `yellow` | 34 | `formatting-reporting` |
-| `git_root` | 27 | `source-collection` |
+| `red` | 44 | `formatting-reporting` |
+| `yellow` | 35 | `formatting-reporting` |
+| `git_root` | 28 | `source-collection` |
 | `green` | 24 | `formatting-reporting` |
 | `resolve_governance` | 17 | `canonicalization` |
 | `pref_get` | 10 | `source-collection` |
@@ -110,7 +112,7 @@ bodies — #739's rule, applied to what #739 left behind.
 - **`json_escape`** — three identical escapers existed as nested functions (`cmd_state` in the dispatcher,
   `cmd_telemetry` and `cmd_budget` in `lib/execution.sh`). One lives in the dispatcher now, where modules already
   reach for shared primitives and where `tests/test-runtime-modules.sh` forbids a module restating one. The map
-  shows the result across the module boundary: its runtime consumers are `cmd_budget`, `cmd_state`, `cmd_telemetry`.
+  shows the result across the module boundary: its runtime consumers are `cmd_budget`, `cmd_state`, `cmd_telemetry`, `facts_envelope_tail`, `facts_repository_fact`.
   `js` is untouched: it *strips* quotes and backslashes rather than escaping them, and merging them would silently
   change `spark doctor --requirements --json`.
 
@@ -144,7 +146,7 @@ In reader bodies the same three facts go two to one, two to one and three to one
 
 - **Responsibilities mapped before change** — `743-responsibilities-before.tsv`, the same map at the base commit,
   generated by the same tool and checked by the same suite.
-- **Every removal cites its evidence** — each of the three names the byte-identical bodies it replaced.
+- **Every removal cites its evidence** — 2 function(s) left the runtime — `bg_json_escape`, `json_escape_out` — and 11 arrived — `__spark_memo_write`, `cmd_facts`, `facts_canonical`, `facts_envelope_tail` and 7 more.
 - **The dispatcher parses, routes, loads and reports rather than owning duplicate semantics** — the duplication
   removed is exactly the read-a-fact-twice kind; where the dispatcher still owns rules, the map says so and the
   manifest says why relocating them would not help.
@@ -152,8 +154,7 @@ In reader bodies the same three facts go two to one, two to one and three to one
   actually fell.
 - **Fanout compared where mechanically practical** — consumer counts per function, on both sides, computed across
   module boundaries.
-- **Module count rises only when duplication or change surface falls** — module count is unchanged at three.
-- **No public behaviour or authority guarantee changed** — no CLI semantics touched; `js` and `repo_trunk` left
-  alone deliberately.
-- **No cleanup-only refactor became a rewrite** — three primitives, no restructuring.
+- **Module count rises only when duplication or change surface falls** — module count goes 3 to 4, adding `facts.sh`.
+- **The change to public behaviour is stated, not assumed** — the shipped verb surface adds `facts`, so this tree does change public CLI behaviour and says so here.
+- **No cleanup-only refactor became a rewrite** — 11 function(s) added, 2 removed, +159 body lines — the shape of an increment, not of a restructuring.
 - **Focused and full suites green on the exact HEAD** — recorded in the pull request.

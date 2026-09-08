@@ -32,6 +32,12 @@
 # repo_locator_normalize <url> — a canonical host/owner/name locator, so the same
 # repository compares equal however its remote is spelled. SSH, HTTPS, with or
 # without a trailing .git, are one repository and must not read as three.
+#
+# Case is part of that spelling. GitHub compares hosts, owners and names
+# case-insensitively — Spark and spark are one repository, and it will serve
+# either — so a remote written in either case must produce one locator, not two
+# that compare unequal. The canonical form is lower-case, which is also the form
+# the fact model's <repository> identifier admits (#731, R1).
 repo_locator_normalize() {
   local u="${1:-}"
   [ -n "$u" ] || return 0
@@ -44,7 +50,7 @@ repo_locator_normalize() {
   esac
   # Strip any userinfo left in an https form.
   u="${u#*@}"
-  printf '%s' "$u"
+  printf '%s' "${u,,}"
 }
 
 # repo_identity <dir> — the canonical facts a mutation boundary is built from.
@@ -77,10 +83,17 @@ repo_fact() { printf '%s\n' "$1" | awk -F'\t' -v k="$2" '$1 == k { print $2; exi
 # that wanders cannot quietly move it.
 repo_binding_path() { printf '%s/.spark/repository' "$1"; }
 
+# A binding recorded before the locator was case-normalized is still a binding
+# for the same repository, so it is read through the same normalization. Without
+# this, lower-casing the live locator would turn every mixed-case binding
+# already on disk into a BOUNDARY stop — a false refusal to act in the very
+# repository the human bound.
 repo_bound_locator() {
-  local f; f="$(repo_binding_path "$1")"
+  local f raw; f="$(repo_binding_path "$1")"
   [ -f "$f" ] || return 0
-  awk -F'\t' '$1 == "locator" { print $2; exit }' "$f"
+  raw="$(awk -F'\t' '$1 == "locator" { print $2; exit }' "$f")"
+  [ -n "$raw" ] || return 0
+  printf '%s' "${raw,,}"
 }
 
 repo_bind() { # repo_bind <root> <locator>

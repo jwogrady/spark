@@ -29,8 +29,20 @@ BASE = args[1] if len(args) > 1 else ""
 MAP_ONLY = "--map-only" in flags
 OUT = next((a.split("=", 1)[1] for a in flags if a.startswith("--out=")), W)
 
+# The runtime, module by module. A file added here that did not exist at the
+# pinned baseline is handled throughout: a NEW module is exactly that case, and
+# a generator that assumed every file exists in both trees would crash on the
+# first one rather than report it as growth.
 FILES = ["plugins/spark/bin/spark", "plugins/spark/lib/execution.sh",
-         "plugins/spark/lib/planning.sh", "plugins/spark/lib/repository.sh"]
+         "plugins/spark/lib/planning.sh", "plugins/spark/lib/repository.sh",
+         "plugins/spark/lib/facts.sh"]
+# present <tree> — the files of FILES that this tree actually has. A module
+# introduced after the pinned baseline is absent from the base checkout, and
+# absence there is a fact about growth, not an error to raise.
+def present(tree):
+    return [f for f in FILES if os.path.exists(os.path.join(tree, f))]
+
+
 ORDER = ["argument-parsing", "routing-dispatch", "source-collection", "canonicalization", "domain-semantics",
          "evidence-authority", "formatting-reporting", "compatibility-fallback"]
 GLOSS = {
@@ -64,12 +76,12 @@ def inventory(tree):
     are collected here, the scanner's answer is kept as the authority for the top-level half, and each row records
     which it is and, for a nested one, the function that holds it."""
     scanner = {}
-    for f in FILES:
+    for f in present(tree):
         for line in sh("bash", "tests/structure.sh", "--raw", f, cwd=tree).split("\n"):
             p = line.split("\t")
             if p[0] == "FUNC": scanner[p[1]] = (f, int(p[2]))
     fns = {}
-    for f in FILES:
+    for f in present(tree):
         lines = open(os.path.join(tree, f)).read().split("\n")
         stack = []          # (name, indent, start index)
         for i, line in enumerate(lines):
@@ -120,7 +132,7 @@ def bodies_of(tree):
     which is the right model for the size of a file and the wrong one for a graph over every body.
     """
     bodies, stack = collections.defaultdict(list), []
-    for f in FILES:
+    for f in present(tree):
         for raw in open(os.path.join(tree, f)).read().split("\n"):
             m = DECL_RE.match(raw)
             if m:
@@ -330,12 +342,79 @@ inventory_note = (
     f"total goes {n_before} to {n_after}. A top-level-only inventory saw none of the removals, because all three "
     f"escapers were nested, and reported this unit adding two functions.")
 
+# Module counts are DERIVED, like every other figure on the page. They were prose
+# — "unchanged at three" — which is a claim about one unit's intent that goes
+# false the moment a later unit adds a module, and a manifest that contradicts
+# the runtime it describes is worse than one that omits the count.
+def now_text_raw(f):
+    return open(os.path.join(W, f)).read()
+
+
+def base_text_raw(f):
+    return subprocess.run(["git", "show", f"{base_sha}:{f}"], cwd=W,
+                          capture_output=True, text=True).stdout
+
+
+def modules_of(files):
+    return [f for f in files if "/lib/" in f]
+
+
 def loc_of(tree_reader, f):
-    return len(tree_reader(f).split("\n")) - 1
+    text = tree_reader(f)
+    # A file the tree does not have is zero lines. Without this the subtraction
+    # below reports -1 for a new module, and every figure derived from it is off
+    # by one in a direction that flatters the change.
+    return len(text.split("\n")) - 1 if text else 0
 
 
-now_text = lambda f: open(os.path.join(W, f)).read()
-base_text = lambda f: subprocess.run(["git", "show", f"{base_sha}:{f}"], cwd=W, capture_output=True, text=True).stdout
+# The shipped verb surface, read off the dispatcher's own VERBS table in both
+# trees. Whether public CLI semantics changed is a mechanical question — a verb
+# appeared, or it did not — and answering it from the table means the page cannot
+# claim otherwise while a new verb sits in it.
+def verbs_of(text):
+    m = re.search(r"^VERBS='(.*?)'$", text, re.S | re.M)
+    if not m:
+        return set()
+    return {ln.split("|", 1)[0] for ln in m.group(1).split("\n") if "|" in ln}
+
+
+verbs_after = verbs_of(now_text_raw("plugins/spark/bin/spark"))
+verbs_before = verbs_of(base_text_raw("plugins/spark/bin/spark"))
+verbs_added = sorted(verbs_after - verbs_before)
+verbs_gone = sorted(verbs_before - verbs_after)
+
+names_after = {r[0] for r in rows_after}
+names_before = {r[0] for r in rows_before}
+fns_added = sorted(names_after - names_before)
+fns_gone = sorted(names_before - names_after)
+
+mods_after = modules_of(present(W))
+mods_before = [f for f in modules_of(FILES)
+               if subprocess.run(["git", "cat-file", "-e", f"{base_sha}:{f}"], cwd=W,
+                                 capture_output=True).returncode == 0]
+n_mods_after, n_mods_before = len(mods_after), len(mods_before)
+mods_added = [f.rsplit("/", 1)[-1] for f in mods_after if f not in mods_before]
+NUM = {0: "none", 1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six"}
+mods_word_after = NUM.get(n_mods_after, str(n_mods_after))
+# The rule sentence states what this tree's modules earned, not what one unit
+# intended, so it stays true for whoever regenerates the page next.
+if n_mods_after == n_mods_before:
+    module_rule = "This tree removes duplicate readers and adds no module."
+else:
+    module_rule = ("This tree adds " + ", ".join(f"`{m}`" for m in mods_added)
+                   + ", whose helpers no verb outside it references.")
+if n_mods_after == n_mods_before:
+    mods_claim = f"Module count is unchanged at {mods_word_after}"
+else:
+    added = ", ".join(f"`{m}`" for m in mods_added)
+    mods_claim = (f"Module count goes {n_mods_before} to {n_mods_after}"
+                  + (f", adding {added}" if added else ""))
+mods_claim_lower = mods_claim[0].lower() + mods_claim[1:]
+
+
+
+now_text = now_text_raw
+base_text = base_text_raw
 loc_after = {f: loc_of(now_text, f) for f in FILES}
 loc_before = {f: loc_of(base_text, f) for f in FILES}
 parse_after = {r[0]: int(r[6]) for r in rows_after}
@@ -405,15 +484,63 @@ def consumers_of(name, rows):
 je_after = consumers_of("json_escape", rows_after)
 d_fns, d_body = n_after - n_before, l_after - l_before
 
+def _names(xs, limit=4):
+    shown = ", ".join(f"`{x}`" for x in xs[:limit])
+    return shown + (f" and {len(xs) - limit} more" if len(xs) > limit else "")
+
+
+# Each of these was a sentence about one unit's intent. Stated as a constant it
+# goes false for the next tree that regenerates the page, which is how a map ends
+# up contradicting the runtime it maps.
+if fns_gone and not fns_added:
+    removal_note = (f"{len(fns_gone)} function(s) left the runtime — {_names(fns_gone)} — "
+                    "each naming the byte-identical bodies it replaced.")
+elif fns_gone:
+    removal_note = (f"{len(fns_gone)} function(s) left the runtime — {_names(fns_gone)} — "
+                    f"and {len(fns_added)} arrived — {_names(fns_added)}.")
+elif fns_added:
+    removal_note = (f"this tree removes no function; it adds {len(fns_added)} — {_names(fns_added)} — "
+                    "so the reduction it claims is duplication inside bodies, not fewer of them.")
+else:
+    removal_note = "this tree neither adds nor removes a function."
+
+if verbs_added or verbs_gone:
+    parts = []
+    if verbs_added:
+        parts.append("adds " + _names(verbs_added))
+    if verbs_gone:
+        parts.append("removes " + _names(verbs_gone))
+    verb_note = ("the shipped verb surface " + " and ".join(parts)
+                 + ", so this tree does change public CLI behaviour and says so here.")
+else:
+    verb_note = "the shipped verb surface is unchanged: no verb was added or removed."
+
+if fns_added or fns_gone:
+    rewrite_note = (f"{len(fns_added)} function(s) added, {len(fns_gone)} removed, "
+                    f"{d_body:+d} body lines — the shape of an increment, not of a restructuring.")
+else:
+    rewrite_note = "no function added or removed."
+
+if d_body < 0:
+    loc_note = ("The file grows while the bodies shrink, because each new primitive is documented where it "
+                "lives, at the top level, outside any body.")
+elif d_body > 0:
+    loc_note = ("Both grow: this tree adds runtime rather than only redistributing it, and the body lines say "
+                "so rather than being read out of the file total.")
+else:
+    loc_note = ("The file changes while the bodies do not, so what moved is documentation and top-level state, "
+                "not executable work.")
+
+
 manifest = f"""# Runtime surface after canonicalization (v0.23 cleanup, #743)
 
 **Rule.** An extraction or removal earns its place only by removing dead code, eliminating duplicate semantics,
 creating one canonical primitive with several consumers, lowering change fanout, or making a boundary testable
-with less context. Moving duplication into more files is not one of them, so this unit removes duplicate readers
-and adds no module.
+with less context. Moving duplication into more files is not one of them, so a module earns its place only by
+carrying a domain no verb outside it needs. {module_rule}
 
 **The map comes first, and it covers the whole runtime.** `docs/research/v0.23-cleanup/743-responsibilities.tsv`
-assigns every one of the {n_after} functions in the dispatcher and its three modules to exactly one of the issue's
+assigns every one of the {n_after} functions in the dispatcher and its {mods_word_after} modules to exactly one of the issue's
 eight responsibilities, with its body length, everything in the runtime that references it, and the verbs among
 those. `743-responsibilities-before.tsv` is the same map at `{base_sha[:7]}`, the commit this branch left, so the
 before-change baseline is a map and not a pair of totals. Both are generated from `tests/structure.sh --raw` run
@@ -432,7 +559,7 @@ stated rather than smoothed over.
 |---|---|---|
 {file_tbl}
 
-Module count is unchanged at three. The runtime holds {n_after} functions and {l_after:,} body lines, against
+{mods_claim}. The runtime holds {n_after} functions and {l_after:,} body lines, against
 {n_before} and {l_before:,} before: {d_fns:+d} functions, {d_body:+d} body lines.
 
 Those totals count **every** definition, nested ones included — {len(nested_after)} of the {n_after} are nested
@@ -448,8 +575,7 @@ actual line count is reported too:
 {loc_tbl}
 
 **{loc_total_before:,} lines before, {loc_total_after:,} after ({loc_total_after - loc_total_before:+d})**, against
-{l_before:,} and {l_after:,} body lines. The file grows while the bodies shrink because each new primitive is
-documented where it lives, at the top level, outside any body.
+{l_before:,} and {l_after:,} body lines. {loc_note}
 
 **Argument parsing, measured rather than assigned.** The map is exclusive — one responsibility per function — and
 that misrepresents parsing, which no function owns: it sits at the head of every verb. Counting the lines of each
@@ -461,8 +587,8 @@ without inventing an owner. It is a line-level heuristic, not a parser:
 {parse_tbl}
 
 {parse_fns_before} functions carried parse lines before and {parse_fns_after} do now, in
-{parse_by_file_before[FILES[0]] + parse_by_file_before[FILES[1]] + parse_by_file_before[FILES[2]] + parse_by_file_before[FILES[3]]:,}
-and {parse_by_file_after[FILES[0]] + parse_by_file_after[FILES[1]] + parse_by_file_after[FILES[2]] + parse_by_file_after[FILES[3]]:,}
+{sum(parse_by_file_before[f] for f in FILES):,}
+and {sum(parse_by_file_after[f] for f in FILES):,}
 lines respectively. That is why extracting a shared parser is rejected below: the lines are per-verb strings and
 flags, and a shared parser would either normalize what users see or take it all as parameters.
 
@@ -527,7 +653,7 @@ In reader bodies the same three facts go two to one, two to one and three to one
 
 - **Responsibilities mapped before change** — `743-responsibilities-before.tsv`, the same map at the base commit,
   generated by the same tool and checked by the same suite.
-- **Every removal cites its evidence** — each of the three names the byte-identical bodies it replaced.
+- **Every removal cites its evidence** — {removal_note}
 - **The dispatcher parses, routes, loads and reports rather than owning duplicate semantics** — the duplication
   removed is exactly the read-a-fact-twice kind; where the dispatcher still owns rules, the map says so and the
   manifest says why relocating them would not help.
@@ -535,10 +661,9 @@ In reader bodies the same three facts go two to one, two to one and three to one
   actually fell.
 - **Fanout compared where mechanically practical** — consumer counts per function, on both sides, computed across
   module boundaries.
-- **Module count rises only when duplication or change surface falls** — module count is unchanged at three.
-- **No public behaviour or authority guarantee changed** — no CLI semantics touched; `js` and `repo_trunk` left
-  alone deliberately.
-- **No cleanup-only refactor became a rewrite** — three primitives, no restructuring.
+- **Module count rises only when duplication or change surface falls** — {mods_claim_lower}.
+- **The change to public behaviour is stated, not assumed** — {verb_note}
+- **No cleanup-only refactor became a rewrite** — {rewrite_note}
 - **Focused and full suites green on the exact HEAD** — recorded in the pull request.
 """
 open(os.path.join(OUT, "docs/research/v0.23-cleanup/743-runtime-surface.md"), "w").write(manifest)
