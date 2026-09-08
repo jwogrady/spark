@@ -324,6 +324,51 @@ out="$(cd "$WORK/bare" && "$SPARK" facts 2>&1)" && rc=0 || rc=$?
 assert_contains "and says so rather than emitting a fact" "NOT ASSESSED" "$out"
 case "$out" in *'"key"'*) bad "nothing may be emitted for a repository that cannot be named" ;; *) ok ;; esac
 
+# --- an unusable clock is a reason there is no fact --------------------------
+# Every envelope carries the instant its source was read, an UNKNOWN as much as
+# an ESTABLISHED one, so an instant outside the grammar cannot be emitted by any
+# branch. The combination that matters is a bad clock WITH a failing read: that
+# is the branch which reports a failure and would happily have reported it with
+# an invalid observed_at.
+mkdir -p "$WORK/badclock"
+printf '#!/usr/bin/env bash\necho not-a-timestamp\n' > "$WORK/badclock/date"
+chmod +x "$WORK/badclock/date"
+stub_gh "$WORK/bin/gh" <<'STUB'
+echo 'gh: Not Found (HTTP 404)' >&2
+exit 1
+STUB
+out="$(PATH="$WORK/badclock:$PATH" "$SPARK" facts 2>&1)" && rc=0 || rc=$?
+[ "$rc" = "3" ] && ok || bad "an unusable clock cannot yield a fact (got $rc)"
+assert_contains "and says which input was unusable" "NOT ASSESSED" "$out"
+case "$out" in
+  *'"observed_at"'*|*'"key"'*) bad "no envelope may be emitted without a usable instant" ;;
+  *) ok ;;
+esac
+
+# The same with a readable source: the clock alone decides this, before any read.
+stub_gh "$WORK/bin/gh" <<STUB
+printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
+case "\$*" in
+  *"--hostname github.com repos/jwogrady/spark"*) answer_json '$NODE' ;;
+  *) exit 1 ;;
+esac
+STUB
+: > "$GH_CALL_LOG"
+out="$(PATH="$WORK/badclock:$PATH" "$SPARK" facts 2>&1)" && rc=0 || rc=$?
+[ "$rc" = "3" ] && ok || bad "a readable source does not rescue an unusable clock"
+[ ! -s "$GH_CALL_LOG" ] && ok \
+  || bad "the source must not be read when no envelope could carry the reading"
+
+# --- a run that compiled nothing still reports its metrics -------------------
+# Zero emitted and zero reads is a real answer: this verb ran and found nothing
+# it could name. Skipping the record would make an observed run indistinguishable
+# from a run that never happened.
+SPARK_RUN_ID=rzero bash -c 'cd "$1" && SPARK_RUN_ID=rzero "$2" facts >/dev/null 2>&1' _ "$WORK/odd" "$SPARK" || true
+TELZ="$(cd "$WORK/odd" && "$SPARK" telemetry show --run rzero --json 2>/dev/null)"
+assert_contains "a not-assessed run records zero emitted" '"facts_emitted":0' "$TELZ"
+assert_contains "and zero source reads" '"facts_api_calls":0' "$TELZ"
+assert_contains "and zero unknown, because nothing was compiled at all" '"facts_unknown":0' "$TELZ"
+
 # --- the compiler's own cost is observable -----------------------------------
 stub_gh "$WORK/bin/gh" <<STUB
 printf '%s\n' "\$*" >> "\$GH_CALL_LOG"

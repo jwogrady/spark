@@ -177,9 +177,13 @@ facts_envelope_tail() {
   printf ',"provenance":"%s"' "$(json_escape "https://$locator")"
 }
 
-# facts_repository_fact <locator> — sets FACTS_JSON to the repository.identity
-# fact, whatever the outcome. There is always exactly one fact for the class;
-# what varies is its status, never whether it was emitted.
+# facts_repository_fact <locator> <observed_at> — sets FACTS_JSON to the
+# repository.identity fact, whatever the outcome. There is always exactly one
+# fact for the class; what varies is its status, never whether it was emitted.
+#
+# The instant is passed in, already validated. Every status carries observed_at,
+# so checking it here would mean checking it on each branch — and the branch that
+# reports a failed read is exactly the one that would be forgotten.
 #
 # The identity is the repository the local remote names, canonicalized by
 # repository.sh. The node read then says what GitHub currently calls it. When
@@ -187,8 +191,7 @@ facts_envelope_tail() {
 # a redirect is exactly the case where picking one would be the compiler
 # inventing precedence the model does not define.
 facts_repository_fact() {
-  local locator="$1" rc=0 observed head tail
-  observed="$(facts_now)"
+  local locator="$1" observed="$2" rc=0 head tail
   facts_repo_node "$locator" || rc=$?
   head='{"schema_version":'"$FACTS_SCHEMA_VERSION"',"key":"repository.identity","class":"repository","status":'
 
@@ -220,13 +223,10 @@ facts_repository_fact() {
   #
   # So every field is held to the shipped grammar before anything is
   # established, and each failure is the same answer: malformed, which is an
-  # UNKNOWN carrying no value. The observation instant is checked too — it is
-  # generated here, and a `date` that produced nothing usable must not be
-  # emitted as if it were an observation.
+  # UNKNOWN carrying no value.
   local host="${locator%%/*}" nwo="${locator#*/}"
   facts_load_grammars
   if [ -z "$full" ] || [ -z "$branch" ] || [ -z "$updated" ] \
-     || ! facts_canonical "$FACTS_RE_TIMESTAMP" "" "$observed" \
      || ! facts_canonical "$FACTS_RE_TIMESTAMP" "" "$updated" \
      || ! facts_canonical "$FACTS_RE_REF" "$FACTS_CON_REF" "$branch" \
      || ! facts_canonical "$FACTS_RE_REPOSITORY" "$FACTS_CON_REPOSITORY" "$host/${full,,}"; then
@@ -252,6 +252,12 @@ facts_repository_fact() {
 # only when a run is being observed, exactly like the runtime footprint. Five
 # counts and nothing else: the facts themselves are this verb's output, and
 # copying them into a telemetry value is the cost that contract refuses.
+#
+# Called on every exit that ran the compiler, including the ones that compiled
+# nothing. Zero emitted and zero reads is a real answer — this verb ran and
+# found nothing it could name — and it is precisely the answer that would be
+# lost if a not-assessed return skipped recording, leaving an observed run
+# indistinguishable from a run that never happened.
 facts_record_telemetry() {
   [ -n "${SPARK_RUN_ID:-}" ] || return 0
   SPARK_RECORDING=1 "$SPARK_ROOT/bin/spark" telemetry record --run "$SPARK_RUN_ID" \
@@ -278,25 +284,36 @@ cmd_facts() {
     return 1
   fi
 
-  local locator
-  locator="$(repo_locator_normalize "$(git -C "$top" remote get-url origin 2>/dev/null || true)")"
-  # Without a locator the compiler cannot NAME the node it would read, so there
-  # is no subject to be unknown about. That is not an UNKNOWN fact — an UNKNOWN
-  # still identifies its node — so it is reported as not assessed and nothing is
-  # emitted, rather than a fact whose identity was invented to fill the field.
-  # The locator is derived from whatever the origin remote says, which is
-  # arbitrary text. A remote that does not normalize to a canonical repository
-  # cannot name a node either, so it lands in the same place as no remote at
-  # all: nothing is emitted, because an identity invented to fill the field
-  # would be worse than reporting that none could be read.
   facts_load_grammars
-  if [ -z "$locator" ] \
-     || ! facts_canonical "$FACTS_RE_REPOSITORY" "$FACTS_CON_REPOSITORY" "$locator"; then
-    yellow "NOT ASSESSED — no origin remote names a canonical repository here"
+
+  # Every envelope carries the instant its source was read, whatever the status,
+  # so one instant is taken and validated before anything is built. An envelope
+  # cannot report the absence of its own observation instant — an UNKNOWN needs
+  # one as much as an ESTABLISHED does — so an unusable clock is not a fact with
+  # a reason, it is a reason there is no fact.
+  local observed; observed="$(facts_now)"
+  if ! facts_canonical "$FACTS_RE_TIMESTAMP" "" "$observed"; then
+    yellow "NOT ASSESSED — the clock gave no usable observation instant"
+    facts_record_telemetry
     return 3
   fi
 
-  facts_repository_fact "$locator"
+  local locator
+  locator="$(repo_locator_normalize "$(git -C "$top" remote get-url origin 2>/dev/null || true)")"
+  # Without a locator, or with one that does not normalize to a canonical
+  # repository, the compiler cannot NAME the node it would read, so there is no
+  # subject to be unknown about. An UNKNOWN still identifies its node, so this
+  # is not one: nothing is emitted, because an identity invented to fill that
+  # field would be worse than reporting that none could be read. The remote is
+  # arbitrary text, which is why the grammar decides and not emptiness alone.
+  if [ -z "$locator" ] \
+     || ! facts_canonical "$FACTS_RE_REPOSITORY" "$FACTS_CON_REPOSITORY" "$locator"; then
+    yellow "NOT ASSESSED — no origin remote names a canonical repository here"
+    facts_record_telemetry
+    return 3
+  fi
+
+  facts_repository_fact "$locator" "$observed"
   # The fragment shape: a bare list, never an object, so it can never be read as
   # the {observer, facts} snapshot a consumer is allowed to act on (R22).
   printf '[%s]\n' "$FACTS_JSON"
