@@ -2287,9 +2287,17 @@ So these report **not assessed**, name the reason, and emit nothing:
   subject to be unknown about;
 - the clock gave no usable observation instant.
 
-The distinction is exactly whether the node's version was observed. A read that
-succeeded and returned one malformed field still observed it, so that fact is an
-`UNKNOWN` and is emitted.
+For **this class**, the distinction is exactly whether the node's version was
+observed. A read that succeeded and returned one malformed field still observed
+the repository's own `updated_at`, so that fact is an `UNKNOWN` and is emitted.
+
+The `graph` class draws the line differently, and the reason is worth stating
+because the two look inconsistent otherwise. A graph fact names other nodes, and
+a malformed relationship is a malformed *identity* — a state outside the
+vocabulary, a kind with no invalidator form, a node that cannot be named. There
+is no honest partial answer to give, so a malformed relationship yields no fact
+at all, while a merely incomplete one (a truncated list) is an `UNKNOWN` that
+says which list it could not see.
 
 ### The graph fact
 

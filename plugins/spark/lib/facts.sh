@@ -35,8 +35,8 @@
 #
 # The output is a FRAGMENT, not a snapshot: a bare list of facts (R11, R22). A
 # snapshot is exactly {observer, facts} with every required class present, and
-# this module compiles one class so far, so calling its output a snapshot would
-# be a lie a consumer is entitled to act on.
+# this module compiles two of them — `repository` and `graph` — so calling its
+# output a snapshot would be a lie a consumer is entitled to act on.
 #
 # The functions here SET a variable rather than printing their result, the same
 # discipline __spark_memo_key follows and for a sharper reason: a command
