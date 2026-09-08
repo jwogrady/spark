@@ -21,10 +21,10 @@ stated rather than smoothed over.
 |---|---|---|---|---|---|
 | `argument-parsing` | 1 | 1 | 12 | 12 | reads flags and arguments |
 | `routing-dispatch` | 10 | 10 | 93 | 94 | resolves a verb and loads what it needs |
-| `source-collection` | 86 | 92 | 1,754 | 1,871 | reads a source of truth (git, gh, the filesystem) and returns it unjudged |
+| `source-collection` | 86 | 92 | 1,754 | 1,875 | reads a source of truth (git, gh, the filesystem) and returns it unjudged |
 | `canonicalization` | 45 | 49 | 631 | 662 | normalizes what was read into this repository's vocabulary |
 | `domain-semantics` | 66 | 67 | 6,809 | 6,894 | owns a rule about what the facts mean |
-| `evidence-authority` | 19 | 21 | 505 | 780 | decides what the evidence is admissible for |
+| `evidence-authority` | 19 | 21 | 505 | 787 | decides what the evidence is admissible for |
 | `formatting-reporting` | 20 | 20 | 223 | 242 | renders |
 | `compatibility-fallback` | 2 | 2 | 7 | 7 | keeps an older shape working |
 
@@ -36,8 +36,8 @@ stated rather than smoothed over.
 | `plugins/spark/lib/repository.sh` | 10 | 10 |
 | `plugins/spark/lib/facts.sh` | 0 | 13 |
 
-Module count goes 3 to 4, adding `facts.sh`. The runtime holds 262 functions and 10,562 body lines, against
-249 and 10,034 before: +13 functions, +528 body lines.
+Module count goes 3 to 4, adding `facts.sh`. The runtime holds 262 functions and 10,573 body lines, against
+249 and 10,034 before: +13 functions, +539 body lines.
 
 Those totals count **every** definition, nested ones included — 9 of the 262 are nested
 inside another function, against 12 of 249 before. Counted whole, this unit removes 2 definition(s) — `bg_json_escape`, `json_escape_out` — adds 15 — `__spark_memo_write`, `cmd_facts`, `facts_canonical`, `facts_envelope_tail`, `facts_graph_entry`, `facts_graph_fact`, `facts_graph_node`, `facts_load_grammars`, `facts_now`, `facts_record_telemetry`, `facts_repo_node`, `facts_repository_fact`, `facts_state_canonical`, `facts_unreadable_reason`, `intent_liveness` — and moves 1 — `json_escape` — from nested to top-level, which is why the total goes 249 to 262. A top-level-only inventory saw none of the removals, because all three escapers were nested, and reported this unit adding two functions.
@@ -53,10 +53,10 @@ actual line count is reported too:
 | `plugins/spark/lib/execution.sh` | 2,182 | 2,203 | +21 |
 | `plugins/spark/lib/planning.sh` | 825 | 825 | +0 |
 | `plugins/spark/lib/repository.sh` | 221 | 234 | +13 |
-| `plugins/spark/lib/facts.sh` | 0 | 801 | +801 |
+| `plugins/spark/lib/facts.sh` | 0 | 812 | +812 |
 
-**12,166 lines before, 13,022 after (+856)**, against
-10,034 and 10,562 body lines. Both grow: this tree adds runtime rather than only redistributing it, and the body lines say so rather than being read out of the file total.
+**12,166 lines before, 13,033 after (+867)**, against
+10,034 and 10,573 body lines. Both grow: this tree adds runtime rather than only redistributing it, and the body lines say so rather than being read out of the file total.
 
 **Argument parsing, measured rather than assigned.** The map is exclusive — one responsibility per function — and
 that misrepresents parsing, which no function owns: it sits at the head of every verb. Counting the lines of each
@@ -78,7 +78,7 @@ lines respectively. That is why extracting a shared parser is rejected below: th
 flags, and a shared parser would either normalize what users see or take it all as parameters.
 
 Two buckets hold 159 of 262 functions and
-8,765 of 10,562 body lines. That
+8,769 of 10,573 body lines. That
 concentration is the issue's premise, and it is also the trap: for `cmd_doctor`, `cmd_next` and `cmd_labels` the
 rules *are* the product, and there is no lower layer to defer them to. Relocating them would move ownership
 without reducing it.
@@ -156,5 +156,5 @@ In reader bodies the same three facts go two to one, two to one and three to one
   module boundaries.
 - **Module count rises only when duplication or change surface falls** — module count goes 3 to 4, adding `facts.sh`.
 - **The change to public behaviour is stated, not assumed** — the shipped verb surface adds `facts`, so this tree does change public CLI behaviour and says so here.
-- **No cleanup-only refactor became a rewrite** — 15 function(s) added, 2 removed, +528 body lines — the shape of an increment, not of a restructuring.
+- **No cleanup-only refactor became a rewrite** — 15 function(s) added, 2 removed, +539 body lines — the shape of an increment, not of a restructuring.
 - **Focused and full suites green on the exact HEAD** — recorded in the pull request.

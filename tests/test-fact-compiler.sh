@@ -1359,4 +1359,34 @@ assert_contains "well-formed containers still establish" "ESTABLISHED" \
 assert_contains "with the parent named canonically" "github.com/jwogrady/spark#728" \
   "$(printf '%s' "$GG" | jq -r '.value.parent.id')"
 
+# --- the response root is guarded before it is indexed ---------------------
+# `has("errors")` on a scalar raises in jq, so a body that is not an object
+# arrived as a source-read failure rather than the malformed refusal.
+malformed_root '42'    "a numeric response body is not a reply"
+malformed_root 'null'  "nor is a null body"
+malformed_root '[]'    "nor an array body"
+malformed_root '"ok"'  "nor a bare string"
+
+# --- the probe's containers are guarded too --------------------------------
+# The probe reached through .base.repo.full_name with nothing proving base or
+# repo were objects. A malformed enclosing shape must be malformed, not a source
+# that could not be reached.
+probe_shape '42'                                   "a scalar probe body names no pull request"
+probe_shape '{"number":733,"base":"jwogrady/spark"}' "nor does a scalar base"
+probe_shape '{"number":733,"base":{"repo":"jwogrady/spark"}}' "nor a scalar repo"
+probe_shape '{"number":733,"base":{}}'             "nor a base with no repo at all"
+
+# The control: the shape the API actually returns still identifies it.
+stub_gh "$WORK/bin/gh" <<STUB
+printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
+case "\$*" in
+  *graphql*) answer_json '{"data":{"repository":{"issue":null}}}' ;;
+  *"pulls/733"*) answer_json '{"number":733,"base":{"repo":{"full_name":"jwogrady/spark"}}}' ;;
+  *) answer_json '$NODE' ;;
+esac
+STUB
+kout="$("$SPARK" facts --issue 733 2>&1 >/dev/null)"
+assert_contains "a well-formed probe reply still identifies the pull request" \
+  "a pull request has no native graph" "$kout"
+
 finish

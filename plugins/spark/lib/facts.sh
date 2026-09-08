@@ -387,7 +387,11 @@ facts_graph_node() {
     # A GraphQL reply can carry errors beside partial data, and a null list is
     # not an empty one. Both are refused here rather than projected into rows
     # that would read as a complete graph with no relationships.
-    if has("errors") then (["errored"] | @tsv)
+    # The response root is proven to be an object before it is indexed at all:
+    # `has` on a scalar raises, and that error would arrive as a source-read
+    # failure rather than the malformed refusal this path documents.
+    if (obj | not) then (["partial"] | @tsv)
+    elif has("errors") then (["errored"] | @tsv)
     # Only an explicitly present, null `issue` is GitHub saying there is no such
     # issue. A missing `data`, a missing or null `repository`, or no `issue` key
     # at all are replies that did not answer the question — and calling those
@@ -506,12 +510,19 @@ facts_graph_fact() {
       # pull request it describes, and accepting it would let a reply from
       # anywhere decide this work unit's answer.
       #
+      # The projection is TOTAL — ordered container guards, then `empty` rather
+      # than a raise — so a malformed enclosing shape produces no match and
+      # lands on the malformed path, instead of erroring and being reported as
+      # a source that could not be reached.
+      #
       # The projection asks for real types: `jq -r .number` would print a string
       # "733" indistinguishably from the integer 733, and a reply that names its
       # number as a string has not answered in the shape the API defines.
       probe="$(gh api --hostname "${locator%%/*}" "repos/${locator#*/}/pulls/$number" \
-        --jq 'select((.number | type) == "number" and (.base.repo.full_name | type) == "string")
-              | "\(.number)\t\(.base.repo.full_name)"' 2>&1)" || prc=$?
+        --jq 'if (type == "object") and ((.number | type) == "number")
+                 and ((.base | type) == "object") and ((.base.repo | type) == "object")
+                 and ((.base.repo.full_name | type) == "string")
+              then "\(.number)\t\(.base.repo.full_name)" else empty end' 2>&1)" || prc=$?
       # A zero exit is not proof: `gh --jq` exits zero for a null or missing
       # field, and a reply naming a different pull request — or the same number
       # in another repository — is not this work unit.
