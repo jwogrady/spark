@@ -2,7 +2,7 @@
 
 **Model.** `current fact → provenance/index pointer → historical evidence on demand`, never
 `historical evidence → agent reconstruction → current fact`. The pointer is `docs/ops/evidence-index.tsv`:
-every evidence artifact of the repository — 132 files, 1,040,406 bytes, 16,807 lines under
+every evidence artifact of the repository — 132 files, 1,040,402 bytes, 16,807 lines under
 `docs/research`, `docs/releases`, `docs/governance`, the three evidence pages under `docs/ops`, `evaluations`
 and `.spark` — is one row or one family member, with a retention class, an explicit *operative now* answer,
 the release/HEAD/work unit it concerned, the fact it supported, who loads or cites it today, and why it is
@@ -21,7 +21,7 @@ are computed from the index and re-checked by the suite.
 
 | Class | Files | Bytes | Lines |
 |---|---|---|---|
-| `active-current` | 52 | 433,701 | 7,063 |
+| `active-current` | 52 | 433,697 | 7,063 |
 | `historical-retained` | 67 | 397,371 | 6,644 |
 | `do-not-delete` | 13 | 209,334 | 3,100 |
 
@@ -40,7 +40,7 @@ reasoning path, and every deletion candidate failed the "independent retention v
 | `docs/ops` | 3 | 138,568 | 2,550 |
 | `docs/releases` | 13 | 103,829 | 1,849 |
 | `docs/research` | 2 | 7,056 | 101 |
-| `docs/research/v0.23-cleanup` | 20 | 293,783 | 3,818 |
+| `docs/research/v0.23-cleanup` | 20 | 293,779 | 3,818 |
 | `docs/research/v0.23-optimization-baseline` | 46 | 385,106 | 6,360 |
 | `evaluations` | 43 | 79,685 | 1,606 |
 
@@ -73,7 +73,7 @@ that exclusion:
 | `evaluations/lib/*;evaluations/evidence-index.tsv;evaluations/orchestration/run.sh;evaluations/orchestration/rates.tsv;evaluations/skill-routing/run.sh;evaluations/skill-routing/rates.tsv` | `active-current` | yes | `tests/test-eval-lib.sh`; `tests/test-skill-descriptions.sh` |
 | `.spark/state.json;.spark/preferences.json` | `do-not-delete` | yes | `plugins/spark/bin/spark`; `plugins/spark/docs/README.md`; `plugins/spark/docs/how-to/get-started.md`; `plugins/spark/docs/how-to/resume.md`; `plugins/spark/docs/reference/cli.md`; `plugins/spark/docs/reference/compatibility.md`; `plugins/spark/docs/reference/engineering-preferences.md`; `plugins/spark/docs/reference/fact-freshness.md`; `plugins/spark/docs/reference/fact-model.md`; `plugins/spark/docs/reference/hooks.md`; `plugins/spark/docs/reference/project-standards.md`; `plugins/spark/docs/reference/stability.md`; `plugins/spark/docs/reference/state.md`; `plugins/spark/docs/tutorials/adopt-an-existing-repo.md`; `plugins/spark/docs/tutorials/scaffold-a-new-project.md`; `plugins/spark/lib/facts.sh`; `plugins/spark/preferences/fact-model.tsv`; `plugins/spark/preferences/templates/standards/conventions.md`; `plugins/spark/preferences/templates/standards/engineering-standards.md`; `plugins/spark/skills/bootstrap/SKILL.md`; `plugins/spark/skills/bootstrap/references/profiles.md`; `plugins/spark/skills/codify/SKILL.md`; `plugins/spark/skills/ideate/SKILL.md`; `plugins/spark/skills/knowledge/references/operator-knowledge.md`; `plugins/spark/skills/onboard/SKILL.md`; `plugins/spark/skills/plan/SKILL.md`; `plugins/spark/skills/ship/SKILL.md`; `plugins/spark/skills/validate/SKILL.md`; `tests/bench-memo.sh`; `tests/test-apply-permissions.sh`; `tests/test-brief-resume.sh`; `tests/test-course-derivation.sh`; `tests/test-doctor-standards-boundary.sh`; `tests/test-fact-compiler.sh`; `tests/test-first-run.sh`; `tests/test-governance-contract.sh`; `tests/test-governance-integration.sh`; `tests/test-governance-schema.sh`; `tests/test-hot-path-memo.sh`; `tests/test-hub.sh`; `tests/test-labels.sh`; `tests/test-merge-strategy.sh`; `tests/test-orient.sh`; `tests/test-preferences.sh`; `tests/test-reconcile-apply.sh`; `tests/test-reconcile-slate.sh`; `tests/test-setup-profiles.sh`; `tests/test-state.sh`; `tests/test-triage-truth.sh` |
 
-**29 files, 357,797 bytes** of the 132-file, 1,040,406-byte corpus are referenced by code,
+**29 files, 357,793 bytes** of the 132-file, 1,040,402-byte corpus are referenced by code,
 tests or CI outside this index's own machinery (34 % by bytes; the exclusion and its
 reason are stated under the footprint section below). The suite holds this list to the tree: a shipped surface
 that starts naming a non-operative artifact fails until the index lists it.
@@ -217,8 +217,8 @@ Physical, over the same roots, against `3ed1b6f` — the commit this branch left
 | | Files | Bytes | Lines |
 |---|---|---|---|
 | before | 132 | 1,037,839 | 16,776 |
-| after | 132 | 1,040,406 | 16,807 |
-| delta | +0 | +2,567 | +31 |
+| after | 132 | 1,040,402 | 16,807 |
+| delta | +0 | +2,563 | +31 |
 
 The corpus grew, and this page is part of the growth: this manifest, the observation capture and the tool that
 regenerates it are themselves evidence, and they are indexed like everything else. Nothing was moved or deleted,
