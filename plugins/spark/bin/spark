@@ -161,7 +161,7 @@ SPARK_LOADED_MODULES=""
 # The module set is DECLARED, not globbed. A glob over a missing lib/ matches
 # nothing and reports success, so an absent runtime would look like a runtime
 # with no modules — the one failure that must never pass quietly.
-SPARK_MODULES="execution planning repository"
+SPARK_MODULES="execution planning repository facts"
 
 # spark_module_for <verb> — the module owning a verb, or empty for a verb the
 # dispatcher implements itself.
@@ -170,6 +170,7 @@ spark_module_for() {
     telemetry|budget|evidence|route|ci|crossroad) printf 'execution' ;;
     plan) printf 'planning' ;;
     repo) printf 'repository' ;;
+    facts) printf 'facts' ;;
   esac
 }
 
@@ -295,6 +296,7 @@ course|cmd_course|Derive which objective is coherent to pursue next; read-only, 
 crossroad|cmd_crossroad|Classify a proposed stop: CONTINUE unless a specific reserved human authority is named and its durable surface cited
 next|cmd_next|Select the next eligible milestone issue from live GitHub metadata
 repo|cmd_repo|Show the bound repository identity, or hand mutation authority to another repository
+facts|cmd_facts|Compile authoritative repository and GitHub truth into normalized facts (a fragment, never a snapshot)
 help|usage|Show this help'
 
 usage() {

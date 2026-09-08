@@ -29,8 +29,20 @@ BASE = args[1] if len(args) > 1 else ""
 MAP_ONLY = "--map-only" in flags
 OUT = next((a.split("=", 1)[1] for a in flags if a.startswith("--out=")), W)
 
+# The runtime, module by module. A file added here that did not exist at the
+# pinned baseline is handled throughout: a NEW module is exactly that case, and
+# a generator that assumed every file exists in both trees would crash on the
+# first one rather than report it as growth.
 FILES = ["plugins/spark/bin/spark", "plugins/spark/lib/execution.sh",
-         "plugins/spark/lib/planning.sh", "plugins/spark/lib/repository.sh"]
+         "plugins/spark/lib/planning.sh", "plugins/spark/lib/repository.sh",
+         "plugins/spark/lib/facts.sh"]
+# present <tree> — the files of FILES that this tree actually has. A module
+# introduced after the pinned baseline is absent from the base checkout, and
+# absence there is a fact about growth, not an error to raise.
+def present(tree):
+    return [f for f in FILES if os.path.exists(os.path.join(tree, f))]
+
+
 ORDER = ["argument-parsing", "routing-dispatch", "source-collection", "canonicalization", "domain-semantics",
          "evidence-authority", "formatting-reporting", "compatibility-fallback"]
 GLOSS = {
@@ -64,12 +76,12 @@ def inventory(tree):
     are collected here, the scanner's answer is kept as the authority for the top-level half, and each row records
     which it is and, for a nested one, the function that holds it."""
     scanner = {}
-    for f in FILES:
+    for f in present(tree):
         for line in sh("bash", "tests/structure.sh", "--raw", f, cwd=tree).split("\n"):
             p = line.split("\t")
             if p[0] == "FUNC": scanner[p[1]] = (f, int(p[2]))
     fns = {}
-    for f in FILES:
+    for f in present(tree):
         lines = open(os.path.join(tree, f)).read().split("\n")
         stack = []          # (name, indent, start index)
         for i, line in enumerate(lines):
@@ -120,7 +132,7 @@ def bodies_of(tree):
     which is the right model for the size of a file and the wrong one for a graph over every body.
     """
     bodies, stack = collections.defaultdict(list), []
-    for f in FILES:
+    for f in present(tree):
         for raw in open(os.path.join(tree, f)).read().split("\n"):
             m = DECL_RE.match(raw)
             if m:
@@ -331,7 +343,11 @@ inventory_note = (
     f"escapers were nested, and reported this unit adding two functions.")
 
 def loc_of(tree_reader, f):
-    return len(tree_reader(f).split("\n")) - 1
+    text = tree_reader(f)
+    # A file the tree does not have is zero lines. Without this the subtraction
+    # below reports -1 for a new module, and every figure derived from it is off
+    # by one in a direction that flatters the change.
+    return len(text.split("\n")) - 1 if text else 0
 
 
 now_text = lambda f: open(os.path.join(W, f)).read()
@@ -461,8 +477,8 @@ without inventing an owner. It is a line-level heuristic, not a parser:
 {parse_tbl}
 
 {parse_fns_before} functions carried parse lines before and {parse_fns_after} do now, in
-{parse_by_file_before[FILES[0]] + parse_by_file_before[FILES[1]] + parse_by_file_before[FILES[2]] + parse_by_file_before[FILES[3]]:,}
-and {parse_by_file_after[FILES[0]] + parse_by_file_after[FILES[1]] + parse_by_file_after[FILES[2]] + parse_by_file_after[FILES[3]]:,}
+{sum(parse_by_file_before[f] for f in FILES):,}
+and {sum(parse_by_file_after[f] for f in FILES):,}
 lines respectively. That is why extracting a shared parser is rejected below: the lines are per-verb strings and
 flags, and a shared parser would either normalize what users see or take it all as parameters.
 

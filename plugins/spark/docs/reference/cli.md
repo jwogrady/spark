@@ -2230,6 +2230,48 @@ a rebind is a human act, and its absence is what allowed the original incident.
 This is an additional authority dimension, not a replacement: force-push and
 trunk-push protections are unchanged.
 
+## `spark facts`
+
+Compiles authoritative repository and GitHub truth into normalized facts, so
+each command stops re-deriving the same truth in its own vocabulary — with its
+own idea of what "unreadable" means.
+
+Prints a **fragment**: a bare JSON list of facts. A complete snapshot is exactly
+`{observer, facts}` carrying every required class, and a fragment is never
+consumed as one. The classes compiled so far are listed below; asking for a
+snapshot is not yet possible, which is why one is never claimed.
+
+| Class | Key | What it establishes |
+|---|---|---|
+| `repository` | `repository.identity` | The canonical `host/owner/name` of this repository and its default branch |
+
+Every fact carries the same envelope: the schema version it conforms to, its
+status, the source that was read with that source's own version identity, when
+it was read, the invalidator tokens that make it stale and the version observed
+for each, and a provenance pointer. A value is present only under
+`ESTABLISHED`.
+
+### Statuses, and why an unknown is not an absence
+
+| Status | When |
+|---|---|
+| `ESTABLISHED` | The source was read and yields one value |
+| `CONFLICT` | GitHub names the repository differently from the local remote — a rename or a redirect. Both candidates are named and neither is chosen |
+| `UNKNOWN` | The source could not be read. The reason is one of `permission-denied`, `not-found`, `rate-limited`, `timeout`, `malformed` or `unreadable`, and no previous value survives as authority |
+
+A repository with no `origin` remote cannot be **named**, so there is no subject
+to be unknown about. That reports as not assessed and emits nothing, rather than
+inventing an identity to fill the field.
+
+### Cost
+
+One request supplies every field of the repository fact, so the node is observed
+once rather than once per field — a fan-out could observe the same node in three
+states and manufacture a conflict the repository does not have. Within a single
+memoized command the observation is reused. When a run is being observed, the
+compiler records what it read, what it reused and what it produced as counts;
+the facts themselves are this verb's output and are never copied into telemetry.
+
 ## `spark version`
 
 Prints the Spark plugin version, read from `.claude-plugin/plugin.json`.

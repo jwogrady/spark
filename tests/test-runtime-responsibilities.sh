@@ -12,7 +12,7 @@ MAN="$ROOT/docs/research/v0.23-cleanup/743-runtime-surface.md"
 GEN="$ROOT/docs/research/v0.23-cleanup/tools/build-responsibilities.py"
 SPARK="$ROOT/plugins/spark/bin/spark"
 EXEC="$ROOT/plugins/spark/lib/execution.sh"
-FILES="plugins/spark/bin/spark plugins/spark/lib/execution.sh plugins/spark/lib/planning.sh plugins/spark/lib/repository.sh"
+FILES="plugins/spark/bin/spark plugins/spark/lib/execution.sh plugins/spark/lib/planning.sh plugins/spark/lib/repository.sh plugins/spark/lib/facts.sh"
 for f in "$MAP" "$MAP_BEFORE" "$MAN"; do
   [ -f "$f" ] && ok || bad "$(basename "$f") is committed"
 done
@@ -31,10 +31,10 @@ for which in after before; do
     "$($src | awk -F'\t' '$3 == "nested" {print $4}' | sort -u | while IFS= read -r o; do [ -z "$o" ] && continue; $src | cut -f1 | grep -qx "$o" || printf '%s ' "$o"; done)"
   assert_eq "$which: no function is classified twice" "" "$($src | cut -f1 | sort | uniq -d | tr '\n' ' ')"
   assert_eq "$which: every file named is a runtime file" "" \
-    "$($src | cut -f2 | sort -u | grep -vE '^plugins/spark/(bin/spark|lib/(execution|planning|repository)\.sh)$' | tr '\n' ' ')"
+    "$($src | cut -f2 | sort -u | grep -vE '^plugins/spark/(bin/spark|lib/(execution|planning|repository|facts)\.sh)$' | tr '\n' ' ')"
 done
 
-# --- the map is the tree's: same functions, same files, same body lengths, across all four runtime files
+# --- the map is the tree's: same functions, same files, same body lengths, across every runtime file
 tree_rows=""
 for f in $FILES; do
   while IFS=$'\t' read -r kind name body; do
@@ -62,7 +62,11 @@ assert_eq "the manifest names the commit the before map was taken at" "1" \
 before_sha="$(sed -nE 's/.*is the same map at `([0-9a-f]{7})`.*/\1/p' "$MAN" | head -1)"
 if (cd "$ROOT" && git cat-file -e "$before_sha^{commit}" 2>/dev/null); then
   ok
-  for f in $FILES; do
+  # A module introduced after the pin is absent from the baseline, and that
+  # absence is the growth the before/after figures exist to show. What must hold
+  # is the other direction: every file the BEFORE MAP names has to exist at the
+  # commit it claims to be a map of, or the baseline is not a baseline.
+  for f in $(rows_before | cut -f2 | sort -u); do
     (cd "$ROOT" && git cat-file -e "$before_sha:$f" 2>/dev/null) && ok || bad "the before map's commit has no $f"
   done
 else
@@ -132,7 +136,7 @@ assert_eq "resume does not resolve the ref itself" "0" \
 
 # --- the map proves the canonicalization across the module boundary, which a dispatcher-only graph could not
 je="$(rows | awk -F'\t' '$1 == "json_escape" {print $9}')"
-for consumer in cmd_state cmd_telemetry cmd_budget; do
+for consumer in cmd_state cmd_telemetry cmd_budget facts_envelope_tail facts_repository_fact; do
   case "$je" in
     *"$consumer"*) ok ;;
     *) bad "the map does not show $consumer consuming json_escape" ;;
@@ -175,7 +179,7 @@ done <<EOF_ONELINERS
 $oneliners
 EOF_ONELINERS
 assert_eq "no one-line function consumes what its single line does not name" "" "$(printf '%s' "$bad_edges" | sed 's/^ //')"
-assert_eq "the canonical escaper has exactly three consumers" "3" "$(rows | awk -F'\t' '$1 == "json_escape" {print $8}')"
+assert_eq "the canonical escaper has exactly five consumers" "5" "$(rows | awk -F'\t' '$1 == "json_escape" {print $8}')"
 for f in $FILES; do
   pa="$(rows | awk -F'\t' -v f="$f" '$2 == f {s+=$7} END {printf "%d", s}' | sed ':a;s/\B[0-9]\{3\}\>/,&/;ta')"
   pb="$(rows_before | awk -F'\t' -v f="$f" '$2 == f {s+=$7} END {printf "%d", s}' | sed ':a;s/\B[0-9]\{3\}\>/,&/;ta')"

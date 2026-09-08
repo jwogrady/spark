@@ -69,6 +69,7 @@ cmd_crossroad	plugins/spark/lib/execution.sh	top-level	-	domain-semantics	13	3	0
 cmd_docs_impact	plugins/spark/bin/spark	top-level	-	domain-semantics	267	20	0	-	-
 cmd_doctor	plugins/spark/bin/spark	top-level	-	domain-semantics	847	19	0	-	-
 cmd_evidence	plugins/spark/lib/execution.sh	top-level	-	domain-semantics	213	31	0	-	-
+cmd_facts	plugins/spark/lib/facts.sh	top-level	-	domain-semantics	32	5	0	-	-
 cmd_footprint	plugins/spark/bin/spark	top-level	-	domain-semantics	109	11	0	-	-
 cmd_governance	plugins/spark/bin/spark	top-level	-	domain-semantics	202	25	0	-	-
 cmd_hub	plugins/spark/bin/spark	top-level	-	domain-semantics	60	11	0	-	-
@@ -116,6 +117,12 @@ ev_load	plugins/spark/lib/execution.sh	top-level	-	source-collection	9	1	1	cmd_e
 ev_payload	plugins/spark/lib/execution.sh	top-level	-	source-collection	1	1	1	cmd_evidence	cmd_evidence
 ev_tokens	plugins/spark/lib/execution.sh	top-level	-	canonicalization	9	1	1	cmd_evidence	cmd_evidence
 ev_write	plugins/spark/lib/execution.sh	top-level	-	domain-semantics	10	1	1	cmd_evidence	cmd_evidence
+facts_envelope_tail	plugins/spark/lib/facts.sh	top-level	-	formatting-reporting	11	1	1	facts_repository_fact	-
+facts_now	plugins/spark/lib/facts.sh	top-level	-	source-collection	1	0	1	facts_repository_fact	-
+facts_record_telemetry	plugins/spark/lib/facts.sh	top-level	-	formatting-reporting	10	0	1	cmd_facts	cmd_facts
+facts_repo_node	plugins/spark/lib/facts.sh	top-level	-	source-collection	8	0	1	facts_repository_fact	-
+facts_repository_fact	plugins/spark/lib/facts.sh	top-level	-	evidence-authority	44	4	1	cmd_facts	cmd_facts
+facts_unreadable_reason	plugins/spark/lib/facts.sh	top-level	-	canonicalization	10	1	1	facts_repository_fact	-
 fp_bytes_lines	plugins/spark/bin/spark	top-level	-	source-collection	10	1	2	cmd_footprint;fp_plugin_bytes	cmd_footprint
 fp_cache_stability	plugins/spark/bin/spark	top-level	-	domain-semantics	11	1	1	cmd_doctor	cmd_doctor
 fp_desc_chars	plugins/spark/bin/spark	top-level	-	source-collection	9	2	2	cmd_footprint;fp_plugin_bytes	cmd_footprint
@@ -132,7 +139,7 @@ fp_plugin_bytes	plugins/spark/bin/spark	top-level	-	source-collection	12	1	2	cmd
 fp_run_ms	plugins/spark/bin/spark	top-level	-	source-collection	7	1	1	fp_median3_ms	-
 gap	plugins/spark/bin/spark	nested	next_select	canonicalization	1	1	1	next_select	-
 gh_blocked_by	plugins/spark/bin/spark	top-level	-	source-collection	11	3	3	cmd_next;gov_collect;plan_relation_rows	cmd_next
-git_root	plugins/spark/bin/spark	top-level	-	source-collection	18	0	27	apply_standard;cmd_apply_permissions;cmd_brief;cmd_budget;cmd_ci;cmd_course;cmd_docs_impact;cmd_doctor;cmd_evidence;cmd_governance;cmd_hub;cmd_labels;cmd_next;cmd_orient;cmd_preferences;cmd_reconcile;cmd_repo;cmd_resume;cmd_route;cmd_setup;cmd_state;cmd_telemetry;cmd_triage;doctor_requirements;governance_project_model;resolve_prefs;spark_record_runtime_footprint	cmd_apply_permissions;cmd_brief;cmd_budget;cmd_ci;cmd_course;cmd_docs_impact;cmd_doctor;cmd_evidence;cmd_governance;cmd_hub;cmd_labels;cmd_next;cmd_orient;cmd_preferences;cmd_reconcile;cmd_repo;cmd_resume;cmd_route;cmd_setup;cmd_state;cmd_telemetry;cmd_triage
+git_root	plugins/spark/bin/spark	top-level	-	source-collection	18	0	28	apply_standard;cmd_apply_permissions;cmd_brief;cmd_budget;cmd_ci;cmd_course;cmd_docs_impact;cmd_doctor;cmd_evidence;cmd_facts;cmd_governance;cmd_hub;cmd_labels;cmd_next;cmd_orient;cmd_preferences;cmd_reconcile;cmd_repo;cmd_resume;cmd_route;cmd_setup;cmd_state;cmd_telemetry;cmd_triage;doctor_requirements;governance_project_model;resolve_prefs;spark_record_runtime_footprint	cmd_apply_permissions;cmd_brief;cmd_budget;cmd_ci;cmd_course;cmd_docs_impact;cmd_doctor;cmd_evidence;cmd_facts;cmd_governance;cmd_hub;cmd_labels;cmd_next;cmd_orient;cmd_preferences;cmd_reconcile;cmd_repo;cmd_resume;cmd_route;cmd_setup;cmd_state;cmd_telemetry;cmd_triage
 gov_admissible	plugins/spark/bin/spark	top-level	-	evidence-authority	11	3	2	cmd_governance;cmd_next	cmd_governance;cmd_next
 gov_cmd_render	plugins/spark/bin/spark	top-level	-	formatting-reporting	85	17	1	cmd_governance	cmd_governance
 gov_collect	plugins/spark/bin/spark	top-level	-	source-collection	129	5	3	cmd_governance;rec_rows;triage_rows	cmd_governance
@@ -162,7 +169,7 @@ hub_set	plugins/spark/bin/spark	top-level	-	domain-semantics	59	2	1	cmd_hub	cmd_
 intent_liveness	plugins/spark/bin/spark	top-level	-	source-collection	17	1	2	rec_rows;triage_rows	-
 is_legacy_key	plugins/spark/bin/spark	top-level	-	compatibility-fallback	1	1	2	cmd_resume;cmd_state	cmd_resume;cmd_state
 issue_refs	plugins/spark/bin/spark	top-level	-	canonicalization	18	1	2	check_tier_boundary;intent_liveness	-
-json_escape	plugins/spark/bin/spark	top-level	-	formatting-reporting	1	1	3	cmd_budget;cmd_state;cmd_telemetry	cmd_budget;cmd_state;cmd_telemetry
+json_escape	plugins/spark/bin/spark	top-level	-	formatting-reporting	1	1	5	cmd_budget;cmd_state;cmd_telemetry;facts_envelope_tail;facts_repository_fact	cmd_budget;cmd_state;cmd_telemetry
 label_set_equal	plugins/spark/lib/planning.sh	top-level	-	canonicalization	4	2	2	plan_created_rows;plan_live_rows	-
 label_set_show	plugins/spark/lib/planning.sh	top-level	-	formatting-reporting	3	1	2	plan_created_rows;plan_live_rows	-
 leaves_in_inventory	plugins/spark/bin/spark	top-level	-	canonicalization	4	1	1	course_evidence	-
@@ -205,7 +212,7 @@ rec_protected_branch	plugins/spark/bin/spark	top-level	-	canonicalization	6	1	1	
 rec_row	plugins/spark/bin/spark	top-level	-	canonicalization	4	1	1	rec_rows	-
 rec_rows	plugins/spark/bin/spark	top-level	-	domain-semantics	144	1	4	cmd_reconcile;course_evidence;rec_apply;rec_still_present	cmd_reconcile
 rec_still_present	plugins/spark/bin/spark	top-level	-	evidence-authority	3	1	1	rec_apply	-
-red	plugins/spark/bin/spark	top-level	-	formatting-reporting	1	0	43	apply_standard;bg_apply_staged;bg_reject_framing;cmd_apply_permissions;cmd_brief;cmd_budget;cmd_ci;cmd_course;cmd_docs_impact;cmd_doctor;cmd_evidence;cmd_footprint;cmd_governance;cmd_hub;cmd_install_git_hooks;cmd_labels;cmd_list_skills;cmd_new_skill;cmd_next;cmd_orient;cmd_plan;cmd_preferences;cmd_profiles;cmd_reconcile;cmd_repo;cmd_resume;cmd_route;cmd_setup;cmd_state;cmd_telemetry;cmd_triage;cmd_version;di_report;doctor_requirements;gov_cmd_render;hub_set;lint_skill_md;orient_set;place;place_standard;plan_resolve_labels;rec_apply;spark_load_module	cmd_apply_permissions;cmd_brief;cmd_budget;cmd_ci;cmd_course;cmd_docs_impact;cmd_doctor;cmd_evidence;cmd_footprint;cmd_governance;cmd_hub;cmd_install_git_hooks;cmd_labels;cmd_list_skills;cmd_new_skill;cmd_next;cmd_orient;cmd_plan;cmd_preferences;cmd_profiles;cmd_reconcile;cmd_repo;cmd_resume;cmd_route;cmd_setup;cmd_state;cmd_telemetry;cmd_triage;cmd_version
+red	plugins/spark/bin/spark	top-level	-	formatting-reporting	1	0	44	apply_standard;bg_apply_staged;bg_reject_framing;cmd_apply_permissions;cmd_brief;cmd_budget;cmd_ci;cmd_course;cmd_docs_impact;cmd_doctor;cmd_evidence;cmd_facts;cmd_footprint;cmd_governance;cmd_hub;cmd_install_git_hooks;cmd_labels;cmd_list_skills;cmd_new_skill;cmd_next;cmd_orient;cmd_plan;cmd_preferences;cmd_profiles;cmd_reconcile;cmd_repo;cmd_resume;cmd_route;cmd_setup;cmd_state;cmd_telemetry;cmd_triage;cmd_version;di_report;doctor_requirements;gov_cmd_render;hub_set;lint_skill_md;orient_set;place;place_standard;plan_resolve_labels;rec_apply;spark_load_module	cmd_apply_permissions;cmd_brief;cmd_budget;cmd_ci;cmd_course;cmd_docs_impact;cmd_doctor;cmd_evidence;cmd_facts;cmd_footprint;cmd_governance;cmd_hub;cmd_install_git_hooks;cmd_labels;cmd_list_skills;cmd_new_skill;cmd_next;cmd_orient;cmd_plan;cmd_preferences;cmd_profiles;cmd_reconcile;cmd_repo;cmd_resume;cmd_route;cmd_setup;cmd_state;cmd_telemetry;cmd_triage;cmd_version
 release_gate_label	plugins/spark/bin/spark	top-level	-	canonicalization	11	3	4	cmd_next;course_evidence;gov_collect;milestone_inventory	cmd_next
 release_gate_projection	plugins/spark/bin/spark	top-level	-	evidence-authority	95	1	4	cmd_next;course_evidence;gov_gate_rows;ms_inventory_of	cmd_next
 release_gate_render	plugins/spark/bin/spark	top-level	-	formatting-reporting	21	1	3	cmd_next;course_evidence;gov_gate_rows	cmd_next
@@ -219,7 +226,7 @@ repo_fact	plugins/spark/lib/repository.sh	top-level	-	source-collection	1	1	1	cm
 repo_gh_repo_of_command	plugins/spark/lib/repository.sh	top-level	-	source-collection	11	1	0	-	-
 repo_git_facts	plugins/spark/bin/spark	top-level	-	source-collection	11	3	2	cmd_brief;triage_rows	cmd_brief
 repo_identity	plugins/spark/lib/repository.sh	top-level	-	canonicalization	19	1	1	cmd_repo	cmd_repo
-repo_locator_normalize	plugins/spark/lib/repository.sh	top-level	-	canonicalization	14	1	1	repo_identity	-
+repo_locator_normalize	plugins/spark/lib/repository.sh	top-level	-	canonicalization	14	1	2	cmd_facts;repo_identity	cmd_facts
 repo_manifest_names	plugins/spark/bin/spark	top-level	-	source-collection	3	0	2	classification_drifted;classify_repo	-
 repo_open_pr	plugins/spark/bin/spark	top-level	-	source-collection	4	0	1	cmd_brief	cmd_brief
 repo_recorded_intent	plugins/spark/bin/spark	top-level	-	source-collection	9	1	3	cmd_brief;rec_rows;triage_rows	cmd_brief
@@ -245,7 +252,7 @@ ruleset_required_checks	plugins/spark/bin/spark	top-level	-	source-collection	16
 snapshot_unread	plugins/spark/bin/spark	top-level	-	evidence-authority	3	1	2	cmd_next;course_evidence	cmd_next
 spark_load_all_modules	plugins/spark/bin/spark	top-level	-	routing-dispatch	7	0	0	-	-
 spark_load_module	plugins/spark/bin/spark	top-level	-	routing-dispatch	21	1	1	spark_load_all_modules	-
-spark_module_for	plugins/spark/bin/spark	top-level	-	routing-dispatch	7	1	0	-	-
+spark_module_for	plugins/spark/bin/spark	top-level	-	routing-dispatch	8	1	0	-	-
 spark_record_runtime_footprint	plugins/spark/bin/spark	top-level	-	routing-dispatch	31	1	0	-	-
 spark_runtime_source_bytes	plugins/spark/bin/spark	top-level	-	routing-dispatch	13	0	1	spark_record_runtime_footprint	-
 suborder_of	plugins/spark/bin/spark	top-level	-	canonicalization	31	3	1	cmd_next	cmd_next
@@ -274,4 +281,4 @@ tracked_content_count	plugins/spark/bin/spark	top-level	-	source-collection	15	1
 triage_rows	plugins/spark/bin/spark	top-level	-	source-collection	116	2	2	cmd_triage;course_evidence	cmd_triage
 usage	plugins/spark/bin/spark	top-level	-	argument-parsing	12	0	0	-	-
 xr_stop_check	plugins/spark/lib/execution.sh	top-level	-	domain-semantics	41	1	1	cmd_crossroad	cmd_crossroad
-yellow	plugins/spark/bin/spark	top-level	-	formatting-reporting	1	0	34	apply_standard;ci_sentinel_report;cmd_apply_permissions;cmd_brief;cmd_budget;cmd_ci;cmd_course;cmd_docs_impact;cmd_doctor;cmd_evidence;cmd_governance;cmd_install_git_hooks;cmd_labels;cmd_next;cmd_plan;cmd_profiles;cmd_reconcile;cmd_repo;cmd_resume;cmd_route;cmd_setup;cmd_state;cmd_telemetry;cmd_triage;di_report;doctor_requirements;hub_set;lint_skill_md;next_report_impl_prs;next_route;orient_set;place_standard;place_template;rec_apply	cmd_apply_permissions;cmd_brief;cmd_budget;cmd_ci;cmd_course;cmd_docs_impact;cmd_doctor;cmd_evidence;cmd_governance;cmd_install_git_hooks;cmd_labels;cmd_next;cmd_plan;cmd_profiles;cmd_reconcile;cmd_repo;cmd_resume;cmd_route;cmd_setup;cmd_state;cmd_telemetry;cmd_triage
+yellow	plugins/spark/bin/spark	top-level	-	formatting-reporting	1	0	35	apply_standard;ci_sentinel_report;cmd_apply_permissions;cmd_brief;cmd_budget;cmd_ci;cmd_course;cmd_docs_impact;cmd_doctor;cmd_evidence;cmd_facts;cmd_governance;cmd_install_git_hooks;cmd_labels;cmd_next;cmd_plan;cmd_profiles;cmd_reconcile;cmd_repo;cmd_resume;cmd_route;cmd_setup;cmd_state;cmd_telemetry;cmd_triage;di_report;doctor_requirements;hub_set;lint_skill_md;next_report_impl_prs;next_route;orient_set;place_standard;place_template;rec_apply	cmd_apply_permissions;cmd_brief;cmd_budget;cmd_ci;cmd_course;cmd_docs_impact;cmd_doctor;cmd_evidence;cmd_facts;cmd_governance;cmd_install_git_hooks;cmd_labels;cmd_next;cmd_plan;cmd_profiles;cmd_reconcile;cmd_repo;cmd_resume;cmd_route;cmd_setup;cmd_state;cmd_telemetry;cmd_triage
