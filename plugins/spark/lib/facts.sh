@@ -357,54 +357,46 @@ facts_graph_node() {
         }
       }
     }' --jq '
-    # A relationship node is held to the same standard as the root: an object
-    # carrying a real integer number, not a string that prints like one, and the
-    # strings the projection will read. Coercing first and checking later is how
-    # "740" became 740.
+    # The shape check is ORDERED: nothing is indexed before it is known to be
+    # indexable. jq raises on reaching into a scalar, and that error would arrive
+    # as a source-read failure rather than the malformed refusal this path
+    # documents — so the guards run outside-in and `and` short-circuits.
+    def obj: type == "object";
+    # A relationship node is held to the same standard as the root: a real integer number,
+    # not a string that prints like one, and the strings the projection reads.
     def relation_ok:
-      type == "object"
+      obj
       and (.number | type) == "number" and (.number == (.number | floor))
-      and (.state | type) == "string" and (.updatedAt | type) == "string"
-      and (.repository.nameWithOwner | type) == "string"
-      and (.__typename | type) == "string";
+      and (.state | type) == "string"
+      and (.updatedAt | type) == "string"
+      and (.__typename | type) == "string"
+      and (.repository | obj) and (.repository.nameWithOwner | type) == "string";
+    def list_ok:
+      obj and (.nodes | type) == "array"
+      and (.pageInfo | obj) and (.pageInfo.hasNextPage | type) == "boolean"
+      and ([.nodes[] | relation_ok] | all);
+    def root_ok:
+      obj
+      and (.number | type) == "number" and (.number == (.number | floor))
+      and (.updatedAt | type) == "string"
+      and (.repository | obj) and (.repository.nameWithOwner | type) == "string"
+      # `parent` must be present and either absent-as-null or a whole relation:
+      # a reply that omits it has not said the work unit has no parent.
+      and has("parent") and ((.parent == null) or (.parent | relation_ok))
+      and (.subIssues | list_ok) and (.blockedBy | list_ok);
     # A GraphQL reply can carry errors beside partial data, and a null list is
     # not an empty one. Both are refused here rather than projected into rows
     # that would read as a complete graph with no relationships.
-    #
-    # hasNextPage is required to be a BOOLEAN, not merely present: a pageInfo
-    # that does not say whether more pages exist has not told us the list is
-    # complete, and absence of a completeness signal is not a completeness
-    # signal.
     if has("errors") then (["errored"] | @tsv)
     # Only an explicitly present, null `issue` is GitHub saying there is no such
     # issue. A missing `data`, a missing or null `repository`, or no `issue` key
     # at all are replies that did not answer the question — and calling those
     # absence produces a confident wrong reason two steps later.
-    elif (.data | type) != "object" then (["partial"] | @tsv)
-    elif (.data.repository | type) != "object" then (["partial"] | @tsv)
+    elif (.data | obj | not) then (["partial"] | @tsv)
+    elif (.data.repository | obj | not) then (["partial"] | @tsv)
     elif (.data.repository | has("issue") | not) then (["partial"] | @tsv)
     elif .data.repository.issue == null then (["absent"] | @tsv)
-    # The type guard comes before any field access. Reaching into a scalar or an
-    # array raises a jq error, and the failure then arrives as a generic read
-    # failure rather than the malformed refusal this path documents — the right
-    # outcome by the wrong mechanism, which is how the sentinel rows hid a bug
-    # earlier on this branch.
-    elif (.data.repository.issue | type) != "object" then (["partial"] | @tsv)
-    elif (.data.repository.issue
-          | ((.number | type) != "number") or (.updatedAt == null)
-            or ((.repository.nameWithOwner | type) != "string")
-            # `parent` gets the same rule as every other relationship field: a
-            # reply that omits it has not said the work unit has no parent.
-            or (has("parent") | not)
-            or ((.parent | type) as $pt | $pt != "object" and $pt != "null")
-            or ((.subIssues.nodes | type) != "array")
-            or ((.subIssues.pageInfo.hasNextPage | type) != "boolean")
-            or ((.blockedBy.nodes | type) != "array")
-            or ((.blockedBy.pageInfo.hasNextPage | type) != "boolean")
-            or (.parent != null and ((.parent | relation_ok) | not))
-            or ([.subIssues.nodes[] | relation_ok] | any(. == false))
-            or ([.blockedBy.nodes[] | relation_ok] | any(. == false)))
-      then (["partial"] | @tsv)
+    elif (.data.repository.issue | root_ok | not) then (["partial"] | @tsv)
     else
       .data.repository.issue as $i
       |

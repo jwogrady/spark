@@ -1315,4 +1315,48 @@ assert_contains "an integer relation number still establishes" "ESTABLISHED" \
 assert_contains "and is named canonically" "github.com/jwogrady/spark#740" \
   "$(printf '%s' "$GI" | jq -r '.value.children[0].id')"
 
+# --- nothing is indexed before it is known to be indexable -----------------
+# jq raises on reaching into a scalar, and that error used to arrive as a
+# source-read failure rather than the malformed refusal this path documents.
+# These are the containers the old checks reached through without a guard, and
+# each asserts the REASON, because a refusal by accident and one by design are
+# indistinguishable otherwise.
+graph_refused '{"number":733,"repository":"jwogrady/spark","updatedAt":"2026-09-08T10:00:00Z","parent":null,
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
+  "a scalar where the root repository object belongs"
+graph_refused '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"updatedAt":"2026-09-08T10:00:00Z","parent":null,
+  "subIssues":"none",
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
+  "a scalar where a relationship list belongs"
+graph_refused '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"updatedAt":"2026-09-08T10:00:00Z","parent":null,
+  "subIssues":{"pageInfo":"complete","nodes":[]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
+  "a scalar where pageInfo belongs"
+graph_refused '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"updatedAt":"2026-09-08T10:00:00Z","parent":null,
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
+  "blockedBy":42}' \
+  "and a number where the blocker list belongs"
+graph_refused '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"updatedAt":["2026-09-08T10:00:00Z"],"parent":null,
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
+  "an array where the root version belongs is not a version"
+graph_refused '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"updatedAt":"2026-09-08T10:00:00Z",
+  "parent":{"__typename":"Issue","number":728,"state":"OPEN","updatedAt":"2026-09-08T09:00:00Z","repository":"jwogrady/spark"},
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
+  "and a relation whose repository is a scalar is held to the same guard"
+
+# The control: the same reply with every container an object still establishes,
+# so the guards discriminate rather than refusing whatever they are shown.
+graph_stub '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"updatedAt":"2026-09-08T10:00:00Z",
+  "parent":{"__typename":"Issue","number":728,"state":"OPEN","updatedAt":"2026-09-08T09:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}},
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
+GG="$(gfact "$("$SPARK" facts --issue 733 2>/dev/null)")"
+assert_contains "well-formed containers still establish" "ESTABLISHED" \
+  "$(printf '%s' "$GG" | jq -r '.status')"
+assert_contains "with the parent named canonically" "github.com/jwogrady/spark#728" \
+  "$(printf '%s' "$GG" | jq -r '.value.parent.id')"
+
 finish
