@@ -430,9 +430,15 @@ facts_state_canonical() {
 }
 
 # facts_graph_entry <locator-host> <number> <state> <nwo> <typename> — one
-# relationship entry as JSON, and its invalidator token, separated by a tab.
-# Returns non-zero when the node cannot be named canonically, so the caller
-# refuses rather than emitting a locator outside the grammar.
+# relationship entry as JSON, then its canonical work-unit locator and its kind,
+# tab-separated. Returns non-zero when the node cannot be named canonically, so
+# the caller refuses rather than emitting a locator outside the grammar.
+#
+# Identity and kind are returned apart because they are different things. The
+# work unit IS the locator; the kind is something observed about it. Keying
+# identity by `<kind>:<locator>` would make one work unit returned as an issue
+# and as a pull request look like two nodes — and two contradictory kinds would
+# both survive, which is exactly what "one node, one state" forbids.
 facts_graph_entry() {
   local host="$1" number="$2" state="$3" nwo="$4" typename="$5" wu kind st
   case "$typename" in
@@ -443,8 +449,8 @@ facts_graph_entry() {
   st="$(facts_state_canonical "$state")" || return 1
   wu="$(printf '%s/%s#%s' "$host" "${nwo,,}" "$number")"
   facts_canonical "$FACTS_RE_WORK_UNIT" "$FACTS_CON_WORK_UNIT" "$wu" || return 1
-  printf '{"kind":"%s","id":"%s","state":"%s"}\t%s:%s' \
-    "$kind" "$(json_escape "$wu")" "$st" "$kind" "$(json_escape "$wu")"
+  printf '{"kind":"%s","id":"%s","state":"%s"}\t%s\t%s' \
+    "$kind" "$(json_escape "$wu")" "$st" "$wu" "$kind"
 }
 
 # facts_graph_fact <locator> <number> <observed_at> — sets FACTS_JSON to the
@@ -538,7 +544,7 @@ facts_graph_fact() {
   # than reconciled by preferring one.
   local self_version parent='"none"' kids="" blocks=""
   local seen_parent="" seen_child="" seen_blocker="" known=""
-  local inv="issue:$wu" vers="" kind line f1 f2 f3 f4 f5 f6 entry tok
+  local inv="issue:$wu" vers="" kind line f1 f2 f3 f4 f5 f6 entry tok rel_wu rel_kind
   # The node returned must be the node asked for. Without this a response naming
   # a different issue would compile that issue's version and relationships under
   # this work unit's identity — one node wearing another's name, which is the
@@ -559,6 +565,11 @@ facts_graph_fact() {
     return 3
   fi
   vers='"'"$(json_escape "$inv")"'":"'"$(json_escape "$self_version")"'"'
+  # The root is inside the identity tracking, not beside it. Without this a
+  # relation naming the root would append its invalidator a second time and
+  # write the same key into `versions` twice — an object with one key twice,
+  # which is not a conforming fact at all.
+  known=" $wu=ROOT@$self_version"
 
   # Only walked when the whole set was returned. A truncated read has no value to
   # build and no relationship it may claim to represent.
@@ -569,35 +580,45 @@ facts_graph_fact() {
       parent|child|blocker)
         entry="$(facts_graph_entry "$host" "$f2" "$f3" "$f5" "$f6")" || {
           FACTS_REFUSED="malformed"; return 3; }
-        tok="${entry#*$'\t'}"; entry="${entry%%$'\t'*}"
+        rel_kind="${entry##*$'\t'}"
+        entry="${entry%$'\t'*}"; rel_wu="${entry##*$'\t'}"; entry="${entry%$'\t'*}"
+        tok="$rel_kind:$rel_wu"
         if ! facts_canonical "$FACTS_RE_TIMESTAMP" "" "$f4"; then
           FACTS_REFUSED="malformed"; return 3
         fi
 
-        # One node, one state and one observed version, wherever it appears. A
-        # node reported twice consistently is one node in two relationships; a
-        # node reported twice with different states or versions has no
-        # representation in this schema.
+        # A work unit is not its own parent, child or blocker. A reply saying so
+        # is malformed, and treating it as a relationship would make the fact
+        # name the same node twice with two roles.
+        if [ "$rel_wu" = "$wu" ]; then
+          FACTS_REFUSED="malformed"; return 3
+        fi
+
+        # Identity is the work unit; kind and state are observed about it. So a
+        # node reported twice consistently is one node in two relationships,
+        # while one reported with two kinds, two states or two versions has no
+        # representation in this schema and is refused rather than reconciled.
         case " $known " in
-          *" $tok=$entry@$f4 "*) ;;
-          *" $tok="*) FACTS_REFUSED="malformed"; return 3 ;;
-          *) known="$known $tok=$entry@$f4"
+          *" $rel_wu=$entry@$f4 "*) ;;
+          *" $rel_wu="*) FACTS_REFUSED="malformed"; return 3 ;;
+          *) known="$known $rel_wu=$entry@$f4"
              vers="$vers,\"$(json_escape "$tok")\":\"$(json_escape "$f4")\""
              inv="$inv $tok" ;;
         esac
 
-        # Membership is then per list, so a node that is both a child and a
-        # blocker appears in both — one edge is not a duplicate of the other.
+        # Membership is then per list, keyed by the work unit, so a node that is
+        # both a child and a blocker appears in both — one edge is not a
+        # duplicate of the other.
         case "$f1" in
           parent)
-            case " $seen_parent " in *" $tok "*) continue ;; esac
-            seen_parent="$seen_parent $tok"; parent="$entry" ;;
+            case " $seen_parent " in *" $rel_wu "*) continue ;; esac
+            seen_parent="$seen_parent $rel_wu"; parent="$entry" ;;
           child)
-            case " $seen_child " in *" $tok "*) continue ;; esac
-            seen_child="$seen_child $tok"; kids="${kids:+$kids,}$entry" ;;
+            case " $seen_child " in *" $rel_wu "*) continue ;; esac
+            seen_child="$seen_child $rel_wu"; kids="${kids:+$kids,}$entry" ;;
           blocker)
-            case " $seen_blocker " in *" $tok "*) continue ;; esac
-            seen_blocker="$seen_blocker $tok"; blocks="${blocks:+$blocks,}$entry" ;;
+            case " $seen_blocker " in *" $rel_wu "*) continue ;; esac
+            seen_blocker="$seen_blocker $rel_wu"; blocks="${blocks:+$blocks,}$entry" ;;
         esac ;;
     esac
   done <<EOF

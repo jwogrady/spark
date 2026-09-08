@@ -1135,4 +1135,57 @@ assert_contains "the same repository in another case is the same repository" "ES
 assert_contains "and the fact names it canonically" "github.com/jwogrady/spark#733" \
   "$(printf '%s' "$GC" | jq -r '.source.identity')"
 
+# --- one work unit is one node, whatever kind it is called -----------------
+# Keying identity by "<kind>:<locator>" made the same work unit returned once as
+# an Issue and once as a PullRequest look like two nodes: it could appear twice
+# in one list, and both contradictory kinds survived. The kind is an attribute
+# of a node; the locator is the node.
+graph_refused '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"updatedAt":"2026-09-08T10:00:00Z","parent":null,
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[
+    {"__typename":"Issue","number":740,"state":"OPEN","updatedAt":"2026-09-07T08:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}},
+    {"__typename":"PullRequest","number":740,"state":"OPEN","updatedAt":"2026-09-07T08:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}}]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
+  "one work unit cannot be both an issue and a pull request in one list"
+graph_refused '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"updatedAt":"2026-09-08T10:00:00Z","parent":null,
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[
+    {"__typename":"Issue","number":740,"state":"OPEN","updatedAt":"2026-09-07T08:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}}]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[
+    {"__typename":"PullRequest","number":740,"state":"OPEN","updatedAt":"2026-09-07T08:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}}]}}' \
+  "nor across two lists"
+
+# --- the root is inside the identity accounting ----------------------------
+# A relation naming the root used to append the root's invalidator again and
+# write the same key into `versions` twice: an object with one key twice, which
+# is not a conforming fact at all. A work unit is also not its own relation.
+graph_refused '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"updatedAt":"2026-09-08T10:00:00Z",
+  "parent":{"__typename":"Issue","number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}},
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
+  "a work unit is not its own parent"
+graph_refused '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"updatedAt":"2026-09-08T10:00:00Z","parent":null,
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[
+    {"__typename":"Issue","number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}}]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
+  "nor its own child"
+
+# --- the invariant itself, on a graph that does establish ------------------
+# Every invalidator unique, every version key unique, and one version per node.
+graph_stub '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"updatedAt":"2026-09-08T10:00:00Z",
+  "parent":{"__typename":"Issue","number":728,"state":"OPEN","updatedAt":"2026-09-08T09:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}},
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[
+    {"__typename":"Issue","number":740,"state":"OPEN","updatedAt":"2026-09-07T08:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}}]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[
+    {"__typename":"Issue","number":740,"state":"OPEN","updatedAt":"2026-09-07T08:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}}]}}'
+GU="$(gfact "$("$SPARK" facts --issue 733 2>/dev/null)")"
+assert_contains "a shared node still establishes" "ESTABLISHED" \
+  "$(printf '%s' "$GU" | jq -r '.status')"
+[ "$(printf '%s' "$GU" | jq -r '.invalidators | length')" \
+  = "$(printf '%s' "$GU" | jq -r '.invalidators | unique | length')" ] && ok \
+  || bad "every invalidator appears once"
+[ "$(printf '%s' "$GU" | jq -r '.invalidators | length')" \
+  = "$(printf '%s' "$GU" | jq -r '.versions | length')" ] && ok \
+  || bad "and each has exactly one observed version"
+[ "$(printf '%s' "$GU" | jq -r '.invalidators | length')" = "3" ] && ok \
+  || bad "the root, its parent and the shared node are three nodes, not four"
+
 finish
