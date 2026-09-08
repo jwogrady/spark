@@ -2251,17 +2251,34 @@ it was read, the invalidator tokens that make it stale and the version observed
 for each, and a provenance pointer. A value is present only under
 `ESTABLISHED`.
 
-### Statuses, and why an unknown is not an absence
+### Statuses, and when there is no fact at all
 
 | Status | When |
 |---|---|
 | `ESTABLISHED` | The source was read and yields one value |
 | `CONFLICT` | GitHub names the repository differently from the local remote — a rename or a redirect. Both candidates are named and neither is chosen |
-| `UNKNOWN` | The source could not be read. The reason is one of `permission-denied`, `not-found`, `rate-limited`, `timeout`, `malformed` or `unreadable`, and no previous value survives as authority |
+| `UNKNOWN` | The node was read, so its observed version is recorded, but a field it returned is not canonical. The reason is `malformed`, no value is present, and no previous value survives as authority |
 
-A repository with no `origin` remote cannot be **named**, so there is no subject
-to be unknown about. That reports as not assessed and emits nothing, rather than
-inventing an identity to fill the field.
+**Some failures produce no fact, by design.** Every fact — an `UNKNOWN` included
+— records the version observed for the node it depends on, because that is how
+freshness is decided: a fact is current only while the version it recorded still
+matches the node's. For this class that version is the repository node's own
+`updated_at`, so a read that fails leaves nothing to record. An empty version is
+not a weaker answer, it is a field that cannot mean anything, and writing the
+observation instant in its place would state an observation that never happened.
+
+So these report **not assessed**, name the reason, and emit nothing:
+
+- the source could not be read — `permission-denied`, `not-found`,
+  `rate-limited`, `timeout`, an undecodable body, or an unclassified failure;
+- the node's own `updated_at` is not an instant, so no version can be recorded;
+- the `origin` remote does not name a canonical repository, so there is no
+  subject to be unknown about;
+- the clock gave no usable observation instant.
+
+The distinction is exactly whether the node's version was observed. A read that
+succeeded and returned one malformed field still observed it, so that fact is an
+`UNKNOWN` and is emitted.
 
 ### Cost
 

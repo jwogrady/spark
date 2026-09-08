@@ -31,6 +31,30 @@ model_regex() {
   awk -F'\t' -v k="$1" -v n="$2" '$1 == k && $2 == n { print $3; exit }' "$MODEL"
 }
 
+# assert_versions_canonical <fact json> <label> — every version an emitted fact
+# records is a version by the shipped grammar.
+#
+# This is the assertion whose absence let an UNKNOWN ship with an empty
+# source.version and an empty versions entry: the old fixtures checked the
+# STATUS of a failed read and never what the envelope said it had observed.
+# `versions` answers "as of when", so a blank there is not a weaker answer, it
+# is a field that cannot mean anything.
+assert_versions_canonical() {
+  local f="$1" label="$2" re v
+  re="$(model_regex source-version github-api)"
+  v="$(printf '%s' "$f" | jq -r '.source.version')"
+  if printf '%s' "$v" | grep -Eq "$re"; then ok
+  else bad "$label: source.version '$v' is not a github-api version"; fi
+  local tok
+  while IFS= read -r tok; do
+    [ -n "$tok" ] || continue
+    if printf '%s' "$tok" | grep -Eq "$re"; then ok
+    else bad "$label: an observed version '$tok' is not a version"; fi
+  done <<EOF
+$(printf '%s' "$f" | jq -r '.versions | to_entries[] | .value')
+EOF
+}
+
 # required_fields — every envelope field the schema marks required.
 required_fields() {
   awk -F'\t' '$1 == "field" && $3 == "required" { print $2 }' "$MODEL"
@@ -123,6 +147,7 @@ assert_contains "and that token's observed version is recorded" "2026-09-07T21:0
 
 printf '%s' "$(fget '.provenance')" | grep -Eq "$(model_regex identifier provenance)" && ok \
   || bad "provenance is not a canonical pointer"
+assert_versions_canonical "$F" "the established fact"
 
 # R6: a value exists only under ESTABLISHED, and detail only under the other two.
 [ "$(fget 'has("detail")')" = "false" ] && ok \
@@ -163,6 +188,7 @@ case "$(cat "$GH_CALL_LOG")" in
 esac
 assert_contains "and the fact still names the origin" "github.com/jwogrady/spark" \
   "$(jq -r '.[0].value.id' < "$WORK/env.json")"
+assert_versions_canonical "$(jq -r '.[0]' < "$WORK/env.json")" "the fact read under a redirected GH_REPO"
 
 # A second remote is another thing gh may choose among. The identity is origin's.
 git -C "$WORK/proj" remote add upstream "https://github.com/someone/else.git"
@@ -195,6 +221,7 @@ assert_contains "with the host in the identity" "github.example.com/acme/widget"
   "$(printf '%s' "$E" | jq -r '.value.id')"
 assert_contains "and its own default branch" "main" \
   "$(printf '%s' "$E" | jq -r '.value.default_branch')"
+assert_versions_canonical "$E" "the enterprise fact"
 
 # Back to the project fixture for the remaining cases.
 stub_gh "$WORK/bin/gh" <<STUB
@@ -236,26 +263,37 @@ assert_contains "including the one GitHub reports" "github.com/jwogrady/spark-re
   "$(printf '%s' "$C" | jq -r '.detail.candidates[1]')"
 [ "$(printf '%s' "$C" | jq -r '.detail.candidates | length')" = "2" ] && ok \
   || bad "a conflict names exactly the candidates it saw"
+# A CONFLICT is an emitted fact, so it is held to the version grammar like every
+# other. It can be: the node WAS read, so its version was observed.
+assert_versions_canonical "$C" "the conflict fact"
 
 # --- the unreadable ladder ---------------------------------------------------
 # Every one of these is UNKNOWN with a reason. None is a permissive default, and
 # none carries a value: an unreadable source is not a smaller success.
+# An unreadable source yields NO FACT, and the reason why is the point.
+#
+# An UNKNOWN is a full envelope: it names the node it depends on and records the
+# version observed for that node, which is how freshness is decided. For this
+# class that version form is the node's own updated_at — exactly what a failed
+# read denies. An empty string is not a version, and the observation instant is
+# not one either: writing it would fabricate evidence in the one field whose job
+# is to say what was seen. So the failure is reported, with its reason, and no
+# fact is emitted.
 unreadable_case() { # unreadable_case <message> <expected reason> <label>
   stub_gh "$WORK/bin/gh" <<STUB
 printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
 echo "$1" >&2
 exit 1
 STUB
-  local u; u="$("$SPARK" facts | jq -r '.[0]')"
-  assert_contains "$3" "$2" "$(printf '%s' "$u" | jq -r '.detail.reason')"
-  [ "$(printf '%s' "$u" | jq -r '.status')" = "UNKNOWN" ] && ok \
-    || bad "$3: an unreadable source is UNKNOWN"
-  [ "$(printf '%s' "$u" | jq -r 'has("value")')" = "false" ] && ok \
-    || bad "$3: an unknown fact carries no value"
-  # It still names the node it failed to read, so the failure goes stale when
-  # that node changes.
-  [ "$(printf '%s' "$u" | jq -r '.invalidators[0]')" = "repository:github.com/jwogrady/spark" ] && ok \
-    || bad "$3: an unknown still names the node it could not read"
+  local out rc=0
+  out="$("$SPARK" facts 2>&1)" || rc=$?
+  [ "$rc" = "3" ] && ok || bad "$3: an unreadable source yields no fact (got $rc)"
+  assert_contains "$3" "$2" "$out"
+  assert_contains "$3: and says nothing was established" "NOT ASSESSED" "$out"
+  case "$out" in
+    *'"key"'*|*'"versions"'*) bad "$3: no envelope may be emitted without an observed version" ;;
+    *) ok ;;
+  esac
 }
 
 unreadable_case 'gh: Bad credentials (HTTP 401)'      'permission-denied' 'a 401 is a permission answer'
@@ -282,6 +320,12 @@ assert_contains "and malformed is unknown, not established" "UNKNOWN" \
 # "not-a-timestamp" looks like an answer. Emitted, it would become this fact's
 # source version and its invalidator's observed version, so freshness — which is
 # a comparison of versions — would be comparing something that is not one.
+# A malformed field is two different situations, and the difference is whether
+# the node's own version was observed.
+#
+# malformed_case: the read succeeded and updated_at was a real instant, so the
+# envelope conforms — the fact is emitted as UNKNOWN, carrying the version that
+# was actually observed, and only the value is missing.
 malformed_case() { # malformed_case <node json> <label>
   stub_gh "$WORK/bin/gh" <<STUB
 answer_json '$1'
@@ -292,12 +336,33 @@ STUB
     || bad "$2: an invalid field is UNKNOWN, not ESTABLISHED"
   [ "$(printf '%s' "$m" | jq -r 'has("value")')" = "false" ] && ok \
     || bad "$2: and carries no value"
+  # The whole point of the repair: this UNKNOWN is schema-valid, because the
+  # node WAS read and its version recorded.
+  assert_versions_canonical "$m" "$2"
+  [ "$(printf '%s' "$m" | jq -r '.invalidators[0]')" = "repository:github.com/jwogrady/spark" ] && ok \
+    || bad "$2: an unknown still names the node it read"
 }
 
-malformed_case '{"full_name":"jwogrady/spark","default_branch":"master","updated_at":"not-a-timestamp"}' \
-  'a version outside the timestamp grammar is malformed'
-malformed_case '{"full_name":"jwogrady/spark","default_branch":"master","updated_at":"2026-02-30T00:00:00Z"}' \
-  'and so is an instant the calendar does not have'
+# refused_case: the version itself is not a version, so no envelope can be built
+# at all and nothing is emitted.
+refused_case() { # refused_case <node json> <label>
+  stub_gh "$WORK/bin/gh" <<STUB
+answer_json '$1'
+STUB
+  local out rc=0
+  out="$("$SPARK" facts 2>&1)" || rc=$?
+  [ "$rc" = "3" ] && ok || bad "$2: no observed version means no fact (got $rc)"
+  assert_contains "$2" "NOT ASSESSED" "$out"
+  case "$out" in
+    *'"key"'*|*'"versions"'*) bad "$2: nothing may be emitted without an observed version" ;;
+    *) ok ;;
+  esac
+}
+
+refused_case '{"full_name":"jwogrady/spark","default_branch":"master","updated_at":"not-a-timestamp"}' \
+  'a version outside the timestamp grammar yields no fact'
+refused_case '{"full_name":"jwogrady/spark","default_branch":"master","updated_at":"2026-02-30T00:00:00Z"}' \
+  'and neither does an instant the calendar does not have'
 malformed_case '{"full_name":"not a repository name","default_branch":"master","updated_at":"2026-09-07T21:00:00Z"}' \
   'a name outside the repository grammar is malformed'
 malformed_case '{"full_name":"jwogrady/spark.git","default_branch":"master","updated_at":"2026-09-07T21:00:00Z"}' \
@@ -316,12 +381,10 @@ stub_gh "$WORK/bin/gh" <<'STUB'
 printf '%s\n' "$*" >> "$GH_CALL_LOG"
 printf 'this is not json'
 STUB
-D="$("$SPARK" facts | jq -r '.[0]')"
-assert_contains "an undecodable body is malformed, not unreadable" "malformed" \
-  "$(printf '%s' "$D" | jq -r '.detail.reason')"
-assert_contains "and is unknown" "UNKNOWN" "$(printf '%s' "$D" | jq -r '.status')"
-[ "$(printf '%s' "$D" | jq -r 'has("value")')" = "false" ] && ok \
-  || bad "an undecodable body carries no value"
+dout="$("$SPARK" facts 2>&1)" && drc=0 || drc=$?
+[ "$drc" = "3" ] && ok || bad "an undecodable body yields no fact (got $drc)"
+assert_contains "an undecodable body is malformed, not unreadable" "malformed" "$dout"
+assert_contains "and nothing is established" "NOT ASSESSED" "$dout"
 [ "$(grep -c . "$GH_CALL_LOG")" = "1" ] && ok \
   || bad "a decode failure must not cost a second read"
 
@@ -332,9 +395,9 @@ malformed_case '{"full_name":{"nested":"object"},"default_branch":"master","upda
   'an object where a name belongs is malformed'
 malformed_case '{"full_name":"jwogrady/spark","default_branch":["master"],"updated_at":"2026-09-07T21:00:00Z"}' \
   'and so is an array where a branch belongs'
-malformed_case '{"full_name":"jwogrady/spark","default_branch":"master","updated_at":1757280000}' \
-  'and a number where an instant belongs'
-malformed_case '[]' 'a body that is not an object at all is malformed'
+refused_case '{"full_name":"jwogrady/spark","default_branch":"master","updated_at":1757280000}' \
+  'nor a number where an instant belongs'
+refused_case '[]' 'a body that is not an object at all yields no fact'
 
 # A remote that does not normalize to a canonical repository cannot name a node
 # either — the same answer as no remote at all, for the same reason.
@@ -412,14 +475,26 @@ assert_contains "the compiler reports what it emitted" '"facts_emitted":1' "$TEL
 assert_contains "and what it read" '"facts_api_calls":1' "$TEL"
 assert_contains "and that nothing was unreadable" '"facts_unknown":0' "$TEL"
 
-# An unreadable run reports the unknown rather than a smaller emitted count.
+# An unreadable run emitted nothing, and says so: one read, no fact. The counts
+# stay truthful rather than reporting an unknown that was never emitted.
 stub_gh "$WORK/bin/gh" <<'STUB'
 echo 'gh: Not Found (HTTP 404)' >&2
 exit 1
 STUB
-SPARK_RUN_ID=rfacts2 "$SPARK" facts >/dev/null
+SPARK_RUN_ID=rfacts2 "$SPARK" facts >/dev/null 2>&1 || true
 TEL2="$("$SPARK" telemetry show --run rfacts2 --json)"
-assert_contains "an unreadable run still emitted its fact" '"facts_emitted":1' "$TEL2"
-assert_contains "and counts it as unknown" '"facts_unknown":1' "$TEL2"
+assert_contains "an unreadable run emitted no fact" '"facts_emitted":0' "$TEL2"
+assert_contains "and counts no unknown it never emitted" '"facts_unknown":0' "$TEL2"
+assert_contains "while still reporting the read it made" '"facts_api_calls":1' "$TEL2"
+
+# A malformed field that still let the version be observed DOES emit, and the
+# counts distinguish the two situations.
+stub_gh "$WORK/bin/gh" <<'STUB'
+answer_json '{"full_name":"not a name","default_branch":"master","updated_at":"2026-09-07T21:00:00Z"}'
+STUB
+SPARK_RUN_ID=rfacts3 "$SPARK" facts >/dev/null 2>&1 || true
+TEL3="$("$SPARK" telemetry show --run rfacts3 --json)"
+assert_contains "a conforming unknown is emitted and counted" '"facts_emitted":1' "$TEL3"
+assert_contains "and counted as unknown" '"facts_unknown":1' "$TEL3"
 
 finish
