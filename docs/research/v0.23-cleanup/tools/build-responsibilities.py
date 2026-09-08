@@ -346,6 +346,15 @@ inventory_note = (
 # — "unchanged at three" — which is a claim about one unit's intent that goes
 # false the moment a later unit adds a module, and a manifest that contradicts
 # the runtime it describes is worse than one that omits the count.
+def now_text_raw(f):
+    return open(os.path.join(W, f)).read()
+
+
+def base_text_raw(f):
+    return subprocess.run(["git", "show", f"{base_sha}:{f}"], cwd=W,
+                          capture_output=True, text=True).stdout
+
+
 def modules_of(files):
     return [f for f in files if "/lib/" in f]
 
@@ -357,6 +366,27 @@ def loc_of(tree_reader, f):
     # by one in a direction that flatters the change.
     return len(text.split("\n")) - 1 if text else 0
 
+
+# The shipped verb surface, read off the dispatcher's own VERBS table in both
+# trees. Whether public CLI semantics changed is a mechanical question — a verb
+# appeared, or it did not — and answering it from the table means the page cannot
+# claim otherwise while a new verb sits in it.
+def verbs_of(text):
+    m = re.search(r"^VERBS='(.*?)'$", text, re.S | re.M)
+    if not m:
+        return set()
+    return {ln.split("|", 1)[0] for ln in m.group(1).split("\n") if "|" in ln}
+
+
+verbs_after = verbs_of(now_text_raw("plugins/spark/bin/spark"))
+verbs_before = verbs_of(base_text_raw("plugins/spark/bin/spark"))
+verbs_added = sorted(verbs_after - verbs_before)
+verbs_gone = sorted(verbs_before - verbs_after)
+
+names_after = {r[0] for r in rows_after}
+names_before = {r[0] for r in rows_before}
+fns_added = sorted(names_after - names_before)
+fns_gone = sorted(names_before - names_after)
 
 mods_after = modules_of(present(W))
 mods_before = [f for f in modules_of(FILES)
@@ -381,8 +411,10 @@ else:
                   + (f", adding {added}" if added else ""))
 mods_claim_lower = mods_claim[0].lower() + mods_claim[1:]
 
-now_text = lambda f: open(os.path.join(W, f)).read()
-base_text = lambda f: subprocess.run(["git", "show", f"{base_sha}:{f}"], cwd=W, capture_output=True, text=True).stdout
+
+
+now_text = now_text_raw
+base_text = base_text_raw
 loc_after = {f: loc_of(now_text, f) for f in FILES}
 loc_before = {f: loc_of(base_text, f) for f in FILES}
 parse_after = {r[0]: int(r[6]) for r in rows_after}
@@ -452,6 +484,54 @@ def consumers_of(name, rows):
 je_after = consumers_of("json_escape", rows_after)
 d_fns, d_body = n_after - n_before, l_after - l_before
 
+def _names(xs, limit=4):
+    shown = ", ".join(f"`{x}`" for x in xs[:limit])
+    return shown + (f" and {len(xs) - limit} more" if len(xs) > limit else "")
+
+
+# Each of these was a sentence about one unit's intent. Stated as a constant it
+# goes false for the next tree that regenerates the page, which is how a map ends
+# up contradicting the runtime it maps.
+if fns_gone and not fns_added:
+    removal_note = (f"{len(fns_gone)} function(s) left the runtime — {_names(fns_gone)} — "
+                    "each naming the byte-identical bodies it replaced.")
+elif fns_gone:
+    removal_note = (f"{len(fns_gone)} function(s) left the runtime — {_names(fns_gone)} — "
+                    f"and {len(fns_added)} arrived — {_names(fns_added)}.")
+elif fns_added:
+    removal_note = (f"this tree removes no function; it adds {len(fns_added)} — {_names(fns_added)} — "
+                    "so the reduction it claims is duplication inside bodies, not fewer of them.")
+else:
+    removal_note = "this tree neither adds nor removes a function."
+
+if verbs_added or verbs_gone:
+    parts = []
+    if verbs_added:
+        parts.append("adds " + _names(verbs_added))
+    if verbs_gone:
+        parts.append("removes " + _names(verbs_gone))
+    verb_note = ("the shipped verb surface " + " and ".join(parts)
+                 + ", so this tree does change public CLI behaviour and says so here.")
+else:
+    verb_note = "the shipped verb surface is unchanged: no verb was added or removed."
+
+if fns_added or fns_gone:
+    rewrite_note = (f"{len(fns_added)} function(s) added, {len(fns_gone)} removed, "
+                    f"{d_body:+d} body lines — the shape of an increment, not of a restructuring.")
+else:
+    rewrite_note = "no function added or removed."
+
+if d_body < 0:
+    loc_note = ("The file grows while the bodies shrink, because each new primitive is documented where it "
+                "lives, at the top level, outside any body.")
+elif d_body > 0:
+    loc_note = ("Both grow: this tree adds runtime rather than only redistributing it, and the body lines say "
+                "so rather than being read out of the file total.")
+else:
+    loc_note = ("The file changes while the bodies do not, so what moved is documentation and top-level state, "
+                "not executable work.")
+
+
 manifest = f"""# Runtime surface after canonicalization (v0.23 cleanup, #743)
 
 **Rule.** An extraction or removal earns its place only by removing dead code, eliminating duplicate semantics,
@@ -495,8 +575,7 @@ actual line count is reported too:
 {loc_tbl}
 
 **{loc_total_before:,} lines before, {loc_total_after:,} after ({loc_total_after - loc_total_before:+d})**, against
-{l_before:,} and {l_after:,} body lines. The file grows while the bodies shrink because each new primitive is
-documented where it lives, at the top level, outside any body.
+{l_before:,} and {l_after:,} body lines. {loc_note}
 
 **Argument parsing, measured rather than assigned.** The map is exclusive — one responsibility per function — and
 that misrepresents parsing, which no function owns: it sits at the head of every verb. Counting the lines of each
@@ -574,7 +653,7 @@ In reader bodies the same three facts go two to one, two to one and three to one
 
 - **Responsibilities mapped before change** — `743-responsibilities-before.tsv`, the same map at the base commit,
   generated by the same tool and checked by the same suite.
-- **Every removal cites its evidence** — each of the three names the byte-identical bodies it replaced.
+- **Every removal cites its evidence** — {removal_note}
 - **The dispatcher parses, routes, loads and reports rather than owning duplicate semantics** — the duplication
   removed is exactly the read-a-fact-twice kind; where the dispatcher still owns rules, the map says so and the
   manifest says why relocating them would not help.
@@ -583,9 +662,8 @@ In reader bodies the same three facts go two to one, two to one and three to one
 - **Fanout compared where mechanically practical** — consumer counts per function, on both sides, computed across
   module boundaries.
 - **Module count rises only when duplication or change surface falls** — {mods_claim_lower}.
-- **No public behaviour or authority guarantee changed** — no CLI semantics touched; `js` and `repo_trunk` left
-  alone deliberately.
-- **No cleanup-only refactor became a rewrite** — three primitives, no restructuring.
+- **The change to public behaviour is stated, not assumed** — {verb_note}
+- **No cleanup-only refactor became a rewrite** — {rewrite_note}
 - **Focused and full suites green on the exact HEAD** — recorded in the pull request.
 """
 open(os.path.join(OUT, "docs/research/v0.23-cleanup/743-runtime-surface.md"), "w").write(manifest)
