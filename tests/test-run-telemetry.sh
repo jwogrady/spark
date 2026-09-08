@@ -152,6 +152,42 @@ if "$SPARK" telemetry record --run r9 verdict=MAYBE >/dev/null 2>&1; then
   bad "an unknown verdict must be refused"
 else ok; fi
 
+# --- the fact compiler's metrics (#733) --------------------------------------
+# The compiler reports what it read, what it reused and what it produced. The
+# allowlist has to admit these before the compiler that records them exists,
+# because an unknown key fails closed.
+"$SPARK" telemetry record --run rf1 facts_emitted=1 facts_unknown=0 \
+  facts_api_calls=1 facts_cache_hits=0 facts_cache_misses=1 >/dev/null 2>&1
+RF1="$("$SPARK" telemetry show --run rf1)"
+assert_contains "the compiler's counts are recorded" "emitted / unknown" "$RF1"
+assert_contains "and read back as the pair they were written as" "1 / 0" "$RF1"
+assert_contains "with the source reads beside them" "source api calls" "$RF1"
+
+# Counts, not payloads. A fact belongs in the compiler's own output; the record
+# says how many there were.
+if "$SPARK" telemetry record --run rf1 facts_emitted=many >/dev/null 2>&1; then
+  bad "a compiler count that is not a number must be refused"
+else ok; fi
+
+# Reuse is a comparison, not an assertion: hits rise while the read count stays
+# flat, which is only visible because both are recorded.
+"$SPARK" telemetry record --run rf2 facts_emitted=3 facts_api_calls=1 \
+  facts_cache_hits=2 facts_cache_misses=1 >/dev/null 2>&1
+assert_contains "reuse is visible beside the read count" "reuse hit / miss" \
+  "$("$SPARK" telemetry show --run rf2)"
+assert_contains "and the counts survive the round trip" '"facts_cache_hits":2' \
+  "$("$SPARK" telemetry show --run rf2 --json)"
+
+# An unreadable source is not a smaller success: a run that established nothing
+# must not render as one that established everything it emitted.
+"$SPARK" telemetry record --run rf3 facts_emitted=1 facts_unknown=1 >/dev/null 2>&1
+assert_contains "an unknown fact is counted, not dropped" "1 / 1" \
+  "$("$SPARK" telemetry show --run rf3)"
+
+# A metric with no compiler run behind it is NOT ASSESSED, like every other.
+assert_contains "an unrecorded compiler metric is not a zero" "NOT ASSESSED" \
+  "$("$SPARK" telemetry show --run r5)"
+
 # --- the observability cost contract, enforced -------------------------------
 # Each of these is a way a transcript, diff or log could have entered the stream.
 if "$SPARK" telemetry record --run r1 transcript=hello >/dev/null 2>&1; then

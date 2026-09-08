@@ -23,7 +23,7 @@ stated rather than smoothed over.
 | `routing-dispatch` | 10 | 10 | 93 | 93 | resolves a verb and loads what it needs |
 | `source-collection` | 86 | 88 | 1,754 | 1,756 | reads a source of truth (git, gh, the filesystem) and returns it unjudged |
 | `canonicalization` | 45 | 45 | 631 | 615 | normalizes what was read into this repository's vocabulary |
-| `domain-semantics` | 66 | 66 | 6,809 | 6,790 | owns a rule about what the facts mean |
+| `domain-semantics` | 66 | 66 | 6,809 | 6,798 | owns a rule about what the facts mean |
 | `evidence-authority` | 19 | 19 | 505 | 505 | decides what the evidence is admissible for |
 | `formatting-reporting` | 20 | 18 | 223 | 221 | renders |
 | `compatibility-fallback` | 2 | 2 | 7 | 7 | keeps an older shape working |
@@ -35,8 +35,8 @@ stated rather than smoothed over.
 | `plugins/spark/lib/planning.sh` | 16 | 16 |
 | `plugins/spark/lib/repository.sh` | 10 | 10 |
 
-Module count is unchanged at three. The runtime holds 249 functions and 9,999 body lines, against
-249 and 10,034 before: +0 functions, -35 body lines.
+Module count is unchanged at three. The runtime holds 249 functions and 10,007 body lines, against
+249 and 10,034 before: +0 functions, -27 body lines.
 
 Those totals count **every** definition, nested ones included — 9 of the 249 are nested
 inside another function, against 12 of 249 before. Counted whole, this unit removes 2 definition(s) — `bg_json_escape`, `json_escape_out` — adds 2 — `__spark_memo_write`, `intent_liveness` — and moves 1 — `json_escape` — from nested to top-level, which is why the total goes 249 to 249. A top-level-only inventory saw none of the removals, because all three escapers were nested, and reported this unit adding two functions.
@@ -49,12 +49,12 @@ actual line count is reported too:
 | File | Lines before | after | delta |
 |---|---|---|---|
 | `plugins/spark/bin/spark` | 8,938 | 8,957 | +19 |
-| `plugins/spark/lib/execution.sh` | 2,182 | 2,180 | -2 |
+| `plugins/spark/lib/execution.sh` | 2,182 | 2,203 | +21 |
 | `plugins/spark/lib/planning.sh` | 825 | 825 | +0 |
 | `plugins/spark/lib/repository.sh` | 221 | 234 | +13 |
 
-**12,166 lines before, 12,196 after (+30)**, against
-10,034 and 9,999 body lines. The file grows while the bodies shrink because each new primitive is
+**12,166 lines before, 12,219 after (+53)**, against
+10,034 and 10,007 body lines. The file grows while the bodies shrink because each new primitive is
 documented where it lives, at the top level, outside any body.
 
 **Argument parsing, measured rather than assigned.** The map is exclusive — one responsibility per function — and
@@ -76,7 +76,7 @@ lines respectively. That is why extracting a shared parser is rejected below: th
 flags, and a shared parser would either normalize what users see or take it all as parameters.
 
 Two buckets hold 154 of 249 functions and
-8,546 of 9,999 body lines. That
+8,554 of 10,007 body lines. That
 concentration is the issue's premise, and it is also the trap: for `cmd_doctor`, `cmd_next` and `cmd_labels` the
 rules *are* the product, and there is no lower layer to defer them to. Relocating them would move ownership
 without reducing it.

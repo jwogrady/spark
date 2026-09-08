@@ -87,7 +87,7 @@ cmd_resume	plugins/spark/bin/spark	top-level	-	domain-semantics	122	1	0	-	-
 cmd_route	plugins/spark/lib/execution.sh	top-level	-	domain-semantics	302	27	0	-	-
 cmd_setup	plugins/spark/bin/spark	top-level	-	domain-semantics	119	10	0	-	-
 cmd_state	plugins/spark/bin/spark	top-level	-	domain-semantics	81	8	0	-	-
-cmd_telemetry	plugins/spark/lib/execution.sh	top-level	-	domain-semantics	320	19	0	-	-
+cmd_telemetry	plugins/spark/lib/execution.sh	top-level	-	domain-semantics	328	19	0	-	-
 cmd_triage	plugins/spark/bin/spark	top-level	-	domain-semantics	110	15	0	-	-
 cmd_version	plugins/spark/bin/spark	top-level	-	domain-semantics	16	0	0	-	-
 completed_in_inventory	plugins/spark/bin/spark	top-level	-	canonicalization	3	1	1	completed_milestones	-
