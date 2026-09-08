@@ -71,8 +71,11 @@ FACTS_MODEL="$SPARK_ROOT/preferences/fact-model.tsv"
 FACTS_RE_REPOSITORY=""
 FACTS_RE_REF=""
 FACTS_RE_TIMESTAMP=""
+FACTS_RE_WORK_UNIT=""
+FACTS_RE_ISSUE_STATE=""
 FACTS_CON_REPOSITORY=""
 FACTS_CON_REF=""
+FACTS_CON_WORK_UNIT=""
 FACTS_GRAMMARS_LOADED=""
 
 facts_load_grammars() {
@@ -81,14 +84,17 @@ facts_load_grammars() {
   while IFS=$'\t' read -r kind name rest; do
     case "$kind/$name" in
       identifier/repository) FACTS_RE_REPOSITORY="$rest" ;;
+      identifier/work-unit)  FACTS_RE_WORK_UNIT="$rest" ;;
+      identifier/issue-state) FACTS_RE_ISSUE_STATE="$rest" ;;
+      constraint/work-unit)  FACTS_CON_WORK_UNIT="$FACTS_CON_WORK_UNIT$rest"$'\n' ;;
       identifier/ref)        FACTS_RE_REF="$rest" ;;
       identifier/timestamp)  FACTS_RE_TIMESTAMP="$rest" ;;
       constraint/repository) FACTS_CON_REPOSITORY="$FACTS_CON_REPOSITORY$rest"$'\n' ;;
       constraint/ref)        FACTS_CON_REF="$FACTS_CON_REF$rest"$'\n' ;;
     esac
   done < <(awk -F'\t' '
-    $1 == "identifier" && ($2 == "repository" || $2 == "ref" || $2 == "timestamp") { print $1 "\t" $2 "\t" $3 }
-    $1 == "constraint" && ($2 == "repository" || $2 == "ref") { print $1 "\t" $2 "\t" $3 }' "$FACTS_MODEL")
+    $1 == "identifier" && ($2 == "repository" || $2 == "ref" || $2 == "timestamp" || $2 == "work-unit" || $2 == "issue-state") { print $1 "\t" $2 "\t" $3 }
+    $1 == "constraint" && ($2 == "repository" || $2 == "ref" || $2 == "work-unit") { print $1 "\t" $2 "\t" $3 }' "$FACTS_MODEL")
   FACTS_GRAMMARS_LOADED=1
 }
 
@@ -292,6 +298,185 @@ facts_repository_fact() {
   FACTS_JSON="$head"'"ESTABLISHED","value":{"id":"'"$(json_escape "$locator")"'","default_branch":"'"$(json_escape "$branch")"'"}'"$tail"'}'
 }
 
+# facts_graph_node <locator> <number> — ONE read of the work unit's native
+# relationships. Sets FACTS_NODE to TSV rows and returns 0, or sets it to the
+# failure output and returns non-zero.
+#
+# Rows: "self <state> <updatedAt>", then "parent|child|blocker <number> <state>
+# <updatedAt> <owner/name>" per related node, then "truncated <which>" for any
+# relationship list GitHub could not return whole.
+#
+# One request for the whole graph, for the same reason the repository fact makes
+# one: a request per relationship could observe the graph in three states, and
+# since the model wants a version per invalidator, each of those reads would have
+# to be re-read to stay mutually consistent.
+#
+# `__typename` is carried and checked rather than assumed. The invalidator form
+# differs for an issue and a pull request (R14) and a compiler that guessed would
+# emit a token naming the wrong kind of node.
+facts_graph_node() {
+  local locator="$1" number="$2" host="${1%%/*}" nwo="${1#*/}" out rc=0
+  FACTS_API_CALLS=$(( FACTS_API_CALLS + 1 ))
+  out="$(gh api graphql --hostname "$host" \
+    -F owner="${nwo%%/*}" -F name="${nwo##*/}" -F number="$number" -f query='
+    query($owner:String!,$name:String!,$number:Int!){
+      repository(owner:$owner,name:$name){
+        issue(number:$number){
+          number state updatedAt
+          parent{ __typename number state updatedAt repository{ nameWithOwner } }
+          subIssues(first:100){ pageInfo{ hasNextPage } nodes{ __typename number state updatedAt repository{ nameWithOwner } } }
+          blockedBy(first:100){ pageInfo{ hasNextPage } nodes{ __typename number state updatedAt repository{ nameWithOwner } } }
+        }
+      }
+    }' --jq '
+    .data.repository.issue as $i
+    | if $i == null then ("absent" | @tsv)
+      else
+        (["self", $i.state, $i.updatedAt] | @tsv),
+        (if $i.parent != null then
+           ["parent", ($i.parent.number|tostring), $i.parent.state, $i.parent.updatedAt,
+            $i.parent.repository.nameWithOwner, $i.parent.__typename] | @tsv
+         else empty end),
+        (if $i.subIssues.pageInfo.hasNextPage then ["truncated", "children"] | @tsv else empty end),
+        ($i.subIssues.nodes[] | ["child", (.number|tostring), .state, .updatedAt,
+                                 .repository.nameWithOwner, .__typename] | @tsv),
+        (if $i.blockedBy.pageInfo.hasNextPage then ["truncated", "blockers"] | @tsv else empty end),
+        ($i.blockedBy.nodes[] | ["blocker", (.number|tostring), .state, .updatedAt,
+                                 .repository.nameWithOwner, .__typename] | @tsv)
+      end' 2>&1)" || rc=$?
+  FACTS_NODE="$out"
+  return "$rc"
+}
+
+# facts_state_canonical <github state> — the model's vocabulary, not GitHub's.
+#
+# GitHub answers OPEN/CLOSED through GraphQL and open/closed through REST, and
+# the runtime has carried all three spellings plus an UNKNOWN in different
+# readers. The model admits exactly open|closed, so the translation happens once,
+# here, and anything outside the pair is refused rather than lower-cased and
+# hoped for — that is the residual ambiguity acceptance item 7 names.
+facts_state_canonical() {
+  case "$1" in
+    OPEN|open)     printf 'open' ;;
+    CLOSED|closed) printf 'closed' ;;
+    *)             return 1 ;;
+  esac
+}
+
+# facts_graph_entry <locator-host> <number> <state> <nwo> <typename> — one
+# relationship entry as JSON, and its invalidator token, separated by a tab.
+# Returns non-zero when the node cannot be named canonically, so the caller
+# refuses rather than emitting a locator outside the grammar.
+facts_graph_entry() {
+  local host="$1" number="$2" state="$3" nwo="$4" typename="$5" wu kind st
+  case "$typename" in
+    Issue)       kind=issue ;;
+    PullRequest) kind=pull_request ;;
+    *)           return 1 ;;
+  esac
+  st="$(facts_state_canonical "$state")" || return 1
+  wu="$(printf '%s/%s#%s' "$host" "${nwo,,}" "$number")"
+  facts_canonical "$FACTS_RE_WORK_UNIT" "$FACTS_CON_WORK_UNIT" "$wu" || return 1
+  printf '{"kind":"%s","id":"%s","state":"%s"}\t%s:%s' \
+    "$kind" "$(json_escape "$wu")" "$st" "$kind" "$(json_escape "$wu")"
+}
+
+# facts_graph_fact <locator> <number> <observed_at> — sets FACTS_JSON to the
+# graph.native fact, or FACTS_REFUSED when no conforming fact can be built.
+#
+# The statuses, and what decides them:
+#
+#   ESTABLISHED  the whole relationship set was read, every node named
+#                canonically, every state in the model's vocabulary;
+#   UNKNOWN      a list was truncated. The node's own version WAS observed, so
+#                the envelope conforms; what is missing is the value, and a
+#                bounded read is an unknown rather than a shorter graph;
+#   refused      the read failed, the work unit is absent, or a node cannot be
+#                named or its state canonicalized — no observed version, or no
+#                canonical representation, so no fact.
+facts_graph_fact() {
+  local locator="$1" number="$2" observed="$3" rc=0 host="${1%%/*}"
+  local wu="$locator#$number"
+  FACTS_JSON=""
+  FACTS_REFUSED=""
+  facts_load_grammars
+
+  facts_canonical "$FACTS_RE_WORK_UNIT" "$FACTS_CON_WORK_UNIT" "$wu" || {
+    FACTS_REFUSED="the work unit cannot be named canonically"; return 3; }
+
+  facts_graph_node "$locator" "$number" || {
+    FACTS_REFUSED="$(facts_unreadable_reason "$FACTS_NODE")"; return 3; }
+
+  case "$FACTS_NODE" in
+    absent*) FACTS_REFUSED="not-found"; return 3 ;;
+  esac
+
+  # `none` in a value shape is the model's literal for "no such relationship",
+  # and its own next_action example writes it as a JSON string. A bare token
+  # would not parse at all, which is a fact nobody can read.
+  local self_version truncated="" parent='"none"' kids="" blocks="" seen=""
+  local inv="issue:$wu" vers="" kind line f1 f2 f3 f4 f5 f6 entry tok
+  self_version="$(printf '%s' "$FACTS_NODE" | awk -F'\t' '$1 == "self" { print $3; exit }')"
+  if [ -z "$self_version" ] || ! facts_canonical "$FACTS_RE_TIMESTAMP" "" "$self_version"; then
+    FACTS_REFUSED="malformed"
+    return 3
+  fi
+  vers='"'"$(json_escape "$inv")"'":"'"$(json_escape "$self_version")"'"'
+
+  while IFS=$'\t' read -r f1 f2 f3 f4 f5 f6; do
+    [ -n "$f1" ] || continue
+    case "$f1" in
+      self) continue ;;
+      truncated) truncated="$f2" ;;
+      parent|child|blocker)
+        entry="$(facts_graph_entry "$host" "$f2" "$f3" "$f5" "$f6")" || {
+          FACTS_REFUSED="malformed"; return 3; }
+        tok="${entry#*$'\t'}"; entry="${entry%%$'\t'*}"
+        # R14: a work unit appears at most once per list, and one node carries
+        # one state. A repeat with the same state is GitHub listing it twice and
+        # is dropped; a repeat with a different state has no representation and
+        # is refused rather than resolved by picking one.
+        case " $seen " in
+          *" $tok=$entry "*) continue ;;
+          *" $tok="*) FACTS_REFUSED="malformed"; return 3 ;;
+        esac
+        seen="$seen $tok=$entry"
+        if ! facts_canonical "$FACTS_RE_TIMESTAMP" "" "$f4"; then
+          FACTS_REFUSED="malformed"; return 3
+        fi
+        vers="$vers,\"$(json_escape "$tok")\":\"$(json_escape "$f4")\""
+        inv="$inv $tok"
+        case "$f1" in
+          parent)  parent="$entry" ;;
+          child)   kids="${kids:+$kids,}$entry" ;;
+          blocker) blocks="${blocks:+$blocks,}$entry" ;;
+        esac ;;
+    esac
+  done <<EOF
+$FACTS_NODE
+EOF
+
+  local inv_json="" t
+  for t in $inv; do inv_json="${inv_json:+$inv_json,}\"$(json_escape "$t")\""; done
+
+  local head tail
+  head='{"schema_version":'"$FACTS_SCHEMA_VERSION"',"key":"graph.native","class":"graph","status":'
+  tail=',"source":{"type":"github-api","identity":"'"$(json_escape "$wu")"'","version":"'"$(json_escape "$self_version")"'"}'
+  tail="$tail"',"observed_at":"'"$observed"'","invalidators":['"$inv_json"'],"versions":{'"$vers"'}'
+  tail="$tail"',"provenance":"'"$(json_escape "https://$locator/issues/$number")"'"'
+
+  FACTS_EMITTED=$(( FACTS_EMITTED + 1 ))
+  if [ -n "$truncated" ]; then
+    # The relationships this fact would describe were not all returned, so it
+    # describes none of them. The node's version is recorded, so a later read
+    # can tell whether anything changed since the truncation.
+    FACTS_UNKNOWN=$(( FACTS_UNKNOWN + 1 ))
+    FACTS_JSON="$head"'"UNKNOWN"'"$tail"',"detail":{"reason":"the '"$truncated"' list was truncated","candidates":[]}}'
+    return 0
+  fi
+  FACTS_JSON="$head"'"ESTABLISHED","value":{"parent":'"$parent"',"children":['"$kids"'],"blocked_by":['"$blocks"']}'"$tail"'}'
+}
+
 # facts_record_telemetry — the compiler's efficiency observability, recorded
 # only when a run is being observed, exactly like the runtime footprint. Five
 # counts and nothing else: the facts themselves are this verb's output, and
@@ -314,13 +499,23 @@ facts_record_telemetry() {
 }
 
 cmd_facts() {
-  local usage_line="usage: spark facts [--help]"
+  local usage_line="usage: spark facts [--issue <number>] [--help]"
+  local issue=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
+      --issue)   shift; issue="${1:-}" ;;
+      --issue=*) issue="${1#--issue=}" ;;
       -h|--help) echo "$usage_line"; return 0 ;;
       *) red "unknown option: $1"; echo "$usage_line"; return 1 ;;
     esac
+    if [ "$#" -gt 0 ]; then shift; fi
   done
+  # Validated before it reaches a query, and refused rather than coerced: a work
+  # unit is a positive integer, and anything else names no node.
+  case "$issue" in
+    ''|[1-9]*[!0-9]*|0*|*[!0-9]*) [ -z "$issue" ] || {
+      red "--issue takes an issue number"; echo "$usage_line"; return 1; } ;;
+  esac
 
   local top; top="$(git_root)"
   if [ -z "$top" ]; then
@@ -357,16 +552,35 @@ cmd_facts() {
     return 3
   fi
 
-  if ! facts_repository_fact "$locator" "$observed"; then
-    # A source that could not be read, or whose own version is not a version, is
-    # reported rather than emitted as a fact this schema cannot carry. The
-    # counts still go out: this verb ran, read once, and established nothing.
-    yellow "NOT ASSESSED — the repository source could not be established: $FACTS_REFUSED"
+  # Each class is compiled independently and the fragment carries the ones that
+  # could be built. A class that could not be established is absent rather than
+  # present-and-empty, and the reasons are reported, so a caller can never read
+  # silence as an answer.
+  local facts="" why=""
+  if facts_repository_fact "$locator" "$observed"; then
+    facts="$FACTS_JSON"
+  else
+    why="repository: $FACTS_REFUSED"
+  fi
+
+  if [ -n "$issue" ]; then
+    if facts_graph_fact "$locator" "$issue" "$observed"; then
+      facts="${facts:+$facts,}$FACTS_JSON"
+    else
+      why="${why:+$why; }graph: $FACTS_REFUSED"
+    fi
+  fi
+
+  if [ -z "$facts" ]; then
+    yellow "NOT ASSESSED — nothing could be established: $why"
     facts_record_telemetry
     return 3
   fi
   # The fragment shape: a bare list, never an object, so it can never be read as
-  # the {observer, facts} snapshot a consumer is allowed to act on (R22).
-  printf '[%s]\n' "$FACTS_JSON"
+  # the {observer, facts} snapshot a consumer is allowed to act on (R22). Two
+  # classes are not the required set either, so this stays a fragment however
+  # many facts it carries.
+  printf '[%s]\n' "$facts"
+  [ -z "$why" ] || yellow "not established — $why"
   facts_record_telemetry
 }

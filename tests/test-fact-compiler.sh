@@ -497,4 +497,244 @@ TEL3="$("$SPARK" telemetry show --run rfacts3 --json)"
 assert_contains "a conforming unknown is emitted and counted" '"facts_emitted":1' "$TEL3"
 assert_contains "and counted as unknown" '"facts_unknown":1' "$TEL3"
 
+
+# =========================================================================
+# The graph fact (#733 packet 2)
+# =========================================================================
+#
+# A graph is a graph OF a work unit, and every node it names carries a state and
+# an observed version. The three things a happy-path check would miss:
+#
+#   * GitHub's vocabulary is OPEN/CLOSED and the model's is open|closed. Four
+#     readers in this runtime spelled that difference four ways, which is the
+#     residual ambiguity this packet's acceptance item names;
+#   * a truncated relationship list is an UNKNOWN, not a shorter graph — the
+#     node's own version was observed, so the envelope conforms and says what it
+#     could not see;
+#   * one node carries one state. A repeat with a different state has no
+#     representation and must be refused, not resolved by picking one.
+
+# graph_stub <issue json|null> — answer the graph query with this issue node, and
+# the repository query as usual, so a --issue run sees both sources.
+graph_stub() {
+  stub_gh "$WORK/bin/gh" <<STUB
+printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
+case "\$*" in
+  *graphql*) answer_json '{"data":{"repository":{"issue":$1}}}' ;;
+  *"--hostname github.com repos/jwogrady/spark"*) answer_json '$NODE' ;;
+  *) exit 1 ;;
+esac
+STUB
+}
+
+# gfact — the graph fact out of a --issue run.
+gfact() { printf '%s' "$1" | jq -r '.[] | select(.key=="graph.native")'; }
+
+REL='{"__typename":"Issue","number":%d,"state":"%s","updatedAt":"%s","repository":{"nameWithOwner":"jwogrady/spark"}}'
+
+FULL='{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z",
+  "parent":{"__typename":"Issue","number":728,"state":"OPEN","updatedAt":"2026-09-08T09:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}},
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[
+    {"__typename":"Issue","number":740,"state":"CLOSED","updatedAt":"2026-09-07T08:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}},
+    {"__typename":"PullRequest","number":741,"state":"OPEN","updatedAt":"2026-09-07T09:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}}]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[
+    {"__typename":"Issue","number":700,"state":"CLOSED","updatedAt":"2026-09-06T07:00:00Z","repository":{"nameWithOwner":"OTHER/Repo"}}]}}'
+
+: > "$GH_CALL_LOG"
+graph_stub "$FULL"
+GOUT="$("$SPARK" facts --issue 733)"
+G="$(gfact "$GOUT")"
+
+# --- the fragment carries both classes, and is still a fragment -------------
+[ "$(printf '%s' "$GOUT" | jq -r 'type')" = "array" ] && ok || bad "a fragment is a bare list"
+[ "$(printf '%s' "$GOUT" | jq -r 'length')" = "2" ] && ok \
+  || bad "a --issue run compiles the repository and the graph"
+[ "$(printf '%s' "$GOUT" | jq -r '[.[].key] | sort | join(",")')" = "graph.native,repository.identity" ] \
+  && ok || bad "and those two classes exactly"
+
+# --- the envelope is the schema's ------------------------------------------
+for field in $(required_fields); do
+  if [ "$(printf '%s' "$G" | jq -r "has(\"$field\")")" = "true" ]; then ok
+  else bad "the graph envelope is missing the required field '$field'"; fi
+done
+assert_contains "the graph fact carries its class's one key" "graph.native" \
+  "$(printf '%s' "$G" | jq -r '.key')"
+assert_contains "a whole relationship set establishes the fact" "ESTABLISHED" \
+  "$(printf '%s' "$G" | jq -r '.status')"
+[ "$(printf '%s' "$G" | jq -r 'has("detail")')" = "false" ] && ok \
+  || bad "an established graph carries no detail"
+
+# --- the source is the work-unit node, versioned by its own updatedAt ------
+assert_contains "the source names the work unit it was read from" "github.com/jwogrady/spark#733" \
+  "$(printf '%s' "$G" | jq -r '.source.identity')"
+printf '%s' "$(printf '%s' "$G" | jq -r '.source.identity')" \
+  | grep -Eq "$(model_regex identifier work-unit)" && ok \
+  || bad "source.identity is not a canonical work-unit locator"
+assert_contains "versioned by the node's own updatedAt" "2026-09-08T10:00:00Z" \
+  "$(printf '%s' "$G" | jq -r '.source.version')"
+assert_versions_canonical "$G" "the graph fact"
+
+# --- GitHub's vocabulary is translated, once -------------------------------
+# This is acceptance item 7's residual ambiguity: OPEN/CLOSED in, open|closed out.
+assert_contains "the parent's state is the model's vocabulary" "open" \
+  "$(printf '%s' "$G" | jq -r '.value.parent.state')"
+assert_contains "and a closed child's is too" "closed" \
+  "$(printf '%s' "$G" | jq -r '.value.children[] | select(.id|test("#740")) | .state')"
+[ -z "$(printf '%s' "$G" | jq -r '[.. | objects | select(has("state")) | .state] | map(select(. != "open" and . != "closed")) | join(",")')" ] \
+  && ok || bad "no state outside the model's closed vocabulary may appear"
+printf '%s' "$(printf '%s' "$G" | jq -r '.value.parent.state')" \
+  | grep -Eq "$(model_regex identifier issue-state)" && ok \
+  || bad "a state is outside the issue-state grammar"
+
+# --- kinds are read, not assumed ------------------------------------------
+# The invalidator form differs for an issue and a pull request, so a compiler
+# that guessed the kind would emit a token naming the wrong sort of node.
+assert_contains "a pull-request child is named as one" "pull_request" \
+  "$(printf '%s' "$G" | jq -r '.value.children[] | select(.id|test("#741")) | .kind')"
+assert_contains "and gets the pull_request invalidator" "pull_request:github.com/jwogrady/spark#741" \
+  "$(printf '%s' "$G" | jq -r '.invalidators | join(" ")')"
+assert_contains "while an issue child gets the issue one" "issue:github.com/jwogrady/spark#740" \
+  "$(printf '%s' "$G" | jq -r '.invalidators | join(" ")')"
+
+# --- a foreign blocker keeps its own identity -----------------------------
+assert_contains "a blocker in another repository is named by that repository" \
+  "github.com/other/repo#700" "$(printf '%s' "$G" | jq -r '.value.blocked_by[0].id')"
+
+# --- every named node is an invalidator, with its own observed version ----
+[ "$(printf '%s' "$G" | jq -r '.invalidators | length')" = "5" ] && ok \
+  || bad "the node and its four relations are each an invalidator"
+[ "$(printf '%s' "$G" | jq -r '.versions | length')" = "5" ] && ok \
+  || bad "versions carries one entry per invalidator"
+assert_contains "the work unit's own token is listed" "issue:github.com/jwogrady/spark#733" \
+  "$(printf '%s' "$G" | jq -r '.invalidators | join(" ")')"
+assert_contains "and each relation's version is that node's" "2026-09-06T07:00:00Z" \
+  "$(printf '%s' "$G" | jq -r '.versions["issue:github.com/other/repo#700"]')"
+
+# --- one read for the whole graph -----------------------------------------
+[ "$(grep -c graphql "$GH_CALL_LOG")" = "1" ] && ok \
+  || bad "the graph is one request, not one per relationship ($(grep -c graphql "$GH_CALL_LOG"))"
+
+# --- a truncated list is an unknown, not a shorter graph ------------------
+TRUNC='{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
+  "subIssues":{"pageInfo":{"hasNextPage":true},"nodes":[]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
+graph_stub "$TRUNC"
+GT="$(gfact "$("$SPARK" facts --issue 733)")"
+assert_contains "a truncated relationship list is unknown" "UNKNOWN" \
+  "$(printf '%s' "$GT" | jq -r '.status')"
+assert_contains "and says which list it could not see" "children" \
+  "$(printf '%s' "$GT" | jq -r '.detail.reason')"
+[ "$(printf '%s' "$GT" | jq -r 'has("value")')" = "false" ] && ok \
+  || bad "a truncated graph carries no value — a bounded read is not a smaller set"
+# It conforms, because the node's own version WAS observed.
+assert_versions_canonical "$GT" "the truncated graph"
+[ "$(printf '%s' "$GT" | jq -r '.invalidators | length')" = "1" ] && ok \
+  || bad "an unknown graph names the node it read and no relationship it cannot describe"
+
+# --- no parent is 'none', not a missing key ------------------------------
+graph_stub '{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
+GN="$(gfact "$("$SPARK" facts --issue 733)")"
+assert_contains "a work unit with no parent says none" "none" \
+  "$(printf '%s' "$GN" | jq -r '.value.parent')"
+[ "$(printf '%s' "$GN" | jq -r '.value.children | length')" = "0" ] && ok \
+  || bad "and carries an empty child list"
+
+# --- one node, one state -------------------------------------------------
+DUP_SAME='{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[
+    {"__typename":"Issue","number":740,"state":"CLOSED","updatedAt":"2026-09-07T08:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}},
+    {"__typename":"Issue","number":740,"state":"CLOSED","updatedAt":"2026-09-07T08:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}}]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
+graph_stub "$DUP_SAME"
+GD="$(gfact "$("$SPARK" facts --issue 733)")"
+[ "$(printf '%s' "$GD" | jq -r '.value.children | length')" = "1" ] && ok \
+  || bad "a node listed twice with one state appears once"
+
+DUP_DIFF='{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[
+    {"__typename":"Issue","number":740,"state":"CLOSED","updatedAt":"2026-09-07T08:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}},
+    {"__typename":"Issue","number":740,"state":"OPEN","updatedAt":"2026-09-07T08:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}}]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
+graph_stub "$DUP_DIFF"
+gout="$("$SPARK" facts --issue 733)" && grc=0 || grc=$?
+case "$(printf '%s' "$gout" | jq -r '[.[].key] | join(",")' 2>/dev/null)" in
+  *graph.native*) bad "one node cannot carry two states — that has no representation" ;;
+  *) ok ;;
+esac
+
+# --- what cannot be named or canonicalized is refused --------------------
+graph_refused() { # graph_refused <issue json> <label>
+  graph_stub "$1"
+  local out; out="$("$SPARK" facts --issue 733 2>&1)"
+  case "$(printf '%s' "$out" | jq -r '[.[].key] | join(",")' 2>/dev/null)" in
+    *graph.native*) bad "$2" ;;
+    *) ok ;;
+  esac
+}
+graph_refused '{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[
+    {"__typename":"Issue","number":740,"state":"MERGED","updatedAt":"2026-09-07T08:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}}]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
+  "a relation state outside the vocabulary must not be emitted"
+
+# The work unit's OWN state is not part of this class: the value carries the
+# state of each relation, and the work unit's belongs to another fact. So a
+# state this class does not represent cannot make its graph unreadable —
+# asserting otherwise would be inventing strictness rather than implementing the
+# contract.
+graph_stub '{"number":733,"state":"SOMETHING_ELSE","updatedAt":"2026-09-08T10:00:00Z",
+  "parent":{"__typename":"Issue","number":728,"state":"OPEN","updatedAt":"2026-09-08T09:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}},
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
+GS="$(gfact "$("$SPARK" facts --issue 733)")"
+assert_contains "the work unit's own state is not this class's business" "ESTABLISHED" \
+  "$(printf '%s' "$GS" | jq -r '.status')"
+[ -z "$(printf '%s' "$GS" | jq -r '[.. | objects | select(has("state")) | .state] | map(select(. != "open" and . != "closed")) | join(",")')" ] \
+  && ok || bad "and no state it does not represent leaks into the value"
+graph_refused '{"number":733,"state":"OPEN","updatedAt":"not-an-instant","parent":null,
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
+  "a node version that is not a version leaves nothing to record"
+graph_refused '{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z",
+  "parent":{"__typename":"Discussion","number":9,"state":"OPEN","updatedAt":"2026-09-08T09:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}},
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
+  "a node kind with no invalidator form must not be guessed at"
+graph_refused 'null' "a work unit that does not exist yields no graph"
+
+# --- an unreadable graph source is refused, like the repository's --------
+stub_gh "$WORK/bin/gh" <<STUB
+printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
+case "\$*" in
+  *graphql*) echo 'gh: Not Found (HTTP 404)' >&2; exit 1 ;;
+  *) answer_json '$NODE' ;;
+esac
+STUB
+gout="$("$SPARK" facts --issue 733 2>&1)"
+assert_contains "an unreadable graph names its reason" "not-found" "$gout"
+case "$(printf '%s' "$gout" | jq -r '[.[].key] | join(",")' 2>/dev/null)" in
+  *graph.native*) bad "an unreadable graph must emit no fact" ;;
+  *) ok ;;
+esac
+# The repository fact still comes back: one class failing does not silence another.
+assert_contains "while the class that could be read is still emitted" "repository.identity" "$gout"
+
+# --- the flag is validated before it reaches a query --------------------
+graph_stub "$FULL"
+for bad_arg in 0 abc 12x -3; do
+  out="$("$SPARK" facts --issue "$bad_arg" 2>&1)" && rc=0 || rc=$?
+  [ "$rc" = "1" ] && ok || bad "--issue $bad_arg must be refused (got $rc)"
+done
+
+# --- the compiler's cost, with two classes ------------------------------
+: > "$GH_CALL_LOG"
+graph_stub "$FULL"
+SPARK_RUN_ID=rgraph "$SPARK" facts --issue 733 >/dev/null
+TELG="$("$SPARK" telemetry show --run rgraph --json)"
+assert_contains "two classes compiled means two facts" '"facts_emitted":2' "$TELG"
+assert_contains "from two source reads" '"facts_api_calls":2' "$TELG"
+assert_contains "and nothing unknown" '"facts_unknown":0' "$TELG"
+
 finish
