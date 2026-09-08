@@ -28,6 +28,7 @@
 # consumer count <TAB> consumers <TAB> verbs
 __spark_memo_key	plugins/spark/bin/spark	top-level	-	source-collection	8	2	2	git_root;resolve_prefs	-
 __spark_memo_read	plugins/spark/bin/spark	top-level	-	source-collection	17	1	2	git_root;resolve_prefs	-
+__spark_memo_write	plugins/spark/bin/spark	top-level	-	source-collection	13	1	2	git_root;resolve_prefs	-
 active_in_inventory	plugins/spark/bin/spark	top-level	-	canonicalization	4	1	1	current_milestone	-
 apply_standard	plugins/spark/bin/spark	top-level	-	domain-semantics	209	1	2	cmd_preferences;cmd_setup	cmd_preferences;cmd_setup
 artifact_labels	plugins/spark/lib/planning.sh	top-level	-	canonicalization	3	1	2	plan_created_rows;plan_live_rows	-
@@ -131,7 +132,7 @@ fp_plugin_bytes	plugins/spark/bin/spark	top-level	-	source-collection	12	1	2	cmd
 fp_run_ms	plugins/spark/bin/spark	top-level	-	source-collection	7	1	1	fp_median3_ms	-
 gap	plugins/spark/bin/spark	nested	next_select	canonicalization	1	1	1	next_select	-
 gh_blocked_by	plugins/spark/bin/spark	top-level	-	source-collection	11	3	3	cmd_next;gov_collect;plan_relation_rows	cmd_next
-git_root	plugins/spark/bin/spark	top-level	-	source-collection	37	0	27	apply_standard;cmd_apply_permissions;cmd_brief;cmd_budget;cmd_ci;cmd_course;cmd_docs_impact;cmd_doctor;cmd_evidence;cmd_governance;cmd_hub;cmd_labels;cmd_next;cmd_orient;cmd_preferences;cmd_reconcile;cmd_repo;cmd_resume;cmd_route;cmd_setup;cmd_state;cmd_telemetry;cmd_triage;doctor_requirements;governance_project_model;resolve_prefs;spark_record_runtime_footprint	cmd_apply_permissions;cmd_brief;cmd_budget;cmd_ci;cmd_course;cmd_docs_impact;cmd_doctor;cmd_evidence;cmd_governance;cmd_hub;cmd_labels;cmd_next;cmd_orient;cmd_preferences;cmd_reconcile;cmd_repo;cmd_resume;cmd_route;cmd_setup;cmd_state;cmd_telemetry;cmd_triage
+git_root	plugins/spark/bin/spark	top-level	-	source-collection	18	0	27	apply_standard;cmd_apply_permissions;cmd_brief;cmd_budget;cmd_ci;cmd_course;cmd_docs_impact;cmd_doctor;cmd_evidence;cmd_governance;cmd_hub;cmd_labels;cmd_next;cmd_orient;cmd_preferences;cmd_reconcile;cmd_repo;cmd_resume;cmd_route;cmd_setup;cmd_state;cmd_telemetry;cmd_triage;doctor_requirements;governance_project_model;resolve_prefs;spark_record_runtime_footprint	cmd_apply_permissions;cmd_brief;cmd_budget;cmd_ci;cmd_course;cmd_docs_impact;cmd_doctor;cmd_evidence;cmd_governance;cmd_hub;cmd_labels;cmd_next;cmd_orient;cmd_preferences;cmd_reconcile;cmd_repo;cmd_resume;cmd_route;cmd_setup;cmd_state;cmd_telemetry;cmd_triage
 gov_admissible	plugins/spark/bin/spark	top-level	-	evidence-authority	11	3	2	cmd_governance;cmd_next	cmd_governance;cmd_next
 gov_cmd_render	plugins/spark/bin/spark	top-level	-	formatting-reporting	85	17	1	cmd_governance	cmd_governance
 gov_collect	plugins/spark/bin/spark	top-level	-	source-collection	129	5	3	cmd_governance;rec_rows;triage_rows	cmd_governance
@@ -226,7 +227,7 @@ repo_target_of_command	plugins/spark/lib/repository.sh	top-level	-	source-collec
 repo_trunk	plugins/spark/bin/spark	top-level	-	source-collection	14	1	2	rec_rows;triage_rows	-
 resolve_governance	plugins/spark/bin/spark	top-level	-	canonicalization	118	11	17	cmd_brief;cmd_docs_impact;cmd_doctor;cmd_governance;cmd_labels;cmd_next;cmd_plan;cmd_resume;course_evidence;gov_cmd_render;governance_family_members;milestone_inventory;plan_live_rows;rec_rows;taxonomy_label_color;taxonomy_label_desc;triage_rows	cmd_brief;cmd_docs_impact;cmd_doctor;cmd_governance;cmd_labels;cmd_next;cmd_plan;cmd_resume
 resolve_issue_taxonomy	plugins/spark/bin/spark	top-level	-	canonicalization	14	1	4	cmd_doctor;cmd_labels;cmd_next;gov_collect	cmd_doctor;cmd_labels;cmd_next
-resolve_prefs	plugins/spark/bin/spark	top-level	-	canonicalization	59	2	4	cmd_brief;cmd_hub;cmd_preferences;pref_get	cmd_brief;cmd_hub;cmd_preferences
+resolve_prefs	plugins/spark/bin/spark	top-level	-	canonicalization	43	2	4	cmd_brief;cmd_hub;cmd_preferences;pref_get	cmd_brief;cmd_hub;cmd_preferences
 ro_isolate	plugins/spark/bin/spark	top-level	-	source-collection	3	1	1	ro_probe	-
 ro_probe	plugins/spark/bin/spark	top-level	-	evidence-authority	59	1	0	-	-
 ro_release	plugins/spark/bin/spark	top-level	-	source-collection	4	2	1	ro_probe	-

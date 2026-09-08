@@ -6,7 +6,7 @@ with less context. Moving duplication into more files is not one of them, so thi
 and adds no module.
 
 **The map comes first, and it covers the whole runtime.** `docs/research/v0.23-cleanup/743-responsibilities.tsv`
-assigns every one of the 248 functions in the dispatcher and its three modules to exactly one of the issue's
+assigns every one of the 249 functions in the dispatcher and its three modules to exactly one of the issue's
 eight responsibilities, with its body length, everything in the runtime that references it, and the verbs among
 those. `743-responsibilities-before.tsv` is the same map at `29e4f4e`, the commit this branch left, so the
 before-change baseline is a map and not a pair of totals. Both are generated from `tests/structure.sh --raw` run
@@ -21,8 +21,8 @@ stated rather than smoothed over.
 |---|---|---|---|---|---|
 | `argument-parsing` | 1 | 1 | 12 | 12 | reads flags and arguments |
 | `routing-dispatch` | 10 | 10 | 93 | 93 | resolves a verb and loads what it needs |
-| `source-collection` | 86 | 87 | 1,754 | 1,760 | reads a source of truth (git, gh, the filesystem) and returns it unjudged |
-| `canonicalization` | 45 | 45 | 631 | 631 | normalizes what was read into this repository's vocabulary |
+| `source-collection` | 86 | 88 | 1,754 | 1,754 | reads a source of truth (git, gh, the filesystem) and returns it unjudged |
+| `canonicalization` | 45 | 45 | 631 | 615 | normalizes what was read into this repository's vocabulary |
 | `domain-semantics` | 66 | 66 | 6,809 | 6,790 | owns a rule about what the facts mean |
 | `evidence-authority` | 19 | 19 | 505 | 505 | decides what the evidence is admissible for |
 | `formatting-reporting` | 20 | 18 | 223 | 221 | renders |
@@ -30,16 +30,16 @@ stated rather than smoothed over.
 
 | File | Functions before | after |
 |---|---|---|
-| `plugins/spark/bin/spark` | 158 | 159 |
+| `plugins/spark/bin/spark` | 158 | 160 |
 | `plugins/spark/lib/execution.sh` | 65 | 63 |
 | `plugins/spark/lib/planning.sh` | 16 | 16 |
 | `plugins/spark/lib/repository.sh` | 10 | 10 |
 
-Module count is unchanged at three. The runtime holds 248 functions and 10,019 body lines, against
-249 and 10,034 before: -1 functions, -15 body lines.
+Module count is unchanged at three. The runtime holds 249 functions and 9,997 body lines, against
+249 and 10,034 before: +0 functions, -37 body lines.
 
-Those totals count **every** definition, nested ones included — 9 of the 248 are nested
-inside another function, against 12 of 249 before. Counted whole, this unit removes 2 definition(s) — `bg_json_escape`, `json_escape_out` — adds 1 — `intent_liveness` — and moves 1 — `json_escape` — from nested to top-level, which is why the total goes 249 to 248. A top-level-only inventory saw none of the removals, because all three escapers were nested, and reported this unit adding two functions.
+Those totals count **every** definition, nested ones included — 9 of the 249 are nested
+inside another function, against 12 of 249 before. Counted whole, this unit removes 2 definition(s) — `bg_json_escape`, `json_escape_out` — adds 2 — `__spark_memo_write`, `intent_liveness` — and moves 1 — `json_escape` — from nested to top-level, which is why the total goes 249 to 249. A top-level-only inventory saw none of the removals, because all three escapers were nested, and reported this unit adding two functions.
 `tests/structure.sh` reports the top-level half — the right scope for the size of a file — and stays the authority
 for it; the map records each function's scope and, for a nested one, the function that holds it.
 
@@ -48,13 +48,13 @@ actual line count is reported too:
 
 | File | Lines before | after | delta |
 |---|---|---|---|
-| `plugins/spark/bin/spark` | 8,938 | 8,958 | +20 |
+| `plugins/spark/bin/spark` | 8,938 | 8,957 | +19 |
 | `plugins/spark/lib/execution.sh` | 2,182 | 2,180 | -2 |
 | `plugins/spark/lib/planning.sh` | 825 | 825 | +0 |
 | `plugins/spark/lib/repository.sh` | 221 | 221 | +0 |
 
-**12,166 lines before, 12,184 after (+18)**, against
-10,034 and 10,019 body lines. The file grows while the bodies shrink because each new primitive is
+**12,166 lines before, 12,183 after (+17)**, against
+10,034 and 9,997 body lines. The file grows while the bodies shrink because each new primitive is
 documented where it lives, at the top level, outside any body.
 
 **Argument parsing, measured rather than assigned.** The map is exclusive — one responsibility per function — and
@@ -64,19 +64,19 @@ without inventing an owner. It is a line-level heuristic, not a parser:
 
 | File | Parse lines before | after |
 |---|---|---|
-| `plugins/spark/bin/spark` | 531 | 532 |
+| `plugins/spark/bin/spark` | 531 | 533 |
 | `plugins/spark/lib/execution.sh` | 205 | 203 |
 | `plugins/spark/lib/planning.sh` | 61 | 61 |
 | `plugins/spark/lib/repository.sh` | 23 | 23 |
 
-212 functions carried parse lines before and 211 do now, in
+212 functions carried parse lines before and 212 do now, in
 820
-and 819
+and 820
 lines respectively. That is why extracting a shared parser is rejected below: the lines are per-verb strings and
 flags, and a shared parser would either normalize what users see or take it all as parameters.
 
-Two buckets hold 153 of 248 functions and
-8,550 of 10,019 body lines. That
+Two buckets hold 154 of 249 functions and
+8,544 of 9,997 body lines. That
 concentration is the issue's premise, and it is also the trap: for `cmd_doctor`, `cmd_next` and `cmd_labels` the
 rules *are* the product, and there is no lower layer to defer them to. Relocating them would move ownership
 without reducing it.

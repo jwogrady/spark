@@ -8,7 +8,7 @@ RESP = {
 "argument-parsing": ["usage"],
 "routing-dispatch": ["spark_module_for", "spark_load_module", "spark_load_all_modules",
     "spark_runtime_source_bytes", "spark_record_runtime_footprint"],
-"source-collection": ["__spark_memo_key", "__spark_memo_read", "git_root", "check_json", "prefs_operator_path",
+"source-collection": ["__spark_memo_key", "__spark_memo_read", "__spark_memo_write", "git_root", "check_json", "prefs_operator_path",
     "read_flat_json", "pref_get", "repo_git_facts", "repo_open_pr", "repo_recorded_intent", "repo_classification",
     "repo_trunk", "repo_manifest_names", "tracked_content_count", "governance_shipped_model",
     "governance_operator_model", "governance_project_model", "governance_records", "di_trunk", "di_repo_nwo",
