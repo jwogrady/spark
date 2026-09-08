@@ -948,4 +948,53 @@ gout="$("$SPARK" facts --issue 733 2>/dev/null)"
   || bad "and carry only the class that was established"
 [ -n "$nout" ] && ok || bad "while the reason is reported on stderr, not dropped"
 
+# --- failing to look is not absence ----------------------------------------
+# After the issue lookup reports absence, the pull-request probe decides which
+# absence it is. Every non-zero result used to mean not-found, so a 401 or a
+# rate limit asserted that the work unit does not exist — sending a caller to
+# create something that may already be there.
+probe_case() { # probe_case <probe stderr> <expected reason> <label>
+  stub_gh "$WORK/bin/gh" <<STUB
+printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
+case "\$*" in
+  *graphql*) echo 'gh: Could not resolve to an Issue with the number of 733.' >&2; exit 1 ;;
+  *"pulls/733"*) echo "$1" >&2; exit 1 ;;
+  *) answer_json '$NODE' ;;
+esac
+STUB
+  local out; out="$("$SPARK" facts --issue 733 2>&1 >/dev/null)"
+  assert_contains "$3" "$2" "$out"
+}
+probe_case 'gh: Not Found (HTTP 404)'          'not-found'         'no issue and no pull request is genuinely absent'
+probe_case 'gh: Bad credentials (HTTP 401)'    'permission-denied' 'but a 401 is a permission answer, not absence'
+probe_case 'gh: API rate limit exceeded (HTTP 403)' 'rate-limited' 'and a rate limit is not absence either'
+probe_case 'error: context deadline exceeded'  'timeout'           'nor is a timeout'
+probe_case 'gh: Internal Server Error (HTTP 500)' 'unreadable'     'and an unclassified failure is still not absence'
+
+# --- the node returned must be the node asked for --------------------------
+# A response naming a different issue would compile that issue's version and
+# relationships under this work unit's identity: one node wearing another's name.
+graph_refused '{"number":734,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
+  "a graph for another issue must not be compiled under this work unit"
+graph_refused '{"number":null,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
+  "a root with no number names nothing"
+graph_refused '{"number":"733","state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
+  "and a string is not an issue number, whatever it spells"
+
+# The control: the matching number still establishes, so the check discriminates.
+graph_stub '{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
+GM="$(gfact "$("$SPARK" facts --issue 733 2>/dev/null)")"
+assert_contains "the requested work unit's own graph is established" "ESTABLISHED" \
+  "$(printf '%s' "$GM" | jq -r '.status')"
+assert_contains "and named as itself" "github.com/jwogrady/spark#733" \
+  "$(printf '%s' "$GM" | jq -r '.source.identity')"
+
 finish

@@ -312,9 +312,12 @@ facts_repository_fact() {
 # a single request. Sets FACTS_NODE to TSV rows and returns 0, or sets it to the
 # failure output and returns non-zero.
 #
-# Rows: "self <state> <updatedAt>", then "parent|child|blocker <number> <state>
-# <updatedAt> <owner/name>" per related node, then "truncated <which>" for any
-# relationship list GitHub could not return whole.
+# Rows: "self <number> <state> <updatedAt>", then "parent|child|blocker <number>
+# <state> <updatedAt> <owner/name>" per related node, then "truncated <which>"
+# for any relationship list GitHub could not return whole.
+#
+# The root's own number is carried so the caller can check that the node
+# returned is the node asked for.
 #
 # One request for the whole graph, for the same reason the repository fact makes
 # one: a request per relationship could observe the graph in three states, and
@@ -350,7 +353,7 @@ facts_graph_node() {
     if has("errors") then ("errored" | @tsv)
     elif (.data.repository.issue // null) == null then ("absent" | @tsv)
     elif (.data.repository.issue
-          | (.state == null) or (.updatedAt == null)
+          | ((.number | type) != "number") or (.state == null) or (.updatedAt == null)
             or ((.subIssues.nodes | type) != "array")
             or ((.subIssues.pageInfo.hasNextPage | type) != "boolean")
             or ((.blockedBy.nodes | type) != "array")
@@ -359,7 +362,7 @@ facts_graph_node() {
     else
       .data.repository.issue as $i
       |
-        (["self", $i.state, $i.updatedAt] | @tsv),
+        (["self", ($i.number | tostring), $i.state, $i.updatedAt] | @tsv),
         (if $i.parent != null then
            ["parent", ($i.parent.number|tostring), $i.parent.state, $i.parent.updatedAt,
             $i.parent.repository.nameWithOwner, $i.parent.__typename] | @tsv
@@ -453,11 +456,18 @@ facts_graph_fact() {
       # UNKNOWN and CONFLICT, and NOT_APPLICABLE belongs to the HEAD-bound
       # classes. So this is a refusal with an accurate reason, not a fact.
       FACTS_API_CALLS=$(( FACTS_API_CALLS + 1 ))
-      if gh api --hostname "${locator%%/*}" \
-           "repos/${locator#*/}/pulls/$number" --jq .number >/dev/null 2>&1; then
+      local probe prc=0
+      probe="$(gh api --hostname "${locator%%/*}" \
+        "repos/${locator#*/}/pulls/$number" --jq .number 2>&1)" || prc=$?
+      if [ "$prc" -eq 0 ]; then
         FACTS_REFUSED="a pull request has no native graph"
       else
-        FACTS_REFUSED="not-found"
+        # Absence is a claim about the world; failing to look is not. A real 404
+        # means no pull request either, so the work unit is genuinely absent —
+        # the ladder maps that to not-found. A 401, a rate limit or a transport
+        # error keeps its own reason instead of asserting the work unit does not
+        # exist, which would send a caller to create something that may be there.
+        FACTS_REFUSED="$(facts_unreadable_reason "$probe")"
       fi
       return 3 ;;
     # A reply that carried errors, or one whose relationship structures were
@@ -494,7 +504,17 @@ facts_graph_fact() {
   local self_version parent='"none"' kids="" blocks=""
   local seen_parent="" seen_child="" seen_blocker="" known=""
   local inv="issue:$wu" vers="" kind line f1 f2 f3 f4 f5 f6 entry tok
-  self_version="$(printf '%s' "$FACTS_NODE" | awk -F'\t' '$1 == "self" { print $3; exit }')"
+  # The node returned must be the node asked for. Without this a response naming
+  # a different issue would compile that issue's version and relationships under
+  # this work unit's identity — one node wearing another's name, which is the
+  # failure the identity discipline exists to prevent.
+  local self_number
+  self_number="$(printf '%s' "$FACTS_NODE" | awk -F'\t' '$1 == "self" { print $2; exit }')"
+  if [ "$self_number" != "$number" ]; then
+    FACTS_REFUSED="malformed"
+    return 3
+  fi
+  self_version="$(printf '%s' "$FACTS_NODE" | awk -F'\t' '$1 == "self" { print $4; exit }')"
   if [ -z "$self_version" ] || ! facts_canonical "$FACTS_RE_TIMESTAMP" "" "$self_version"; then
     FACTS_REFUSED="malformed"
     return 3
