@@ -141,7 +141,7 @@ assert_eq "resume does not resolve the ref itself" "0" \
 
 # --- the map proves the canonicalization across the module boundary, which a dispatcher-only graph could not
 je="$(rows | awk -F'\t' '$1 == "json_escape" {print $9}')"
-for consumer in cmd_state cmd_telemetry cmd_budget facts_envelope_tail facts_repository_fact; do
+for consumer in cmd_state cmd_telemetry cmd_budget facts_envelope_tail facts_repository_fact facts_graph_entry facts_graph_fact; do
   case "$je" in
     *"$consumer"*) ok ;;
     *) bad "the map does not show $consumer consuming json_escape" ;;
@@ -184,7 +184,7 @@ done <<EOF_ONELINERS
 $oneliners
 EOF_ONELINERS
 assert_eq "no one-line function consumes what its single line does not name" "" "$(printf '%s' "$bad_edges" | sed 's/^ //')"
-assert_eq "the canonical escaper has exactly five consumers" "5" "$(rows | awk -F'\t' '$1 == "json_escape" {print $8}')"
+assert_eq "the canonical escaper has exactly seven consumers" "7" "$(rows | awk -F'\t' '$1 == "json_escape" {print $8}')"
 for f in $FILES; do
   pa="$(rows | awk -F'\t' -v f="$f" '$2 == f {s+=$7} END {printf "%d", s}' | sed ':a;s/\B[0-9]\{3\}\>/,&/;ta')"
   pb="$(rows_before | awk -F'\t' -v f="$f" '$2 == f {s+=$7} END {printf "%d", s}' | sed ':a;s/\B[0-9]\{3\}\>/,&/;ta')"

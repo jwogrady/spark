@@ -2230,7 +2230,7 @@ a rebind is a human act, and its absence is what allowed the original incident.
 This is an additional authority dimension, not a replacement: force-push and
 trunk-push protections are unchanged.
 
-## `spark facts`
+## `spark facts [--issue <number>]`
 
 Compiles authoritative repository and GitHub truth into normalized facts, so
 each command stops re-deriving the same truth in its own vocabulary — with its
@@ -2244,6 +2244,17 @@ snapshot is not yet possible, which is why one is never claimed.
 | Class | Key | What it establishes |
 |---|---|---|
 | `repository` | `repository.identity` | The canonical `host/owner/name` of this repository and its default branch |
+| `graph` | `graph.native` | An issue's native parent, children and blockers, each with its current state |
+
+The `graph` class needs a work unit, so it is compiled when `--issue <number>`
+names one. Without the flag, only `repository` is compiled.
+
+**The root is an issue.** That is GitHub's shape, not a simplification: `parent`,
+`subIssues` and `blockedBy` belong to an issue and to nothing else, so a pull
+request has no native graph to report. A number naming a pull request is told
+exactly that rather than reported as not found. The relationships themselves may
+be either kind — a pull-request child is named as one and carries the
+pull-request invalidator form.
 
 Every fact carries the same envelope: the schema version it conforms to, its
 status, the source that was read with that source's own version identity, when
@@ -2276,14 +2287,65 @@ So these report **not assessed**, name the reason, and emit nothing:
   subject to be unknown about;
 - the clock gave no usable observation instant.
 
-The distinction is exactly whether the node's version was observed. A read that
-succeeded and returned one malformed field still observed it, so that fact is an
-`UNKNOWN` and is emitted.
+For **this class**, the distinction is exactly whether the node's version was
+observed. A read that succeeded and returned one malformed field still observed
+the repository's own `updated_at`, so that fact is an `UNKNOWN` and is emitted.
+
+The `graph` class draws the line differently, and the reason is worth stating
+because the two look inconsistent otherwise. A graph fact names other nodes, and
+a malformed relationship is a malformed *identity* — a state outside the
+vocabulary, a kind with no invalidator form, a node that cannot be named. There
+is no honest partial answer to give, so a malformed relationship yields no fact
+at all, while a merely incomplete one (a truncated list) is an `UNKNOWN` that
+says which list it could not see.
+
+### The graph fact
+
+One request returns the work unit, its parent, its children and its blockers,
+each with the `updatedAt` that becomes that node's observed version. Every node
+the fact names is also one of its invalidators, so a change to any relationship
+makes the fact stale.
+
+State is translated once, here: GitHub answers `OPEN`/`CLOSED`, the fact model
+admits `open|closed`, and anything outside that pair is refused rather than
+lower-cased and hoped for. A relationship's kind is read from the node rather
+than assumed, because an issue and a pull request take different invalidator
+forms.
+
+A **truncated** relationship list is `UNKNOWN`, not a shorter graph: the work
+unit's own version was observed, so the envelope conforms and the fact says which
+list it could not see whole. A read that fails, a work unit that does not exist,
+a node that cannot be named canonically, and a state or kind outside the model's
+vocabulary all yield **no fact**, for the same reason the repository class does.
+
+The work unit's own state is not part of this class. The value carries the state
+of each relation; the work unit's belongs to another fact.
+
+### What is verified before a fact is emitted
+
+A fact names nodes, and a consumer acts on those names, so each one is checked
+against the reply rather than assumed from the request:
+
+- the **endpoint and host** come from the repository's own locator, so the node
+  read is the node named;
+- the **root's number and repository** must both come back and must match what
+  was asked for — a reply describing another issue, or the same number in
+  another repository, is refused rather than bound to this work unit's name;
+- each **relation's kind** is read from the node, because an issue and a pull
+  request take different invalidator forms;
+- every **observed version** must satisfy the schema's grammar, and a fact whose
+  version could not be observed is not emitted at all.
+
+A reply that omits a field is not read as that field being empty. A missing
+relationship list, a missing completeness flag, a missing parent key and a
+missing repository each refuse, because a reply that did not answer is not an
+answer of "none".
 
 ### Cost
 
-One request supplies every field of the repository fact, so the node is observed
-once rather than once per field — a fan-out could observe the same node in three
+One request supplies every field of the repository fact, and one more supplies a
+work unit's whole relationship graph, so each node is observed once rather than
+once per field or once per relationship — a fan-out could observe the same node in three
 states and manufacture a conflict the repository does not have. The endpoint and
 the host come from the repository's own locator, so the node that is read is the
 node the fact names.

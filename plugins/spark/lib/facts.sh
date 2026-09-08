@@ -24,10 +24,19 @@
 #     succeeded and returned a malformed field still observed the node's version,
 #     so that UNKNOWN conforms and is emitted.
 #
+# EVERY IDENTITY A FACT CARRIES IS ONE THIS COMPILER OBSERVED. Never one it
+# assumed because it asked nicely. Three defects in this module were the same
+# mistake wearing different clothes — an endpoint resolved from gh's own context
+# rather than from the locator, a root issue number requested and never checked,
+# a root repository synthesized from the request — and each one could have bound
+# another node's version and relationships to this work unit's name. So a reply
+# must say which node it is about, and that must match what was asked, before
+# anything it contains becomes a fact.
+#
 # The output is a FRAGMENT, not a snapshot: a bare list of facts (R11, R22). A
 # snapshot is exactly {observer, facts} with every required class present, and
-# this module compiles one class so far, so calling its output a snapshot would
-# be a lie a consumer is entitled to act on.
+# this module compiles two of them — `repository` and `graph` — so calling its
+# output a snapshot would be a lie a consumer is entitled to act on.
 #
 # The functions here SET a variable rather than printing their result, the same
 # discipline __spark_memo_key follows and for a sharper reason: a command
@@ -71,8 +80,11 @@ FACTS_MODEL="$SPARK_ROOT/preferences/fact-model.tsv"
 FACTS_RE_REPOSITORY=""
 FACTS_RE_REF=""
 FACTS_RE_TIMESTAMP=""
+FACTS_RE_WORK_UNIT=""
+FACTS_RE_ISSUE_STATE=""
 FACTS_CON_REPOSITORY=""
 FACTS_CON_REF=""
+FACTS_CON_WORK_UNIT=""
 FACTS_GRAMMARS_LOADED=""
 
 facts_load_grammars() {
@@ -81,14 +93,17 @@ facts_load_grammars() {
   while IFS=$'\t' read -r kind name rest; do
     case "$kind/$name" in
       identifier/repository) FACTS_RE_REPOSITORY="$rest" ;;
+      identifier/work-unit)  FACTS_RE_WORK_UNIT="$rest" ;;
+      identifier/issue-state) FACTS_RE_ISSUE_STATE="$rest" ;;
+      constraint/work-unit)  FACTS_CON_WORK_UNIT="$FACTS_CON_WORK_UNIT$rest"$'\n' ;;
       identifier/ref)        FACTS_RE_REF="$rest" ;;
       identifier/timestamp)  FACTS_RE_TIMESTAMP="$rest" ;;
       constraint/repository) FACTS_CON_REPOSITORY="$FACTS_CON_REPOSITORY$rest"$'\n' ;;
       constraint/ref)        FACTS_CON_REF="$FACTS_CON_REF$rest"$'\n' ;;
     esac
   done < <(awk -F'\t' '
-    $1 == "identifier" && ($2 == "repository" || $2 == "ref" || $2 == "timestamp") { print $1 "\t" $2 "\t" $3 }
-    $1 == "constraint" && ($2 == "repository" || $2 == "ref") { print $1 "\t" $2 "\t" $3 }' "$FACTS_MODEL")
+    $1 == "identifier" && ($2 == "repository" || $2 == "ref" || $2 == "timestamp" || $2 == "work-unit" || $2 == "issue-state") { print $1 "\t" $2 "\t" $3 }
+    $1 == "constraint" && ($2 == "repository" || $2 == "ref" || $2 == "work-unit") { print $1 "\t" $2 "\t" $3 }' "$FACTS_MODEL")
   FACTS_GRAMMARS_LOADED=1
 }
 
@@ -292,6 +307,392 @@ facts_repository_fact() {
   FACTS_JSON="$head"'"ESTABLISHED","value":{"id":"'"$(json_escape "$locator")"'","default_branch":"'"$(json_escape "$branch")"'"}'"$tail"'}'
 }
 
+# facts_graph_node <locator> <number> — ONE read of an ISSUE's native
+# relationships.
+#
+# The root is an issue, and that is a property of GitHub rather than a
+# simplification: the schema gives `parent`, `subIssues` and `blockedBy` to
+# Issue and to nothing else, so a pull request has no native graph to report.
+#
+# Asking for the pull request in the SAME query does not work — GitHub reports a
+# legitimately-absent alternative as a NOT_FOUND entry in `errors`, which would
+# make every issue's graph refuse. So the kinds are told apart only where the
+# issue turned out to be absent, by one targeted read, and the normal path stays
+# a single request. Sets FACTS_NODE to TSV rows and returns 0, or sets it to the
+# failure output and returns non-zero.
+#
+# Rows: "self <number> <owner/name> <updatedAt>", then "parent|child|blocker <number> <state>
+# <updatedAt> <owner/name>" per related node, then "truncated <which>" for any
+# relationship list GitHub could not return whole.
+#
+# The root's own state is neither read nor projected: this class carries the
+# state of each RELATION, and the work unit's own belongs to another fact. An
+# unused field that could gate the fact is worse than no field at all.
+#
+# The root's own number AND repository are carried so the caller can check that
+# the node returned is the node asked for. Checking the number alone leaves the
+# repository half of the identity assumed, and a fact that names a repository it
+# never observed is the defect this whole class exists to prevent.
+#
+# One request for the whole graph, for the same reason the repository fact makes
+# one: a request per relationship could observe the graph in three states, and
+# since the model wants a version per invalidator, each of those reads would have
+# to be re-read to stay mutually consistent.
+#
+# `__typename` is carried and checked rather than assumed. The invalidator form
+# differs for an issue and a pull request (R14) and a compiler that guessed would
+# emit a token naming the wrong kind of node.
+facts_graph_node() {
+  local locator="$1" number="$2" host="${1%%/*}" nwo="${1#*/}" out rc=0
+  FACTS_API_CALLS=$(( FACTS_API_CALLS + 1 ))
+  out="$(gh api graphql --hostname "$host" \
+    -F owner="${nwo%%/*}" -F name="${nwo##*/}" -F number="$number" -f query='
+    query($owner:String!,$name:String!,$number:Int!){
+      repository(owner:$owner,name:$name){
+        issue(number:$number){
+          number updatedAt repository{ nameWithOwner }
+          parent{ __typename number state updatedAt repository{ nameWithOwner } }
+          subIssues(first:100){ pageInfo{ hasNextPage } nodes{ __typename number state updatedAt repository{ nameWithOwner } } }
+          blockedBy(first:100){ pageInfo{ hasNextPage } nodes{ __typename number state updatedAt repository{ nameWithOwner } } }
+        }
+      }
+    }' --jq '
+    # The shape check is ORDERED: nothing is indexed before it is known to be
+    # indexable. jq raises on reaching into a scalar, and that error would arrive
+    # as a source-read failure rather than the malformed refusal this path
+    # documents — so the guards run outside-in and `and` short-circuits.
+    def obj: type == "object";
+    # A relationship node is held to the same standard as the root: a real integer number,
+    # not a string that prints like one, and the strings the projection reads.
+    def relation_ok:
+      obj
+      and (.number | type) == "number" and (.number == (.number | floor))
+      and (.state | type) == "string"
+      and (.updatedAt | type) == "string"
+      and (.__typename | type) == "string"
+      and (.repository | obj) and (.repository.nameWithOwner | type) == "string";
+    def list_ok:
+      obj and (.nodes | type) == "array"
+      and (.pageInfo | obj) and (.pageInfo.hasNextPage | type) == "boolean"
+      and ([.nodes[] | relation_ok] | all);
+    def root_ok:
+      obj
+      and (.number | type) == "number" and (.number == (.number | floor))
+      and (.updatedAt | type) == "string"
+      and (.repository | obj) and (.repository.nameWithOwner | type) == "string"
+      # `parent` must be present and either absent-as-null or a whole relation:
+      # a reply that omits it has not said the work unit has no parent.
+      and has("parent") and ((.parent == null) or (.parent | relation_ok))
+      and (.subIssues | list_ok) and (.blockedBy | list_ok);
+    # A GraphQL reply can carry errors beside partial data, and a null list is
+    # not an empty one. Both are refused here rather than projected into rows
+    # that would read as a complete graph with no relationships.
+    # The response root is proven to be an object before it is indexed at all:
+    # `has` on a scalar raises, and that error would arrive as a source-read
+    # failure rather than the malformed refusal this path documents.
+    if (obj | not) then (["partial"] | @tsv)
+    elif has("errors") then (["errored"] | @tsv)
+    # Only an explicitly present, null `issue` is GitHub saying there is no such
+    # issue. A missing `data`, a missing or null `repository`, or no `issue` key
+    # at all are replies that did not answer the question — and calling those
+    # absence produces a confident wrong reason two steps later.
+    elif (.data | obj | not) then (["partial"] | @tsv)
+    elif (.data.repository | obj | not) then (["partial"] | @tsv)
+    elif (.data.repository | has("issue") | not) then (["partial"] | @tsv)
+    elif .data.repository.issue == null then (["absent"] | @tsv)
+    elif (.data.repository.issue | root_ok | not) then (["partial"] | @tsv)
+    else
+      .data.repository.issue as $i
+      |
+        (["self", ($i.number | tostring), $i.repository.nameWithOwner, $i.updatedAt] | @tsv),
+        (if $i.parent != null then
+           ["parent", ($i.parent.number|tostring), $i.parent.state, $i.parent.updatedAt,
+            $i.parent.repository.nameWithOwner, $i.parent.__typename] | @tsv
+         else empty end),
+        (if $i.subIssues.pageInfo.hasNextPage then ["truncated", "children"] | @tsv else empty end),
+        ($i.subIssues.nodes[] | ["child", (.number|tostring), .state, .updatedAt,
+                                 .repository.nameWithOwner, .__typename] | @tsv),
+        (if $i.blockedBy.pageInfo.hasNextPage then ["truncated", "blockers"] | @tsv else empty end),
+        ($i.blockedBy.nodes[] | ["blocker", (.number|tostring), .state, .updatedAt,
+                                 .repository.nameWithOwner, .__typename] | @tsv)
+    end' 2>&1)" || rc=$?
+  # A work unit that does not exist is not a transport failure. GraphQL reports
+  # it as a NOT_FOUND error and gh exits non-zero, so without this the absent
+  # path is unreachable and a missing issue reads as an unreadable source —
+  # which would send a caller to check access it has.
+  if [ "$rc" -ne 0 ]; then
+    case "$out" in
+      *"Could not resolve to an Issue"*) FACTS_NODE="absent"; return 0 ;;
+    esac
+  fi
+  FACTS_NODE="$out"
+  return "$rc"
+}
+
+# facts_state_canonical <github state> — the model's vocabulary, not GitHub's.
+#
+# GitHub answers OPEN/CLOSED through GraphQL and open/closed through REST, and
+# the runtime has carried all three spellings plus an UNKNOWN in different
+# readers. The model admits exactly open|closed, so the translation happens once,
+# here, and anything outside the pair is refused rather than lower-cased and
+# hoped for — that is the residual ambiguity acceptance item 7 names.
+facts_state_canonical() {
+  case "$1" in
+    OPEN|open)     printf 'open' ;;
+    CLOSED|closed) printf 'closed' ;;
+    *)             return 1 ;;
+  esac
+}
+
+# facts_graph_entry <locator-host> <number> <state> <nwo> <typename> — one
+# relationship entry as JSON, then its canonical work-unit locator and its kind,
+# tab-separated. Returns non-zero when the node cannot be named canonically, so
+# the caller refuses rather than emitting a locator outside the grammar.
+#
+# Identity and kind are returned apart because they are different things. The
+# work unit IS the locator; the kind is something observed about it. Keying
+# identity by `<kind>:<locator>` would make one work unit returned as an issue
+# and as a pull request look like two nodes — and two contradictory kinds would
+# both survive, which is exactly what "one node, one state" forbids.
+facts_graph_entry() {
+  local host="$1" number="$2" state="$3" nwo="$4" typename="$5" wu kind st
+  case "$typename" in
+    Issue)       kind=issue ;;
+    PullRequest) kind=pull_request ;;
+    *)           return 1 ;;
+  esac
+  st="$(facts_state_canonical "$state")" || return 1
+  wu="$(printf '%s/%s#%s' "$host" "${nwo,,}" "$number")"
+  facts_canonical "$FACTS_RE_WORK_UNIT" "$FACTS_CON_WORK_UNIT" "$wu" || return 1
+  printf '{"kind":"%s","id":"%s","state":"%s"}\t%s\t%s' \
+    "$kind" "$(json_escape "$wu")" "$st" "$wu" "$kind"
+}
+
+# facts_graph_fact <locator> <number> <observed_at> — sets FACTS_JSON to the
+# graph.native fact, or FACTS_REFUSED when no conforming fact can be built.
+#
+# The statuses, and what decides them:
+#
+#   ESTABLISHED  the whole relationship set was read, every node named
+#                canonically, every state in the model's vocabulary;
+#   UNKNOWN      a list was truncated. The node's own version WAS observed, so
+#                the envelope conforms; what is missing is the value, and a
+#                bounded read is an unknown rather than a shorter graph;
+#   refused      the read failed, the work unit is absent, or a node cannot be
+#                named or its state canonicalized — no observed version, or no
+#                canonical representation, so no fact.
+facts_graph_fact() {
+  local locator="$1" number="$2" observed="$3" rc=0 host="${1%%/*}"
+  local wu="$locator#$number"
+  FACTS_JSON=""
+  FACTS_REFUSED=""
+  facts_load_grammars
+
+  facts_canonical "$FACTS_RE_WORK_UNIT" "$FACTS_CON_WORK_UNIT" "$wu" || {
+    FACTS_REFUSED="the work unit cannot be named canonically"; return 3; }
+
+  facts_graph_node "$locator" "$number" || {
+    FACTS_REFUSED="$(facts_unreadable_reason "$FACTS_NODE")"; return 3; }
+
+  case "$FACTS_NODE" in
+    absent*)
+      # No issue by that number. One targeted read then says whether the number
+      # names a pull request, because "that is a pull request" and "there is no
+      # such work unit" send a caller to different places. A pull request HAS no
+      # native graph — the schema gives those fields to Issue alone — and the
+      # model offers no conforming fact to say so: `graph` admits ESTABLISHED,
+      # UNKNOWN and CONFLICT, and NOT_APPLICABLE belongs to the HEAD-bound
+      # classes. So this is a refusal with an accurate reason, not a fact.
+      FACTS_API_CALLS=$(( FACTS_API_CALLS + 1 ))
+      local probe prc=0
+      # Both halves of the identity, for the same reason the root needs both: a
+      # reply carrying only a number proves nothing about WHICH repository's
+      # pull request it describes, and accepting it would let a reply from
+      # anywhere decide this work unit's answer.
+      #
+      # The projection is TOTAL — ordered container guards, then `empty` rather
+      # than a raise — so a malformed enclosing shape produces no match and
+      # lands on the malformed path, instead of erroring and being reported as
+      # a source that could not be reached.
+      #
+      # The projection asks for real types: `jq -r .number` would print a string
+      # "733" indistinguishably from the integer 733, and a reply that names its
+      # number as a string has not answered in the shape the API defines.
+      probe="$(gh api --hostname "${locator%%/*}" "repos/${locator#*/}/pulls/$number" \
+        --jq 'if (type == "object") and ((.number | type) == "number")
+                 and ((.base | type) == "object") and ((.base.repo | type) == "object")
+                 and ((.base.repo.full_name | type) == "string")
+              then "\(.number)\t\(.base.repo.full_name)" else empty end' 2>&1)" || prc=$?
+      # A zero exit is not proof: `gh --jq` exits zero for a null or missing
+      # field, and a reply naming a different pull request — or the same number
+      # in another repository — is not this work unit.
+      local probe_num="${probe%%$'\t'*}" probe_repo="${probe##*$'\t'}"
+      if [ "$prc" -eq 0 ] && [ "$probe_num" = "$number" ] \
+         && [ "${locator%%/*}/${probe_repo,,}" = "$locator" ]; then
+        FACTS_REFUSED="a pull request has no native graph"
+      elif [ "$prc" -eq 0 ]; then
+        FACTS_REFUSED="malformed"
+      else
+        # Absence is a claim about the world; failing to look is not. A real 404
+        # means no pull request either, so the work unit is genuinely absent —
+        # the ladder maps that to not-found. A 401, a rate limit or a transport
+        # error keeps its own reason instead of asserting the work unit does not
+        # exist, which would send a caller to create something that may be there.
+        FACTS_REFUSED="$(facts_unreadable_reason "$probe")"
+      fi
+      return 3 ;;
+    # A reply that carried errors, or one whose relationship structures were
+    # missing, was not a reading of this graph. Compiling it would state that
+    # the work unit has no relationships, which is a different fact from not
+    # having been able to see them.
+    errored*) FACTS_REFUSED="malformed"; return 3 ;;
+    partial*) FACTS_REFUSED="malformed"; return 3 ;;
+  esac
+
+  # `none` in a value shape is the model's literal for "no such relationship",
+  # and its own next_action example writes it as a JSON string. A bare token
+  # would not parse at all, which is a fact nobody can read.
+  # Truncation is decided BEFORE the relationships are walked. An UNKNOWN graph
+  # represents none of them, so it must list none of them as invalidators (R17);
+  # accumulating the partial page's nodes first and discarding them afterwards
+  # invites exactly the bug where the fact denies knowing the set and still
+  # claims a freshness contract over part of it.
+  # Every incomplete list, not the first one: a fact that says what it could not
+  # see must say all of it.
+  local truncated
+  truncated="$(printf '%s' "$FACTS_NODE" | awk -F'\t' '$1 == "truncated" { print $2 }' \
+    | sort -u | tr '\n' ' ')"
+  truncated="${truncated% }"
+
+  # Membership is per list and identity is global, which are different rules.
+  #
+  # The model has a work unit appear at most once IN EACH list, and a node can
+  # legitimately be both a child and a blocker — so tracking uniqueness across
+  # the lists silently dropped a real edge. What must be unique globally is the
+  # node's invalidator and its observed version: one node has one version, and a
+  # node reported twice with different states or versions is refused rather
+  # than reconciled by preferring one.
+  local self_version parent='"none"' kids="" blocks=""
+  local seen_parent="" seen_child="" seen_blocker="" known=""
+  local inv="issue:$wu" vers="" kind line f1 f2 f3 f4 f5 f6 entry tok rel_wu rel_kind
+  # The node returned must be the node asked for. Without this a response naming
+  # a different issue would compile that issue's version and relationships under
+  # this work unit's identity — one node wearing another's name, which is the
+  # failure the identity discipline exists to prevent.
+  local self_number self_repo
+  self_number="$(printf '%s' "$FACTS_NODE" | awk -F'\t' '$1 == "self" { print $2; exit }')"
+  self_repo="$(printf '%s' "$FACTS_NODE" | awk -F'\t' '$1 == "self" { print $3; exit }')"
+  # Both halves of the identity, because checking the number alone leaves the
+  # repository assumed — and a reply from another repository would then have its
+  # issue's version and relationships bound to this repository's name.
+  if [ "$self_number" != "$number" ] || [ "$host/${self_repo,,}" != "$locator" ]; then
+    FACTS_REFUSED="malformed"
+    return 3
+  fi
+  self_version="$(printf '%s' "$FACTS_NODE" | awk -F'\t' '$1 == "self" { print $4; exit }')"
+  if [ -z "$self_version" ] || ! facts_canonical "$FACTS_RE_TIMESTAMP" "" "$self_version"; then
+    FACTS_REFUSED="malformed"
+    return 3
+  fi
+  vers='"'"$(json_escape "$inv")"'":"'"$(json_escape "$self_version")"'"'
+  # The root is inside the identity tracking, not beside it. Without this a
+  # relation naming the root would append its invalidator a second time and
+  # write the same key into `versions` twice — an object with one key twice,
+  # which is not a conforming fact at all.
+  known=" $wu=ROOT@$self_version"
+
+  # Every returned row is walked and validated, whatever the truncation state: a
+  # node the reply DID return is a node it claimed, and a malformed claim makes
+  # the reply malformed. What truncation changes is representation, not
+  # validation — a partial reading may not contribute to the value, the
+  # invalidators or the versions, because the fact would then assert a freshness
+  # contract over a set it admits it could not see.
+  while IFS=$'\t' read -r f1 f2 f3 f4 f5 f6; do
+    [ -n "$f1" ] || continue
+    case "$f1" in
+      self|truncated) continue ;;
+      parent|child|blocker)
+        entry="$(facts_graph_entry "$host" "$f2" "$f3" "$f5" "$f6")" || {
+          FACTS_REFUSED="malformed"; return 3; }
+        rel_kind="${entry##*$'\t'}"
+        entry="${entry%$'\t'*}"; rel_wu="${entry##*$'\t'}"; entry="${entry%$'\t'*}"
+        tok="$rel_kind:$rel_wu"
+        if ! facts_canonical "$FACTS_RE_TIMESTAMP" "" "$f4"; then
+          FACTS_REFUSED="malformed"; return 3
+        fi
+
+        # A work unit is not its own parent, child or blocker. A reply saying so
+        # is malformed, and treating it as a relationship would make the fact
+        # name the same node twice with two roles.
+        if [ "$rel_wu" = "$wu" ]; then
+          FACTS_REFUSED="malformed"; return 3
+        fi
+
+        # Identity is the work unit; kind and state are observed about it. So a
+        # node reported twice consistently is one node in two relationships,
+        # while one reported with two kinds, two states or two versions has no
+        # representation in this schema and is refused rather than reconciled.
+        case " $known " in
+          *" $rel_wu=$entry@$f4 "*) ;;
+          *" $rel_wu="*) FACTS_REFUSED="malformed"; return 3 ;;
+          *) known="$known $rel_wu=$entry@$f4"
+             # The identity is remembered so a later contradiction is still
+             # caught, but a truncated reading contributes nothing a consumer
+             # could act on.
+             if [ -z "$truncated" ]; then
+               vers="$vers,\"$(json_escape "$tok")\":\"$(json_escape "$f4")\""
+               inv="$inv $tok"
+             fi ;;
+        esac
+
+        # Validated; and represented only when the whole set was returned.
+        [ -z "$truncated" ] || continue
+
+        # Membership is then per list, keyed by the work unit, so a node that is
+        # both a child and a blocker appears in both — one edge is not a
+        # duplicate of the other.
+        case "$f1" in
+          parent)
+            case " $seen_parent " in *" $rel_wu "*) continue ;; esac
+            seen_parent="$seen_parent $rel_wu"; parent="$entry" ;;
+          child)
+            case " $seen_child " in *" $rel_wu "*) continue ;; esac
+            seen_child="$seen_child $rel_wu"; kids="${kids:+$kids,}$entry" ;;
+          blocker)
+            case " $seen_blocker " in *" $rel_wu "*) continue ;; esac
+            seen_blocker="$seen_blocker $rel_wu"; blocks="${blocks:+$blocks,}$entry" ;;
+        esac ;;
+    esac
+  done <<EOF
+$FACTS_NODE
+EOF
+
+  local inv_json="" t
+  for t in $inv; do inv_json="${inv_json:+$inv_json,}\"$(json_escape "$t")\""; done
+
+  local head tail
+  head='{"schema_version":'"$FACTS_SCHEMA_VERSION"',"key":"graph.native","class":"graph","status":'
+  tail=',"source":{"type":"github-api","identity":"'"$(json_escape "$wu")"'","version":"'"$(json_escape "$self_version")"'"}'
+  tail="$tail"',"observed_at":"'"$observed"'","invalidators":['"$inv_json"'],"versions":{'"$vers"'}'
+  tail="$tail"',"provenance":"'"$(json_escape "https://$locator/issues/$number")"'"'
+
+  FACTS_EMITTED=$(( FACTS_EMITTED + 1 ))
+  if [ -n "$truncated" ]; then
+    # The relationships this fact would describe were not all returned, so it
+    # describes none of them. The node's version is recorded, so a later read
+    # can tell whether anything changed since the truncation.
+    FACTS_UNKNOWN=$(( FACTS_UNKNOWN + 1 ))
+    local which
+    case "$truncated" in
+      *" "*) which="the ${truncated% *} and ${truncated##* } lists were truncated" ;;
+      *)     which="the $truncated list was truncated" ;;
+    esac
+    FACTS_JSON="$head"'"UNKNOWN"'"$tail"',"detail":{"reason":"'"$(json_escape "$which")"'","candidates":[]}}'
+    return 0
+  fi
+  FACTS_JSON="$head"'"ESTABLISHED","value":{"parent":'"$parent"',"children":['"$kids"'],"blocked_by":['"$blocks"']}'"$tail"'}'
+}
+
 # facts_record_telemetry — the compiler's efficiency observability, recorded
 # only when a run is being observed, exactly like the runtime footprint. Five
 # counts and nothing else: the facts themselves are this verb's output, and
@@ -314,13 +715,30 @@ facts_record_telemetry() {
 }
 
 cmd_facts() {
-  local usage_line="usage: spark facts [--help]"
+  local usage_line="usage: spark facts [--issue <number>] [--help]"
+  local issue="" issue_given=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
+      --issue)   issue_given=1; shift; issue="${1:-}" ;;
+      --issue=*) issue_given=1; issue="${1#--issue=}" ;;
       -h|--help) echo "$usage_line"; return 0 ;;
       *) red "unknown option: $1"; echo "$usage_line"; return 1 ;;
     esac
+    if [ "$#" -gt 0 ]; then shift; fi
   done
+  # Whether the flag was SUPPLIED is tracked separately from its value. `--issue`
+  # with nothing after it, and `--issue=`, are caller errors: treating them as
+  # the flag's absence would quietly compile a different set of facts than the
+  # caller asked for, which is worse than refusing.
+  #
+  # The value is then validated before it reaches a query and refused rather than
+  # coerced: a work unit is a positive integer, and anything else names no node.
+  if [ -n "$issue_given" ]; then
+    case "$issue" in
+      ''|0|0*|*[!0-9]*)
+        red "--issue takes an issue number"; echo "$usage_line"; return 1 ;;
+    esac
+  fi
 
   local top; top="$(git_root)"
   if [ -z "$top" ]; then
@@ -337,7 +755,7 @@ cmd_facts() {
   # a reason, it is a reason there is no fact.
   local observed; observed="$(facts_now)"
   if ! facts_canonical "$FACTS_RE_TIMESTAMP" "" "$observed"; then
-    yellow "NOT ASSESSED — the clock gave no usable observation instant"
+    yellow "NOT ASSESSED — the clock gave no usable observation instant" >&2
     facts_record_telemetry
     return 3
   fi
@@ -352,21 +770,43 @@ cmd_facts() {
   # arbitrary text, which is why the grammar decides and not emptiness alone.
   if [ -z "$locator" ] \
      || ! facts_canonical "$FACTS_RE_REPOSITORY" "$FACTS_CON_REPOSITORY" "$locator"; then
-    yellow "NOT ASSESSED — no origin remote names a canonical repository here"
+    yellow "NOT ASSESSED — no origin remote names a canonical repository here" >&2
     facts_record_telemetry
     return 3
   fi
 
-  if ! facts_repository_fact "$locator" "$observed"; then
-    # A source that could not be read, or whose own version is not a version, is
-    # reported rather than emitted as a fact this schema cannot carry. The
-    # counts still go out: this verb ran, read once, and established nothing.
-    yellow "NOT ASSESSED — the repository source could not be established: $FACTS_REFUSED"
+  # Each class is compiled independently and the fragment carries the ones that
+  # could be built. A class that could not be established is absent rather than
+  # present-and-empty, and the reasons are reported, so a caller can never read
+  # silence as an answer.
+  local facts="" why=""
+  if facts_repository_fact "$locator" "$observed"; then
+    facts="$FACTS_JSON"
+  else
+    why="repository: $FACTS_REFUSED"
+  fi
+
+  if [ -n "$issue" ]; then
+    if facts_graph_fact "$locator" "$issue" "$observed"; then
+      facts="${facts:+$facts,}$FACTS_JSON"
+    else
+      why="${why:+$why; }graph: $FACTS_REFUSED"
+    fi
+  fi
+
+  # Every diagnostic goes to stderr. This verb's stdout is a machine surface, and
+  # a fragment followed by a human note is not parseable JSON — which is exactly
+  # what a caller piping it would discover at the worst moment.
+  if [ -z "$facts" ]; then
+    yellow "NOT ASSESSED — nothing could be established: $why" >&2
     facts_record_telemetry
     return 3
   fi
   # The fragment shape: a bare list, never an object, so it can never be read as
-  # the {observer, facts} snapshot a consumer is allowed to act on (R22).
-  printf '[%s]\n' "$FACTS_JSON"
+  # the {observer, facts} snapshot a consumer is allowed to act on (R22). Two
+  # classes are not the required set either, so this stays a fragment however
+  # many facts it carries.
+  printf '[%s]\n' "$facts"
+  [ -z "$why" ] || yellow "not established — $why" >&2
   facts_record_telemetry
 }
