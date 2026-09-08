@@ -87,7 +87,12 @@ for f in $FILES; do
   grep -qF -- "| \`$f\` | $nb | $na |" "$MAN" && ok || bad "the manifest's file row for $f is not the maps' ($nb/$na)"
 done
 n_after="$(rows | grep -c .)"
-grep -qF -- "the $n_after functions in the dispatcher and its three modules" "$MAN" && ok || bad "the manifest does not state the runtime function count $n_after"
+# The module count is derived here for the same reason the manifest derives it:
+# pinned as a word, this assertion goes stale the moment a module is added, and
+# a suite that must be edited to stay true is not checking anything.
+n_mods="$(rows | cut -f2 | sort -u | grep -c '/lib/')"
+case "$n_mods" in 1) mw=one ;; 2) mw=two ;; 3) mw=three ;; 4) mw=four ;; 5) mw=five ;; *) mw="$n_mods" ;; esac
+grep -qF -- "the $n_after functions in the dispatcher and its $mw modules" "$MAN" && ok || bad "the manifest does not state the runtime function count $n_after over $mw modules"
 
 # --- the page's account of the inventory change is the maps': names, not arithmetic
 gone="$(comm -23 <(rows_before | cut -f1 | sort) <(rows | cut -f1 | sort))"

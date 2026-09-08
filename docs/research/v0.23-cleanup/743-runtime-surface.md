@@ -2,11 +2,11 @@
 
 **Rule.** An extraction or removal earns its place only by removing dead code, eliminating duplicate semantics,
 creating one canonical primitive with several consumers, lowering change fanout, or making a boundary testable
-with less context. Moving duplication into more files is not one of them, so this unit removes duplicate readers
-and adds no module.
+with less context. Moving duplication into more files is not one of them, so a module earns its place only by
+carrying a domain no verb outside it needs. This tree adds `facts.sh`, whose helpers no verb outside it references.
 
 **The map comes first, and it covers the whole runtime.** `docs/research/v0.23-cleanup/743-responsibilities.tsv`
-assigns every one of the 258 functions in the dispatcher and its three modules to exactly one of the issue's
+assigns every one of the 258 functions in the dispatcher and its four modules to exactly one of the issue's
 eight responsibilities, with its body length, everything in the runtime that references it, and the verbs among
 those. `743-responsibilities-before.tsv` is the same map at `29e4f4e`, the commit this branch left, so the
 before-change baseline is a map and not a pair of totals. Both are generated from `tests/structure.sh --raw` run
@@ -36,7 +36,7 @@ stated rather than smoothed over.
 | `plugins/spark/lib/repository.sh` | 10 | 10 |
 | `plugins/spark/lib/facts.sh` | 0 | 9 |
 
-Module count is unchanged at three. The runtime holds 258 functions and 10,193 body lines, against
+Module count goes 3 to 4, adding `facts.sh`. The runtime holds 258 functions and 10,193 body lines, against
 249 and 10,034 before: +9 functions, +159 body lines.
 
 Those totals count **every** definition, nested ones included — 9 of the 258 are nested
@@ -155,7 +155,7 @@ In reader bodies the same three facts go two to one, two to one and three to one
   actually fell.
 - **Fanout compared where mechanically practical** — consumer counts per function, on both sides, computed across
   module boundaries.
-- **Module count rises only when duplication or change surface falls** — module count is unchanged at three.
+- **Module count rises only when duplication or change surface falls** — module count goes 3 to 4, adding `facts.sh`.
 - **No public behaviour or authority guarantee changed** — no CLI semantics touched; `js` and `repo_trunk` left
   alone deliberately.
 - **No cleanup-only refactor became a rewrite** — three primitives, no restructuring.

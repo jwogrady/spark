@@ -342,6 +342,14 @@ inventory_note = (
     f"total goes {n_before} to {n_after}. A top-level-only inventory saw none of the removals, because all three "
     f"escapers were nested, and reported this unit adding two functions.")
 
+# Module counts are DERIVED, like every other figure on the page. They were prose
+# — "unchanged at three" — which is a claim about one unit's intent that goes
+# false the moment a later unit adds a module, and a manifest that contradicts
+# the runtime it describes is worse than one that omits the count.
+def modules_of(files):
+    return [f for f in files if "/lib/" in f]
+
+
 def loc_of(tree_reader, f):
     text = tree_reader(f)
     # A file the tree does not have is zero lines. Without this the subtraction
@@ -349,6 +357,29 @@ def loc_of(tree_reader, f):
     # by one in a direction that flatters the change.
     return len(text.split("\n")) - 1 if text else 0
 
+
+mods_after = modules_of(present(W))
+mods_before = [f for f in modules_of(FILES)
+               if subprocess.run(["git", "cat-file", "-e", f"{base_sha}:{f}"], cwd=W,
+                                 capture_output=True).returncode == 0]
+n_mods_after, n_mods_before = len(mods_after), len(mods_before)
+mods_added = [f.rsplit("/", 1)[-1] for f in mods_after if f not in mods_before]
+NUM = {0: "none", 1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six"}
+mods_word_after = NUM.get(n_mods_after, str(n_mods_after))
+# The rule sentence states what this tree's modules earned, not what one unit
+# intended, so it stays true for whoever regenerates the page next.
+if n_mods_after == n_mods_before:
+    module_rule = "This tree removes duplicate readers and adds no module."
+else:
+    module_rule = ("This tree adds " + ", ".join(f"`{m}`" for m in mods_added)
+                   + ", whose helpers no verb outside it references.")
+if n_mods_after == n_mods_before:
+    mods_claim = f"Module count is unchanged at {mods_word_after}"
+else:
+    added = ", ".join(f"`{m}`" for m in mods_added)
+    mods_claim = (f"Module count goes {n_mods_before} to {n_mods_after}"
+                  + (f", adding {added}" if added else ""))
+mods_claim_lower = mods_claim[0].lower() + mods_claim[1:]
 
 now_text = lambda f: open(os.path.join(W, f)).read()
 base_text = lambda f: subprocess.run(["git", "show", f"{base_sha}:{f}"], cwd=W, capture_output=True, text=True).stdout
@@ -425,11 +456,11 @@ manifest = f"""# Runtime surface after canonicalization (v0.23 cleanup, #743)
 
 **Rule.** An extraction or removal earns its place only by removing dead code, eliminating duplicate semantics,
 creating one canonical primitive with several consumers, lowering change fanout, or making a boundary testable
-with less context. Moving duplication into more files is not one of them, so this unit removes duplicate readers
-and adds no module.
+with less context. Moving duplication into more files is not one of them, so a module earns its place only by
+carrying a domain no verb outside it needs. {module_rule}
 
 **The map comes first, and it covers the whole runtime.** `docs/research/v0.23-cleanup/743-responsibilities.tsv`
-assigns every one of the {n_after} functions in the dispatcher and its three modules to exactly one of the issue's
+assigns every one of the {n_after} functions in the dispatcher and its {mods_word_after} modules to exactly one of the issue's
 eight responsibilities, with its body length, everything in the runtime that references it, and the verbs among
 those. `743-responsibilities-before.tsv` is the same map at `{base_sha[:7]}`, the commit this branch left, so the
 before-change baseline is a map and not a pair of totals. Both are generated from `tests/structure.sh --raw` run
@@ -448,7 +479,7 @@ stated rather than smoothed over.
 |---|---|---|
 {file_tbl}
 
-Module count is unchanged at three. The runtime holds {n_after} functions and {l_after:,} body lines, against
+{mods_claim}. The runtime holds {n_after} functions and {l_after:,} body lines, against
 {n_before} and {l_before:,} before: {d_fns:+d} functions, {d_body:+d} body lines.
 
 Those totals count **every** definition, nested ones included — {len(nested_after)} of the {n_after} are nested
@@ -551,7 +582,7 @@ In reader bodies the same three facts go two to one, two to one and three to one
   actually fell.
 - **Fanout compared where mechanically practical** — consumer counts per function, on both sides, computed across
   module boundaries.
-- **Module count rises only when duplication or change surface falls** — module count is unchanged at three.
+- **Module count rises only when duplication or change surface falls** — {mods_claim_lower}.
 - **No public behaviour or authority guarantee changed** — no CLI semantics touched; `js` and `repo_trunk` left
   alone deliberately.
 - **No cleanup-only refactor became a rewrite** — three primitives, no restructuring.
