@@ -188,6 +188,7 @@ case "$(cat "$GH_CALL_LOG")" in
 esac
 assert_contains "and the fact still names the origin" "github.com/jwogrady/spark" \
   "$(jq -r '.[0].value.id' < "$WORK/env.json")"
+assert_versions_canonical "$(jq -r '.[0]' < "$WORK/env.json")" "the fact read under a redirected GH_REPO"
 
 # A second remote is another thing gh may choose among. The identity is origin's.
 git -C "$WORK/proj" remote add upstream "https://github.com/someone/else.git"
@@ -220,6 +221,7 @@ assert_contains "with the host in the identity" "github.example.com/acme/widget"
   "$(printf '%s' "$E" | jq -r '.value.id')"
 assert_contains "and its own default branch" "main" \
   "$(printf '%s' "$E" | jq -r '.value.default_branch')"
+assert_versions_canonical "$E" "the enterprise fact"
 
 # Back to the project fixture for the remaining cases.
 stub_gh "$WORK/bin/gh" <<STUB
@@ -261,6 +263,9 @@ assert_contains "including the one GitHub reports" "github.com/jwogrady/spark-re
   "$(printf '%s' "$C" | jq -r '.detail.candidates[1]')"
 [ "$(printf '%s' "$C" | jq -r '.detail.candidates | length')" = "2" ] && ok \
   || bad "a conflict names exactly the candidates it saw"
+# A CONFLICT is an emitted fact, so it is held to the version grammar like every
+# other. It can be: the node WAS read, so its version was observed.
+assert_versions_canonical "$C" "the conflict fact"
 
 # --- the unreadable ladder ---------------------------------------------------
 # Every one of these is UNKNOWN with a reason. None is a permissive default, and
