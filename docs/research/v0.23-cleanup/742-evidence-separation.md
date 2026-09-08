@@ -2,7 +2,7 @@
 
 **Model.** `current fact → provenance/index pointer → historical evidence on demand`, never
 `historical evidence → agent reconstruction → current fact`. The pointer is `docs/ops/evidence-index.tsv`:
-every evidence artifact of the repository — 132 files, 1,037,839 bytes, 16,776 lines under
+every evidence artifact of the repository — 132 files, 1,040,073 bytes, 16,805 lines under
 `docs/research`, `docs/releases`, `docs/governance`, the three evidence pages under `docs/ops`, `evaluations`
 and `.spark` — is one row or one family member, with a retention class, an explicit *operative now* answer,
 the release/HEAD/work unit it concerned, the fact it supported, who loads or cites it today, and why it is
@@ -21,7 +21,7 @@ are computed from the index and re-checked by the suite.
 
 | Class | Files | Bytes | Lines |
 |---|---|---|---|
-| `active-current` | 52 | 431,134 | 7,032 |
+| `active-current` | 52 | 433,368 | 7,061 |
 | `historical-retained` | 67 | 397,371 | 6,644 |
 | `do-not-delete` | 13 | 209,334 | 3,100 |
 
@@ -40,7 +40,7 @@ reasoning path, and every deletion candidate failed the "independent retention v
 | `docs/ops` | 3 | 138,568 | 2,550 |
 | `docs/releases` | 13 | 103,829 | 1,849 |
 | `docs/research` | 2 | 7,056 | 101 |
-| `docs/research/v0.23-cleanup` | 20 | 291,216 | 3,787 |
+| `docs/research/v0.23-cleanup` | 20 | 293,450 | 3,816 |
 | `docs/research/v0.23-optimization-baseline` | 46 | 385,106 | 6,360 |
 | `evaluations` | 43 | 79,685 | 1,606 |
 
@@ -71,9 +71,9 @@ that exclusion:
 | `docs/ops/v0.21-dogfood-evaluation.md` | `active-current` | yes | `.github/scripts/ledger-truth-check.sh`; `tests/test-evidence-index.sh` |
 | `docs/ops/telemetry-baseline.md` | `active-current` | yes | `tests/test-evidence-index.sh`; `tests/test-run-telemetry.sh` |
 | `evaluations/lib/*;evaluations/evidence-index.tsv;evaluations/orchestration/run.sh;evaluations/orchestration/rates.tsv;evaluations/skill-routing/run.sh;evaluations/skill-routing/rates.tsv` | `active-current` | yes | `tests/test-eval-lib.sh`; `tests/test-skill-descriptions.sh` |
-| `.spark/state.json;.spark/preferences.json` | `do-not-delete` | yes | `plugins/spark/bin/spark`; `plugins/spark/docs/README.md`; `plugins/spark/docs/how-to/get-started.md`; `plugins/spark/docs/how-to/resume.md`; `plugins/spark/docs/reference/cli.md`; `plugins/spark/docs/reference/compatibility.md`; `plugins/spark/docs/reference/engineering-preferences.md`; `plugins/spark/docs/reference/fact-freshness.md`; `plugins/spark/docs/reference/fact-model.md`; `plugins/spark/docs/reference/hooks.md`; `plugins/spark/docs/reference/project-standards.md`; `plugins/spark/docs/reference/stability.md`; `plugins/spark/docs/reference/state.md`; `plugins/spark/docs/tutorials/adopt-an-existing-repo.md`; `plugins/spark/docs/tutorials/scaffold-a-new-project.md`; `plugins/spark/preferences/fact-model.tsv`; `plugins/spark/preferences/templates/standards/conventions.md`; `plugins/spark/preferences/templates/standards/engineering-standards.md`; `plugins/spark/skills/bootstrap/SKILL.md`; `plugins/spark/skills/bootstrap/references/profiles.md`; `plugins/spark/skills/codify/SKILL.md`; `plugins/spark/skills/ideate/SKILL.md`; `plugins/spark/skills/knowledge/references/operator-knowledge.md`; `plugins/spark/skills/onboard/SKILL.md`; `plugins/spark/skills/plan/SKILL.md`; `plugins/spark/skills/ship/SKILL.md`; `plugins/spark/skills/validate/SKILL.md`; `tests/bench-memo.sh`; `tests/test-apply-permissions.sh`; `tests/test-brief-resume.sh`; `tests/test-course-derivation.sh`; `tests/test-doctor-standards-boundary.sh`; `tests/test-first-run.sh`; `tests/test-governance-contract.sh`; `tests/test-governance-integration.sh`; `tests/test-governance-schema.sh`; `tests/test-hot-path-memo.sh`; `tests/test-hub.sh`; `tests/test-labels.sh`; `tests/test-merge-strategy.sh`; `tests/test-orient.sh`; `tests/test-preferences.sh`; `tests/test-reconcile-apply.sh`; `tests/test-reconcile-slate.sh`; `tests/test-setup-profiles.sh`; `tests/test-state.sh`; `tests/test-triage-truth.sh` |
+| `.spark/state.json;.spark/preferences.json` | `do-not-delete` | yes | `plugins/spark/bin/spark`; `plugins/spark/docs/README.md`; `plugins/spark/docs/how-to/get-started.md`; `plugins/spark/docs/how-to/resume.md`; `plugins/spark/docs/reference/cli.md`; `plugins/spark/docs/reference/compatibility.md`; `plugins/spark/docs/reference/engineering-preferences.md`; `plugins/spark/docs/reference/fact-freshness.md`; `plugins/spark/docs/reference/fact-model.md`; `plugins/spark/docs/reference/hooks.md`; `plugins/spark/docs/reference/project-standards.md`; `plugins/spark/docs/reference/stability.md`; `plugins/spark/docs/reference/state.md`; `plugins/spark/docs/tutorials/adopt-an-existing-repo.md`; `plugins/spark/docs/tutorials/scaffold-a-new-project.md`; `plugins/spark/lib/facts.sh`; `plugins/spark/preferences/fact-model.tsv`; `plugins/spark/preferences/templates/standards/conventions.md`; `plugins/spark/preferences/templates/standards/engineering-standards.md`; `plugins/spark/skills/bootstrap/SKILL.md`; `plugins/spark/skills/bootstrap/references/profiles.md`; `plugins/spark/skills/codify/SKILL.md`; `plugins/spark/skills/ideate/SKILL.md`; `plugins/spark/skills/knowledge/references/operator-knowledge.md`; `plugins/spark/skills/onboard/SKILL.md`; `plugins/spark/skills/plan/SKILL.md`; `plugins/spark/skills/ship/SKILL.md`; `plugins/spark/skills/validate/SKILL.md`; `tests/bench-memo.sh`; `tests/test-apply-permissions.sh`; `tests/test-brief-resume.sh`; `tests/test-course-derivation.sh`; `tests/test-doctor-standards-boundary.sh`; `tests/test-fact-compiler.sh`; `tests/test-first-run.sh`; `tests/test-governance-contract.sh`; `tests/test-governance-integration.sh`; `tests/test-governance-schema.sh`; `tests/test-hot-path-memo.sh`; `tests/test-hub.sh`; `tests/test-labels.sh`; `tests/test-merge-strategy.sh`; `tests/test-orient.sh`; `tests/test-preferences.sh`; `tests/test-reconcile-apply.sh`; `tests/test-reconcile-slate.sh`; `tests/test-setup-profiles.sh`; `tests/test-state.sh`; `tests/test-triage-truth.sh` |
 
-**29 files, 355,265 bytes** of the 132-file, 1,037,839-byte corpus are referenced by code,
+**29 files, 357,464 bytes** of the 132-file, 1,040,073-byte corpus are referenced by code,
 tests or CI outside this index's own machinery (34 % by bytes; the exclusion and its
 reason are stated under the footprint section below). The suite holds this list to the tree: a shipped surface
 that starts naming a non-operative artifact fails until the index lists it.
@@ -212,13 +212,13 @@ next `spark` state update rather than edited by hand here.
 
 ## Footprint before and after this work unit
 
-Physical, over the same roots, against `efbdb47` — the commit this branch left:
+Physical, over the same roots, against `3ed1b6f` — the commit this branch left:
 
 | | Files | Bytes | Lines |
 |---|---|---|---|
-| before | 129 | 998,837 | 16,256 |
-| after | 132 | 1,037,839 | 16,776 |
-| delta | +3 | +39,002 | +520 |
+| before | 132 | 1,037,839 | 16,776 |
+| after | 132 | 1,040,073 | 16,805 |
+| delta | +0 | +2,234 | +29 |
 
 The corpus grew, and this page is part of the growth: this manifest, the observation capture and the tool that
 regenerates it are themselves evidence, and they are indexed like everything else. Nothing was moved or deleted,
@@ -227,8 +227,8 @@ this unit and 29 after, because this unit's own five files are excluded as reade
 started naming evidence. The corpus grew and the count of referenced files did not, so the share of the corpus that any surface names by path fell.
 
 The hot path moved too, and by exactly the amount this unit added to it. `doctor`'s link validator opens every
-Markdown surface under these roots, so its read set is the tree's Markdown: **63 files before this
-unit, 64 after**, a delta of **+1** — this unit adds `docs/research/v0.23-cleanup/742-evidence-separation.md`. That is a measurement, not an
+Markdown surface under these roots, so its read set is the tree's Markdown: **64 files before this
+unit, 64 after**, a delta of **+0** — no Markdown surface changed under these roots. That is a measurement, not an
 argument from construction: both figures come from the same roots, the after figure is the committed capture's
 own `doctor` rows, and the suite recomputes the delta from the base commit whenever it is present. No other
 verb's read set changed, because the session path opens no evidence file at either commit.
