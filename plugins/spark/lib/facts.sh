@@ -14,8 +14,15 @@
 #     precedence the model does not define is a CONFLICT, not a decision here;
 #   * write anything to .spark/state.json (R10) — a fact is read from its
 #     source and carried, never stored as state;
-#   * let an unreadable source read as a small success. Unreadable is UNKNOWN
-#     with a reason, and the old value never survives as authority (F5).
+#   * let an unreadable source read as a small success. The old value never
+#     survives as authority (F5), and the failure is reported with its reason;
+#   * emit a fact whose observed version is not a version. An UNKNOWN is a full
+#     envelope — it records the version of the node it depends on, which is how
+#     freshness is decided — so when that version cannot be observed the fact is
+#     refused rather than shipped with an empty one. Which case applies is
+#     decided by what was actually read, not by a uniform rule: a read that
+#     succeeded and returned a malformed field still observed the node's version,
+#     so that UNKNOWN conforms and is emitted.
 #
 # The output is a FRAGMENT, not a snapshot: a bare list of facts (R11, R22). A
 # snapshot is exactly {observer, facts} with every required class present, and
@@ -52,6 +59,9 @@ FACTS_CACHE_MISSES=0
 # The result variables the functions below set.
 FACTS_NODE=""
 FACTS_JSON=""
+# Why no fact could be emitted, when none could. A fact is refused rather than
+# emitted invalid, and the caller reports this instead of a status.
+FACTS_REFUSED=""
 
 # The shipped model is the authority for what a canonical value looks like, so
 # the compiler is held to the schema rather than to a copy of it. Read ONCE per
@@ -214,17 +224,24 @@ facts_repository_fact() {
   local locator="$1" observed="$2" rc=0 head tail
   facts_repo_node "$locator" || rc=$?
   head='{"schema_version":'"$FACTS_SCHEMA_VERSION"',"key":"repository.identity","class":"repository","status":'
+  FACTS_JSON=""
+  FACTS_REFUSED=""
 
-  FACTS_EMITTED=$(( FACTS_EMITTED + 1 ))
-
+  # No read, no observed version, and therefore no fact this schema can carry.
+  #
+  # An UNKNOWN is still a full envelope: it names the node it depends on as an
+  # invalidator and records the version observed for that node, which is how
+  # freshness is decided. For this class that version form is the node's own
+  # updated_at — precisely what a failed read denies. An empty string is not a
+  # version, and the observation instant is not one either: writing it would
+  # fabricate evidence in the field whose only job is to say what was seen.
+  #
+  # So the fact is refused rather than emitted invalid. The failure is still
+  # reported, with its reason, by the caller; what is not done is dress it as a
+  # conforming fact.
   if [ "$rc" -ne 0 ]; then
-    # An UNKNOWN still names the node it failed to read and lists it as an
-    # invalidator, so the failure goes stale the moment that node changes. It
-    # carries no value and no source version, because nothing was read (R6).
-    FACTS_UNKNOWN=$(( FACTS_UNKNOWN + 1 ))
-    tail="$(facts_envelope_tail "$locator" "$observed" "")"
-    FACTS_JSON="$head"'"UNKNOWN"'"$tail"',"detail":{"reason":"'"$(json_escape "$(facts_unreadable_reason "$FACTS_NODE")")"'","candidates":[]}}'
-    return 0
+    FACTS_REFUSED="$(facts_unreadable_reason "$FACTS_NODE")"
+    return 3
   fi
 
   local full branch updated
@@ -232,39 +249,46 @@ facts_repository_fact() {
   branch="$(printf '%s' "$FACTS_NODE" | awk -F'\t' 'NR == 1 { print $2 }')"
   updated="$(printf '%s' "$FACTS_NODE" | awk -F'\t' 'NR == 1 { print $3 }')"
 
-  # A field being PRESENT does not make it canonical, and the difference is not
-  # cosmetic: an updated_at outside the timestamp grammar would become this
-  # fact's source version and its invalidator's observed version, so freshness —
-  # a comparison of versions — would be comparing something that is not one. A
-  # full_name outside the repository grammar would become an identity. Either
-  # would be an ESTABLISHED fact violating the schema it declares conformance
-  # to, which is worse than an unknown, because a consumer is entitled to act on
-  # an established fact.
-  #
-  # So every field is held to the shipped grammar before anything is
-  # established, and each failure is the same answer: malformed, which is an
-  # UNKNOWN carrying no value.
-  local host="${locator%%/*}" nwo="${locator#*/}"
   facts_load_grammars
-  if [ -z "$full" ] || [ -z "$branch" ] || [ -z "$updated" ] \
-     || ! facts_canonical "$FACTS_RE_TIMESTAMP" "" "$updated" \
+
+  # The version is checked first and on its own, because it decides whether any
+  # envelope can be built at all. Every other field's failure is reportable
+  # inside a conforming fact; this one is not.
+  if [ -z "$updated" ] || ! facts_canonical "$FACTS_RE_TIMESTAMP" "" "$updated"; then
+    FACTS_REFUSED="malformed"
+    return 3
+  fi
+
+  # From here the node's observed version is known, so an envelope conforms and
+  # every remaining problem can be stated inside one.
+  tail="$(facts_envelope_tail "$locator" "$observed" "$updated")"
+
+  # A field being PRESENT does not make it canonical. A full_name outside the
+  # repository grammar would become an identity; a branch outside the ref grammar
+  # would become a default branch Git could not name. Either would be an
+  # ESTABLISHED fact violating the schema it declares conformance to, which is
+  # worse than an unknown, because a consumer is entitled to act on what is
+  # established. This UNKNOWN is schema-valid: the node was read, so its version
+  # is recorded, and only the value is missing (R6).
+  local host="${locator%%/*}" nwo="${locator#*/}"
+  if [ -z "$full" ] || [ -z "$branch" ] \
      || ! facts_canonical "$FACTS_RE_REF" "$FACTS_CON_REF" "$branch" \
      || ! facts_canonical "$FACTS_RE_REPOSITORY" "$FACTS_CON_REPOSITORY" "$host/${full,,}"; then
+    FACTS_EMITTED=$(( FACTS_EMITTED + 1 ))
     FACTS_UNKNOWN=$(( FACTS_UNKNOWN + 1 ))
-    tail="$(facts_envelope_tail "$locator" "$observed" "")"
     FACTS_JSON="$head"'"UNKNOWN"'"$tail"',"detail":{"reason":"malformed","candidates":[]}}'
     return 0
   fi
 
-  tail="$(facts_envelope_tail "$locator" "$observed" "$updated")"
-
   # GitHub compares owner and name case-insensitively, and so does the locator
   # now, so a case difference is not a disagreement. A different name is.
   if [ "${full,,}" != "$nwo" ]; then
+    FACTS_EMITTED=$(( FACTS_EMITTED + 1 ))
     FACTS_JSON="$head"'"CONFLICT"'"$tail"',"detail":{"reason":"the repository names itself differently","candidates":["'"$(json_escape "$locator")"'","'"$(json_escape "$host/${full,,}")"'"]}}'
     return 0
   fi
 
+  FACTS_EMITTED=$(( FACTS_EMITTED + 1 ))
   FACTS_JSON="$head"'"ESTABLISHED","value":{"id":"'"$(json_escape "$locator")"'","default_branch":"'"$(json_escape "$branch")"'"}'"$tail"'}'
 }
 
@@ -333,7 +357,14 @@ cmd_facts() {
     return 3
   fi
 
-  facts_repository_fact "$locator" "$observed"
+  if ! facts_repository_fact "$locator" "$observed"; then
+    # A source that could not be read, or whose own version is not a version, is
+    # reported rather than emitted as a fact this schema cannot carry. The
+    # counts still go out: this verb ran, read once, and established nothing.
+    yellow "NOT ASSESSED — the repository source could not be established: $FACTS_REFUSED"
+    facts_record_telemetry
+    return 3
+  fi
   # The fragment shape: a bare list, never an object, so it can never be read as
   # the {observer, facts} snapshot a consumer is allowed to act on (R22).
   printf '[%s]\n' "$FACTS_JSON"
