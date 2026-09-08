@@ -2244,10 +2244,17 @@ snapshot is not yet possible, which is why one is never claimed.
 | Class | Key | What it establishes |
 |---|---|---|
 | `repository` | `repository.identity` | The canonical `host/owner/name` of this repository and its default branch |
-| `graph` | `graph.native` | A work unit's native parent, children and blockers, each with its current state |
+| `graph` | `graph.native` | An issue's native parent, children and blockers, each with its current state |
 
 The `graph` class needs a work unit, so it is compiled when `--issue <number>`
 names one. Without the flag, only `repository` is compiled.
+
+**The root is an issue.** That is GitHub's shape, not a simplification: `parent`,
+`subIssues` and `blockedBy` belong to an issue and to nothing else, so a pull
+request has no native graph to report. A number naming a pull request is told
+exactly that rather than reported as not found. The relationships themselves may
+be either kind — a pull-request child is named as one and carries the
+pull-request invalidator form.
 
 Every fact carries the same envelope: the schema version it conforms to, its
 status, the source that was read with that source's own version identity, when

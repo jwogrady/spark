@@ -298,8 +298,18 @@ facts_repository_fact() {
   FACTS_JSON="$head"'"ESTABLISHED","value":{"id":"'"$(json_escape "$locator")"'","default_branch":"'"$(json_escape "$branch")"'"}'"$tail"'}'
 }
 
-# facts_graph_node <locator> <number> — ONE read of the work unit's native
-# relationships. Sets FACTS_NODE to TSV rows and returns 0, or sets it to the
+# facts_graph_node <locator> <number> — ONE read of an ISSUE's native
+# relationships.
+#
+# The root is an issue, and that is a property of GitHub rather than a
+# simplification: the schema gives `parent`, `subIssues` and `blockedBy` to
+# Issue and to nothing else, so a pull request has no native graph to report.
+#
+# Asking for the pull request in the SAME query does not work — GitHub reports a
+# legitimately-absent alternative as a NOT_FOUND entry in `errors`, which would
+# make every issue's graph refuse. So the kinds are told apart only where the
+# issue turned out to be absent, by one targeted read, and the normal path stays
+# a single request. Sets FACTS_NODE to TSV rows and returns 0, or sets it to the
 # failure output and returns non-zero.
 #
 # Rows: "self <state> <updatedAt>", then "parent|child|blocker <number> <state>
@@ -341,9 +351,9 @@ facts_graph_node() {
     elif (.data.repository.issue // null) == null then ("absent" | @tsv)
     elif (.data.repository.issue
           | (.state == null) or (.updatedAt == null)
-            or (.subIssues == null) or (.subIssues.nodes == null)
+            or ((.subIssues.nodes | type) != "array")
             or ((.subIssues.pageInfo.hasNextPage | type) != "boolean")
-            or (.blockedBy == null) or (.blockedBy.nodes == null)
+            or ((.blockedBy.nodes | type) != "array")
             or ((.blockedBy.pageInfo.hasNextPage | type) != "boolean"))
       then ("partial" | @tsv)
     else
@@ -361,6 +371,15 @@ facts_graph_node() {
         ($i.blockedBy.nodes[] | ["blocker", (.number|tostring), .state, .updatedAt,
                                  .repository.nameWithOwner, .__typename] | @tsv)
     end' 2>&1)" || rc=$?
+  # A work unit that does not exist is not a transport failure. GraphQL reports
+  # it as a NOT_FOUND error and gh exits non-zero, so without this the absent
+  # path is unreachable and a missing issue reads as an unreadable source —
+  # which would send a caller to check access it has.
+  if [ "$rc" -ne 0 ]; then
+    case "$out" in
+      *"Could not resolve to an Issue"*) FACTS_NODE="absent"; return 0 ;;
+    esac
+  fi
   FACTS_NODE="$out"
   return "$rc"
 }
@@ -425,7 +444,22 @@ facts_graph_fact() {
     FACTS_REFUSED="$(facts_unreadable_reason "$FACTS_NODE")"; return 3; }
 
   case "$FACTS_NODE" in
-    absent*)  FACTS_REFUSED="not-found"; return 3 ;;
+    absent*)
+      # No issue by that number. One targeted read then says whether the number
+      # names a pull request, because "that is a pull request" and "there is no
+      # such work unit" send a caller to different places. A pull request HAS no
+      # native graph — the schema gives those fields to Issue alone — and the
+      # model offers no conforming fact to say so: `graph` admits ESTABLISHED,
+      # UNKNOWN and CONFLICT, and NOT_APPLICABLE belongs to the HEAD-bound
+      # classes. So this is a refusal with an accurate reason, not a fact.
+      FACTS_API_CALLS=$(( FACTS_API_CALLS + 1 ))
+      if gh api --hostname "${locator%%/*}" \
+           "repos/${locator#*/}/pulls/$number" --jq .number >/dev/null 2>&1; then
+        FACTS_REFUSED="a pull request has no native graph"
+      else
+        FACTS_REFUSED="not-found"
+      fi
+      return 3 ;;
     # A reply that carried errors, or one whose relationship structures were
     # missing, was not a reading of this graph. Compiling it would state that
     # the work unit has no relationships, which is a different fact from not
@@ -599,7 +633,7 @@ cmd_facts() {
   # a reason, it is a reason there is no fact.
   local observed; observed="$(facts_now)"
   if ! facts_canonical "$FACTS_RE_TIMESTAMP" "" "$observed"; then
-    yellow "NOT ASSESSED — the clock gave no usable observation instant"
+    yellow "NOT ASSESSED — the clock gave no usable observation instant" >&2
     facts_record_telemetry
     return 3
   fi
@@ -614,7 +648,7 @@ cmd_facts() {
   # arbitrary text, which is why the grammar decides and not emptiness alone.
   if [ -z "$locator" ] \
      || ! facts_canonical "$FACTS_RE_REPOSITORY" "$FACTS_CON_REPOSITORY" "$locator"; then
-    yellow "NOT ASSESSED — no origin remote names a canonical repository here"
+    yellow "NOT ASSESSED — no origin remote names a canonical repository here" >&2
     facts_record_telemetry
     return 3
   fi
@@ -638,8 +672,11 @@ cmd_facts() {
     fi
   fi
 
+  # Every diagnostic goes to stderr. This verb's stdout is a machine surface, and
+  # a fragment followed by a human note is not parseable JSON — which is exactly
+  # what a caller piping it would discover at the worst moment.
   if [ -z "$facts" ]; then
-    yellow "NOT ASSESSED — nothing could be established: $why"
+    yellow "NOT ASSESSED — nothing could be established: $why" >&2
     facts_record_telemetry
     return 3
   fi
@@ -648,6 +685,6 @@ cmd_facts() {
   # classes are not the required set either, so this stays a fragment however
   # many facts it carries.
   printf '[%s]\n' "$facts"
-  [ -z "$why" ] || yellow "not established — $why"
+  [ -z "$why" ] || yellow "not established — $why" >&2
   facts_record_telemetry
 }

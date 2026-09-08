@@ -69,7 +69,7 @@ cmd_crossroad	plugins/spark/lib/execution.sh	top-level	-	domain-semantics	13	3	0
 cmd_docs_impact	plugins/spark/bin/spark	top-level	-	domain-semantics	267	20	0	-	-
 cmd_doctor	plugins/spark/bin/spark	top-level	-	domain-semantics	847	19	0	-	-
 cmd_evidence	plugins/spark/lib/execution.sh	top-level	-	domain-semantics	213	31	0	-	-
-cmd_facts	plugins/spark/lib/facts.sh	top-level	-	domain-semantics	93	8	0	-	-
+cmd_facts	plugins/spark/lib/facts.sh	top-level	-	domain-semantics	96	8	0	-	-
 cmd_footprint	plugins/spark/bin/spark	top-level	-	domain-semantics	109	11	0	-	-
 cmd_governance	plugins/spark/bin/spark	top-level	-	domain-semantics	202	25	0	-	-
 cmd_hub	plugins/spark/bin/spark	top-level	-	domain-semantics	60	11	0	-	-
@@ -120,8 +120,8 @@ ev_write	plugins/spark/lib/execution.sh	top-level	-	domain-semantics	10	1	1	cmd_
 facts_canonical	plugins/spark/lib/facts.sh	top-level	-	canonicalization	12	1	4	cmd_facts;facts_graph_entry;facts_graph_fact;facts_repository_fact	cmd_facts
 facts_envelope_tail	plugins/spark/lib/facts.sh	top-level	-	formatting-reporting	11	1	1	facts_repository_fact	-
 facts_graph_entry	plugins/spark/lib/facts.sh	top-level	-	canonicalization	13	1	1	facts_graph_fact	-
-facts_graph_fact	plugins/spark/lib/facts.sh	top-level	-	evidence-authority	125	3	1	cmd_facts	cmd_facts
-facts_graph_node	plugins/spark/lib/facts.sh	top-level	-	source-collection	50	1	1	facts_graph_fact	-
+facts_graph_fact	plugins/spark/lib/facts.sh	top-level	-	evidence-authority	140	3	1	cmd_facts	cmd_facts
+facts_graph_node	plugins/spark/lib/facts.sh	top-level	-	source-collection	59	1	1	facts_graph_fact	-
 facts_load_grammars	plugins/spark/lib/facts.sh	top-level	-	source-collection	19	2	3	cmd_facts;facts_graph_fact;facts_repository_fact	cmd_facts
 facts_now	plugins/spark/lib/facts.sh	top-level	-	source-collection	1	0	1	cmd_facts	cmd_facts
 facts_record_telemetry	plugins/spark/lib/facts.sh	top-level	-	formatting-reporting	10	0	1	cmd_facts	cmd_facts

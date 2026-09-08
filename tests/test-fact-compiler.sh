@@ -690,7 +690,7 @@ DUP_DIFF='{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","paren
     {"__typename":"Issue","number":740,"state":"OPEN","updatedAt":"2026-09-07T08:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}}]},
   "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
 graph_stub "$DUP_DIFF"
-gout="$("$SPARK" facts --issue 733)" && grc=0 || grc=$?
+gout="$("$SPARK" facts --issue 733 2>/dev/null)" && grc=0 || grc=$?
 case "$(printf '%s' "$gout" | jq -r '[.[].key] | join(",")' 2>/dev/null)" in
   *graph.native*) bad "one node cannot carry two states — that has no representation" ;;
   *) ok ;;
@@ -886,5 +886,66 @@ GW="$(gfact "$("$SPARK" facts --issue 733)")"
   || bad "a node listed twice in one list appears once in it"
 [ "$(printf '%s' "$GW" | jq -r '.invalidators | length')" = "2" ] && ok \
   || bad "and contributes one invalidator"
+
+# --- a list that is not a list ---------------------------------------------
+# Same rule as the null list and the missing hasNextPage: a shape that cannot
+# answer "which nodes" is not an answer of "none".
+graph_refused '{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":{}},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
+  "an object where the node list belongs is not an empty list"
+graph_refused '{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":"none"}}' \
+  "and neither is a string"
+
+# --- the root is an issue, and the reason says which case applies -----------
+# GitHub gives parent, subIssues and blockedBy to Issue and to nothing else, so
+# a pull request has no native graph to report. "That is a pull request" and
+# "there is no such work unit" send a caller to different places, so they are
+# told apart — by one extra read, and only where the issue was absent.
+stub_gh "$WORK/bin/gh" <<STUB
+printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
+case "\$*" in
+  *graphql*) echo 'gh: Could not resolve to an Issue with the number of 733.' >&2; exit 1 ;;
+  *"pulls/733"*) answer_json '{"number":733}' ;;
+  *) answer_json '$NODE' ;;
+esac
+STUB
+pout="$("$SPARK" facts --issue 733 2>&1 >/dev/null)"
+assert_contains "a pull request has no native graph, and is told so" \
+  "a pull request has no native graph" "$pout"
+
+stub_gh "$WORK/bin/gh" <<STUB
+printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
+case "\$*" in
+  *graphql*) echo 'gh: Could not resolve to an Issue with the number of 733.' >&2; exit 1 ;;
+  *"pulls/733"*) echo 'gh: Not Found (HTTP 404)' >&2; exit 1 ;;
+  *) answer_json '$NODE' ;;
+esac
+STUB
+nout="$("$SPARK" facts --issue 733 2>&1 >/dev/null)"
+assert_contains "a number that names neither is not-found" "not-found" "$nout"
+case "$nout" in
+  *"pull request"*) bad "a missing work unit must not be reported as a pull request" ;;
+  *) ok ;;
+esac
+
+# A work unit that does not exist is not an unreadable source: reporting it that
+# way would send a caller to check access it already has.
+case "$nout" in
+  *unreadable*) bad "an absent work unit is not an unreadable source" ;;
+  *) ok ;;
+esac
+
+# --- stdout stays a machine surface ----------------------------------------
+# A fragment followed by a human note is not parseable JSON, which is exactly
+# what a caller piping this would discover at the worst moment.
+gout="$("$SPARK" facts --issue 733 2>/dev/null)"
+[ "$(printf '%s' "$gout" | jq -r 'type')" = "array" ] && ok \
+  || bad "stdout must stay parseable when one class could not be established"
+[ "$(printf '%s' "$gout" | jq -r 'length')" = "1" ] && ok \
+  || bad "and carry only the class that was established"
+[ -n "$nout" ] && ok || bad "while the reason is reported on stderr, not dropped"
 
 finish
