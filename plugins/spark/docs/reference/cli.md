@@ -2267,9 +2267,13 @@ inventing an identity to fill the field.
 
 One request supplies every field of the repository fact, so the node is observed
 once rather than once per field — a fan-out could observe the same node in three
-states and manufacture a conflict the repository does not have. Within a single
-memoized command the observation is reused. When a run is being observed, the
-compiler records what it read, what it reused and what it produced as counts;
+states and manufacture a conflict the repository does not have. The endpoint and
+the host come from the repository's own locator, so the node that is read is the
+node the fact names.
+
+Nothing is cached. Each run observes its source again, which is what keeps a fact
+a statement about now rather than about the last time anyone looked. When a run is
+being observed, the compiler records what it read and what it produced as counts;
 the facts themselves are this verb's output and are never copied into telemetry.
 
 ## `spark version`

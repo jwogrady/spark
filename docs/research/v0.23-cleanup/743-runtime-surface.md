@@ -53,9 +53,9 @@ actual line count is reported too:
 | `plugins/spark/lib/execution.sh` | 2,182 | 2,203 | +21 |
 | `plugins/spark/lib/planning.sh` | 825 | 825 | +0 |
 | `plugins/spark/lib/repository.sh` | 221 | 234 | +13 |
-| `plugins/spark/lib/facts.sh` | 0 | 224 | +224 |
+| `plugins/spark/lib/facts.sh` | 0 | 234 | +234 |
 
-**12,166 lines before, 12,445 after (+279)**, against
+**12,166 lines before, 12,455 after (+289)**, against
 10,034 and 10,124 body lines. The file grows while the bodies shrink because each new primitive is
 documented where it lives, at the top level, outside any body.
 
@@ -70,11 +70,11 @@ without inventing an owner. It is a line-level heuristic, not a parser:
 | `plugins/spark/lib/execution.sh` | 205 | 203 |
 | `plugins/spark/lib/planning.sh` | 61 | 61 |
 | `plugins/spark/lib/repository.sh` | 23 | 23 |
-| `plugins/spark/lib/facts.sh` | 0 | 11 |
+| `plugins/spark/lib/facts.sh` | 0 | 12 |
 
-212 functions carried parse lines before and 216 do now, in
+212 functions carried parse lines before and 217 do now, in
 820
-and 831
+and 832
 lines respectively. That is why extracting a shared parser is rejected below: the lines are per-verb strings and
 flags, and a shared parser would either normalize what users see or take it all as parameters.
 

@@ -78,9 +78,19 @@ facts_unreadable_reason() {
   esac
 }
 
-# facts_repo_node — ONE read of the repository node. Sets FACTS_NODE to
-# "<full_name>\t<default_branch>\t<updated_at>" and returns 0, or sets it to the
-# failure output and returns non-zero.
+# facts_repo_node <locator> — ONE read of the repository node the LOCATOR names.
+# Sets FACTS_NODE to "<full_name>\t<default_branch>\t<updated_at>" and returns 0,
+# or sets it to the failure output and returns non-zero.
+#
+# The endpoint and the host are built from the locator, never left to gh to
+# resolve. `repos/{owner}/{repo}` is expanded from gh's OWN context — $GH_REPO,
+# and its choice among several remotes — which is not necessarily the origin the
+# fact names. A compiler that read one repository and emitted a fact about
+# another would be wrong in the one way this whole model exists to prevent, and
+# it would be wrong silently, because both halves are individually plausible.
+# The host matters for the same reason: an Enterprise origin read from
+# github.com is an answer about a different repository that happens to share a
+# name.
 #
 # One request for three fields is the collection rule (#733): a fan-out of one
 # request per field would read the same node three times and could observe it
@@ -96,9 +106,9 @@ facts_unreadable_reason() {
 # the second call site that needs the same observation, measured then; a cache
 # with one caller is an optimization that cannot be shown to work.
 facts_repo_node() {
-  local out rc=0
+  local locator="$1" host="${1%%/*}" nwo="${1#*/}" out rc=0
   FACTS_API_CALLS=$(( FACTS_API_CALLS + 1 ))
-  out="$(gh api 'repos/{owner}/{repo}' \
+  out="$(gh api --hostname "$host" "repos/$nwo" \
     --jq '[.full_name, .default_branch, .updated_at] | @tsv' 2>&1)" || rc=$?
   FACTS_NODE="$out"
   return "$rc"
@@ -133,7 +143,7 @@ facts_envelope_tail() {
 facts_repository_fact() {
   local locator="$1" rc=0 observed head tail
   observed="$(facts_now)"
-  facts_repo_node || rc=$?
+  facts_repo_node "$locator" || rc=$?
   head='{"schema_version":'"$FACTS_SCHEMA_VERSION"',"key":"repository.identity","class":"repository","status":'
 
   FACTS_EMITTED=$(( FACTS_EMITTED + 1 ))

@@ -120,7 +120,7 @@ ev_write	plugins/spark/lib/execution.sh	top-level	-	domain-semantics	10	1	1	cmd_
 facts_envelope_tail	plugins/spark/lib/facts.sh	top-level	-	formatting-reporting	11	1	1	facts_repository_fact	-
 facts_now	plugins/spark/lib/facts.sh	top-level	-	source-collection	1	0	1	facts_repository_fact	-
 facts_record_telemetry	plugins/spark/lib/facts.sh	top-level	-	formatting-reporting	10	0	1	cmd_facts	cmd_facts
-facts_repo_node	plugins/spark/lib/facts.sh	top-level	-	source-collection	8	0	1	facts_repository_fact	-
+facts_repo_node	plugins/spark/lib/facts.sh	top-level	-	source-collection	8	1	1	facts_repository_fact	-
 facts_repository_fact	plugins/spark/lib/facts.sh	top-level	-	evidence-authority	44	4	1	cmd_facts	cmd_facts
 facts_unreadable_reason	plugins/spark/lib/facts.sh	top-level	-	canonicalization	10	1	1	facts_repository_fact	-
 fp_bytes_lines	plugins/spark/bin/spark	top-level	-	source-collection	10	1	2	cmd_footprint;fp_plugin_bytes	cmd_footprint

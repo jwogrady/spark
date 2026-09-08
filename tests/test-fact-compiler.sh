@@ -53,7 +53,7 @@ NODE='{"id":123456789,"full_name":"jwogrady/spark","default_branch":"master","up
 stub_gh "$WORK/bin/gh" <<STUB
 printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
 case "\$*" in
-  *"repos/{owner}/{repo}"*) answer_json '$NODE' ;;
+  *"--hostname github.com repos/jwogrady/spark"*) answer_json '$NODE' ;;
   *) exit 1 ;;
 esac
 STUB
@@ -137,6 +137,73 @@ printf '%s' "$(fget '.provenance')" | grep -Eq "$(model_regex identifier provena
 # --- nothing is stored (R10) -------------------------------------------------
 [ ! -f "$WORK/proj/.spark/state.json" ] && ok \
   || bad "the compiler must not write mutable GitHub truth into state.json"
+
+# --- the read addresses the node the fact names ------------------------------
+# `repos/{owner}/{repo}` is expanded by gh from its OWN context, so a compiler
+# using it could read one repository and emit a fact about another — wrong in the
+# one way this model exists to prevent, and wrong silently, because both halves
+# are individually plausible.
+assert_contains "the request names the repository the fact names" \
+  "repos/jwogrady/spark" "$(cat "$GH_CALL_LOG")"
+assert_contains "and the host it belongs to" "--hostname github.com" "$(cat "$GH_CALL_LOG")"
+case "$(cat "$GH_CALL_LOG")" in
+  *"{owner}"*) bad "the endpoint must not be left for gh to resolve" ;;
+  *) ok ;;
+esac
+
+# gh reads $GH_REPO before it reads the remote. If the compiler let it, the
+# environment could redirect the read while the fact still named the origin.
+: > "$GH_CALL_LOG"
+GH_REPO="someone/else" "$SPARK" facts > "$WORK/env.json"
+assert_contains "the environment cannot redirect the read" "repos/jwogrady/spark" \
+  "$(cat "$GH_CALL_LOG")"
+case "$(cat "$GH_CALL_LOG")" in
+  *"someone/else"*) bad "GH_REPO must not choose the node that is read" ;;
+  *) ok ;;
+esac
+assert_contains "and the fact still names the origin" "github.com/jwogrady/spark" \
+  "$(jq -r '.[0].value.id' < "$WORK/env.json")"
+
+# A second remote is another thing gh may choose among. The identity is origin's.
+git -C "$WORK/proj" remote add upstream "https://github.com/someone/else.git"
+: > "$GH_CALL_LOG"
+"$SPARK" facts >/dev/null
+assert_contains "a second remote does not move the identity" "repos/jwogrady/spark" \
+  "$(cat "$GH_CALL_LOG")"
+git -C "$WORK/proj" remote remove upstream
+
+# --- an Enterprise origin is read from its own host --------------------------
+# Reading github.com for a github.example.com origin answers about a different
+# repository that happens to share a name.
+make_repo "$WORK/ent"
+git -C "$WORK/ent" remote add origin "git@github.example.com:acme/widget.git"
+stub_gh "$WORK/bin/gh" <<'STUB'
+printf '%s\n' "$*" >> "$GH_CALL_LOG"
+case "$*" in
+  *"--hostname github.example.com repos/acme/widget"*)
+    answer_json '{"full_name":"acme/widget","default_branch":"main","updated_at":"2026-09-07T21:00:00Z"}' ;;
+  *) echo "gh: Not Found (HTTP 404)" >&2; exit 1 ;;
+esac
+STUB
+: > "$GH_CALL_LOG"
+E="$( (cd "$WORK/ent" && "$SPARK" facts) | jq -r '.[0]')"
+assert_contains "an enterprise origin is read from its own host" \
+  "--hostname github.example.com" "$(cat "$GH_CALL_LOG")"
+assert_contains "and establishes the fact" "ESTABLISHED" \
+  "$(printf '%s' "$E" | jq -r '.status')"
+assert_contains "with the host in the identity" "github.example.com/acme/widget" \
+  "$(printf '%s' "$E" | jq -r '.value.id')"
+assert_contains "and its own default branch" "main" \
+  "$(printf '%s' "$E" | jq -r '.value.default_branch')"
+
+# Back to the project fixture for the remaining cases.
+stub_gh "$WORK/bin/gh" <<STUB
+printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
+case "\$*" in
+  *"--hostname github.com repos/jwogrady/spark"*) answer_json '$NODE' ;;
+  *) exit 1 ;;
+esac
+STUB
 
 # --- nothing is carried between runs -----------------------------------------
 # The compiler is not a cache and not a database. A second invocation reads the
@@ -223,7 +290,7 @@ case "$out" in *'"key"'*) bad "nothing may be emitted for a repository that cann
 stub_gh "$WORK/bin/gh" <<STUB
 printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
 case "\$*" in
-  *"repos/{owner}/{repo}"*) answer_json '$NODE' ;;
+  *"--hostname github.com repos/jwogrady/spark"*) answer_json '$NODE' ;;
   *) exit 1 ;;
 esac
 STUB
