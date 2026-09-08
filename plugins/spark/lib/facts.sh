@@ -490,15 +490,23 @@ facts_graph_fact() {
       # classes. So this is a refusal with an accurate reason, not a fact.
       FACTS_API_CALLS=$(( FACTS_API_CALLS + 1 ))
       local probe prc=0
-      # The projection asks for a NUMBER: `jq -r .number` would print a string
+      # Both halves of the identity, for the same reason the root needs both: a
+      # reply carrying only a number proves nothing about WHICH repository's
+      # pull request it describes, and accepting it would let a reply from
+      # anywhere decide this work unit's answer.
+      #
+      # The projection asks for real types: `jq -r .number` would print a string
       # "733" indistinguishably from the integer 733, and a reply that names its
       # number as a string has not answered in the shape the API defines.
       probe="$(gh api --hostname "${locator%%/*}" "repos/${locator#*/}/pulls/$number" \
-        --jq 'select((.number | type) == "number") | .number' 2>&1)" || prc=$?
-      # A zero exit is not proof: `gh --jq .number` exits zero for a null or
-      # missing field, and a reply naming a DIFFERENT pull request is not this
-      # work unit. The probe must return this number, as a number.
-      if [ "$prc" -eq 0 ] && [ "$probe" = "$number" ]; then
+        --jq 'select((.number | type) == "number" and (.base.repo.full_name | type) == "string")
+              | "\(.number)\t\(.base.repo.full_name)"' 2>&1)" || prc=$?
+      # A zero exit is not proof: `gh --jq` exits zero for a null or missing
+      # field, and a reply naming a different pull request — or the same number
+      # in another repository — is not this work unit.
+      local probe_num="${probe%%$'\t'*}" probe_repo="${probe##*$'\t'}"
+      if [ "$prc" -eq 0 ] && [ "$probe_num" = "$number" ] \
+         && [ "${locator%%/*}/${probe_repo,,}" = "$locator" ]; then
         FACTS_REFUSED="a pull request has no native graph"
       elif [ "$prc" -eq 0 ]; then
         FACTS_REFUSED="malformed"

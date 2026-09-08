@@ -908,7 +908,7 @@ stub_gh "$WORK/bin/gh" <<STUB
 printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
 case "\$*" in
   *graphql*) echo 'gh: Could not resolve to an Issue with the number of 733.' >&2; exit 1 ;;
-  *"pulls/733"*) answer_json '{"number":733}' ;;
+  *"pulls/733"*) answer_json '{"number":733,"base":{"repo":{"full_name":"jwogrady/spark"}}}' ;;
   *) answer_json '$NODE' ;;
 esac
 STUB
@@ -1006,7 +1006,7 @@ raw_graph_stub() { # raw_graph_stub <whole graphql response>
 printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
 case "\$*" in
   *graphql*) answer_json '$1' ;;
-  *"pulls/733"*) answer_json '{"number":733}' ;;
+  *"pulls/733"*) answer_json '{"number":733,"base":{"repo":{"full_name":"jwogrady/spark"}}}' ;;
   *) answer_json '$NODE' ;;
 esac
 STUB
@@ -1057,7 +1057,34 @@ STUB
 probe_shape '{}'              "a probe reply with no number names no pull request"
 probe_shape '{"number":null}' "and neither does a null number"
 probe_shape '{"number":"733"}' "a string is not a number here either"
-probe_shape '{"number":999}'  "and another pull request is not this one"
+probe_shape '{"number":999,"base":{"repo":{"full_name":"jwogrady/spark"}}}' \
+  "and another pull request is not this one"
+
+# The probe needs BOTH halves of the identity, for the same reason the root
+# does: a reply carrying only a number proves nothing about which repository's
+# pull request it describes, so a reply from anywhere could decide this work
+# unit's answer.
+probe_shape '{"number":733}' "a reply naming no repository proves nothing"
+probe_shape '{"number":733,"base":{"repo":{"full_name":"someone/else"}}}' \
+  "and another repository's pull request is not this work unit's"
+probe_shape '{"number":733,"base":{"repo":{"full_name":null}}}' \
+  "a null repository name names nothing"
+probe_shape '{"number":733,"base":{"repo":{"full_name":42}}}' \
+  "and a number is not a repository name"
+
+# Case is folded, as everywhere else: the same repository spelled differently is
+# the same repository, so the check discriminates rather than refusing spellings.
+stub_gh "$WORK/bin/gh" <<STUB
+printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
+case "\$*" in
+  *graphql*) answer_json '{"data":{"repository":{"issue":null}}}' ;;
+  *"pulls/733"*) answer_json '{"number":733,"base":{"repo":{"full_name":"JWOgrady/Spark"}}}' ;;
+  *) answer_json '$NODE' ;;
+esac
+STUB
+cout="$("$SPARK" facts --issue 733 2>&1 >/dev/null)"
+assert_contains "the same repository in another case is still this one" \
+  "a pull request has no native graph" "$cout"
 
 # --- parent gets the same rule as every other relationship field -----------
 # A reply that omits `parent` has not said the work unit has no parent. Reading
