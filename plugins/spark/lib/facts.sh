@@ -312,9 +312,13 @@ facts_repository_fact() {
 # a single request. Sets FACTS_NODE to TSV rows and returns 0, or sets it to the
 # failure output and returns non-zero.
 #
-# Rows: "self <number> <state> <updatedAt>", then "parent|child|blocker <number>
-# <state> <updatedAt> <owner/name>" per related node, then "truncated <which>"
-# for any relationship list GitHub could not return whole.
+# Rows: "self <number> <updatedAt>", then "parent|child|blocker <number> <state>
+# <updatedAt> <owner/name>" per related node, then "truncated <which>" for any
+# relationship list GitHub could not return whole.
+#
+# The root's own state is neither read nor projected: this class carries the
+# state of each RELATION, and the work unit's own belongs to another fact. An
+# unused field that could gate the fact is worse than no field at all.
 #
 # The root's own number is carried so the caller can check that the node
 # returned is the node asked for.
@@ -335,7 +339,7 @@ facts_graph_node() {
     query($owner:String!,$name:String!,$number:Int!){
       repository(owner:$owner,name:$name){
         issue(number:$number){
-          number state updatedAt
+          number updatedAt
           parent{ __typename number state updatedAt repository{ nameWithOwner } }
           subIssues(first:100){ pageInfo{ hasNextPage } nodes{ __typename number state updatedAt repository{ nameWithOwner } } }
           blockedBy(first:100){ pageInfo{ hasNextPage } nodes{ __typename number state updatedAt repository{ nameWithOwner } } }
@@ -360,7 +364,11 @@ facts_graph_node() {
     elif (.data.repository | has("issue") | not) then (["partial"] | @tsv)
     elif .data.repository.issue == null then (["absent"] | @tsv)
     elif (.data.repository.issue
-          | ((.number | type) != "number") or (.state == null) or (.updatedAt == null)
+          | ((.number | type) != "number") or (.updatedAt == null)
+            # `parent` gets the same rule as every other relationship field: a
+            # reply that omits it has not said the work unit has no parent.
+            or (has("parent") | not)
+            or ((.parent | type) as $pt | $pt != "object" and $pt != "null")
             or ((.subIssues.nodes | type) != "array")
             or ((.subIssues.pageInfo.hasNextPage | type) != "boolean")
             or ((.blockedBy.nodes | type) != "array")
@@ -369,7 +377,7 @@ facts_graph_node() {
     else
       .data.repository.issue as $i
       |
-        (["self", ($i.number | tostring), $i.state, $i.updatedAt] | @tsv),
+        (["self", ($i.number | tostring), $i.updatedAt] | @tsv),
         (if $i.parent != null then
            ["parent", ($i.parent.number|tostring), $i.parent.state, $i.parent.updatedAt,
             $i.parent.repository.nameWithOwner, $i.parent.__typename] | @tsv
@@ -529,7 +537,7 @@ facts_graph_fact() {
     FACTS_REFUSED="malformed"
     return 3
   fi
-  self_version="$(printf '%s' "$FACTS_NODE" | awk -F'\t' '$1 == "self" { print $4; exit }')"
+  self_version="$(printf '%s' "$FACTS_NODE" | awk -F'\t' '$1 == "self" { print $3; exit }')"
   if [ -z "$self_version" ] || ! facts_canonical "$FACTS_RE_TIMESTAMP" "" "$self_version"; then
     FACTS_REFUSED="malformed"
     return 3

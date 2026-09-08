@@ -1059,4 +1059,45 @@ probe_shape '{"number":null}' "and neither does a null number"
 probe_shape '{"number":"733"}' "a string is not a number here either"
 probe_shape '{"number":999}'  "and another pull request is not this one"
 
+# --- parent gets the same rule as every other relationship field -----------
+# A reply that omits `parent` has not said the work unit has no parent. Reading
+# it as "none" would state a fact about a field the reply never mentioned.
+graph_refused '{"number":733,"updatedAt":"2026-09-08T10:00:00Z",
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
+  "a reply with no parent field has not said there is no parent"
+graph_refused '{"number":733,"updatedAt":"2026-09-08T10:00:00Z","parent":"none",
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
+  "and a string is not a parent"
+graph_refused '{"number":733,"updatedAt":"2026-09-08T10:00:00Z","parent":[],
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
+  "nor is an array"
+
+# The control: an explicitly null parent IS "no parent", and establishes.
+graph_stub '{"number":733,"updatedAt":"2026-09-08T10:00:00Z","parent":null,
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
+GP="$(gfact "$("$SPARK" facts --issue 733 2>/dev/null)")"
+assert_contains "an explicitly null parent establishes the fact" "ESTABLISHED" \
+  "$(printf '%s' "$GP" | jq -r '.status')"
+assert_contains "and says there is no parent" "none" \
+  "$(printf '%s' "$GP" | jq -r '.value.parent')"
+
+# --- the root's own state is genuinely outside this class ------------------
+# The reference says so; this proves it rather than trusting the sentence. The
+# field is not read at all, so a reply that omits it entirely still establishes.
+graph_stub '{"number":733,"updatedAt":"2026-09-08T10:00:00Z","parent":null,
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[
+    {"__typename":"Issue","number":740,"state":"CLOSED","updatedAt":"2026-09-07T08:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}}]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
+GR="$(gfact "$("$SPARK" facts --issue 733 2>/dev/null)")"
+assert_contains "a reply with no root state still establishes the graph" "ESTABLISHED" \
+  "$(printf '%s' "$GR" | jq -r '.status')"
+assert_contains "and the relation's state is still canonical" "closed" \
+  "$(printf '%s' "$GR" | jq -r '.value.children[0].state')"
+[ -z "$(printf '%s' "$GR" | jq -r '[.. | objects | select(has("state")) | .state] | map(select(. != "open" and . != "closed")) | join(",")')" ] \
+  && ok || bad "no state outside the vocabulary may appear"
+
 finish
