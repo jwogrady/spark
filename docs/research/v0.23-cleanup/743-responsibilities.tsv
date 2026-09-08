@@ -69,7 +69,7 @@ cmd_crossroad	plugins/spark/lib/execution.sh	top-level	-	domain-semantics	13	3	0
 cmd_docs_impact	plugins/spark/bin/spark	top-level	-	domain-semantics	267	20	0	-	-
 cmd_doctor	plugins/spark/bin/spark	top-level	-	domain-semantics	847	19	0	-	-
 cmd_evidence	plugins/spark/lib/execution.sh	top-level	-	domain-semantics	213	31	0	-	-
-cmd_facts	plugins/spark/lib/facts.sh	top-level	-	domain-semantics	32	5	0	-	-
+cmd_facts	plugins/spark/lib/facts.sh	top-level	-	domain-semantics	39	5	0	-	-
 cmd_footprint	plugins/spark/bin/spark	top-level	-	domain-semantics	109	11	0	-	-
 cmd_governance	plugins/spark/bin/spark	top-level	-	domain-semantics	202	25	0	-	-
 cmd_hub	plugins/spark/bin/spark	top-level	-	domain-semantics	60	11	0	-	-
@@ -117,11 +117,13 @@ ev_load	plugins/spark/lib/execution.sh	top-level	-	source-collection	9	1	1	cmd_e
 ev_payload	plugins/spark/lib/execution.sh	top-level	-	source-collection	1	1	1	cmd_evidence	cmd_evidence
 ev_tokens	plugins/spark/lib/execution.sh	top-level	-	canonicalization	9	1	1	cmd_evidence	cmd_evidence
 ev_write	plugins/spark/lib/execution.sh	top-level	-	domain-semantics	10	1	1	cmd_evidence	cmd_evidence
+facts_canonical	plugins/spark/lib/facts.sh	top-level	-	canonicalization	12	1	2	cmd_facts;facts_repository_fact	cmd_facts
 facts_envelope_tail	plugins/spark/lib/facts.sh	top-level	-	formatting-reporting	11	1	1	facts_repository_fact	-
+facts_load_grammars	plugins/spark/lib/facts.sh	top-level	-	source-collection	16	2	2	cmd_facts;facts_repository_fact	cmd_facts
 facts_now	plugins/spark/lib/facts.sh	top-level	-	source-collection	1	0	1	facts_repository_fact	-
 facts_record_telemetry	plugins/spark/lib/facts.sh	top-level	-	formatting-reporting	10	0	1	cmd_facts	cmd_facts
 facts_repo_node	plugins/spark/lib/facts.sh	top-level	-	source-collection	8	1	1	facts_repository_fact	-
-facts_repository_fact	plugins/spark/lib/facts.sh	top-level	-	evidence-authority	44	4	1	cmd_facts	cmd_facts
+facts_repository_fact	plugins/spark/lib/facts.sh	top-level	-	evidence-authority	61	4	1	cmd_facts	cmd_facts
 facts_unreadable_reason	plugins/spark/lib/facts.sh	top-level	-	canonicalization	10	1	1	facts_repository_fact	-
 fp_bytes_lines	plugins/spark/bin/spark	top-level	-	source-collection	10	1	2	cmd_footprint;fp_plugin_bytes	cmd_footprint
 fp_cache_stability	plugins/spark/bin/spark	top-level	-	domain-semantics	11	1	1	cmd_doctor	cmd_doctor

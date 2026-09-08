@@ -6,7 +6,7 @@ with less context. Moving duplication into more files is not one of them, so thi
 and adds no module.
 
 **The map comes first, and it covers the whole runtime.** `docs/research/v0.23-cleanup/743-responsibilities.tsv`
-assigns every one of the 256 functions in the dispatcher and its three modules to exactly one of the issue's
+assigns every one of the 258 functions in the dispatcher and its three modules to exactly one of the issue's
 eight responsibilities, with its body length, everything in the runtime that references it, and the verbs among
 those. `743-responsibilities-before.tsv` is the same map at `29e4f4e`, the commit this branch left, so the
 before-change baseline is a map and not a pair of totals. Both are generated from `tests/structure.sh --raw` run
@@ -21,10 +21,10 @@ stated rather than smoothed over.
 |---|---|---|---|---|---|
 | `argument-parsing` | 1 | 1 | 12 | 12 | reads flags and arguments |
 | `routing-dispatch` | 10 | 10 | 93 | 94 | resolves a verb and loads what it needs |
-| `source-collection` | 86 | 90 | 1,754 | 1,765 | reads a source of truth (git, gh, the filesystem) and returns it unjudged |
-| `canonicalization` | 45 | 46 | 631 | 625 | normalizes what was read into this repository's vocabulary |
-| `domain-semantics` | 66 | 67 | 6,809 | 6,830 | owns a rule about what the facts mean |
-| `evidence-authority` | 19 | 20 | 505 | 549 | decides what the evidence is admissible for |
+| `source-collection` | 86 | 91 | 1,754 | 1,781 | reads a source of truth (git, gh, the filesystem) and returns it unjudged |
+| `canonicalization` | 45 | 47 | 631 | 637 | normalizes what was read into this repository's vocabulary |
+| `domain-semantics` | 66 | 67 | 6,809 | 6,837 | owns a rule about what the facts mean |
+| `evidence-authority` | 19 | 20 | 505 | 566 | decides what the evidence is admissible for |
 | `formatting-reporting` | 20 | 20 | 223 | 242 | renders |
 | `compatibility-fallback` | 2 | 2 | 7 | 7 | keeps an older shape working |
 
@@ -34,13 +34,13 @@ stated rather than smoothed over.
 | `plugins/spark/lib/execution.sh` | 65 | 63 |
 | `plugins/spark/lib/planning.sh` | 16 | 16 |
 | `plugins/spark/lib/repository.sh` | 10 | 10 |
-| `plugins/spark/lib/facts.sh` | 0 | 7 |
+| `plugins/spark/lib/facts.sh` | 0 | 9 |
 
-Module count is unchanged at three. The runtime holds 256 functions and 10,124 body lines, against
-249 and 10,034 before: +7 functions, +90 body lines.
+Module count is unchanged at three. The runtime holds 258 functions and 10,176 body lines, against
+249 and 10,034 before: +9 functions, +142 body lines.
 
-Those totals count **every** definition, nested ones included — 9 of the 256 are nested
-inside another function, against 12 of 249 before. Counted whole, this unit removes 2 definition(s) — `bg_json_escape`, `json_escape_out` — adds 9 — `__spark_memo_write`, `cmd_facts`, `facts_envelope_tail`, `facts_now`, `facts_record_telemetry`, `facts_repo_node`, `facts_repository_fact`, `facts_unreadable_reason`, `intent_liveness` — and moves 1 — `json_escape` — from nested to top-level, which is why the total goes 249 to 256. A top-level-only inventory saw none of the removals, because all three escapers were nested, and reported this unit adding two functions.
+Those totals count **every** definition, nested ones included — 9 of the 258 are nested
+inside another function, against 12 of 249 before. Counted whole, this unit removes 2 definition(s) — `bg_json_escape`, `json_escape_out` — adds 11 — `__spark_memo_write`, `cmd_facts`, `facts_canonical`, `facts_envelope_tail`, `facts_load_grammars`, `facts_now`, `facts_record_telemetry`, `facts_repo_node`, `facts_repository_fact`, `facts_unreadable_reason`, `intent_liveness` — and moves 1 — `json_escape` — from nested to top-level, which is why the total goes 249 to 258. A top-level-only inventory saw none of the removals, because all three escapers were nested, and reported this unit adding two functions.
 `tests/structure.sh` reports the top-level half — the right scope for the size of a file — and stays the authority
 for it; the map records each function's scope and, for a nested one, the function that holds it.
 
@@ -53,10 +53,10 @@ actual line count is reported too:
 | `plugins/spark/lib/execution.sh` | 2,182 | 2,203 | +21 |
 | `plugins/spark/lib/planning.sh` | 825 | 825 | +0 |
 | `plugins/spark/lib/repository.sh` | 221 | 234 | +13 |
-| `plugins/spark/lib/facts.sh` | 0 | 234 | +234 |
+| `plugins/spark/lib/facts.sh` | 0 | 304 | +304 |
 
-**12,166 lines before, 12,455 after (+289)**, against
-10,034 and 10,124 body lines. The file grows while the bodies shrink because each new primitive is
+**12,166 lines before, 12,525 after (+359)**, against
+10,034 and 10,176 body lines. The file grows while the bodies shrink because each new primitive is
 documented where it lives, at the top level, outside any body.
 
 **Argument parsing, measured rather than assigned.** The map is exclusive — one responsibility per function — and
@@ -70,16 +70,16 @@ without inventing an owner. It is a line-level heuristic, not a parser:
 | `plugins/spark/lib/execution.sh` | 205 | 203 |
 | `plugins/spark/lib/planning.sh` | 61 | 61 |
 | `plugins/spark/lib/repository.sh` | 23 | 23 |
-| `plugins/spark/lib/facts.sh` | 0 | 12 |
+| `plugins/spark/lib/facts.sh` | 0 | 15 |
 
-212 functions carried parse lines before and 217 do now, in
+212 functions carried parse lines before and 219 do now, in
 820
-and 832
+and 835
 lines respectively. That is why extracting a shared parser is rejected below: the lines are per-verb strings and
 flags, and a shared parser would either normalize what users see or take it all as parameters.
 
-Two buckets hold 157 of 256 functions and
-8,595 of 10,124 body lines. That
+Two buckets hold 158 of 258 functions and
+8,618 of 10,176 body lines. That
 concentration is the issue's premise, and it is also the trap: for `cmd_doctor`, `cmd_next` and `cmd_labels` the
 rules *are* the product, and there is no lower layer to defer them to. Relocating them would move ownership
 without reducing it.

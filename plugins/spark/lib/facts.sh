@@ -53,6 +53,52 @@ FACTS_CACHE_MISSES=0
 FACTS_NODE=""
 FACTS_JSON=""
 
+# The shipped model is the authority for what a canonical value looks like, so
+# the compiler is held to the schema rather than to a copy of it. Read ONCE per
+# process into these, in a single pass: a validator that re-read the file per
+# field would make conformance cost more than the read it is checking.
+FACTS_MODEL="$SPARK_ROOT/preferences/fact-model.tsv"
+FACTS_RE_REPOSITORY=""
+FACTS_RE_REF=""
+FACTS_RE_TIMESTAMP=""
+FACTS_CON_REPOSITORY=""
+FACTS_CON_REF=""
+FACTS_GRAMMARS_LOADED=""
+
+facts_load_grammars() {
+  [ -z "$FACTS_GRAMMARS_LOADED" ] || return 0
+  local line kind name rest
+  while IFS=$'\t' read -r kind name rest; do
+    case "$kind/$name" in
+      identifier/repository) FACTS_RE_REPOSITORY="$rest" ;;
+      identifier/ref)        FACTS_RE_REF="$rest" ;;
+      identifier/timestamp)  FACTS_RE_TIMESTAMP="$rest" ;;
+      constraint/repository) FACTS_CON_REPOSITORY="$FACTS_CON_REPOSITORY$rest"$'\n' ;;
+      constraint/ref)        FACTS_CON_REF="$FACTS_CON_REF$rest"$'\n' ;;
+    esac
+  done < <(awk -F'\t' '
+    $1 == "identifier" && ($2 == "repository" || $2 == "ref" || $2 == "timestamp") { print $1 "\t" $2 "\t" $3 }
+    $1 == "constraint" && ($2 == "repository" || $2 == "ref") { print $1 "\t" $2 "\t" $3 }' "$FACTS_MODEL")
+  FACTS_GRAMMARS_LOADED=1
+}
+
+# facts_canonical <regex> <constraints> <value> — the model's own definition of
+# canonical: the value matches its grammar AND matches none of its constraints
+# (R1). A grammar that could not be read is a refusal, not a pass: a validator
+# that waves a value through when it cannot check it is not a validator.
+facts_canonical() {
+  local re="$1" cons="$2" value="$3" c
+  [ -n "$re" ] || return 1
+  [[ "$value" =~ $re ]] || return 1
+  while IFS= read -r c; do
+    [ -n "$c" ] || continue
+    if [[ "$value" =~ $c ]]; then return 1; fi
+  done <<EOF
+$cons
+EOF
+  return 0
+}
+
 # facts_now — the instant a source was read, in the model's one timestamp form.
 facts_now() { date -u +%FT%TZ 2>/dev/null; }
 
@@ -163,9 +209,27 @@ facts_repository_fact() {
   branch="$(printf '%s' "$FACTS_NODE" | awk -F'\t' 'NR == 1 { print $2 }')"
   updated="$(printf '%s' "$FACTS_NODE" | awk -F'\t' 'NR == 1 { print $3 }')"
 
-  # A response that parsed but does not carry the fields is malformed, not a
-  # smaller success: an empty default branch is not a repository with no trunk.
-  if [ -z "$full" ] || [ -z "$branch" ] || [ -z "$updated" ]; then
+  # A field being PRESENT does not make it canonical, and the difference is not
+  # cosmetic: an updated_at outside the timestamp grammar would become this
+  # fact's source version and its invalidator's observed version, so freshness —
+  # a comparison of versions — would be comparing something that is not one. A
+  # full_name outside the repository grammar would become an identity. Either
+  # would be an ESTABLISHED fact violating the schema it declares conformance
+  # to, which is worse than an unknown, because a consumer is entitled to act on
+  # an established fact.
+  #
+  # So every field is held to the shipped grammar before anything is
+  # established, and each failure is the same answer: malformed, which is an
+  # UNKNOWN carrying no value. The observation instant is checked too — it is
+  # generated here, and a `date` that produced nothing usable must not be
+  # emitted as if it were an observation.
+  local host="${locator%%/*}" nwo="${locator#*/}"
+  facts_load_grammars
+  if [ -z "$full" ] || [ -z "$branch" ] || [ -z "$updated" ] \
+     || ! facts_canonical "$FACTS_RE_TIMESTAMP" "" "$observed" \
+     || ! facts_canonical "$FACTS_RE_TIMESTAMP" "" "$updated" \
+     || ! facts_canonical "$FACTS_RE_REF" "$FACTS_CON_REF" "$branch" \
+     || ! facts_canonical "$FACTS_RE_REPOSITORY" "$FACTS_CON_REPOSITORY" "$host/${full,,}"; then
     FACTS_UNKNOWN=$(( FACTS_UNKNOWN + 1 ))
     tail="$(facts_envelope_tail "$locator" "$observed" "")"
     FACTS_JSON="$head"'"UNKNOWN"'"$tail"',"detail":{"reason":"malformed","candidates":[]}}'
@@ -176,7 +240,6 @@ facts_repository_fact() {
 
   # GitHub compares owner and name case-insensitively, and so does the locator
   # now, so a case difference is not a disagreement. A different name is.
-  local host="${locator%%/*}" nwo="${locator#*/}"
   if [ "${full,,}" != "$nwo" ]; then
     FACTS_JSON="$head"'"CONFLICT"'"$tail"',"detail":{"reason":"the repository names itself differently","candidates":["'"$(json_escape "$locator")"'","'"$(json_escape "$host/${full,,}")"'"]}}'
     return 0
@@ -221,8 +284,15 @@ cmd_facts() {
   # is no subject to be unknown about. That is not an UNKNOWN fact — an UNKNOWN
   # still identifies its node — so it is reported as not assessed and nothing is
   # emitted, rather than a fact whose identity was invented to fill the field.
-  if [ -z "$locator" ]; then
-    yellow "NOT ASSESSED — no origin remote, so this repository cannot be named"
+  # The locator is derived from whatever the origin remote says, which is
+  # arbitrary text. A remote that does not normalize to a canonical repository
+  # cannot name a node either, so it lands in the same place as no remote at
+  # all: nothing is emitted, because an identity invented to fill the field
+  # would be worse than reporting that none could be read.
+  facts_load_grammars
+  if [ -z "$locator" ] \
+     || ! facts_canonical "$FACTS_RE_REPOSITORY" "$FACTS_CON_REPOSITORY" "$locator"; then
+    yellow "NOT ASSESSED — no origin remote names a canonical repository here"
     return 3
   fi
 

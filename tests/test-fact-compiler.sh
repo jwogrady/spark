@@ -277,6 +277,44 @@ assert_contains "a response missing a field is malformed" "malformed" \
 assert_contains "and malformed is unknown, not established" "UNKNOWN" \
   "$(printf '%s' "$M" | jq -r '.status')"
 
+# A field that is present but outside its grammar is malformed too, and this is
+# the sharper half of the rule: an empty field is obviously missing, while
+# "not-a-timestamp" looks like an answer. Emitted, it would become this fact's
+# source version and its invalidator's observed version, so freshness — which is
+# a comparison of versions — would be comparing something that is not one.
+malformed_case() { # malformed_case <node json> <label>
+  stub_gh "$WORK/bin/gh" <<STUB
+answer_json '$1'
+STUB
+  local m; m="$("$SPARK" facts | jq -r '.[0]')"
+  assert_contains "$2" "malformed" "$(printf '%s' "$m" | jq -r '.detail.reason')"
+  [ "$(printf '%s' "$m" | jq -r '.status')" = "UNKNOWN" ] && ok \
+    || bad "$2: an invalid field is UNKNOWN, not ESTABLISHED"
+  [ "$(printf '%s' "$m" | jq -r 'has("value")')" = "false" ] && ok \
+    || bad "$2: and carries no value"
+}
+
+malformed_case '{"full_name":"jwogrady/spark","default_branch":"master","updated_at":"not-a-timestamp"}' \
+  'a version outside the timestamp grammar is malformed'
+malformed_case '{"full_name":"jwogrady/spark","default_branch":"master","updated_at":"2026-02-30T00:00:00Z"}' \
+  'and so is an instant the calendar does not have'
+malformed_case '{"full_name":"not a repository name","default_branch":"master","updated_at":"2026-09-07T21:00:00Z"}' \
+  'a name outside the repository grammar is malformed'
+malformed_case '{"full_name":"jwogrady/spark.git","default_branch":"master","updated_at":"2026-09-07T21:00:00Z"}' \
+  'including one carrying the clone URL suffix a constraint forbids'
+malformed_case '{"full_name":"jwogrady/spark","default_branch":"refs/heads/master","updated_at":"2026-09-07T21:00:00Z"}' \
+  'a ref spelled as its refs/ path is malformed'
+malformed_case '{"full_name":"jwogrady/spark","default_branch":"bad..name","updated_at":"2026-09-07T21:00:00Z"}' \
+  'and so is a branch name Git would refuse'
+
+# A remote that does not normalize to a canonical repository cannot name a node
+# either — the same answer as no remote at all, for the same reason.
+make_repo "$WORK/odd"
+git -C "$WORK/odd" remote add origin "git@localhost:no-host-here.git"
+out="$(cd "$WORK/odd" && "$SPARK" facts 2>&1)" && rc=0 || rc=$?
+[ "$rc" = "3" ] && ok || bad "a non-canonical remote cannot name a repository (got $rc)"
+assert_contains "and says so rather than inventing an identity" "NOT ASSESSED" "$out"
+
 # --- an unnameable repository is not assessed --------------------------------
 # An UNKNOWN still identifies its node. With no remote there is no node to name,
 # so nothing is emitted rather than a fact whose identity was invented.
