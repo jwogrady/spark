@@ -307,6 +307,35 @@ malformed_case '{"full_name":"jwogrady/spark","default_branch":"refs/heads/maste
 malformed_case '{"full_name":"jwogrady/spark","default_branch":"bad..name","updated_at":"2026-09-07T21:00:00Z"}' \
   'and so is a branch name Git would refuse'
 
+# A body that arrived and cannot be decoded is a different fact about the world
+# from a body that never arrived, and reporting the first as unreadable would
+# send a caller to check credentials and connectivity that are demonstrably fine.
+# Every malformed case above is valid JSON, so none of them crosses this line.
+: > "$GH_CALL_LOG"
+stub_gh "$WORK/bin/gh" <<'STUB'
+printf '%s\n' "$*" >> "$GH_CALL_LOG"
+printf 'this is not json'
+STUB
+D="$("$SPARK" facts | jq -r '.[0]')"
+assert_contains "an undecodable body is malformed, not unreadable" "malformed" \
+  "$(printf '%s' "$D" | jq -r '.detail.reason')"
+assert_contains "and is unknown" "UNKNOWN" "$(printf '%s' "$D" | jq -r '.status')"
+[ "$(printf '%s' "$D" | jq -r 'has("value")')" = "false" ] && ok \
+  || bad "an undecodable body carries no value"
+[ "$(grep -c . "$GH_CALL_LOG")" = "1" ] && ok \
+  || bad "a decode failure must not cost a second read"
+
+# A field of the wrong type is decodable and still not an answer. The projection
+# is total, so this lands on the malformed path rather than erroring as if the
+# request had failed.
+malformed_case '{"full_name":{"nested":"object"},"default_branch":"master","updated_at":"2026-09-07T21:00:00Z"}' \
+  'an object where a name belongs is malformed'
+malformed_case '{"full_name":"jwogrady/spark","default_branch":["master"],"updated_at":"2026-09-07T21:00:00Z"}' \
+  'and so is an array where a branch belongs'
+malformed_case '{"full_name":"jwogrady/spark","default_branch":"master","updated_at":1757280000}' \
+  'and a number where an instant belongs'
+malformed_case '[]' 'a body that is not an object at all is malformed'
+
 # A remote that does not normalize to a canonical repository cannot name a node
 # either — the same answer as no remote at all, for the same reason.
 make_repo "$WORK/odd"

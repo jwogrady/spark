@@ -120,6 +120,11 @@ facts_unreadable_reason() {
     *"HTTP 403"*)                                   printf 'permission-denied' ;;
     *"HTTP 404"*|*"Not Found"*)                     printf 'not-found' ;;
     *"timeout"*|*"timed out"*|*"deadline exceeded"*|*"i/o timeout"*) printf 'timeout' ;;
+    # A body that arrived and could not be decoded is a different fact about the
+    # world from a body that never arrived. Reporting it as unreadable would send
+    # a caller to check credentials and connectivity that are demonstrably fine.
+    *"decoding JSON"*|*"invalid character"*|*"unexpected end of JSON"*|*"jq: error"*|\
+    *"parse error"*|*"cannot unmarshal"*)           printf 'malformed' ;;
     *) printf 'unreadable' ;;
   esac
 }
@@ -138,6 +143,16 @@ facts_unreadable_reason() {
 # github.com is an answer about a different repository that happens to share a
 # name.
 #
+# Transport and decoding are different failures and are reported as different
+# facts: a body that never arrived is unreadable with its transport reason, and
+# a body that arrived and could not be decoded is malformed. They reach that
+# separation from both ends — the projection cannot fail on a value's type, and
+# the reason vocabulary recognises a decode error — because the one call is
+# deliberate. A separate decode step would need a JSON decoder in shipped code,
+# which the zero-dependency rule forbids, and a text scan for the key is not a
+# substitute: a fork's response carries `parent.full_name`, so a scanner would
+# read the parent's identity as this repository's.
+#
 # One request for three fields is the collection rule (#733): a fan-out of one
 # request per field would read the same node three times and could observe it
 # in three different states — a conflict manufactured by the reader.
@@ -154,8 +169,13 @@ facts_unreadable_reason() {
 facts_repo_node() {
   local locator="$1" host="${1%%/*}" nwo="${1#*/}" out rc=0
   FACTS_API_CALLS=$(( FACTS_API_CALLS + 1 ))
+  # The projection is TOTAL: any valid JSON produces three fields, and anything
+  # that is not a string — an object, an array, a number, a null, or a body that
+  # is not an object at all — produces an empty one. A field of the wrong type is
+  # then malformed by the check that already exists, instead of erroring here and
+  # being reported as a failure to reach GitHub.
   out="$(gh api --hostname "$host" "repos/$nwo" \
-    --jq '[.full_name, .default_branch, .updated_at] | @tsv' 2>&1)" || rc=$?
+    --jq '[.full_name?, .default_branch?, .updated_at?] | map(if type == "string" then . else "" end) | @tsv' 2>&1)" || rc=$?
   FACTS_NODE="$out"
   return "$rc"
 }
