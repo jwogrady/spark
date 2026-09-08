@@ -332,12 +332,19 @@ facts_graph_node() {
     # A GraphQL reply can carry errors beside partial data, and a null list is
     # not an empty one. Both are refused here rather than projected into rows
     # that would read as a complete graph with no relationships.
+    #
+    # hasNextPage is required to be a BOOLEAN, not merely present: a pageInfo
+    # that does not say whether more pages exist has not told us the list is
+    # complete, and absence of a completeness signal is not a completeness
+    # signal.
     if has("errors") then ("errored" | @tsv)
     elif (.data.repository.issue // null) == null then ("absent" | @tsv)
     elif (.data.repository.issue
           | (.state == null) or (.updatedAt == null)
-            or (.subIssues == null) or (.subIssues.nodes == null) or (.subIssues.pageInfo == null)
-            or (.blockedBy == null) or (.blockedBy.nodes == null) or (.blockedBy.pageInfo == null))
+            or (.subIssues == null) or (.subIssues.nodes == null)
+            or ((.subIssues.pageInfo.hasNextPage | type) != "boolean")
+            or (.blockedBy == null) or (.blockedBy.nodes == null)
+            or ((.blockedBy.pageInfo.hasNextPage | type) != "boolean"))
       then ("partial" | @tsv)
     else
       .data.repository.issue as $i
@@ -435,10 +442,23 @@ facts_graph_fact() {
   # accumulating the partial page's nodes first and discarding them afterwards
   # invites exactly the bug where the fact denies knowing the set and still
   # claims a freshness contract over part of it.
+  # Every incomplete list, not the first one: a fact that says what it could not
+  # see must say all of it.
   local truncated
-  truncated="$(printf '%s' "$FACTS_NODE" | awk -F'\t' '$1 == "truncated" { print $2; exit }')"
+  truncated="$(printf '%s' "$FACTS_NODE" | awk -F'\t' '$1 == "truncated" { print $2 }' \
+    | sort -u | tr '\n' ' ')"
+  truncated="${truncated% }"
 
-  local self_version parent='"none"' kids="" blocks="" seen=""
+  # Membership is per list and identity is global, which are different rules.
+  #
+  # The model has a work unit appear at most once IN EACH list, and a node can
+  # legitimately be both a child and a blocker — so tracking uniqueness across
+  # the lists silently dropped a real edge. What must be unique globally is the
+  # node's invalidator and its observed version: one node has one version, and a
+  # node reported twice with different states or versions is refused rather
+  # than reconciled by preferring one.
+  local self_version parent='"none"' kids="" blocks=""
+  local seen_parent="" seen_child="" seen_blocker="" known=""
   local inv="issue:$wu" vers="" kind line f1 f2 f3 f4 f5 f6 entry tok
   self_version="$(printf '%s' "$FACTS_NODE" | awk -F'\t' '$1 == "self" { print $3; exit }')"
   if [ -z "$self_version" ] || ! facts_canonical "$FACTS_RE_TIMESTAMP" "" "$self_version"; then
@@ -457,24 +477,34 @@ facts_graph_fact() {
         entry="$(facts_graph_entry "$host" "$f2" "$f3" "$f5" "$f6")" || {
           FACTS_REFUSED="malformed"; return 3; }
         tok="${entry#*$'\t'}"; entry="${entry%%$'\t'*}"
-        # R14: a work unit appears at most once per list, and one node carries
-        # one state. A repeat with the same state is GitHub listing it twice and
-        # is dropped; a repeat with a different state has no representation and
-        # is refused rather than resolved by picking one.
-        case " $seen " in
-          *" $tok=$entry "*) continue ;;
-          *" $tok="*) FACTS_REFUSED="malformed"; return 3 ;;
-        esac
-        seen="$seen $tok=$entry"
         if ! facts_canonical "$FACTS_RE_TIMESTAMP" "" "$f4"; then
           FACTS_REFUSED="malformed"; return 3
         fi
-        vers="$vers,\"$(json_escape "$tok")\":\"$(json_escape "$f4")\""
-        inv="$inv $tok"
+
+        # One node, one state and one observed version, wherever it appears. A
+        # node reported twice consistently is one node in two relationships; a
+        # node reported twice with different states or versions has no
+        # representation in this schema.
+        case " $known " in
+          *" $tok=$entry@$f4 "*) ;;
+          *" $tok="*) FACTS_REFUSED="malformed"; return 3 ;;
+          *) known="$known $tok=$entry@$f4"
+             vers="$vers,\"$(json_escape "$tok")\":\"$(json_escape "$f4")\""
+             inv="$inv $tok" ;;
+        esac
+
+        # Membership is then per list, so a node that is both a child and a
+        # blocker appears in both — one edge is not a duplicate of the other.
         case "$f1" in
-          parent)  parent="$entry" ;;
-          child)   kids="${kids:+$kids,}$entry" ;;
-          blocker) blocks="${blocks:+$blocks,}$entry" ;;
+          parent)
+            case " $seen_parent " in *" $tok "*) continue ;; esac
+            seen_parent="$seen_parent $tok"; parent="$entry" ;;
+          child)
+            case " $seen_child " in *" $tok "*) continue ;; esac
+            seen_child="$seen_child $tok"; kids="${kids:+$kids,}$entry" ;;
+          blocker)
+            case " $seen_blocker " in *" $tok "*) continue ;; esac
+            seen_blocker="$seen_blocker $tok"; blocks="${blocks:+$blocks,}$entry" ;;
         esac ;;
     esac
   done <<EOF
@@ -496,7 +526,12 @@ EOF
     # describes none of them. The node's version is recorded, so a later read
     # can tell whether anything changed since the truncation.
     FACTS_UNKNOWN=$(( FACTS_UNKNOWN + 1 ))
-    FACTS_JSON="$head"'"UNKNOWN"'"$tail"',"detail":{"reason":"the '"$truncated"' list was truncated","candidates":[]}}'
+    local which
+    case "$truncated" in
+      *" "*) which="the ${truncated% *} and ${truncated##* } lists were truncated" ;;
+      *)     which="the $truncated list was truncated" ;;
+    esac
+    FACTS_JSON="$head"'"UNKNOWN"'"$tail"',"detail":{"reason":"'"$(json_escape "$which")"'","candidates":[]}}'
     return 0
   fi
   FACTS_JSON="$head"'"ESTABLISHED","value":{"parent":'"$parent"',"children":['"$kids"'],"blocked_by":['"$blocks"']}'"$tail"'}'

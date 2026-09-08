@@ -653,6 +653,12 @@ graph_stub '{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","par
 GT2="$(gfact "$("$SPARK" facts --issue 733)")"
 assert_contains "two truncated lists are still one unknown" "UNKNOWN" \
   "$(printf '%s' "$GT2" | jq -r '.status')"
+# And it must name BOTH. A fact that says what it could not see, and names only
+# half of it, is telling a caller the other half was read.
+assert_contains "and names the first incomplete list" "blockers" \
+  "$(printf '%s' "$GT2" | jq -r '.detail.reason')"
+assert_contains "and the second" "children" \
+  "$(printf '%s' "$GT2" | jq -r '.detail.reason')"
 [ "$(printf '%s' "$GT2" | jq -r '.invalidators | length')" = "1" ] && ok \
   || bad "and it still names only the work unit"
 assert_versions_canonical "$GT2" "the doubly truncated graph"
@@ -809,5 +815,76 @@ TELG="$("$SPARK" telemetry show --run rgraph --json)"
 assert_contains "two classes compiled means two facts" '"facts_emitted":2' "$TELG"
 assert_contains "from two source reads" '"facts_api_calls":2' "$TELG"
 assert_contains "and nothing unknown" '"facts_unknown":0' "$TELG"
+
+# --- a pageInfo that does not say whether more pages exist ------------------
+# Absence of a completeness signal is not a completeness signal. A list whose
+# hasNextPage is missing, null or the wrong type has not told us it is whole, so
+# it cannot compile as a graph that saw everything.
+graph_refused '{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
+  "subIssues":{"pageInfo":{},"nodes":[]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
+  "a pageInfo with no hasNextPage has not said the list is complete"
+graph_refused '{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
+  "subIssues":{"pageInfo":{"hasNextPage":null},"nodes":[]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
+  "nor has a null hasNextPage"
+graph_refused '{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
+  "subIssues":{"pageInfo":{"hasNextPage":"false"},"nodes":[]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
+  "and a string is not a boolean, whatever it spells"
+graph_refused '{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
+  "blockedBy":{"pageInfo":{},"nodes":[]}}' \
+  "the blocker list is held to the same rule"
+
+# --- a node can be both a child and a blocker -----------------------------
+# Membership is per list; identity is global. Tracking uniqueness across the
+# lists would silently drop one of two real edges.
+graph_stub '{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[
+    {"__typename":"Issue","number":740,"state":"OPEN","updatedAt":"2026-09-07T08:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}}]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[
+    {"__typename":"Issue","number":740,"state":"OPEN","updatedAt":"2026-09-07T08:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}}]}}'
+GB="$(gfact "$("$SPARK" facts --issue 733)")"
+assert_contains "a node that is both a child and a blocker is established" "ESTABLISHED" \
+  "$(printf '%s' "$GB" | jq -r '.status')"
+[ "$(printf '%s' "$GB" | jq -r '.value.children | length')" = "1" ] && ok \
+  || bad "it appears as a child"
+[ "$(printf '%s' "$GB" | jq -r '.value.blocked_by | length')" = "1" ] && ok \
+  || bad "and as a blocker — one edge is not a duplicate of the other"
+# One node, one invalidator and one version, however many relationships it has.
+[ "$(printf '%s' "$GB" | jq -r '.invalidators | length')" = "2" ] && ok \
+  || bad "the node and the work unit are two invalidators, not three"
+[ "$(printf '%s' "$GB" | jq -r '.versions | length')" = "2" ] && ok \
+  || bad "and two observed versions"
+assert_versions_canonical "$GB" "the shared-node graph"
+
+# The same node reported with two different states has no representation.
+graph_refused '{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[
+    {"__typename":"Issue","number":740,"state":"OPEN","updatedAt":"2026-09-07T08:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}}]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[
+    {"__typename":"Issue","number":740,"state":"CLOSED","updatedAt":"2026-09-07T08:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}}]}}' \
+  "one node cannot be open in one list and closed in another"
+
+# Nor with two different observed versions: one node has one version.
+graph_refused '{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[
+    {"__typename":"Issue","number":740,"state":"OPEN","updatedAt":"2026-09-07T08:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}}]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[
+    {"__typename":"Issue","number":740,"state":"OPEN","updatedAt":"2026-09-07T09:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}}]}}' \
+  "and cannot carry two observed versions"
+
+# A node listed twice within ONE list is still one member of it.
+graph_stub '{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[
+    {"__typename":"Issue","number":740,"state":"OPEN","updatedAt":"2026-09-07T08:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}},
+    {"__typename":"Issue","number":740,"state":"OPEN","updatedAt":"2026-09-07T08:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}}]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
+GW="$(gfact "$("$SPARK" facts --issue 733)")"
+[ "$(printf '%s' "$GW" | jq -r '.value.children | length')" = "1" ] && ok \
+  || bad "a node listed twice in one list appears once in it"
+[ "$(printf '%s' "$GW" | jq -r '.invalidators | length')" = "2" ] && ok \
+  || bad "and contributes one invalidator"
 
 finish
