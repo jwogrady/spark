@@ -997,4 +997,66 @@ assert_contains "the requested work unit's own graph is established" "ESTABLISHE
 assert_contains "and named as itself" "github.com/jwogrady/spark#733" \
   "$(printf '%s' "$GM" | jq -r '.source.identity')"
 
+# --- a reply that did not answer is not a reply of "no" --------------------
+# Only an explicitly present, null `issue` is GitHub saying there is no such
+# issue. Everything else here is a reply that failed to answer the question, and
+# calling that absence produces a confident wrong reason two steps later.
+raw_graph_stub() { # raw_graph_stub <whole graphql response>
+  stub_gh "$WORK/bin/gh" <<STUB
+printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
+case "\$*" in
+  *graphql*) answer_json '$1' ;;
+  *"pulls/733"*) answer_json '{"number":733}' ;;
+  *) answer_json '$NODE' ;;
+esac
+STUB
+}
+
+malformed_root() { # malformed_root <response> <label>
+  raw_graph_stub "$1"
+  local out; out="$("$SPARK" facts --issue 733 2>&1 >/dev/null)"
+  assert_contains "$2" "malformed" "$out"
+  case "$out" in
+    *"pull request has no native graph"*) bad "$2: a reply that did not answer is not a pull request" ;;
+    *not-found*) bad "$2: a reply that did not answer is not absence" ;;
+    *) ok ;;
+  esac
+}
+
+malformed_root '{}' "a reply with no data did not answer"
+malformed_root '{"data":null}' "and neither did a null data"
+malformed_root '{"data":{}}' "nor one with no repository"
+malformed_root '{"data":{"repository":null}}' "nor a null repository"
+malformed_root '{"data":{"repository":{}}}' "nor a repository with no issue key"
+
+# The control: an explicitly null issue IS absence, and reaches the probe.
+raw_graph_stub '{"data":{"repository":{"issue":null}}}'
+aout="$("$SPARK" facts --issue 733 2>&1 >/dev/null)"
+assert_contains "an explicitly null issue is absence, and the probe decides which" \
+  "a pull request has no native graph" "$aout"
+
+# --- the probe must name THIS pull request ---------------------------------
+# `gh --jq .number` exits zero for a null or missing field, so a zero exit is
+# not proof; and a reply naming a different pull request is not this work unit.
+probe_shape() { # probe_shape <probe stdout json> <label>
+  stub_gh "$WORK/bin/gh" <<STUB
+printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
+case "\$*" in
+  *graphql*) answer_json '{"data":{"repository":{"issue":null}}}' ;;
+  *"pulls/733"*) answer_json '$1' ;;
+  *) answer_json '$NODE' ;;
+esac
+STUB
+  local out; out="$("$SPARK" facts --issue 733 2>&1 >/dev/null)"
+  assert_contains "$2" "malformed" "$out"
+  case "$out" in
+    *"pull request has no native graph"*) bad "$2: that reply did not name this pull request" ;;
+    *) ok ;;
+  esac
+}
+probe_shape '{}'              "a probe reply with no number names no pull request"
+probe_shape '{"number":null}' "and neither does a null number"
+probe_shape '{"number":"733"}' "a string is not a number here either"
+probe_shape '{"number":999}'  "and another pull request is not this one"
+
 finish

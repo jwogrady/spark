@@ -350,15 +350,22 @@ facts_graph_node() {
     # that does not say whether more pages exist has not told us the list is
     # complete, and absence of a completeness signal is not a completeness
     # signal.
-    if has("errors") then ("errored" | @tsv)
-    elif (.data.repository.issue // null) == null then ("absent" | @tsv)
+    if has("errors") then (["errored"] | @tsv)
+    # Only an explicitly present, null `issue` is GitHub saying there is no such
+    # issue. A missing `data`, a missing or null `repository`, or no `issue` key
+    # at all are replies that did not answer the question — and calling those
+    # absence produces a confident wrong reason two steps later.
+    elif (.data | type) != "object" then (["partial"] | @tsv)
+    elif (.data.repository | type) != "object" then (["partial"] | @tsv)
+    elif (.data.repository | has("issue") | not) then (["partial"] | @tsv)
+    elif .data.repository.issue == null then (["absent"] | @tsv)
     elif (.data.repository.issue
           | ((.number | type) != "number") or (.state == null) or (.updatedAt == null)
             or ((.subIssues.nodes | type) != "array")
             or ((.subIssues.pageInfo.hasNextPage | type) != "boolean")
             or ((.blockedBy.nodes | type) != "array")
             or ((.blockedBy.pageInfo.hasNextPage | type) != "boolean"))
-      then ("partial" | @tsv)
+      then (["partial"] | @tsv)
     else
       .data.repository.issue as $i
       |
@@ -457,10 +464,18 @@ facts_graph_fact() {
       # classes. So this is a refusal with an accurate reason, not a fact.
       FACTS_API_CALLS=$(( FACTS_API_CALLS + 1 ))
       local probe prc=0
-      probe="$(gh api --hostname "${locator%%/*}" \
-        "repos/${locator#*/}/pulls/$number" --jq .number 2>&1)" || prc=$?
-      if [ "$prc" -eq 0 ]; then
+      # The projection asks for a NUMBER: `jq -r .number` would print a string
+      # "733" indistinguishably from the integer 733, and a reply that names its
+      # number as a string has not answered in the shape the API defines.
+      probe="$(gh api --hostname "${locator%%/*}" "repos/${locator#*/}/pulls/$number" \
+        --jq 'select((.number | type) == "number") | .number' 2>&1)" || prc=$?
+      # A zero exit is not proof: `gh --jq .number` exits zero for a null or
+      # missing field, and a reply naming a DIFFERENT pull request is not this
+      # work unit. The probe must return this number, as a number.
+      if [ "$prc" -eq 0 ] && [ "$probe" = "$number" ]; then
         FACTS_REFUSED="a pull request has no native graph"
+      elif [ "$prc" -eq 0 ]; then
+        FACTS_REFUSED="malformed"
       else
         # Absence is a claim about the world; failing to look is not. A real 404
         # means no pull request either, so the work unit is genuinely absent —
