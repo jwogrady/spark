@@ -615,8 +615,14 @@ assert_contains "and each relation's version is that node's" "2026-09-06T07:00:0
   || bad "the graph is one request, not one per relationship ($(grep -c graphql "$GH_CALL_LOG"))"
 
 # --- a truncated list is an unknown, not a shorter graph ------------------
-TRUNC='{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
-  "subIssues":{"pageInfo":{"hasNextPage":true},"nodes":[]},
+# The truncated page CARRIES nodes, which is what a real truncation looks like.
+# An empty truncated page cannot show the defect this pins: partial nodes must
+# not survive in the invalidators of a fact that says it saw no relationships.
+TRUNC='{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z",
+  "parent":{"__typename":"Issue","number":728,"state":"OPEN","updatedAt":"2026-09-08T09:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}},
+  "subIssues":{"pageInfo":{"hasNextPage":true},"nodes":[
+    {"__typename":"Issue","number":740,"state":"CLOSED","updatedAt":"2026-09-07T08:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}},
+    {"__typename":"Issue","number":742,"state":"CLOSED","updatedAt":"2026-09-07T09:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}}]},
   "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
 graph_stub "$TRUNC"
 GT="$(gfact "$("$SPARK" facts --issue 733)")"
@@ -630,6 +636,26 @@ assert_contains "and says which list it could not see" "children" \
 assert_versions_canonical "$GT" "the truncated graph"
 [ "$(printf '%s' "$GT" | jq -r '.invalidators | length')" = "1" ] && ok \
   || bad "an unknown graph names the node it read and no relationship it cannot describe"
+# The sharp edge: the partial page's nodes must not survive here. A fact that
+# denies knowing the relationship set cannot also claim a freshness contract
+# over part of it.
+[ "$(printf '%s' "$GT" | jq -r '.invalidators | join(" ")')" = "issue:github.com/jwogrady/spark#733" ] \
+  && ok || bad "a partial page's nodes must not remain in an unknown graph's invalidators"
+[ "$(printf '%s' "$GT" | jq -r '.versions | length')" = "1" ] && ok \
+  || bad "nor in its versions"
+
+# Both lists truncated is the same answer, and names one of them.
+graph_stub '{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
+  "subIssues":{"pageInfo":{"hasNextPage":true},"nodes":[
+    {"__typename":"Issue","number":740,"state":"CLOSED","updatedAt":"2026-09-07T08:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}}]},
+  "blockedBy":{"pageInfo":{"hasNextPage":true},"nodes":[
+    {"__typename":"Issue","number":700,"state":"OPEN","updatedAt":"2026-09-06T07:00:00Z","repository":{"nameWithOwner":"jwogrady/spark"}}]}}'
+GT2="$(gfact "$("$SPARK" facts --issue 733)")"
+assert_contains "two truncated lists are still one unknown" "UNKNOWN" \
+  "$(printf '%s' "$GT2" | jq -r '.status')"
+[ "$(printf '%s' "$GT2" | jq -r '.invalidators | length')" = "1" ] && ok \
+  || bad "and it still names only the work unit"
+assert_versions_canonical "$GT2" "the doubly truncated graph"
 
 # --- no parent is 'none', not a missing key ------------------------------
 graph_stub '{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
@@ -704,6 +730,38 @@ graph_refused '{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z",
   "a node kind with no invalidator form must not be guessed at"
 graph_refused 'null' "a work unit that does not exist yields no graph"
 
+# --- a partial or errored reply is not a reading of the graph ------------
+# GraphQL can answer with errors beside partial data, and a null list is not an
+# empty one. Compiling either would state that the work unit has no
+# relationships, which is a different fact from not having been able to see them.
+graph_refused '{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
+  "subIssues":null,
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
+  "a null relationship list is not an empty one"
+graph_refused '{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,
+  "subIssues":{"pageInfo":{"hasNextPage":false}},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
+  "a list with no nodes key was not returned, not returned empty"
+graph_refused '{"number":733,"state":"OPEN","updatedAt":null,"parent":null,
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
+  "a node with no version leaves nothing to record"
+
+# A reply carrying errors is refused even when it also carries data.
+stub_gh "$WORK/bin/gh" <<STUB
+printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
+case "\$*" in
+  *graphql*) answer_json '{"errors":[{"message":"Something went wrong"}],"data":{"repository":{"issue":{"number":733,"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,"subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},"blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}}}}' ;;
+  *) answer_json '$NODE' ;;
+esac
+STUB
+eout="$("$SPARK" facts --issue 733 2>&1)"
+case "$(printf '%s' "$eout" | jq -r '[.[].key] | join(",")' 2>/dev/null)" in
+  *graph.native*) bad "a reply carrying errors must not compile as a graph" ;;
+  *) ok ;;
+esac
+assert_contains "and the reason says the reply was malformed" "malformed" "$eout"
+
 # --- an unreadable graph source is refused, like the repository's --------
 stub_gh "$WORK/bin/gh" <<STUB
 printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
@@ -727,6 +785,21 @@ for bad_arg in 0 abc 12x -3; do
   out="$("$SPARK" facts --issue "$bad_arg" 2>&1)" && rc=0 || rc=$?
   [ "$rc" = "1" ] && ok || bad "--issue $bad_arg must be refused (got $rc)"
 done
+
+# A flag that was SUPPLIED and left empty is a caller error, not the flag's
+# absence. Treating it as absence would quietly compile a different set of facts
+# than the caller asked for.
+out="$("$SPARK" facts --issue 2>&1)" && rc=0 || rc=$?
+[ "$rc" = "1" ] && ok || bad "--issue with no value must be refused (got $rc)"
+case "$out" in *'"key"'*) bad "--issue with no value must not compile anything" ;; *) ok ;; esac
+out="$("$SPARK" facts --issue= 2>&1)" && rc=0 || rc=$?
+[ "$rc" = "1" ] && ok || bad "--issue= must be refused (got $rc)"
+case "$out" in *'"key"'*) bad "--issue= must not compile anything" ;; *) ok ;; esac
+
+# And the flag's absence still compiles exactly the repository class.
+out="$("$SPARK" facts)"
+[ "$(printf '%s' "$out" | jq -r 'length')" = "1" ] && ok \
+  || bad "without the flag only the repository class is compiled"
 
 # --- the compiler's cost, with two classes ------------------------------
 : > "$GH_CALL_LOG"

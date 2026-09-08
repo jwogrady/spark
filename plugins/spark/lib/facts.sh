@@ -329,9 +329,19 @@ facts_graph_node() {
         }
       }
     }' --jq '
-    .data.repository.issue as $i
-    | if $i == null then ("absent" | @tsv)
-      else
+    # A GraphQL reply can carry errors beside partial data, and a null list is
+    # not an empty one. Both are refused here rather than projected into rows
+    # that would read as a complete graph with no relationships.
+    if has("errors") then ("errored" | @tsv)
+    elif (.data.repository.issue // null) == null then ("absent" | @tsv)
+    elif (.data.repository.issue
+          | (.state == null) or (.updatedAt == null)
+            or (.subIssues == null) or (.subIssues.nodes == null) or (.subIssues.pageInfo == null)
+            or (.blockedBy == null) or (.blockedBy.nodes == null) or (.blockedBy.pageInfo == null))
+      then ("partial" | @tsv)
+    else
+      .data.repository.issue as $i
+      |
         (["self", $i.state, $i.updatedAt] | @tsv),
         (if $i.parent != null then
            ["parent", ($i.parent.number|tostring), $i.parent.state, $i.parent.updatedAt,
@@ -343,7 +353,7 @@ facts_graph_node() {
         (if $i.blockedBy.pageInfo.hasNextPage then ["truncated", "blockers"] | @tsv else empty end),
         ($i.blockedBy.nodes[] | ["blocker", (.number|tostring), .state, .updatedAt,
                                  .repository.nameWithOwner, .__typename] | @tsv)
-      end' 2>&1)" || rc=$?
+    end' 2>&1)" || rc=$?
   FACTS_NODE="$out"
   return "$rc"
 }
@@ -408,13 +418,27 @@ facts_graph_fact() {
     FACTS_REFUSED="$(facts_unreadable_reason "$FACTS_NODE")"; return 3; }
 
   case "$FACTS_NODE" in
-    absent*) FACTS_REFUSED="not-found"; return 3 ;;
+    absent*)  FACTS_REFUSED="not-found"; return 3 ;;
+    # A reply that carried errors, or one whose relationship structures were
+    # missing, was not a reading of this graph. Compiling it would state that
+    # the work unit has no relationships, which is a different fact from not
+    # having been able to see them.
+    errored*) FACTS_REFUSED="malformed"; return 3 ;;
+    partial*) FACTS_REFUSED="malformed"; return 3 ;;
   esac
 
   # `none` in a value shape is the model's literal for "no such relationship",
   # and its own next_action example writes it as a JSON string. A bare token
   # would not parse at all, which is a fact nobody can read.
-  local self_version truncated="" parent='"none"' kids="" blocks="" seen=""
+  # Truncation is decided BEFORE the relationships are walked. An UNKNOWN graph
+  # represents none of them, so it must list none of them as invalidators (R17);
+  # accumulating the partial page's nodes first and discarding them afterwards
+  # invites exactly the bug where the fact denies knowing the set and still
+  # claims a freshness contract over part of it.
+  local truncated
+  truncated="$(printf '%s' "$FACTS_NODE" | awk -F'\t' '$1 == "truncated" { print $2; exit }')"
+
+  local self_version parent='"none"' kids="" blocks="" seen=""
   local inv="issue:$wu" vers="" kind line f1 f2 f3 f4 f5 f6 entry tok
   self_version="$(printf '%s' "$FACTS_NODE" | awk -F'\t' '$1 == "self" { print $3; exit }')"
   if [ -z "$self_version" ] || ! facts_canonical "$FACTS_RE_TIMESTAMP" "" "$self_version"; then
@@ -423,11 +447,12 @@ facts_graph_fact() {
   fi
   vers='"'"$(json_escape "$inv")"'":"'"$(json_escape "$self_version")"'"'
 
-  while IFS=$'\t' read -r f1 f2 f3 f4 f5 f6; do
+  # Only walked when the whole set was returned. A truncated read has no value to
+  # build and no relationship it may claim to represent.
+  while [ -z "$truncated" ] && IFS=$'\t' read -r f1 f2 f3 f4 f5 f6; do
     [ -n "$f1" ] || continue
     case "$f1" in
-      self) continue ;;
-      truncated) truncated="$f2" ;;
+      self|truncated) continue ;;
       parent|child|blocker)
         entry="$(facts_graph_entry "$host" "$f2" "$f3" "$f5" "$f6")" || {
           FACTS_REFUSED="malformed"; return 3; }
@@ -500,22 +525,29 @@ facts_record_telemetry() {
 
 cmd_facts() {
   local usage_line="usage: spark facts [--issue <number>] [--help]"
-  local issue=""
+  local issue="" issue_given=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
-      --issue)   shift; issue="${1:-}" ;;
-      --issue=*) issue="${1#--issue=}" ;;
+      --issue)   issue_given=1; shift; issue="${1:-}" ;;
+      --issue=*) issue_given=1; issue="${1#--issue=}" ;;
       -h|--help) echo "$usage_line"; return 0 ;;
       *) red "unknown option: $1"; echo "$usage_line"; return 1 ;;
     esac
     if [ "$#" -gt 0 ]; then shift; fi
   done
-  # Validated before it reaches a query, and refused rather than coerced: a work
-  # unit is a positive integer, and anything else names no node.
-  case "$issue" in
-    ''|[1-9]*[!0-9]*|0*|*[!0-9]*) [ -z "$issue" ] || {
-      red "--issue takes an issue number"; echo "$usage_line"; return 1; } ;;
-  esac
+  # Whether the flag was SUPPLIED is tracked separately from its value. `--issue`
+  # with nothing after it, and `--issue=`, are caller errors: treating them as
+  # the flag's absence would quietly compile a different set of facts than the
+  # caller asked for, which is worse than refusing.
+  #
+  # The value is then validated before it reaches a query and refused rather than
+  # coerced: a work unit is a positive integer, and anything else names no node.
+  if [ -n "$issue_given" ]; then
+    case "$issue" in
+      ''|0|0*|*[!0-9]*)
+        red "--issue takes an issue number"; echo "$usage_line"; return 1 ;;
+    esac
+  fi
 
   local top; top="$(git_root)"
   if [ -z "$top" ]; then
