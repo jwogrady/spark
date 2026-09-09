@@ -43,16 +43,21 @@ model_regex() {
 # is a field that cannot mean anything.
 #
 # Every value is judged inside jq, as the one JSON value it is — never handed
-# back through -r as text and re-checked by the shell. jq's own ^/$ anchors are
-# PER LINE (Oniguruma/Ruby syntax, not whole-string), so a value carrying an
-# embedded newline could show one line matching the grammar while the value as
-# a whole does not — and two canonical-looking lines glued by one embedded
-# newline would each pass a per-line check with no line ever failing. A bare
-# command substitution then silently drops a TRAILING newline before a check
-# ever sees it. So a newline is rejected before the grammar is asked at all,
-# and every line of the report below is a status token built with `tojson` —
-# never the raw value itself — so a value's own embedded newline can never
-# masquerade as a second report line.
+# back through -r as text and re-checked by the shell. That is what closes the
+# per-line hole: `grep -Eq` accepts a value whenever ANY ONE of its lines
+# matches an anchored pattern, `read` splits an embedded newline into separate
+# tokens, and a bare command substitution drops a TRAILING newline before any
+# check sees it — so "NOT-A-VERSION\n<canonical>" read as canonical, and so did
+# two canonical lines glued together into one value that is not.
+#
+# jq's own anchors were measured here rather than assumed: on jq 1.7.1
+# `"a\nb" | test("^b$")` is FALSE, so ^/$ bind to the whole string and the
+# grammar could be asked directly. A control character is still rejected BEFORE
+# the grammar, for two reasons that do not depend on that measurement holding
+# in another jq build: the rejection reason stays truthful about what the value
+# is, and the report below is a line-oriented transport, so a value must never
+# be able to contribute a line to it. Every report line is a status token built
+# with `tojson`, never the raw value, for the same reason.
 assert_versions_canonical() {
   local f="$1" label="$2" re report
   re="$(model_regex source-version github-api)"
@@ -61,24 +66,32 @@ assert_versions_canonical() {
     printf '%s' "$f" | jq -j --arg re "$re" '
       def canonical:
         if type != "string" then "bad:\(. | tojson) is not a string"
-        elif test("\n") then "bad:\(. | tojson) contains a newline"
+        elif test("[[:cntrl:]]") then "bad:\(. | tojson) carries a control character"
+        elif . == "" then "bad:\(. | tojson) is empty, so it cannot say as of when"
         elif test($re) then "ok"
         else "bad:\(. | tojson) is not a github-api version" end;
       ([.source.version | canonical]
        + (if (.versions | type) != "object"
           then ["bad-versions-type:\(.versions | type)"]
+          elif (.versions | length) == 0 then ["bad-versions-none:"]
           else [.versions | to_entries[] | (.value | canonical)] end))
       | join("\n")'
   )"
 
   local entry
   while IFS= read -r entry; do
-    [ -n "$entry" ] || continue
     case "$entry" in
       ok) ok ;;
       bad-versions-type:*)
         bad "$label: .versions is ${entry#bad-versions-type:}, not an object of canonical versions" ;;
+      bad-versions-none:*)
+        bad "$label: .versions records no observed version, so nothing can invalidate the fact" ;;
       bad:*) bad "$label: an observed version ${entry#bad:}" ;;
+      # jq emits one line per value and never fewer than one, so a blank report
+      # is jq failing to read the fact — the one case that must not pass by
+      # producing no verdict at all. Skipping a blank here is the exact shape
+      # this helper exists to repair, so it is classified, never skipped.
+      "") bad "$label: no version could be classified — the fact did not parse" ;;
       *) bad "$label: assert_versions_canonical produced an unrecognised report line '$entry'" ;;
     esac
   done <<EOF
@@ -86,42 +99,57 @@ $report
 EOF
 }
 
-# --- negative controls: assert_versions_canonical must itself reject a blank
-# invalidator version, a trailing newline on source.version, and an embedded
-# newline that glues two otherwise-canonical lines together — never skip any
-# of them. Each runs in a subshell so the helper's own ok/bad calls are counted
-# locally instead of against this suite's real pass/fail totals, proving the
-# rejection without faking a passing fixture.
-NEG_VERSIONS='{"source":{"version":"2026-09-07T21:00:00Z"},"versions":{"repository:github.com/jwogrady/spark":""}}'
-NEG_RESULT="$(
-  fail=0
-  assert_versions_canonical "$NEG_VERSIONS" "the negative control" >/dev/null 2>&1
-  echo "$fail"
-)"
-[ "$NEG_RESULT" -gt 0 ] && ok \
-  || bad "assert_versions_canonical accepted a canonical source.version alongside an empty invalidator version"
+# --- negative controls: the helper above must REJECT every fixture here.
+#
+# The four newline fixtures are the discriminating ones — each was measured
+# PASSING at the pre-repair helper, where the value reached `grep` through
+# `jq -r`, a command substitution and a heredoc; they are marked
+# `(was fail-open)`. The rest were already rejected there and are kept so the
+# rewrite is provably a tightening and not a trade: a helper can gain the
+# newline case and quietly lose the empty, non-string or absent one.
+#
+# `refuses` runs the helper in a subshell so its ok/bad calls land there
+# instead of on this suite's real totals, proving the rejection without a
+# fixture that fakes a pass.
+refuses() {
+  local counted
+  counted="$(
+    fail=0
+    assert_versions_canonical "$1" "the negative control" >/dev/null 2>&1
+    echo "$fail"
+  )"
+  [ "$counted" -gt 0 ] && ok \
+    || bad "assert_versions_canonical accepted $2"
+}
 
-# A trailing newline that a bare command substitution would silently discard.
-NEG_TRAILING_NEWLINE='{"source":{"version":"2026-09-07T21:00:00Z\n"},"versions":{"repository:github.com/jwogrady/spark":"2026-09-07T21:00:00Z"}}'
-NEG_RESULT="$(
-  fail=0
-  assert_versions_canonical "$NEG_TRAILING_NEWLINE" "the negative control" >/dev/null 2>&1
-  echo "$fail"
-)"
-[ "$NEG_RESULT" -gt 0 ] && ok \
-  || bad "assert_versions_canonical accepted a source.version with a trailing newline"
+CANON='2026-09-07T21:00:00Z'
+KEY='repository:github.com/jwogrady/spark'
+refuses "{\"source\":{\"version\":\"$CANON\"},\"versions\":{\"$KEY\":\"\"}}" \
+  "a canonical source.version alongside an empty invalidator version"
+refuses "{\"source\":{\"version\":\"$CANON\"},\"versions\":{\"$KEY\":\"$CANON\\n\"}}" \
+  "an invalidator version with a trailing newline (was fail-open)"
+refuses "{\"source\":{\"version\":\"$CANON\"},\"versions\":{\"$KEY\":\"$CANON\\n2026-09-08T00:00:00Z\"}}" \
+  "an invalidator version whose every line is canonical but whose value is not (was fail-open)"
+refuses "{\"source\":{\"version\":\"$CANON\\n\"},\"versions\":{\"$KEY\":\"$CANON\"}}" \
+  "a source.version with a trailing newline (was fail-open)"
+refuses "{\"source\":{\"version\":\"NOT-A-VERSION\\n$CANON\"},\"versions\":{\"$KEY\":\"$CANON\"}}" \
+  "a source.version whose second line alone is canonical (was fail-open)"
+refuses "{\"source\":{\"version\":\"$CANON\"},\"versions\":{\"$KEY\":1757278800}}" \
+  "a non-string invalidator version"
+refuses "{\"source\":{\"version\":\"$CANON\"},\"versions\":{\"$KEY\":null}}" \
+  "a null invalidator version"
+refuses "{\"source\":{\"version\":null},\"versions\":{\"$KEY\":\"$CANON\"}}" \
+  "an absent source.version"
+refuses "{\"source\":{\"version\":\"$CANON\"},\"versions\":[]}" \
+  "a .versions that is not an object"
+refuses "{\"source\":{\"version\":\"$CANON\"},\"versions\":{}}" \
+  "a fact recording no invalidator version at all"
 
-# An embedded newline gluing two individually-canonical timestamps into one
-# non-canonical value — the case a per-line grep or read loop would wave
-# through with every line matching and no line ever failing.
-NEG_EMBEDDED_NEWLINE='{"source":{"version":"2026-09-07T21:00:00Z"},"versions":{"repository:github.com/jwogrady/spark":"2026-09-07T21:00:00Z\n2026-09-08T00:00:00Z"}}'
-NEG_RESULT="$(
-  fail=0
-  assert_versions_canonical "$NEG_EMBEDDED_NEWLINE" "the negative control" >/dev/null 2>&1
-  echo "$fail"
-)"
-[ "$NEG_RESULT" -gt 0 ] && ok \
-  || bad "assert_versions_canonical accepted a versions entry with an embedded newline joining two timestamps"
+# --- positive control: the tightened helper still ACCEPTS a conforming fact,
+# so the ten rejections above are discrimination and not a blanket refusal.
+assert_versions_canonical \
+  "{\"source\":{\"version\":\"$CANON\"},\"versions\":{\"$KEY\":\"$CANON\"}}" \
+  "the positive control"
 
 # required_fields — every envelope field the schema marks required.
 required_fields() {
