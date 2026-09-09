@@ -577,7 +577,9 @@ EOF
 }
 
 # facts_error_absent <response body> — true when the reply carries a GraphQL
-# error that is itself a NOT_FOUND at the node this query asked for.
+# error that is itself a NOT_FOUND at the node this query asked for, AND the
+# enclosing shape confirms it: `.data.repository` is present and its
+# `issueOrPullRequest` key is explicitly null.
 #
 # This is PARSED, not pattern-matched, and the reason is a reply that is valid
 # and still contains both tokens in the wrong places:
@@ -591,6 +593,15 @@ EOF
 # Only a parser can say that ONE error object has BOTH `.type == "NOT_FOUND"`
 # and its own `.path` equal to the node's.
 #
+# The error alone is not enough, either. GraphQL returns partial `data`
+# alongside `errors`, so a reply can carry a NOT_FOUND at this node's path
+# while `data.repository.issueOrPullRequest` is a non-null node — the two
+# halves of the same reply disagreeing about whether the node exists. That is
+# contradictory evidence, not a reading of the world, and reporting it as
+# absence would send a caller to create something the same reply just
+# described. Absence is the ERROR paired with the null the schema promises for
+# it, never the error alone.
+#
 # Zero runtime dependencies still holds: with no parser available this returns
 # false, so no absence is established and the failure keeps its own reason.
 # That is the safe direction — absence is a claim about the world, and the cost
@@ -603,7 +614,11 @@ facts_error_absent() {
       (type == "object") and (.errors | type == "array")
       and any(.errors[]; (type == "object")
               and (.type == "NOT_FOUND")
-              and (.path == ["repository", "issueOrPullRequest"]))' >/dev/null 2>&1
+              and (.path == ["repository", "issueOrPullRequest"]))
+      and ((.data | type) == "object")
+      and ((.data.repository | type) == "object")
+      and (.data.repository | has("issueOrPullRequest"))
+      and (.data.repository.issueOrPullRequest == null)' >/dev/null 2>&1
   elif command -v python3 >/dev/null 2>&1; then
     printf '%s' "$body" | python3 -c '
 import json, sys
@@ -617,9 +632,19 @@ errs = d.get("errors")
 if not isinstance(errs, list):
     sys.exit(1)
 want = ["repository", "issueOrPullRequest"]
-sys.exit(0 if any(
+if not any(
     isinstance(e, dict) and e.get("type") == "NOT_FOUND" and e.get("path") == want
-    for e in errs) else 1)
+    for e in errs):
+    sys.exit(1)
+data = d.get("data")
+if not isinstance(data, dict):
+    sys.exit(1)
+repo = data.get("repository")
+if not isinstance(repo, dict):
+    sys.exit(1)
+if "issueOrPullRequest" not in repo:
+    sys.exit(1)
+sys.exit(0 if repo["issueOrPullRequest"] is None else 1)
 ' >/dev/null 2>&1
   else
     return 1

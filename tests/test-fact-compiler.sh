@@ -1662,15 +1662,18 @@ assert_eq "so only the repository class survives" "1" \
 # rejected a reply that also named another node, and every number-based rule
 # accepted the wrong ENTITY.
 
-# resolve_stub <errors json array> — the shape gh actually produces: raw body on
-# stdout, a message on stderr, non-zero exit.
+# resolve_stub <errors json array> [target node json] — the shape gh actually
+# produces: raw body on stdout, a message on stderr, non-zero exit. The target
+# node defaults to null, which is what a genuine absence looks like; a caller
+# proving the contradictory-evidence case passes a non-null node instead.
 resolve_stub() {
+  local target="${2:-null}"
   stub_gh "$WORK/bin/gh" <<STUB
 printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
 case "\$*" in
   *graphql*)
     echo 'gh: the reply carried errors' >&2
-    printf '%s' '{"data":{"repository":{"issueOrPullRequest":null}},"errors":$1}'
+    printf '%s' '{"data":{"repository":{"issueOrPullRequest":$target}},"errors":$1}'
     exit 1 ;;
   *) answer_json '$NODE' ;;
 esac
@@ -1738,6 +1741,22 @@ refuses_absence '[{"type":"NOT_FOUND","path":["repository","issueOrPullRequest",
 # And a body that is not an errors array at all establishes nothing.
 refuses_absence '{"type":"NOT_FOUND","path":["repository","issueOrPullRequest"]}' \
   733 "an errors field that is not an array was read as absence"
+
+# A NON-NULL target node returned ALONGSIDE the target's own NOT_FOUND. The two
+# halves of the same reply disagree about whether the node exists — data says
+# here it is, errors says it could not be resolved — which is contradictory,
+# malformed evidence, not a reading of the world. Reporting this as absence
+# would send a caller to create a work unit the same reply just described.
+resolve_stub \
+  '[{"type":"NOT_FOUND","path":["repository","issueOrPullRequest"],"message":"Could not resolve to an issue or pull request with the number of 733."}]' \
+  '{"__typename":"Issue","number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"updatedAt":"2026-09-08T10:00:00Z","parent":null,"subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},"blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
+cout="$("$SPARK" facts --issue 733 2>&1 >/dev/null)"
+case "$cout" in
+  *"no work unit by that number"*)
+    bad "a non-null target node alongside its own NOT_FOUND was read as absence" ;;
+  *) ok ;;
+esac
+assert_contains "the contradiction keeps its own reason instead" "unreadable" "$cout"
 
 # A reply carrying the message but NO structured body establishes nothing.
 # Absence is a claim about the world, so with nothing structured to read it
