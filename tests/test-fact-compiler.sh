@@ -1012,12 +1012,16 @@ graph_refused '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"st
 # a pull request has no native graph to report. "That is a pull request" and
 # "there is no such work unit" send a caller to different places, so they are
 # told apart by the SAME read: `issueOrPullRequest` returns either kind as data.
-# A GraphQL resolve failure therefore means neither exists, and absence is the
-# only thing it can mean — there is no second request left to disagree with it.
+# A GraphQL resolve failure therefore means neither exists, and it is decided
+# from the error's PATH rather than its message — the detailed cases are with
+# the work unit class below, where the classification lives.
 stub_gh "$WORK/bin/gh" <<STUB
 printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
 case "\$*" in
-  *graphql*) echo 'gh: Could not resolve to an Issue with the number of 733.' >&2; exit 1 ;;
+  *graphql*)
+    echo 'gh: the reply carried errors' >&2
+    printf '%s' '{"data":{"repository":{"issueOrPullRequest":null}},"errors":[{"type":"NOT_FOUND","path":["repository","issueOrPullRequest"],"message":"gone"}]}'
+    exit 1 ;;
   *"pulls/"*) echo 'a second request was made for a kind the first read already named' >&2; exit 1 ;;
   *) answer_json '$NODE' ;;
 esac
@@ -1046,10 +1050,8 @@ gout="$("$SPARK" facts --issue 733 2>/dev/null)"
 [ -n "$nout" ] && ok || bad "while the reason is reported on stderr, not dropped"
 
 # --- failing to look is not absence ----------------------------------------
-# Every non-zero result used to be read as not-found somewhere in this path, so
-# a 401 or a rate limit asserted that the work unit does not exist — sending a
-# caller to create something that may already be there. Only GitHub explicitly
-# resolving nothing is absence; every other failure keeps its own reason.
+# Only a typed NOT_FOUND at the node's path is absence; every other failure
+# keeps its own reason instead of asserting that the work unit does not exist.
 read_case() { # read_case <gh stderr> <expected reason> <label>
   stub_gh "$WORK/bin/gh" <<STUB
 printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
@@ -1069,6 +1071,7 @@ read_case 'gh: Bad credentials (HTTP 401)'         'permission-denied' 'a 401 is
 read_case 'gh: API rate limit exceeded (HTTP 403)' 'rate-limited'      'and a rate limit is not absence either'
 read_case 'error: context deadline exceeded'       'timeout'           'nor is a timeout'
 read_case 'gh: Internal Server Error (HTTP 500)'   'unreadable'        'and an unclassified failure is still not absence'
+
 
 # --- the node returned must be the node asked for --------------------------
 # A response naming a different issue would compile that issue's version and
@@ -1609,50 +1612,78 @@ assert_eq "and no work unit" "false" \
 assert_eq "so only the repository class survives" "1" \
   "$(printf '%s' "$DOUT" | jq -r 'length')"
 
-# --- a repository that could not be resolved is not an absent work unit -----
-# GitHub phrases a REPOSITORY failure the same way as a node failure — "Could
-# not resolve to a Repository with the name ..." — so a prefix match turned an
-# inaccessible or nonexistent repository into "no work unit by that number": a
-# confident claim about a node in a repository that was never read.
-stub_gh "$WORK/bin/gh" <<STUB
+# --- absence is decided by the error PATH, not by its message ---------------
+# When the node does not exist GitHub answers with a typed error, and `gh`
+# ignores `--jq` for a reply carrying errors and writes the RAW body to stdout.
+# The query asks for exactly ONE node, at `repository.issueOrPullRequest`, so a
+# NOT_FOUND at that path is GitHub saying the node this request asked for does
+# not exist. Nothing is read out of the sentence — which is what four rounds of
+# matching on it kept getting wrong: a glob had no digit boundary, stripping to
+# the first occurrence was order-dependent, requiring an exact set of numbers
+# rejected a reply that also named another node, and every number-based rule
+# accepted the wrong ENTITY.
+
+# resolve_stub <errors json array> — the shape gh actually produces: raw body on
+# stdout, a message on stderr, non-zero exit.
+resolve_stub() {
+  stub_gh "$WORK/bin/gh" <<STUB
 printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
 case "\$*" in
-  *graphql*) echo "gh: Could not resolve to a Repository with the name 'jwogrady/spark'." >&2; exit 1 ;;
+  *graphql*)
+    echo 'gh: the reply carried errors' >&2
+    printf '%s' '{"data":{"repository":{"issueOrPullRequest":null}},"errors":$1}'
+    exit 1 ;;
   *) answer_json '$NODE' ;;
 esac
 STUB
-rout="$("$SPARK" facts --issue 733 2>&1 >/dev/null)"
-case "$rout" in
-  *"no work unit by that number"*)
-    bad "an unresolvable repository was reported as an absent work unit" ;;
-  *) ok ;;
-esac
-# It keeps the unclassified reason rather than gaining a confident one: GitHub
-# says "Could not resolve to a Repository" both for one that does not exist and
-# for one this token cannot see, so `unreadable` is the whole of what was
-# learned. Fail-closed, and it does not send a caller to create a repository
-# that may already be there.
-assert_contains "an unresolvable repository keeps its own reason" "unreadable" "$rout"
+}
 
-# A node-scoped failure for ANOTHER number is not an answer about this one.
-stub_gh "$WORK/bin/gh" <<STUB
-printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
-case "\$*" in
-  *graphql*) echo 'gh: Could not resolve to an Issue with the number of 999.' >&2; exit 1 ;;
-  *) answer_json '$NODE' ;;
-esac
-STUB
-oout="$("$SPARK" facts --issue 733 2>&1 >/dev/null)"
-case "$oout" in
-  *"no work unit by that number"*)
-    bad "a failure naming another number was read as this work unit's absence" ;;
-  *) ok ;;
-esac
+establishes_absence() { # establishes_absence <errors json> <requested> <label>
+  resolve_stub "$1"
+  local out; out="$("$SPARK" facts --issue "$2" 2>&1 >/dev/null)"
+  assert_contains "$3" "no work unit by that number" "$out"
+}
+refuses_absence() { # refuses_absence <errors json> <requested> <label>
+  resolve_stub "$1"
+  local out; out="$("$SPARK" facts --issue "$2" 2>&1 >/dev/null)"
+  case "$out" in
+    *"no work unit by that number"*) bad "$3" ;;
+    *) ok ;;
+  esac
+}
 
-# A node-scoped failure naming a LONGER number is not an answer about a
-# SHORTER one either: "73" is a prefix of "733", and a prefix match on the
-# number would let an error about 733 stand in for the absence of 73 — a
-# confident claim about a different work unit than the one asked for.
+establishes_absence '[{"type":"NOT_FOUND","path":["repository","issueOrPullRequest"],"message":"Could not resolve to an issue or pull request with the number of 733."}]' \
+  733 "NOT_FOUND at the work unit's own path is absence"
+# The path is the fact, so neither the number in the sentence nor the position
+# of the error in the array can change the answer.
+establishes_absence '[{"type":"NOT_FOUND","path":["repository","issueOrPullRequest"],"message":"Could not resolve to an issue or pull request with the number of 999999."}]' \
+  73 "the message's number is irrelevant when the path is the fact"
+establishes_absence '[{"type":"NOT_FOUND","path":["repository","milestone"],"message":"m"},{"type":"NOT_FOUND","path":["repository","issueOrPullRequest"],"message":"i"}]' \
+  733 "and a NOT_FOUND at our path is absence even when listed second"
+establishes_absence '[ { "type" : "NOT_FOUND" , "path" : [ "repository" , "issueOrPullRequest" ] , "message" : "spaced" } ]' \
+  733 "JSON whitespace is not part of the comparison"
+
+# A DIFFERENT ENTITY whose message names the requested number. Every
+# number-based rule accepted this: the digits are in the sentence, but a
+# milestone is not a work unit.
+refuses_absence '[{"type":"NOT_FOUND","path":["repository","milestone"],"message":"Could not resolve to a Milestone with the number of 733."}]' \
+  733 "a milestone resolution failure was read as a work unit's absence"
+# The repository itself, which an earlier prefix match also accepted.
+refuses_absence '[{"type":"NOT_FOUND","path":["repository"],"message":"Could not resolve to a Repository."}]' \
+  733 "a repository resolution failure was read as a work unit's absence"
+# Our path, but not a NOT_FOUND: being forbidden to see a node says nothing
+# about whether it exists.
+refuses_absence '[{"type":"FORBIDDEN","path":["repository","issueOrPullRequest"],"message":"Resource not accessible."}]' \
+  733 "a forbidden node was reported as absent"
+# Tokens that would pair ACROSS error objects: the NOT_FOUND belongs to another
+# path, and our path carries a different type. Matching both tokens anywhere in
+# the body would call this absence.
+refuses_absence '[{"type":"NOT_FOUND","path":["repository","milestone"],"message":"m"},{"type":"FORBIDDEN","path":["repository","issueOrPullRequest"],"message":"f"}]' \
+  733 "tokens from two different errors were paired into an absence"
+
+# A reply carrying the message but NO structured body establishes nothing.
+# Absence is a claim about the world, so with nothing structured to read it
+# fails closed and keeps its own reason.
 stub_gh "$WORK/bin/gh" <<STUB
 printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
 case "\$*" in
@@ -1660,82 +1691,14 @@ case "\$*" in
   *) answer_json '$NODE' ;;
 esac
 STUB
-pout="$("$SPARK" facts --issue 73 2>&1 >/dev/null)"
-case "$pout" in
+bout="$("$SPARK" facts --issue 733 2>&1 >/dev/null)"
+case "$bout" in
   *"no work unit by that number"*)
-    bad "an error naming 733 was read as the absence of the requested 73" ;;
+    bad "a bare message with no structured error was read as absence" ;;
   *) ok ;;
 esac
-# It keeps the unclassified reason rather than gaining a confident one, the
-# same as any other node-scoped failure naming a number it was not asked
-# about.
-assert_contains "a prefix-only number match keeps its own reason" "unreadable" "$pout"
+assert_contains "an unstructured failure keeps its own reason" "unreadable" "$bout"
 
-# A reply that names THIS number alongside another node still establishes this
-# one's absence: GitHub said this node could not be resolved, and what it also
-# said about a different node does not weaken that. Pinned because the
-# alternative — refusing whenever more than one node is named — is a defensible
-# reading that would report `unreadable` for a node GitHub explicitly could not
-# resolve, and the choice between them should be deliberate rather than
-# whatever the matching happens to do.
-stub_gh "$WORK/bin/gh" <<STUB
-printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
-case "\$*" in
-  *graphql*)
-    echo 'gh: Could not resolve to an Issue with the number of 733.' >&2
-    echo 'gh: Could not resolve to an Issue with the number of 999.' >&2
-    exit 1 ;;
-  *) answer_json '$NODE' ;;
-esac
-STUB
-mout="$("$SPARK" facts --issue 733 2>&1 >/dev/null)"
-assert_contains "a reply naming this node and another still establishes this absence" \
-  "no work unit by that number" "$mout"
-
-# ...and in EITHER ORDER, with the other number a prefix of ours or ours a
-# prefix of it. Reading only the first occurrence of the phrase made the answer
-# depend on which error GitHub happened to list first: errors for 733 then 73,
-# with 73 requested, rejected an absence the reply did state.
-order_case() { # order_case <first number> <second number> <requested> <label>
-  stub_gh "$WORK/bin/gh" <<STUB
-printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
-case "\$*" in
-  *graphql*)
-    echo 'gh: Could not resolve to an Issue with the number of $1.' >&2
-    echo 'gh: Could not resolve to an Issue with the number of $2.' >&2
-    exit 1 ;;
-  *) answer_json '$NODE' ;;
-esac
-STUB
-  local out; out="$("$SPARK" facts --issue "$3" 2>&1 >/dev/null)"
-  assert_contains "$4" "no work unit by that number" "$out"
-}
-order_case 733 73  73  "an error naming 733 first does not hide the requested 73"
-order_case 73  733 73  "and naming 73 first still establishes it"
-order_case 999 733 733 "an unrelated number first does not hide the requested 733"
-order_case 733 7   733 "nor does a shorter number after it"
-
-# The discrimination that keeps all of that honest: a reply naming ONLY numbers
-# this work unit is a prefix of, or unrelated to, is still not its absence.
-order_refuses() { # order_refuses <first> <second> <requested> <label>
-  stub_gh "$WORK/bin/gh" <<STUB
-printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
-case "\$*" in
-  *graphql*)
-    echo 'gh: Could not resolve to an Issue with the number of $1.' >&2
-    echo 'gh: Could not resolve to an Issue with the number of $2.' >&2
-    exit 1 ;;
-  *) answer_json '$NODE' ;;
-esac
-STUB
-  local out; out="$("$SPARK" facts --issue "$3" 2>&1 >/dev/null)"
-  case "$out" in
-    *"no work unit by that number"*) bad "$4" ;;
-    *) ok ;;
-  esac
-}
-order_refuses 733 7331 73  "an error naming 733 and 7331 was read as the absence of 73"
-order_refuses 999 1000 733 "unrelated numbers were read as the absence of 733"
 
 # No observed version, no envelope.
 unit_refused '{"__typename":"Issue","number":733,"repository":{"nameWithOwner":"jwogrady/spark"},

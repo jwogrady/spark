@@ -705,48 +705,44 @@ facts_unit_node() {
   # unreachable and a missing work unit reads as an unreadable source, sending a
   # caller to check access it already has.
   #
-  # There is no structured error to prefer here: a NOT_FOUND at the node scope
-  # is exactly the case where gh's own formatting collapses the GraphQL errors
-  # array to this text on stderr before --jq ever runs, so the JSON path/type
-  # this handler would rather key off never reaches the process. Text is what
-  # was actually observed, so text is what is classified.
+  # The structured errors ARE reachable, and this classifies them rather than
+  # the prose. When a GraphQL reply carries an `errors` array, `gh` ignores
+  # `--jq` entirely and writes the RAW response body to stdout (the message also
+  # goes to stderr, and it exits non-zero) — so the projection above never ran,
+  # but the typed errors are right here.
   #
-  # The match is narrow on purpose. GitHub phrases a REPOSITORY failure the same
-  # way — "Could not resolve to a Repository with the name ..." — so requiring
-  # the node-scoped phrasing keeps an inaccessible or nonexistent repository
-  # from reading as "no work unit by that number": a confident claim about a
-  # node in a repository that was never read.
+  # What decides absence is the error's PATH, not its message. The query asks
+  # for exactly one node, at `repository.issueOrPullRequest`, so a `NOT_FOUND`
+  # reported at that path is GitHub saying the node this request asked for does
+  # not exist. Nothing needs to be read out of the sentence — which is what four
+  # rounds of matching on it kept getting wrong:
   #
-  # Each node-resolution error is then read INDEPENDENTLY, and absence holds
-  # when any one of them names exactly the number requested. Every cheaper
-  # version of this was order-dependent or boundary-blind, and each failed a
-  # different way:
+  #   * a glob on the number has no digit boundary (73 matched 733);
+  #   * stripping to the first occurrence made the answer order-dependent;
+  #   * requiring the set of named numbers to be exactly the one requested
+  #     rejected a reply that also named another node;
+  #   * and any number-based rule accepts the wrong ENTITY — "Could not resolve
+  #     to a Milestone with the number of 733" is not a work unit's absence.
   #
-  #   * a glob on "with the number of <n>" has no digit boundary, so a request
-  #     for 73 was satisfied by an error naming 733;
-  #   * stripping up to the first occurrence and testing the next character
-  #     fixes that single-error case but reads only the FIRST prefix match, so
-  #     errors naming 733 then 73 rejected an absence the reply did state;
-  #   * requiring the set of named numbers to be exactly {n} rejects it too,
-  #     for the opposite reason: a reply may legitimately name another node
-  #     beside this one.
+  # The path has none of those failure modes: it names the field, so the entity
+  # and the request are the same fact. Both tokens must appear in the SAME error
+  # object, so the body is split on object boundaries first — otherwise a
+  # NOT_FOUND for one path could pair with our path from a different error.
   #
-  # So every occurrence is enumerated and tested for equality. What GitHub said
-  # about a different node neither establishes nor withdraws what it said about
-  # this one, and the order it said them in cannot matter.
+  # Whitespace is removed before matching so the comparison is against JSON
+  # structure rather than a formatting choice. If a reply carries no structured
+  # body at all, no absence is established and the failure keeps its own reason:
+  # fail-closed, which is the safe direction for a claim that something does not
+  # exist.
   if [ "$rc" -ne 0 ]; then
-    case "$out" in
-      *"Could not resolve to"*"with the number of "*)
-        if printf '%s\n' "$out" \
-           | awk '{ s = $0
-                    while ((i = index(s, "with the number of ")) > 0) {
-                      s = substr(s, i + 19)
-                      if (match(s, /^[0-9]+/)) print substr(s, 1, RLENGTH)
-                    } }' \
-           | grep -qx -- "$number"; then
-          FACTS_NODE="absent"; return 0
-        fi ;;
-    esac
+    if printf '%s' "$out" | tr -d ' \t\n' \
+       | awk '{ n = split($0, part, /\},\{/)
+                for (i = 1; i <= n; i++)
+                  if (part[i] ~ /"type":"NOT_FOUND"/ \
+                      && part[i] ~ /"path":\["repository","issueOrPullRequest"\]/) f = 1 }
+              END { exit !f }'; then
+      FACTS_NODE="absent"; return 0
+    fi
   fi
   FACTS_NODE="$out"
   return "$rc"
