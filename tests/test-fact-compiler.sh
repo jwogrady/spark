@@ -1692,6 +1692,51 @@ mout="$("$SPARK" facts --issue 733 2>&1 >/dev/null)"
 assert_contains "a reply naming this node and another still establishes this absence" \
   "no work unit by that number" "$mout"
 
+# ...and in EITHER ORDER, with the other number a prefix of ours or ours a
+# prefix of it. Reading only the first occurrence of the phrase made the answer
+# depend on which error GitHub happened to list first: errors for 733 then 73,
+# with 73 requested, rejected an absence the reply did state.
+order_case() { # order_case <first number> <second number> <requested> <label>
+  stub_gh "$WORK/bin/gh" <<STUB
+printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
+case "\$*" in
+  *graphql*)
+    echo 'gh: Could not resolve to an Issue with the number of $1.' >&2
+    echo 'gh: Could not resolve to an Issue with the number of $2.' >&2
+    exit 1 ;;
+  *) answer_json '$NODE' ;;
+esac
+STUB
+  local out; out="$("$SPARK" facts --issue "$3" 2>&1 >/dev/null)"
+  assert_contains "$4" "no work unit by that number" "$out"
+}
+order_case 733 73  73  "an error naming 733 first does not hide the requested 73"
+order_case 73  733 73  "and naming 73 first still establishes it"
+order_case 999 733 733 "an unrelated number first does not hide the requested 733"
+order_case 733 7   733 "nor does a shorter number after it"
+
+# The discrimination that keeps all of that honest: a reply naming ONLY numbers
+# this work unit is a prefix of, or unrelated to, is still not its absence.
+order_refuses() { # order_refuses <first> <second> <requested> <label>
+  stub_gh "$WORK/bin/gh" <<STUB
+printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
+case "\$*" in
+  *graphql*)
+    echo 'gh: Could not resolve to an Issue with the number of $1.' >&2
+    echo 'gh: Could not resolve to an Issue with the number of $2.' >&2
+    exit 1 ;;
+  *) answer_json '$NODE' ;;
+esac
+STUB
+  local out; out="$("$SPARK" facts --issue "$3" 2>&1 >/dev/null)"
+  case "$out" in
+    *"no work unit by that number"*) bad "$4" ;;
+    *) ok ;;
+  esac
+}
+order_refuses 733 7331 73  "an error naming 733 and 7331 was read as the absence of 73"
+order_refuses 999 1000 733 "unrelated numbers were read as the absence of 733"
+
 # No observed version, no envelope.
 unit_refused '{"__typename":"Issue","number":733,"repository":{"nameWithOwner":"jwogrady/spark"},
   "updatedAt":"not-a-timestamp","parent":null,

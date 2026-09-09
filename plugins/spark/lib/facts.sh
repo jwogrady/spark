@@ -596,7 +596,7 @@ EOF
 # "truncated implements" when the reference list was cut, then
 # "implements <number> <owner/name> <typename>" per closing reference.
 facts_unit_node() {
-  local locator="$1" number="$2" host="${1%%/*}" nwo="${1#*/}" out rc=0 rest
+  local locator="$1" number="$2" host="${1%%/*}" nwo="${1#*/}" out rc=0
   FACTS_API_CALLS=$(( FACTS_API_CALLS + 1 ))
   out="$(gh api graphql --hostname "$host" \
     -F owner="${nwo%%/*}" -F name="${nwo##*/}" -F number="$number" -f query='
@@ -711,32 +711,41 @@ facts_unit_node() {
   # this handler would rather key off never reaches the process. Text is what
   # was actually observed, so text is what is classified.
   #
-  # The match is narrow on purpose, in two ways. GitHub phrases a REPOSITORY
-  # failure the same way — "Could not resolve to a Repository with the name
-  # ..." — so requiring "with the number of" (never present in that phrasing)
-  # keeps an inaccessible or nonexistent repository from reading as "no work
-  # unit by that number": a confident claim about a node in a repository that
-  # was never read. And the number itself must match EXACTLY, not as a prefix:
-  # a request for 73 must not be satisfied by an error naming 733, so the
-  # digits are required to end where the requested number ends — a non-digit
-  # or the end of the line — rather than merely begin the same way. Only the
-  # node-scoped form, for the number actually asked for, says anything about
-  # this work unit; a reply about another number is not an answer about this
-  # one.
+  # The match is narrow on purpose. GitHub phrases a REPOSITORY failure the same
+  # way — "Could not resolve to a Repository with the name ..." — so requiring
+  # the node-scoped phrasing keeps an inaccessible or nonexistent repository
+  # from reading as "no work unit by that number": a confident claim about a
+  # node in a repository that was never read.
+  #
+  # Each node-resolution error is then read INDEPENDENTLY, and absence holds
+  # when any one of them names exactly the number requested. Every cheaper
+  # version of this was order-dependent or boundary-blind, and each failed a
+  # different way:
+  #
+  #   * a glob on "with the number of <n>" has no digit boundary, so a request
+  #     for 73 was satisfied by an error naming 733;
+  #   * stripping up to the first occurrence and testing the next character
+  #     fixes that single-error case but reads only the FIRST prefix match, so
+  #     errors naming 733 then 73 rejected an absence the reply did state;
+  #   * requiring the set of named numbers to be exactly {n} rejects it too,
+  #     for the opposite reason: a reply may legitimately name another node
+  #     beside this one.
+  #
+  # So every occurrence is enumerated and tested for equality. What GitHub said
+  # about a different node neither establishes nor withdraws what it said about
+  # this one, and the order it said them in cannot matter.
   if [ "$rc" -ne 0 ]; then
     case "$out" in
-      *"Could not resolve to"*"with the number of $number"*)
-        # The case pattern above only proved $number occurs somewhere after the
-        # phrase — which a LONGER number satisfies too, since "73" is a prefix
-        # of "733". Stripping the shortest match up through that phrase and
-        # the requested digits leaves what GitHub wrote right after them; a
-        # further digit there means the number actually named is longer than
-        # the one asked for, so it is a reply about a different work unit.
-        rest="${out#*"with the number of $number"}"
-        case "$rest" in
-          [0-9]*) ;;
-          *) FACTS_NODE="absent"; return 0 ;;
-        esac ;;
+      *"Could not resolve to"*"with the number of "*)
+        if printf '%s\n' "$out" \
+           | awk '{ s = $0
+                    while ((i = index(s, "with the number of ")) > 0) {
+                      s = substr(s, i + 19)
+                      if (match(s, /^[0-9]+/)) print substr(s, 1, RLENGTH)
+                    } }' \
+           | grep -qx -- "$number"; then
+          FACTS_NODE="absent"; return 0
+        fi ;;
     esac
   fi
   FACTS_NODE="$out"
