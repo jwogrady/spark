@@ -1671,6 +1671,27 @@ esac
 # about.
 assert_contains "a prefix-only number match keeps its own reason" "unreadable" "$pout"
 
+# A reply that names THIS number alongside another node still establishes this
+# one's absence: GitHub said this node could not be resolved, and what it also
+# said about a different node does not weaken that. Pinned because the
+# alternative — refusing whenever more than one node is named — is a defensible
+# reading that would report `unreadable` for a node GitHub explicitly could not
+# resolve, and the choice between them should be deliberate rather than
+# whatever the matching happens to do.
+stub_gh "$WORK/bin/gh" <<STUB
+printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
+case "\$*" in
+  *graphql*)
+    echo 'gh: Could not resolve to an Issue with the number of 733.' >&2
+    echo 'gh: Could not resolve to an Issue with the number of 999.' >&2
+    exit 1 ;;
+  *) answer_json '$NODE' ;;
+esac
+STUB
+mout="$("$SPARK" facts --issue 733 2>&1 >/dev/null)"
+assert_contains "a reply naming this node and another still establishes this absence" \
+  "no work unit by that number" "$mout"
+
 # No observed version, no envelope.
 unit_refused '{"__typename":"Issue","number":733,"repository":{"nameWithOwner":"jwogrady/spark"},
   "updatedAt":"not-a-timestamp","parent":null,
