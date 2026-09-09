@@ -689,10 +689,16 @@ facts_unit_node() {
     # A closing reference needs an identity and a kind, and no version of its
     # own: `implements` is a declared relationship this work unit carries, and
     # the node it names is not an invalidator of this fact.
+    #
+    # The kind is required to be exactly `Issue`, not merely a string. A pull
+    # request cannot close a pull request, so any other kind is a reply this
+    # class cannot read — and accepting the string here let a malformed
+    # reference through the projection and reach a caller that had already
+    # decided the fact was bounded.
     def ref_ok:
       obj
       and (.number | type) == "number" and (.number == (.number | floor))
-      and (.__typename | type) == "string"
+      and (.__typename == "Issue")
       and (.repository | obj) and (.repository.nameWithOwner | type) == "string";
     def closing_ok:
       obj and (.nodes | type) == "array"
@@ -905,16 +911,17 @@ facts_work_unit_fact() {
   tail="$tail"',"versions":{"'"$(json_escape "$inv")"'":"'"$(json_escape "$self_version")"'"}'
   tail="$tail"',"provenance":"'"$(json_escape "https://$locator/issues/$number")"'"}'
 
-  # A truncated reference list is decided before the references are read, so a
-  # shorter list can never be mistaken for the whole one.
-  if printf '%s\n' "$FACTS_NODE" \
-     | awk -F'\t' '$1 == "truncated" && $2 == "implements" { found = 1 } END { exit !found }'; then
-    FACTS_EMITTED=$(( FACTS_EMITTED + 1 ))
-    FACTS_UNKNOWN=$(( FACTS_UNKNOWN + 1 ))
-    FACTS_JSON="$head"'"UNKNOWN","detail":{"reason":"bounded","candidates":[]}'"$tail"
-    return 0
-  fi
-
+  # Every reference the reply DID return is validated BEFORE truncation is
+  # decided. Returning the bounded UNKNOWN first skipped this walk entirely, so
+  # a truncated reply carrying a malformed reference emitted a fact from an
+  # observation the schema does not admit — the truncation flag became a way to
+  # avoid being checked. A node the reply returned is a node it claimed,
+  # however short the list.
+  #
+  # Validating first is safe here in a way it would not be for the graph class:
+  # a closing reference is a declared relationship, never an invalidator of this
+  # fact, so walking the rows accumulates no freshness contract that an UNKNOWN
+  # would then have to disown.
   local implements="none" candidates="" n=0 row rnum rnwo rtype rwu
   while IFS= read -r row; do
     [ -n "$row" ] || continue
@@ -923,7 +930,9 @@ facts_work_unit_fact() {
     rtype="$(printf '%s' "$row" | cut -f4)"
     # A closing reference is an ISSUE. A pull request cannot close a pull
     # request, so a reference returned as anything else is a reply this class
-    # cannot read rather than a relationship it can record.
+    # cannot read rather than a relationship it can record. The projection
+    # already refuses this shape; the check stays because two layers deciding
+    # the same thing is the point — one of them was skippable.
     [ "$rtype" = "Issue" ] || { FACTS_REFUSED="malformed"; return 3; }
     rwu="$(facts_unit_locator "$host" "$rnwo" "$rnum")" || {
       FACTS_REFUSED="malformed"; return 3; }
@@ -933,6 +942,16 @@ facts_work_unit_fact() {
   done <<EOF
 $(printf '%s\n' "$FACTS_NODE" | awk -F'\t' '$1 == "implements"')
 EOF
+
+  # Only now is a bounded list an unknown value: what the reply returned has
+  # been checked, and what it withheld is what cannot be known.
+  if printf '%s\n' "$FACTS_NODE" \
+     | awk -F'\t' '$1 == "truncated" && $2 == "implements" { found = 1 } END { exit !found }'; then
+    FACTS_EMITTED=$(( FACTS_EMITTED + 1 ))
+    FACTS_UNKNOWN=$(( FACTS_UNKNOWN + 1 ))
+    FACTS_JSON="$head"'"UNKNOWN","detail":{"reason":"bounded","candidates":[]}'"$tail"
+    return 0
+  fi
 
   if [ "$n" -gt 1 ]; then
     FACTS_EMITTED=$(( FACTS_EMITTED + 1 ))

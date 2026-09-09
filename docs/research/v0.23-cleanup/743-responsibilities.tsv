@@ -130,10 +130,10 @@ facts_repository_fact	plugins/spark/lib/facts.sh	top-level	-	evidence-authority	
 facts_state_canonical	plugins/spark/lib/facts.sh	top-level	-	canonicalization	7	1	1	facts_graph_entry	-
 facts_unit_kind	plugins/spark/lib/facts.sh	top-level	-	canonicalization	7	1	2	facts_graph_entry;facts_work_unit_fact	-
 facts_unit_locator	plugins/spark/lib/facts.sh	top-level	-	canonicalization	6	1	2	facts_graph_entry;facts_work_unit_fact	-
-facts_unit_node	plugins/spark/lib/facts.sh	top-level	-	source-collection	152	1	1	facts_unit_read	-
+facts_unit_node	plugins/spark/lib/facts.sh	top-level	-	source-collection	158	1	1	facts_unit_read	-
 facts_unit_read	plugins/spark/lib/facts.sh	top-level	-	source-collection	14	2	2	facts_graph_fact;facts_work_unit_fact	-
 facts_unreadable_reason	plugins/spark/lib/facts.sh	top-level	-	canonicalization	15	1	3	facts_graph_fact;facts_repository_fact;facts_work_unit_fact	-
-facts_work_unit_fact	plugins/spark/lib/facts.sh	top-level	-	evidence-authority	95	7	1	cmd_facts	cmd_facts
+facts_work_unit_fact	plugins/spark/lib/facts.sh	top-level	-	evidence-authority	108	7	1	cmd_facts	cmd_facts
 fp_bytes_lines	plugins/spark/bin/spark	top-level	-	source-collection	10	1	2	cmd_footprint;fp_plugin_bytes	cmd_footprint
 fp_cache_stability	plugins/spark/bin/spark	top-level	-	domain-semantics	11	1	1	cmd_doctor	cmd_doctor
 fp_desc_chars	plugins/spark/bin/spark	top-level	-	source-collection	9	2	2	cmd_footprint;fp_plugin_bytes	cmd_footprint

@@ -1578,6 +1578,45 @@ assert_eq "and says why" "bounded" "$(printf '%s' "$W" | jq -r '.detail.reason')
 # what separates an unknown value from no fact at all (R6).
 assert_versions_canonical "$W" "the bounded work unit fact"
 
+# ...but truncation is not a way to avoid being checked. Every reference the
+# reply DID return is validated first, so a truncated list carrying a malformed
+# reference is REFUSED rather than emitted as a bounded UNKNOWN from an
+# observation the schema does not admit.
+unit_stub '{"__typename":"PullRequest","number":774,"repository":{"nameWithOwner":"jwogrady/spark"},
+  "updatedAt":"2026-09-09T10:00:00Z",
+  "closingIssuesReferences":{"pageInfo":{"hasNextPage":true},"nodes":[
+    {"__typename":"PullRequest","number":700,"repository":{"nameWithOwner":"jwogrady/spark"}}]}}'
+TOUT="$("$SPARK" facts --issue 774 2>&1 >/dev/null)"
+case "$TOUT" in
+  *"work_unit: "*) ok ;;
+  *) bad "a truncated list with a non-Issue reference was not refused" ;;
+esac
+TJSON="$(wfact "$("$SPARK" facts --issue 774 2>/dev/null)")"
+assert_eq "and no bounded UNKNOWN was emitted from it" "" "$TJSON"
+
+# The same for a reference that cannot be named canonically: truncation does not
+# excuse it either.
+unit_stub '{"__typename":"PullRequest","number":774,"repository":{"nameWithOwner":"jwogrady/spark"},
+  "updatedAt":"2026-09-09T10:00:00Z",
+  "closingIssuesReferences":{"pageInfo":{"hasNextPage":true},"nodes":[
+    {"__typename":"Issue","number":733,"repository":{"nameWithOwner":"not a name"}}]}}'
+NOUT="$("$SPARK" facts --issue 774 2>&1 >/dev/null)"
+case "$NOUT" in
+  *"work_unit: "*) ok ;;
+  *) bad "a truncated list with an unnameable reference was not refused" ;;
+esac
+
+# The control: a truncated list whose returned references are all sound is
+# still the bounded UNKNOWN — the repair discriminates rather than refusing
+# every truncation.
+unit_stub '{"__typename":"PullRequest","number":774,"repository":{"nameWithOwner":"jwogrady/spark"},
+  "updatedAt":"2026-09-09T10:00:00Z",
+  "closingIssuesReferences":{"pageInfo":{"hasNextPage":true},"nodes":[
+    {"__typename":"Issue","number":733,"repository":{"nameWithOwner":"jwogrady/spark"}}]}}'
+W="$(wfact "$("$SPARK" facts --issue 774 2>/dev/null)")"
+assert_eq "a truncated list of sound references is still the bounded unknown" "UNKNOWN" \
+  "$(printf '%s' "$W" | jq -r '.status')"
+
 # --- what is refused rather than emitted ----------------------------------
 unit_refused() { # unit_refused <node json> <label>
   unit_stub "$1"
