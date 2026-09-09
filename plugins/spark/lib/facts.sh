@@ -448,8 +448,17 @@ facts_graph_fact() {
   # so: graph admits ESTABLISHED, UNKNOWN and CONFLICT, and NOT_APPLICABLE
   # belongs to the HEAD-bound classes. So this is a refusal with an accurate
   # reason, now read from the shared observation rather than a second request.
-  if [ "$(printf '%s' "$FACTS_NODE" | awk -F'\t' '$1 == "self" { print $5; exit }')" = "PullRequest" ]; then
+  #
+  # Stated positively: this class needs an ISSUE, so anything else is refused by
+  # what it is rather than by a list of what it is not. Naming only the pull
+  # request left every other kind to fall through and establish an empty graph.
+  local self_kind
+  self_kind="$(printf '%s' "$FACTS_NODE" | awk -F'\t' '$1 == "self" { print $5; exit }')"
+  if [ "$self_kind" = "PullRequest" ]; then
     FACTS_REFUSED="a pull request has no native graph"
+    return 3
+  elif [ "$self_kind" != "Issue" ]; then
+    FACTS_REFUSED="malformed"
     return 3
   fi
 
@@ -647,6 +656,12 @@ facts_unit_node() {
     #
     # `parent` must be present and either absent-as-null or a whole relation: a
     # reply that omits it has not said the work unit has no parent.
+    #
+    # An unrecognised kind is NOT passed through. `else true` let a Discussion
+    # node satisfy the projection carrying only a self row, and a self row with
+    # no relationship rows is indistinguishable from an issue with no
+    # relationships — so the graph class established an empty graph for a node
+    # that has none because it is not a work unit at all.
     def root_ok:
       whole
       and (if .__typename == "PullRequest"
@@ -654,7 +669,7 @@ facts_unit_node() {
            elif .__typename == "Issue"
            then has("parent") and ((.parent == null) or (.parent | relation_ok))
                 and (.subIssues | list_ok) and (.blockedBy | list_ok)
-           else true end);
+           else false end);
     if (obj | not) then (["partial"] | @tsv)
     elif has("errors") then (["errored"] | @tsv)
     elif (.data | obj | not) then (["partial"] | @tsv)
@@ -689,9 +704,18 @@ facts_unit_node() {
   # reports it as an error with a non-zero exit. Without this the absent path is
   # unreachable and a missing work unit reads as an unreadable source, sending a
   # caller to check access it already has.
+  #
+  # The match is narrow on purpose. GitHub phrases a REPOSITORY failure the same
+  # way — "Could not resolve to a Repository with the name ..." — so matching the
+  # prefix alone turned an inaccessible or nonexistent repository into "no work
+  # unit by that number": a confident claim about a node in a repository that was
+  # never read. Only the node-scoped form says anything about the work unit, and
+  # only for the number actually asked for; a reply about another number is not
+  # an answer about this one.
   if [ "$rc" -ne 0 ]; then
     case "$out" in
-      *"Could not resolve to"*) FACTS_NODE="absent"; return 0 ;;
+      *"Could not resolve to"*"with the number of $number"*)
+        FACTS_NODE="absent"; return 0 ;;
     esac
   fi
   FACTS_NODE="$out"

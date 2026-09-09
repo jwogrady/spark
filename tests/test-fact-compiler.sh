@@ -1593,9 +1593,61 @@ unit_refused '{"__typename":"PullRequest","number":733,"repository":{"nameWithOw
   "a pull request cannot be a closing reference"
 # A kind outside the model's vocabulary cannot have its invalidator spelled, so
 # it is not a fact with a reason — it is no fact.
-unit_refused '{"__typename":"Discussion","number":733,"repository":{"nameWithOwner":"jwogrady/spark"},
-  "updatedAt":"2026-09-08T10:00:00Z"}' \
-  "a kind outside the vocabulary is refused"
+DISCUSSION='{"__typename":"Discussion","number":733,"repository":{"nameWithOwner":"jwogrady/spark"},
+  "updatedAt":"2026-09-08T10:00:00Z"}'
+unit_refused "$DISCUSSION" "a kind outside the vocabulary is refused"
+# And NEITHER class may be emitted for it. A self row with no relationship rows
+# is indistinguishable from an issue that has no relationships, so a permissive
+# projection let the graph class establish an EMPTY graph for a node that has
+# none because it is not a work unit at all.
+unit_stub "$DISCUSSION"
+DOUT="$("$SPARK" facts --issue 733 2>/dev/null)"
+assert_eq "an unrecognised kind establishes no graph either" "false" \
+  "$(printf '%s' "$DOUT" | jq -r 'any(.[]; .key == "graph.native")')"
+assert_eq "and no work unit" "false" \
+  "$(printf '%s' "$DOUT" | jq -r 'any(.[]; .key == "work_unit.identity")')"
+assert_eq "so only the repository class survives" "1" \
+  "$(printf '%s' "$DOUT" | jq -r 'length')"
+
+# --- a repository that could not be resolved is not an absent work unit -----
+# GitHub phrases a REPOSITORY failure the same way as a node failure — "Could
+# not resolve to a Repository with the name ..." — so a prefix match turned an
+# inaccessible or nonexistent repository into "no work unit by that number": a
+# confident claim about a node in a repository that was never read.
+stub_gh "$WORK/bin/gh" <<STUB
+printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
+case "\$*" in
+  *graphql*) echo "gh: Could not resolve to a Repository with the name 'jwogrady/spark'." >&2; exit 1 ;;
+  *) answer_json '$NODE' ;;
+esac
+STUB
+rout="$("$SPARK" facts --issue 733 2>&1 >/dev/null)"
+case "$rout" in
+  *"no work unit by that number"*)
+    bad "an unresolvable repository was reported as an absent work unit" ;;
+  *) ok ;;
+esac
+# It keeps the unclassified reason rather than gaining a confident one: GitHub
+# says "Could not resolve to a Repository" both for one that does not exist and
+# for one this token cannot see, so `unreadable` is the whole of what was
+# learned. Fail-closed, and it does not send a caller to create a repository
+# that may already be there.
+assert_contains "an unresolvable repository keeps its own reason" "unreadable" "$rout"
+
+# A node-scoped failure for ANOTHER number is not an answer about this one.
+stub_gh "$WORK/bin/gh" <<STUB
+printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
+case "\$*" in
+  *graphql*) echo 'gh: Could not resolve to an Issue with the number of 999.' >&2; exit 1 ;;
+  *) answer_json '$NODE' ;;
+esac
+STUB
+oout="$("$SPARK" facts --issue 733 2>&1 >/dev/null)"
+case "$oout" in
+  *"no work unit by that number"*)
+    bad "a failure naming another number was read as this work unit's absence" ;;
+  *) ok ;;
+esac
 # No observed version, no envelope.
 unit_refused '{"__typename":"Issue","number":733,"repository":{"nameWithOwner":"jwogrady/spark"},
   "updatedAt":"not-a-timestamp","parent":null,
