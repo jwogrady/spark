@@ -2,7 +2,7 @@
 
 **Model.** `current fact → provenance/index pointer → historical evidence on demand`, never
 `historical evidence → agent reconstruction → current fact`. The pointer is `docs/ops/evidence-index.tsv`:
-every evidence artifact of the repository — 132 files, 1,047,065 bytes, 16,923 lines under
+every evidence artifact of the repository — 132 files, 1,047,133 bytes, 16,924 lines under
 `docs/research`, `docs/releases`, `docs/governance`, the three evidence pages under `docs/ops`, `evaluations`
 and `.spark` — is one row or one family member, with a retention class, an explicit *operative now* answer,
 the release/HEAD/work unit it concerned, the fact it supported, who loads or cites it today, and why it is
@@ -21,7 +21,7 @@ are computed from the index and re-checked by the suite.
 
 | Class | Files | Bytes | Lines |
 |---|---|---|---|
-| `active-current` | 52 | 440,360 | 7,179 |
+| `active-current` | 52 | 440,428 | 7,180 |
 | `historical-retained` | 67 | 397,371 | 6,644 |
 | `do-not-delete` | 13 | 209,334 | 3,100 |
 
@@ -217,8 +217,8 @@ Physical, over the same roots, against `b66766a` — the commit this branch left
 | | Files | Bytes | Lines |
 |---|---|---|---|
 | before | 132 | 1,045,414 | 16,912 |
-| after | 132 | 1,047,065 | 16,923 |
-| delta | +0 | +1,651 | +11 |
+| after | 132 | 1,047,133 | 16,924 |
+| delta | +0 | +1,719 | +12 |
 
 The corpus grew, and this page is part of the growth: this manifest, the observation capture and the tool that regenerates it are themselves evidence, and they are indexed like everything else. Nothing was moved or deleted, so every byte of the delta is new material, not relocation. The reference footprint did not move: 29 files before
 this unit and 29 after, because this unit's own five files are excluded as readers and no other surface
