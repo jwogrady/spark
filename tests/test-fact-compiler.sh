@@ -11,8 +11,10 @@
 #
 # The three things under test that a happy-path check would miss:
 #
-#   * an unreadable source is an UNKNOWN with a stated reason, never a smaller
-#     success and never a surviving previous value;
+#   * an unreadable or unversioned source yields no fact — refused with a
+#     stated reason (NOT ASSESSED, exit 3), never a smaller success and never
+#     a surviving previous value; a readable, versioned source with another
+#     malformed field is a conforming UNKNOWN instead;
 #   * one node is read ONCE for every field of its fact — a per-field fan-out
 #     could observe the same node in three states and manufacture a conflict;
 #   * the source version is the node's updated_at, never its id, because an id
@@ -39,21 +41,115 @@ model_regex() {
 # STATUS of a failed read and never what the envelope said it had observed.
 # `versions` answers "as of when", so a blank there is not a weaker answer, it
 # is a field that cannot mean anything.
+#
+# Every value is judged inside jq, as the one JSON value it is — never handed
+# back through -r as text and re-checked by the shell. That is what closes the
+# per-line hole: `grep -Eq` accepts a value whenever ANY ONE of its lines
+# matches an anchored pattern, `read` splits an embedded newline into separate
+# tokens, and a bare command substitution drops a TRAILING newline before any
+# check sees it — so "NOT-A-VERSION\n<canonical>" read as canonical, and so did
+# two canonical lines glued together into one value that is not.
+#
+# jq's own anchors were measured here rather than assumed: on jq 1.7.1
+# `"a\nb" | test("^b$")` is FALSE, so ^/$ bind to the whole string and the
+# grammar could be asked directly. A control character is still rejected BEFORE
+# the grammar, for two reasons that do not depend on that measurement holding
+# in another jq build: the rejection reason stays truthful about what the value
+# is, and the report below is a line-oriented transport, so a value must never
+# be able to contribute a line to it. Every report line is a status token built
+# with `tojson`, never the raw value, for the same reason.
 assert_versions_canonical() {
-  local f="$1" label="$2" re v
+  local f="$1" label="$2" re report
   re="$(model_regex source-version github-api)"
-  v="$(printf '%s' "$f" | jq -r '.source.version')"
-  if printf '%s' "$v" | grep -Eq "$re"; then ok
-  else bad "$label: source.version '$v' is not a github-api version"; fi
-  local tok
-  while IFS= read -r tok; do
-    [ -n "$tok" ] || continue
-    if printf '%s' "$tok" | grep -Eq "$re"; then ok
-    else bad "$label: an observed version '$tok' is not a version"; fi
+
+  report="$(
+    printf '%s' "$f" | jq -j --arg re "$re" '
+      def canonical:
+        if type != "string" then "bad:\(. | tojson) is not a string"
+        elif test("[[:cntrl:]]") then "bad:\(. | tojson) carries a control character"
+        elif . == "" then "bad:\(. | tojson) is empty, so it cannot say as of when"
+        elif test($re) then "ok"
+        else "bad:\(. | tojson) is not a github-api version" end;
+      ([.source.version | canonical]
+       + (if (.versions | type) != "object"
+          then ["bad-versions-type:\(.versions | type)"]
+          elif (.versions | length) == 0 then ["bad-versions-none:"]
+          else [.versions | to_entries[] | (.value | canonical)] end))
+      | join("\n")'
+  )"
+
+  local entry
+  while IFS= read -r entry; do
+    case "$entry" in
+      ok) ok ;;
+      bad-versions-type:*)
+        bad "$label: .versions is ${entry#bad-versions-type:}, not an object of canonical versions" ;;
+      bad-versions-none:*)
+        bad "$label: .versions records no observed version, so nothing can invalidate the fact" ;;
+      bad:*) bad "$label: an observed version ${entry#bad:}" ;;
+      # jq emits one line per value and never fewer than one, so a blank report
+      # is jq failing to read the fact — the one case that must not pass by
+      # producing no verdict at all. Skipping a blank here is the exact shape
+      # this helper exists to repair, so it is classified, never skipped.
+      "") bad "$label: no version could be classified — the fact did not parse" ;;
+      *) bad "$label: assert_versions_canonical produced an unrecognised report line '$entry'" ;;
+    esac
   done <<EOF
-$(printf '%s' "$f" | jq -r '.versions | to_entries[] | .value')
+$report
 EOF
 }
+
+# --- negative controls: the helper above must REJECT every fixture here.
+#
+# The four newline fixtures are the discriminating ones — each was measured
+# PASSING at the pre-repair helper, where the value reached `grep` through
+# `jq -r`, a command substitution and a heredoc; they are marked
+# `(was fail-open)`. The rest were already rejected there and are kept so the
+# rewrite is provably a tightening and not a trade: a helper can gain the
+# newline case and quietly lose the empty, non-string or absent one.
+#
+# `refuses` runs the helper in a subshell so its ok/bad calls land there
+# instead of on this suite's real totals, proving the rejection without a
+# fixture that fakes a pass.
+refuses() {
+  local counted
+  counted="$(
+    fail=0
+    assert_versions_canonical "$1" "the negative control" >/dev/null 2>&1
+    echo "$fail"
+  )"
+  [ "$counted" -gt 0 ] && ok \
+    || bad "assert_versions_canonical accepted $2"
+}
+
+CANON='2026-09-07T21:00:00Z'
+KEY='repository:github.com/jwogrady/spark'
+refuses "{\"source\":{\"version\":\"$CANON\"},\"versions\":{\"$KEY\":\"\"}}" \
+  "a canonical source.version alongside an empty invalidator version"
+refuses "{\"source\":{\"version\":\"$CANON\"},\"versions\":{\"$KEY\":\"$CANON\\n\"}}" \
+  "an invalidator version with a trailing newline (was fail-open)"
+refuses "{\"source\":{\"version\":\"$CANON\"},\"versions\":{\"$KEY\":\"$CANON\\n2026-09-08T00:00:00Z\"}}" \
+  "an invalidator version whose every line is canonical but whose value is not (was fail-open)"
+refuses "{\"source\":{\"version\":\"$CANON\\n\"},\"versions\":{\"$KEY\":\"$CANON\"}}" \
+  "a source.version with a trailing newline (was fail-open)"
+refuses "{\"source\":{\"version\":\"NOT-A-VERSION\\n$CANON\"},\"versions\":{\"$KEY\":\"$CANON\"}}" \
+  "a source.version whose second line alone is canonical (was fail-open)"
+refuses "{\"source\":{\"version\":\"$CANON\"},\"versions\":{\"$KEY\":1757278800}}" \
+  "a non-string invalidator version"
+refuses "{\"source\":{\"version\":\"$CANON\"},\"versions\":{\"$KEY\":null}}" \
+  "a null invalidator version"
+refuses "{\"source\":{\"version\":null},\"versions\":{\"$KEY\":\"$CANON\"}}" \
+  "an absent source.version"
+refuses "{\"source\":{\"version\":\"$CANON\"},\"versions\":[]}" \
+  "a .versions that is not an object"
+refuses "{\"source\":{\"version\":\"$CANON\"},\"versions\":{}}" \
+  "a fact recording no invalidator version at all"
+
+# --- positive control: the tightened helper still ACCEPTS a conforming fact,
+# so the ten rejections above are discrimination and not a blanket refusal.
+assert_versions_canonical \
+  "{\"source\":{\"version\":\"$CANON\"},\"versions\":{\"$KEY\":\"$CANON\"}}" \
+  "the positive control"
 
 # required_fields — every envelope field the schema marks required.
 required_fields() {
