@@ -1648,6 +1648,29 @@ case "$oout" in
     bad "a failure naming another number was read as this work unit's absence" ;;
   *) ok ;;
 esac
+
+# A node-scoped failure naming a LONGER number is not an answer about a
+# SHORTER one either: "73" is a prefix of "733", and a prefix match on the
+# number would let an error about 733 stand in for the absence of 73 — a
+# confident claim about a different work unit than the one asked for.
+stub_gh "$WORK/bin/gh" <<STUB
+printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
+case "\$*" in
+  *graphql*) echo 'gh: Could not resolve to an Issue with the number of 733.' >&2; exit 1 ;;
+  *) answer_json '$NODE' ;;
+esac
+STUB
+pout="$("$SPARK" facts --issue 73 2>&1 >/dev/null)"
+case "$pout" in
+  *"no work unit by that number"*)
+    bad "an error naming 733 was read as the absence of the requested 73" ;;
+  *) ok ;;
+esac
+# It keeps the unclassified reason rather than gaining a confident one, the
+# same as any other node-scoped failure naming a number it was not asked
+# about.
+assert_contains "a prefix-only number match keeps its own reason" "unreadable" "$pout"
+
 # No observed version, no envelope.
 unit_refused '{"__typename":"Issue","number":733,"repository":{"nameWithOwner":"jwogrady/spark"},
   "updatedAt":"not-a-timestamp","parent":null,

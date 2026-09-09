@@ -596,7 +596,7 @@ EOF
 # "truncated implements" when the reference list was cut, then
 # "implements <number> <owner/name> <typename>" per closing reference.
 facts_unit_node() {
-  local locator="$1" number="$2" host="${1%%/*}" nwo="${1#*/}" out rc=0
+  local locator="$1" number="$2" host="${1%%/*}" nwo="${1#*/}" out rc=0 rest
   FACTS_API_CALLS=$(( FACTS_API_CALLS + 1 ))
   out="$(gh api graphql --hostname "$host" \
     -F owner="${nwo%%/*}" -F name="${nwo##*/}" -F number="$number" -f query='
@@ -705,17 +705,38 @@ facts_unit_node() {
   # unreachable and a missing work unit reads as an unreadable source, sending a
   # caller to check access it already has.
   #
-  # The match is narrow on purpose. GitHub phrases a REPOSITORY failure the same
-  # way — "Could not resolve to a Repository with the name ..." — so matching the
-  # prefix alone turned an inaccessible or nonexistent repository into "no work
-  # unit by that number": a confident claim about a node in a repository that was
-  # never read. Only the node-scoped form says anything about the work unit, and
-  # only for the number actually asked for; a reply about another number is not
-  # an answer about this one.
+  # There is no structured error to prefer here: a NOT_FOUND at the node scope
+  # is exactly the case where gh's own formatting collapses the GraphQL errors
+  # array to this text on stderr before --jq ever runs, so the JSON path/type
+  # this handler would rather key off never reaches the process. Text is what
+  # was actually observed, so text is what is classified.
+  #
+  # The match is narrow on purpose, in two ways. GitHub phrases a REPOSITORY
+  # failure the same way — "Could not resolve to a Repository with the name
+  # ..." — so requiring "with the number of" (never present in that phrasing)
+  # keeps an inaccessible or nonexistent repository from reading as "no work
+  # unit by that number": a confident claim about a node in a repository that
+  # was never read. And the number itself must match EXACTLY, not as a prefix:
+  # a request for 73 must not be satisfied by an error naming 733, so the
+  # digits are required to end where the requested number ends — a non-digit
+  # or the end of the line — rather than merely begin the same way. Only the
+  # node-scoped form, for the number actually asked for, says anything about
+  # this work unit; a reply about another number is not an answer about this
+  # one.
   if [ "$rc" -ne 0 ]; then
     case "$out" in
       *"Could not resolve to"*"with the number of $number"*)
-        FACTS_NODE="absent"; return 0 ;;
+        # The case pattern above only proved $number occurs somewhere after the
+        # phrase — which a LONGER number satisfies too, since "73" is a prefix
+        # of "733". Stripping the shortest match up through that phrase and
+        # the requested digits leaves what GitHub wrote right after them; a
+        # further digit there means the number actually named is longer than
+        # the one asked for, so it is a reply about a different work unit.
+        rest="${out#*"with the number of $number"}"
+        case "$rest" in
+          [0-9]*) ;;
+          *) FACTS_NODE="absent"; return 0 ;;
+        esac ;;
     esac
   fi
   FACTS_NODE="$out"
