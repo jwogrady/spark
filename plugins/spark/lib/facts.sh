@@ -132,8 +132,8 @@ facts_now() { date -u +%FT%TZ 2>/dev/null; }
 #
 # gh reports the status in its message rather than in its exit code, so the
 # message is what can be classified. Every branch lands on a token; an
-# unrecognised failure is `unreadable`, which is still an UNKNOWN with a stated
-# reason and never a guess at which failure it was.
+# unrecognised failure is `unreadable`, which still refuses the fact — no
+# envelope, a stated reason, never a guess at which failure it was.
 #
 # Order matters: a 403 carrying a rate-limit message is rate limiting, not a
 # permission answer, and reading it as permission-denied would send a caller to

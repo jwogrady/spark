@@ -11,8 +11,10 @@
 #
 # The three things under test that a happy-path check would miss:
 #
-#   * an unreadable source is an UNKNOWN with a stated reason, never a smaller
-#     success and never a surviving previous value;
+#   * an unreadable or unversioned source yields no fact — refused with a
+#     stated reason (NOT ASSESSED, exit 3), never a smaller success and never
+#     a surviving previous value; a readable, versioned source with another
+#     malformed field is a conforming UNKNOWN instead;
 #   * one node is read ONCE for every field of its fact — a per-field fan-out
 #     could observe the same node in three states and manufacture a conflict;
 #   * the source version is the node's updated_at, never its id, because an id
@@ -45,15 +47,33 @@ assert_versions_canonical() {
   v="$(printf '%s' "$f" | jq -r '.source.version')"
   if printf '%s' "$v" | grep -Eq "$re"; then ok
   else bad "$label: source.version '$v' is not a github-api version"; fi
+  local vtype
+  vtype="$(printf '%s' "$f" | jq -r '.versions | type')"
+  if [ "$vtype" != "object" ]; then
+    bad "$label: .versions is $vtype, not an object of canonical versions"
+    return
+  fi
   local tok
   while IFS= read -r tok; do
-    [ -n "$tok" ] || continue
     if printf '%s' "$tok" | grep -Eq "$re"; then ok
     else bad "$label: an observed version '$tok' is not a version"; fi
   done <<EOF
-$(printf '%s' "$f" | jq -r '.versions | to_entries[] | .value')
+$(printf '%s' "$f" | jq -r '.versions | to_entries[] | (.value | tostring)')
 EOF
 }
+
+# --- negative control: assert_versions_canonical must itself reject a blank
+# invalidator version, never skip it. Run in a subshell so the helper's own
+# ok/bad calls are counted locally instead of against this suite's real
+# pass/fail totals — proving the rejection without faking a passing fixture.
+NEG_VERSIONS='{"source":{"version":"2026-09-07T21:00:00Z"},"versions":{"repository:github.com/jwogrady/spark":""}}'
+NEG_RESULT="$(
+  fail=0
+  assert_versions_canonical "$NEG_VERSIONS" "the negative control" >/dev/null 2>&1
+  echo "$fail"
+)"
+[ "$NEG_RESULT" -gt 0 ] && ok \
+  || bad "assert_versions_canonical accepted a canonical source.version alongside an empty invalidator version"
 
 # required_fields — every envelope field the schema marks required.
 required_fields() {
