@@ -322,6 +322,23 @@ fi
 # --- before/after: the after figures are the tree's, and the before figures are the base commit's when it is here
 
 assert_eq "the manifest's after row is the tree's" "1" "$(grep -c "^| after | $total_files | $(printf '%s' "$total_bytes" | sed ':a;s/\B[0-9]\{3\}\>/,&/;ta') | " "$MAN")"
+
+# The delta row must be the arithmetic of the two rows above it. It was carried
+# by hand while before/after were re-observed each round, so it drifted and
+# reported +772 bytes for a +1,647 change — a derived figure nobody derived. The
+# independent reviewer caught that; nothing mechanical did, which is the reason
+# this assertion exists rather than a note asking someone to remember.
+delta_check="$(awk -F'|' '
+  function num(x) { gsub(/[ ,+]/, "", x); return x + 0 }
+  $2 ~ /^ *before *$/ { bf = num($3); bb = num($4); bl = num($5) }
+  $2 ~ /^ *after *$/  { af = num($3); ab = num($4); al = num($5) }
+  $2 ~ /^ *delta *$/  { df = num($3); db = num($4); dl = num($5); seen = 1 }
+  END {
+    if (!seen) { print "no delta row"; exit }
+    if (df != af - bf || db != ab - bb || dl != al - bl)
+      printf "delta says %d/%d/%d, arithmetic says %d/%d/%d", df, db, dl, af - bf, ab - bb, al - bl
+  }' "$MAN")"
+assert_eq "the manifest's delta row is the arithmetic of its own before and after" "" "$delta_check"
 if [ -n "$base_sha" ] && (cd "$ROOT" && git cat-file -e "$base_sha^{commit}" 2>/dev/null); then
   bf="$(cd "$ROOT" && git ls-tree -r --name-only "$base_sha" -- docs/research docs/releases docs/governance docs/ops/v0.21-dogfood-evaluation.md docs/ops/telemetry-baseline.md docs/ops/evaluation.md evaluations .spark | grep -c .)"
   assert_eq "the manifest's before row is the base commit's file count" "1" "$(grep -c "^| before | $bf | " "$MAN")"
