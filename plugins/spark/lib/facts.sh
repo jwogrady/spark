@@ -576,6 +576,56 @@ EOF
   FACTS_JSON="$head"'"ESTABLISHED","value":{"parent":'"$parent"',"children":['"$kids"'],"blocked_by":['"$blocks"']}'"$tail"'}'
 }
 
+# facts_error_absent <response body> — true when the reply carries a GraphQL
+# error that is itself a NOT_FOUND at the node this query asked for.
+#
+# This is PARSED, not pattern-matched, and the reason is a reply that is valid
+# and still contains both tokens in the wrong places:
+#
+#   {"type":"NOT_FOUND","path":["repository","milestone"],
+#    "extensions":{"path":["repository","issueOrPullRequest"]}}
+#
+# Text matching cannot tell a top-level `path` from one nested under
+# `extensions`, and splitting on object boundaries splits nested objects too —
+# so that error, which is about a milestone, read as this work unit's absence.
+# Only a parser can say that ONE error object has BOTH `.type == "NOT_FOUND"`
+# and its own `.path` equal to the node's.
+#
+# Zero runtime dependencies still holds: with no parser available this returns
+# false, so no absence is established and the failure keeps its own reason.
+# That is the safe direction — absence is a claim about the world, and the cost
+# of not making it is a less specific reason, while the cost of making it
+# wrongly is sending a caller to create something that already exists.
+facts_error_absent() {
+  local body="$1"
+  if command -v jq >/dev/null 2>&1; then
+    printf '%s' "$body" | jq -e '
+      (type == "object") and (.errors | type == "array")
+      and any(.errors[]; (type == "object")
+              and (.type == "NOT_FOUND")
+              and (.path == ["repository", "issueOrPullRequest"]))' >/dev/null 2>&1
+  elif command -v python3 >/dev/null 2>&1; then
+    printf '%s' "$body" | python3 -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    sys.exit(1)
+if not isinstance(d, dict):
+    sys.exit(1)
+errs = d.get("errors")
+if not isinstance(errs, list):
+    sys.exit(1)
+want = ["repository", "issueOrPullRequest"]
+sys.exit(0 if any(
+    isinstance(e, dict) and e.get("type") == "NOT_FOUND" and e.get("path") == want
+    for e in errs) else 1)
+' >/dev/null 2>&1
+  else
+    return 1
+  fi
+}
+
 # facts_unit_node <locator> <number> — ONE read of a work unit's OWN identity.
 #
 # `issueOrPullRequest` answers for both kinds in a single request, which is why
@@ -598,6 +648,12 @@ EOF
 facts_unit_node() {
   local locator="$1" number="$2" host="${1%%/*}" nwo="${1#*/}" out rc=0
   FACTS_API_CALLS=$(( FACTS_API_CALLS + 1 ))
+  # stdout and stderr are captured SEPARATELY. Merging them put gh's diagnostic
+  # line inside the JSON body, so the body a parser needs was not parseable —
+  # and the classification below could only ever have been text matching.
+  local errfile err=""
+  errfile="$(mktemp "${TMPDIR:-/tmp}/spark-facts.XXXXXX")" || {
+    FACTS_NODE="could not create a temp file"; return 1; }
   out="$(gh api graphql --hostname "$host" \
     -F owner="${nwo%%/*}" -F name="${nwo##*/}" -F number="$number" -f query='
     query($owner:String!,$name:String!,$number:Int!){
@@ -699,50 +755,44 @@ facts_unit_node() {
            ($u.blockedBy.nodes[] | ["blocker", (.number|tostring), .state, .updatedAt,
                                     .repository.nameWithOwner, .__typename] | @tsv)
          else empty end)
-    end' 2>&1)" || rc=$?
+    end' 2>"$errfile")" || rc=$?
+  err="$(cat "$errfile" 2>/dev/null)"
+  rm -f "$errfile"
   # A work unit that does not exist is not a transport failure, and GraphQL
   # reports it as an error with a non-zero exit. Without this the absent path is
   # unreachable and a missing work unit reads as an unreadable source, sending a
   # caller to check access it already has.
   #
-  # The structured errors ARE reachable, and this classifies them rather than
-  # the prose. When a GraphQL reply carries an `errors` array, `gh` ignores
-  # `--jq` entirely and writes the RAW response body to stdout (the message also
-  # goes to stderr, and it exits non-zero) — so the projection above never ran,
-  # but the typed errors are right here.
+  # The structured errors ARE reachable. When a GraphQL reply carries an
+  # `errors` array, gh ignores `--jq` entirely and writes the RAW response body
+  # to stdout (the message goes to stderr, and it exits non-zero) — so the
+  # projection above never ran, but the typed errors are right here.
   #
-  # What decides absence is the error's PATH, not its message. The query asks
-  # for exactly one node, at `repository.issueOrPullRequest`, so a `NOT_FOUND`
-  # reported at that path is GitHub saying the node this request asked for does
-  # not exist. Nothing needs to be read out of the sentence — which is what four
-  # rounds of matching on it kept getting wrong:
+  # What decides absence is the error's own PATH. The query asks for exactly one
+  # node, at `repository.issueOrPullRequest`, so a NOT_FOUND reported at that
+  # path is GitHub saying the node this request asked for does not exist.
+  # Nothing is read out of the sentence, which is what five rounds of matching
+  # on it kept getting wrong:
   #
-  #   * a glob on the number has no digit boundary (73 matched 733);
+  #   * a glob on the number had no digit boundary, so 73 matched 733;
   #   * stripping to the first occurrence made the answer order-dependent;
-  #   * requiring the set of named numbers to be exactly the one requested
-  #     rejected a reply that also named another node;
-  #   * and any number-based rule accepts the wrong ENTITY — "Could not resolve
-  #     to a Milestone with the number of 733" is not a work unit's absence.
+  #   * requiring the named numbers to be exactly the one requested rejected a
+  #     reply that legitimately named another node;
+  #   * every number-based rule accepted the wrong ENTITY, so a milestone
+  #     NOT_FOUND naming this number read as this work unit's absence;
+  #   * and token matching on the structured fields could not tell a top-level
+  #     `path` from one nested under `extensions`.
   #
-  # The path has none of those failure modes: it names the field, so the entity
-  # and the request are the same fact. Both tokens must appear in the SAME error
-  # object, so the body is split on object boundaries first — otherwise a
-  # NOT_FOUND for one path could pair with our path from a different error.
-  #
-  # Whitespace is removed before matching so the comparison is against JSON
-  # structure rather than a formatting choice. If a reply carries no structured
-  # body at all, no absence is established and the failure keeps its own reason:
-  # fail-closed, which is the safe direction for a claim that something does not
-  # exist.
+  # The last of those is why this is parsed rather than matched: only a parser
+  # can require that ONE error object carries both facts itself.
   if [ "$rc" -ne 0 ]; then
-    if printf '%s' "$out" | tr -d ' \t\n' \
-       | awk '{ n = split($0, part, /\},\{/)
-                for (i = 1; i <= n; i++)
-                  if (part[i] ~ /"type":"NOT_FOUND"/ \
-                      && part[i] ~ /"path":\["repository","issueOrPullRequest"\]/) f = 1 }
-              END { exit !f }'; then
+    if facts_error_absent "$out"; then
       FACTS_NODE="absent"; return 0
     fi
+    # The reason is what gh SAID, which is now separate from the body it
+    # printed, so a JSON payload can never be classified as a diagnostic.
+    FACTS_NODE="$err"
+    return "$rc"
   fi
   FACTS_NODE="$out"
   return "$rc"

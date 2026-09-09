@@ -1681,6 +1681,25 @@ refuses_absence '[{"type":"FORBIDDEN","path":["repository","issueOrPullRequest"]
 refuses_absence '[{"type":"NOT_FOUND","path":["repository","milestone"],"message":"m"},{"type":"FORBIDDEN","path":["repository","issueOrPullRequest"],"message":"f"}]' \
   733 "tokens from two different errors were paired into an absence"
 
+# A single VALID error carrying both tokens in the wrong places: the error is
+# about a milestone, and the node's path appears only nested under
+# `extensions`. Text matching cannot tell a top-level `path` from a nested one,
+# and splitting on object boundaries splits nested objects too — so this read
+# as the work unit's absence until the body was actually parsed.
+refuses_absence '[{"type":"NOT_FOUND","path":["repository","milestone"],"extensions":{"path":["repository","issueOrPullRequest"]}}]' \
+  733 "a nested extensions.path was read as the error's own path"
+# The same shape the other way round: our path is top-level but the NOT_FOUND
+# belongs to a nested object rather than to this error.
+refuses_absence '[{"type":"FORBIDDEN","path":["repository","issueOrPullRequest"],"extensions":{"type":"NOT_FOUND"}}]' \
+  733 "a nested type was read as the error's own type"
+# A path that merely STARTS at the node is not the node: a deeper field failing
+# to resolve is a different fact from the node not existing.
+refuses_absence '[{"type":"NOT_FOUND","path":["repository","issueOrPullRequest","closingIssuesReferences"]}]' \
+  733 "a deeper path was read as the node's own absence"
+# And a body that is not an errors array at all establishes nothing.
+refuses_absence '{"type":"NOT_FOUND","path":["repository","issueOrPullRequest"]}' \
+  733 "an errors field that is not an array was read as absence"
+
 # A reply carrying the message but NO structured body establishes nothing.
 # Absence is a claim about the world, so with nothing structured to read it
 # fails closed and keeps its own reason.
