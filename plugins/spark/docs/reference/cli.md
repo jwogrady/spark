@@ -2244,15 +2244,25 @@ snapshot is not yet possible, which is why one is never claimed.
 | Class | Key | What it establishes |
 |---|---|---|
 | `repository` | `repository.identity` | The canonical `host/owner/name` of this repository and its default branch |
+| `work_unit` | `work_unit.identity` | Which task is being executed: its kind, its canonical id, and the issue a pull request closes |
 | `graph` | `graph.native` | An issue's native parent, children and blockers, each with its current state |
 
-The `graph` class needs a work unit, so it is compiled when `--issue <number>`
-names one. Without the flag, only `repository` is compiled.
+`work_unit` and `graph` both need a work unit, so they are compiled when
+`--issue <number>` names one. Without the flag, only `repository` is compiled.
+The two are read from **one** request and share that single observation, so they
+can never describe the same node in two different states.
 
-**The root is an issue.** That is GitHub's shape, not a simplification: `parent`,
-`subIssues` and `blockedBy` belong to an issue and to nothing else, so a pull
-request has no native graph to report. A number naming a pull request is told
-exactly that rather than reported as not found. The relationships themselves may
+**`implements` is GitHub's closing reference, never prose.** A pull request that
+merely mentions an issue does not implement it. The field names one issue, so a
+pull request declaring two closing issues is a `CONFLICT` naming both — no
+first-write or plausibility rule picks one — and a reference list GitHub could
+not return whole is `UNKNOWN`, never a shorter answer.
+
+**The graph's root is an issue.** That is GitHub's shape, not a simplification:
+`parent`, `subIssues` and `blockedBy` belong to an issue and to nothing else, so
+a pull request has no native graph to report. A number naming a pull request is
+told exactly that rather than reported as not found, and it is read off the same
+observation that found it rather than probed for afterwards. The relationships themselves may
 be either kind — a pull-request child is named as one and carries the
 pull-request invalidator form.
 

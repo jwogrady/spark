@@ -613,10 +613,18 @@ assert_contains "and counted as unknown" '"facts_unknown":1' "$TEL3"
 # graph_stub <issue json|null> — answer the graph query with this issue node, and
 # the repository query as usual, so a --issue run sees both sources.
 graph_stub() {
+  # `issueOrPullRequest` is what the compiler now asks, and the node carries its
+  # own kind. Every fixture below is an issue, so the default is injected here
+  # rather than repeated in each one — a fixture that needs another kind sets
+  # __typename itself and this leaves it alone.
+  local node
+  node="$(printf '%s' "$1" | jq -c 'if type == "object"
+                                    then . + {__typename: (.__typename // "Issue")}
+                                    else . end')"
   stub_gh "$WORK/bin/gh" <<STUB
 printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
 case "\$*" in
-  *graphql*) answer_json '{"data":{"repository":{"issue":$1}}}' ;;
+  *graphql*) answer_json '{"data":{"repository":{"issueOrPullRequest":$node}}}' ;;
   *"--hostname github.com repos/jwogrady/spark"*) answer_json '$NODE' ;;
   *) exit 1 ;;
 esac
@@ -641,12 +649,12 @@ graph_stub "$FULL"
 GOUT="$("$SPARK" facts --issue 733)"
 G="$(gfact "$GOUT")"
 
-# --- the fragment carries both classes, and is still a fragment -------------
+# --- the fragment carries all three classes, and is still a fragment --------
 [ "$(printf '%s' "$GOUT" | jq -r 'type')" = "array" ] && ok || bad "a fragment is a bare list"
-[ "$(printf '%s' "$GOUT" | jq -r 'length')" = "2" ] && ok \
-  || bad "a --issue run compiles the repository and the graph"
-[ "$(printf '%s' "$GOUT" | jq -r '[.[].key] | sort | join(",")')" = "graph.native,repository.identity" ] \
-  && ok || bad "and those two classes exactly"
+[ "$(printf '%s' "$GOUT" | jq -r 'length')" = "3" ] && ok \
+  || bad "a --issue run compiles the repository, the work unit and the graph"
+[ "$(printf '%s' "$GOUT" | jq -r '[.[].key] | sort | join(",")')" = "graph.native,repository.identity,work_unit.identity" ] \
+  && ok || bad "and those three classes exactly"
 
 # --- the envelope is the schema's ------------------------------------------
 for field in $(required_fields); do
@@ -853,7 +861,7 @@ graph_refused '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"st
 stub_gh "$WORK/bin/gh" <<STUB
 printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
 case "\$*" in
-  *graphql*) answer_json '{"errors":[{"message":"Something went wrong"}],"data":{"repository":{"issue":{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,"subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},"blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}}}}' ;;
+  *graphql*) answer_json '{"errors":[{"message":"Something went wrong"}],"data":{"repository":{"issueOrPullRequest":{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,"subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},"blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}}}}' ;;
   *) answer_json '$NODE' ;;
 esac
 STUB
@@ -903,13 +911,17 @@ out="$("$SPARK" facts)"
 [ "$(printf '%s' "$out" | jq -r 'length')" = "1" ] && ok \
   || bad "without the flag only the repository class is compiled"
 
-# --- the compiler's cost, with two classes ------------------------------
+# --- the compiler's cost, with three classes ----------------------------
 : > "$GH_CALL_LOG"
 graph_stub "$FULL"
 SPARK_RUN_ID=rgraph "$SPARK" facts --issue 733 >/dev/null
 TELG="$("$SPARK" telemetry show --run rgraph --json)"
-assert_contains "two classes compiled means two facts" '"facts_emitted":2' "$TELG"
-assert_contains "from two source reads" '"facts_api_calls":2' "$TELG"
+assert_contains "three classes compiled means three facts" '"facts_emitted":3' "$TELG"
+# Still TWO reads for three facts: the repository node, and one work-unit node
+# that work_unit and graph share. A third read here would mean the two classes
+# had described the same node from two separate observations.
+assert_contains "from two source reads, not three" '"facts_api_calls":2' "$TELG"
+assert_contains "and the shared observation is reused once" '"facts_cache_hits":1' "$TELG"
 assert_contains "and nothing unknown" '"facts_unknown":0' "$TELG"
 
 # --- a pageInfo that does not say whether more pages exist ------------------
@@ -999,33 +1011,22 @@ graph_refused '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"st
 # GitHub gives parent, subIssues and blockedBy to Issue and to nothing else, so
 # a pull request has no native graph to report. "That is a pull request" and
 # "there is no such work unit" send a caller to different places, so they are
-# told apart — by one extra read, and only where the issue was absent.
+# told apart by the SAME read: `issueOrPullRequest` returns either kind as data.
+# A GraphQL resolve failure therefore means neither exists, and absence is the
+# only thing it can mean — there is no second request left to disagree with it.
 stub_gh "$WORK/bin/gh" <<STUB
 printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
 case "\$*" in
   *graphql*) echo 'gh: Could not resolve to an Issue with the number of 733.' >&2; exit 1 ;;
-  *"pulls/733"*) answer_json '{"number":733,"base":{"repo":{"full_name":"jwogrady/spark"}}}' ;;
+  *"pulls/"*) echo 'a second request was made for a kind the first read already named' >&2; exit 1 ;;
   *) answer_json '$NODE' ;;
 esac
 STUB
-pout="$("$SPARK" facts --issue 733 2>&1 >/dev/null)"
-assert_contains "a pull request has no native graph, and is told so" \
-  "a pull request has no native graph" "$pout"
-
-stub_gh "$WORK/bin/gh" <<STUB
-printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
-case "\$*" in
-  *graphql*) echo 'gh: Could not resolve to an Issue with the number of 733.' >&2; exit 1 ;;
-  *"pulls/733"*) echo 'gh: Not Found (HTTP 404)' >&2; exit 1 ;;
-  *) answer_json '$NODE' ;;
-esac
-STUB
+: > "$GH_CALL_LOG"
 nout="$("$SPARK" facts --issue 733 2>&1 >/dev/null)"
-assert_contains "a number that names neither is not-found" "not-found" "$nout"
-case "$nout" in
-  *"pull request"*) bad "a missing work unit must not be reported as a pull request" ;;
-  *) ok ;;
-esac
+assert_contains "a number that names neither is absent" "no work unit by that number" "$nout"
+assert_eq "and nothing was probed to establish that" "0" \
+  "$(grep -c 'pulls/' "$GH_CALL_LOG" || true)"
 
 # A work unit that does not exist is not an unreadable source: reporting it that
 # way would send a caller to check access it already has.
@@ -1039,33 +1040,35 @@ esac
 # what a caller piping this would discover at the worst moment.
 gout="$("$SPARK" facts --issue 733 2>/dev/null)"
 [ "$(printf '%s' "$gout" | jq -r 'type')" = "array" ] && ok \
-  || bad "stdout must stay parseable when one class could not be established"
+  || bad "stdout must stay parseable when a class could not be established"
 [ "$(printf '%s' "$gout" | jq -r 'length')" = "1" ] && ok \
   || bad "and carry only the class that was established"
 [ -n "$nout" ] && ok || bad "while the reason is reported on stderr, not dropped"
 
 # --- failing to look is not absence ----------------------------------------
-# After the issue lookup reports absence, the pull-request probe decides which
-# absence it is. Every non-zero result used to mean not-found, so a 401 or a
-# rate limit asserted that the work unit does not exist — sending a caller to
-# create something that may already be there.
-probe_case() { # probe_case <probe stderr> <expected reason> <label>
+# Every non-zero result used to be read as not-found somewhere in this path, so
+# a 401 or a rate limit asserted that the work unit does not exist — sending a
+# caller to create something that may already be there. Only GitHub explicitly
+# resolving nothing is absence; every other failure keeps its own reason.
+read_case() { # read_case <gh stderr> <expected reason> <label>
   stub_gh "$WORK/bin/gh" <<STUB
 printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
 case "\$*" in
-  *graphql*) echo 'gh: Could not resolve to an Issue with the number of 733.' >&2; exit 1 ;;
-  *"pulls/733"*) echo "$1" >&2; exit 1 ;;
+  *graphql*) echo "$1" >&2; exit 1 ;;
   *) answer_json '$NODE' ;;
 esac
 STUB
   local out; out="$("$SPARK" facts --issue 733 2>&1 >/dev/null)"
   assert_contains "$3" "$2" "$out"
+  case "$out" in
+    *"no work unit by that number"*) bad "$3: a failed read was reported as absence" ;;
+    *) ok ;;
+  esac
 }
-probe_case 'gh: Not Found (HTTP 404)'          'not-found'         'no issue and no pull request is genuinely absent'
-probe_case 'gh: Bad credentials (HTTP 401)'    'permission-denied' 'but a 401 is a permission answer, not absence'
-probe_case 'gh: API rate limit exceeded (HTTP 403)' 'rate-limited' 'and a rate limit is not absence either'
-probe_case 'error: context deadline exceeded'  'timeout'           'nor is a timeout'
-probe_case 'gh: Internal Server Error (HTTP 500)' 'unreadable'     'and an unclassified failure is still not absence'
+read_case 'gh: Bad credentials (HTTP 401)'         'permission-denied' 'a 401 is a permission answer, not absence'
+read_case 'gh: API rate limit exceeded (HTTP 403)' 'rate-limited'      'and a rate limit is not absence either'
+read_case 'error: context deadline exceeded'       'timeout'           'nor is a timeout'
+read_case 'gh: Internal Server Error (HTTP 500)'   'unreadable'        'and an unclassified failure is still not absence'
 
 # --- the node returned must be the node asked for --------------------------
 # A response naming a different issue would compile that issue's version and
@@ -1102,7 +1105,7 @@ raw_graph_stub() { # raw_graph_stub <whole graphql response>
 printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
 case "\$*" in
   *graphql*) answer_json '$1' ;;
-  *"pulls/733"*) answer_json '{"number":733,"base":{"repo":{"full_name":"jwogrady/spark"}}}' ;;
+  *"pulls/"*) echo 'a second request was made for a kind the first read already named' >&2; exit 1 ;;
   *) answer_json '$NODE' ;;
 esac
 STUB
@@ -1123,64 +1126,39 @@ malformed_root '{}' "a reply with no data did not answer"
 malformed_root '{"data":null}' "and neither did a null data"
 malformed_root '{"data":{}}' "nor one with no repository"
 malformed_root '{"data":{"repository":null}}' "nor a null repository"
-malformed_root '{"data":{"repository":{}}}' "nor a repository with no issue key"
+malformed_root '{"data":{"repository":{}}}' "nor a repository with no work-unit key"
 
-# The control: an explicitly null issue IS absence, and reaches the probe.
-raw_graph_stub '{"data":{"repository":{"issue":null}}}'
+# --- the kind is read once, never probed for --------------------------------
+# This replaces a REST probe ladder. `issueOrPullRequest` returns a pull request
+# as DATA carrying its own __typename, so "there is no such work unit" and "that
+# is a pull request" are two readings of ONE observation. The old second request
+# had to classify its own failures — a 401, a rate limit and a timeout each had
+# to be kept apart from absence — and none of that can be got wrong now, because
+# none of it happens.
+
+# An explicitly null work unit IS absence, and absence is all it is.
+raw_graph_stub '{"data":{"repository":{"issueOrPullRequest":null}}}'
 aout="$("$SPARK" facts --issue 733 2>&1 >/dev/null)"
-assert_contains "an explicitly null issue is absence, and the probe decides which" \
-  "a pull request has no native graph" "$aout"
-
-# --- the probe must name THIS pull request ---------------------------------
-# `gh --jq .number` exits zero for a null or missing field, so a zero exit is
-# not proof; and a reply naming a different pull request is not this work unit.
-probe_shape() { # probe_shape <probe stdout json> <label>
-  stub_gh "$WORK/bin/gh" <<STUB
-printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
-case "\$*" in
-  *graphql*) answer_json '{"data":{"repository":{"issue":null}}}' ;;
-  *"pulls/733"*) answer_json '$1' ;;
-  *) answer_json '$NODE' ;;
+assert_contains "an explicitly null work unit is absence, and nothing else" \
+  "no work unit by that number" "$aout"
+case "$aout" in
+  *"pull request"*) bad "absence was reported as a pull request" ;;
+  *) ok ;;
 esac
-STUB
-  local out; out="$("$SPARK" facts --issue 733 2>&1 >/dev/null)"
-  assert_contains "$2" "malformed" "$out"
-  case "$out" in
-    *"pull request has no native graph"*) bad "$2: that reply did not name this pull request" ;;
-    *) ok ;;
-  esac
-}
-probe_shape '{}'              "a probe reply with no number names no pull request"
-probe_shape '{"number":null}' "and neither does a null number"
-probe_shape '{"number":"733"}' "a string is not a number here either"
-probe_shape '{"number":999,"base":{"repo":{"full_name":"jwogrady/spark"}}}' \
-  "and another pull request is not this one"
 
-# The probe needs BOTH halves of the identity, for the same reason the root
-# does: a reply carrying only a number proves nothing about which repository's
-# pull request it describes, so a reply from anywhere could decide this work
-# unit's answer.
-probe_shape '{"number":733}' "a reply naming no repository proves nothing"
-probe_shape '{"number":733,"base":{"repo":{"full_name":"someone/else"}}}' \
-  "and another repository's pull request is not this work unit's"
-probe_shape '{"number":733,"base":{"repo":{"full_name":null}}}' \
-  "a null repository name names nothing"
-probe_shape '{"number":733,"base":{"repo":{"full_name":42}}}' \
-  "and a number is not a repository name"
+# A pull request is named by the same read that found it.
+: > "$GH_CALL_LOG"
+graph_stub '{"__typename":"PullRequest","number":733,"repository":{"nameWithOwner":"jwogrady/spark"},
+  "updatedAt":"2026-09-08T10:00:00Z",
+  "closingIssuesReferences":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
+pout="$("$SPARK" facts --issue 733 2>&1 >/dev/null)"
+assert_contains "a pull request has no native graph, decided from the one read" \
+  "a pull request has no native graph" "$pout"
+assert_eq "and no second request was made to find that out" "1" \
+  "$(grep -c graphql "$GH_CALL_LOG")"
+assert_eq "with no REST probe at all" "0" \
+  "$(grep -c 'pulls/' "$GH_CALL_LOG" || true)"
 
-# Case is folded, as everywhere else: the same repository spelled differently is
-# the same repository, so the check discriminates rather than refusing spellings.
-stub_gh "$WORK/bin/gh" <<STUB
-printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
-case "\$*" in
-  *graphql*) answer_json '{"data":{"repository":{"issue":null}}}' ;;
-  *"pulls/733"*) answer_json '{"number":733,"base":{"repo":{"full_name":"JWOgrady/Spark"}}}' ;;
-  *) answer_json '$NODE' ;;
-esac
-STUB
-cout="$("$SPARK" facts --issue 733 2>&1 >/dev/null)"
-assert_contains "the same repository in another case is still this one" \
-  "a pull request has no native graph" "$cout"
 
 # --- parent gets the same rule as every other relationship field -----------
 # A reply that omits `parent` has not said the work unit has no parent. Reading
@@ -1317,13 +1295,13 @@ assert_contains "a shared node still establishes" "ESTABLISHED" \
 # The outcome looked right and the mechanism was wrong, which is the shape of
 # the sentinel bug earlier on this branch — so these assert the REASON, not just
 # that something refused.
-malformed_root '{"data":{"repository":{"issue":[]}}}'      "an array is not an issue"
-malformed_root '{"data":{"repository":{"issue":"733"}}}'   "nor is a string"
-malformed_root '{"data":{"repository":{"issue":733}}}'     "nor a number"
-malformed_root '{"data":{"repository":{"issue":true}}}'    "nor a boolean"
+malformed_root '{"data":{"repository":{"issueOrPullRequest":[]}}}'      "an array is not a work unit"
+malformed_root '{"data":{"repository":{"issueOrPullRequest":"733"}}}'   "nor is a string"
+malformed_root '{"data":{"repository":{"issueOrPullRequest":733}}}'     "nor a number"
+malformed_root '{"data":{"repository":{"issueOrPullRequest":true}}}'    "nor a boolean"
 
 # The control: an object still reaches the field checks and can establish.
-raw_graph_stub '{"data":{"repository":{"issue":{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"updatedAt":"2026-09-08T10:00:00Z","parent":null,"subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},"blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}}}}'
+raw_graph_stub '{"data":{"repository":{"issueOrPullRequest":{"__typename":"Issue","number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"updatedAt":"2026-09-08T10:00:00Z","parent":null,"subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},"blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}}}}'
 GO="$(gfact "$("$SPARK" facts --issue 733 2>/dev/null)")"
 assert_contains "an object root still establishes" "ESTABLISHED" \
   "$(printf '%s' "$GO" | jq -r '.status')"
@@ -1463,26 +1441,190 @@ malformed_root 'null'  "nor is a null body"
 malformed_root '[]'    "nor an array body"
 malformed_root '"ok"'  "nor a bare string"
 
-# --- the probe's containers are guarded too --------------------------------
-# The probe reached through .base.repo.full_name with nothing proving base or
-# repo were objects. A malformed enclosing shape must be malformed, not a source
-# that could not be reached.
-probe_shape '42'                                   "a scalar probe body names no pull request"
-probe_shape '{"number":733,"base":"jwogrady/spark"}' "nor does a scalar base"
-probe_shape '{"number":733,"base":{"repo":"jwogrady/spark"}}' "nor a scalar repo"
-probe_shape '{"number":733,"base":{}}'             "nor a base with no repo at all"
+# --- one observation, two classes ------------------------------------------
+# work_unit and graph are two facts about the SAME node. Reading it twice would
+# let them describe it in two different states, which is the defect this
+# compiler exists to prevent, reintroduced one level up. So the node is read
+# once and both classes consume it — and the cache counters say so, which they
+# could not before, when nothing ever asked twice.
+: > "$GH_CALL_LOG"
+graph_stub '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"updatedAt":"2026-09-08T10:00:00Z","parent":null,
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
+sout="$("$SPARK" facts --issue 733 2>/dev/null)"
+assert_eq "the work unit and its graph come from ONE graphql request" "1" \
+  "$(grep -c graphql "$GH_CALL_LOG")"
+assert_contains "and both classes are established from it" "work_unit.identity" "$sout"
+assert_contains "the graph among them" "graph.native" "$sout"
 
-# The control: the shape the API actually returns still identifies it.
-stub_gh "$WORK/bin/gh" <<STUB
-printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
-case "\$*" in
-  *graphql*) answer_json '{"data":{"repository":{"issue":null}}}' ;;
-  *"pulls/733"*) answer_json '{"number":733,"base":{"repo":{"full_name":"jwogrady/spark"}}}' ;;
-  *) answer_json '$NODE' ;;
-esac
-STUB
-kout="$("$SPARK" facts --issue 733 2>&1 >/dev/null)"
-assert_contains "a well-formed probe reply still identifies the pull request" \
-  "a pull request has no native graph" "$kout"
+
+# =========================================================================
+# The work unit fact (#733 packet 3)
+# =========================================================================
+#
+# `work_unit.identity` answers WHICH task is being executed, and the field that
+# earns the class is `implements`: the issue a pull request closes. Everything
+# downstream binds an issue's acceptance, placement and graph to a pull
+# request's work unit through that one declared relationship, so the three
+# things a happy-path check would miss are:
+#
+#   * the relationship is GitHub's closing reference, never prose. A pull
+#     request that mentions an issue does not implement it;
+#   * `implements` names ONE issue, so two closing references are a conflict
+#     with both named — not a first-write or a plausibility pick;
+#   * a bounded reference list is an unknown, not a shorter answer.
+
+# wfact — the work unit fact out of a --issue run.
+wfact() { printf '%s' "$1" | jq -r '.[] | select(.key=="work_unit.identity")'; }
+
+# unit_stub <node json> — one work-unit node, whatever its kind.
+unit_stub() { graph_stub "$1"; }
+
+ISSUE_NODE='{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"updatedAt":"2026-09-08T10:00:00Z","parent":null,
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
+
+# --- an issue implements nothing -------------------------------------------
+unit_stub "$ISSUE_NODE"
+W="$(wfact "$("$SPARK" facts --issue 733 2>/dev/null)")"
+assert_eq "an issue is established" "ESTABLISHED" "$(printf '%s' "$W" | jq -r '.status')"
+assert_eq "and its kind is the model's, not GraphQL's" "issue" "$(printf '%s' "$W" | jq -r '.value.kind')"
+assert_eq "and it is named canonically" "github.com/jwogrady/spark#733" "$(printf '%s' "$W" | jq -r '.value.id')"
+# An issue implements nothing, and `none` is the model's literal — written as a
+# JSON string, because a bare token would not parse at all.
+assert_eq "and an issue implements nothing" "none" "$(printf '%s' "$W" | jq -r '.value.implements')"
+assert_eq "the source is the node the value describes" "github.com/jwogrady/spark#733" \
+  "$(printf '%s' "$W" | jq -r '.source.identity')"
+# R17: one canonical form per kind, never both.
+assert_eq "an issue is invalidated as an issue, once" '["issue:github.com/jwogrady/spark#733"]' \
+  "$(printf '%s' "$W" | jq -c '.invalidators')"
+assert_eq "and the version recorded is the node's updated_at" "2026-09-08T10:00:00Z" \
+  "$(printf '%s' "$W" | jq -r '.versions["issue:github.com/jwogrady/spark#733"]')"
+assert_versions_canonical "$W" "the work unit fact"
+for field in $(required_fields); do
+  [ "$(printf '%s' "$W" | jq -r --arg f "$field" 'has($f)')" = "true" ] && ok \
+    || bad "the work unit envelope is missing the required field $field"
+done
+
+# --- a pull request implements the issue it closes -------------------------
+PR_ONE='{"__typename":"PullRequest","number":774,"repository":{"nameWithOwner":"jwogrady/spark"},
+  "updatedAt":"2026-09-09T10:00:00Z",
+  "closingIssuesReferences":{"pageInfo":{"hasNextPage":false},"nodes":[
+    {"__typename":"Issue","number":733,"repository":{"nameWithOwner":"jwogrady/spark"}}]}}'
+unit_stub "$PR_ONE"
+W="$(wfact "$("$SPARK" facts --issue 774 2>/dev/null)")"
+assert_eq "a pull request is established" "ESTABLISHED" "$(printf '%s' "$W" | jq -r '.status')"
+assert_eq "and its kind is a pull request" "pull_request" "$(printf '%s' "$W" | jq -r '.value.kind')"
+assert_eq "and it implements the issue it closes" "github.com/jwogrady/spark#733" \
+  "$(printf '%s' "$W" | jq -r '.value.implements')"
+assert_eq "a pull request is invalidated as a pull request" '["pull_request:github.com/jwogrady/spark#774"]' \
+  "$(printf '%s' "$W" | jq -c '.invalidators')"
+# The issue it implements is NOT an invalidator: `implements` is a relationship
+# this node declares, and the declaration changes when THIS node changes.
+assert_eq "and the issue it implements is not an invalidator of it" "1" \
+  "$(printf '%s' "$W" | jq -r '.invalidators | length')"
+assert_versions_canonical "$W" "the pull request fact"
+
+# A pull request that closes nothing implements nothing — a real answer, not a
+# missing one.
+unit_stub '{"__typename":"PullRequest","number":774,"repository":{"nameWithOwner":"jwogrady/spark"},
+  "updatedAt":"2026-09-09T10:00:00Z",
+  "closingIssuesReferences":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
+W="$(wfact "$("$SPARK" facts --issue 774 2>/dev/null)")"
+assert_eq "a pull request closing nothing is still established" "ESTABLISHED" \
+  "$(printf '%s' "$W" | jq -r '.status')"
+assert_eq "and implements nothing" "none" "$(printf '%s' "$W" | jq -r '.value.implements')"
+
+# --- a closing reference in another repository is named canonically --------
+# Cross-repository identity: the reference carries its own repository, and the
+# work unit it names must be spelled with THAT repository, not the one asked.
+unit_stub '{"__typename":"PullRequest","number":774,"repository":{"nameWithOwner":"jwogrady/spark"},
+  "updatedAt":"2026-09-09T10:00:00Z",
+  "closingIssuesReferences":{"pageInfo":{"hasNextPage":false},"nodes":[
+    {"__typename":"Issue","number":12,"repository":{"nameWithOwner":"OTHER/Repo"}}]}}'
+W="$(wfact "$("$SPARK" facts --issue 774 2>/dev/null)")"
+assert_eq "a closing reference elsewhere is named with its own repository" \
+  "github.com/other/repo#12" "$(printf '%s' "$W" | jq -r '.value.implements')"
+
+# --- two closing references are a conflict --------------------------------
+# The model gives `implements` one work unit. Two authoritative references
+# disagree about which issue this unit implements, and no rule picks one (R8).
+unit_stub '{"__typename":"PullRequest","number":774,"repository":{"nameWithOwner":"jwogrady/spark"},
+  "updatedAt":"2026-09-09T10:00:00Z",
+  "closingIssuesReferences":{"pageInfo":{"hasNextPage":false},"nodes":[
+    {"__typename":"Issue","number":733,"repository":{"nameWithOwner":"jwogrady/spark"}},
+    {"__typename":"Issue","number":728,"repository":{"nameWithOwner":"jwogrady/spark"}}]}}'
+W="$(wfact "$("$SPARK" facts --issue 774 2>/dev/null)")"
+assert_eq "two closing issues are a conflict" "CONFLICT" "$(printf '%s' "$W" | jq -r '.status')"
+assert_eq "and both are named as candidates" \
+  "github.com/jwogrady/spark#728,github.com/jwogrady/spark#733" \
+  "$(printf '%s' "$W" | jq -r '[.detail.candidates[]] | sort | join(",")')"
+assert_eq "and a conflict carries no value" "false" "$(printf '%s' "$W" | jq -r 'has("value")')"
+assert_versions_canonical "$W" "the conflicted work unit fact"
+
+# --- a bounded reference list is an unknown, not a shorter answer ----------
+unit_stub '{"__typename":"PullRequest","number":774,"repository":{"nameWithOwner":"jwogrady/spark"},
+  "updatedAt":"2026-09-09T10:00:00Z",
+  "closingIssuesReferences":{"pageInfo":{"hasNextPage":true},"nodes":[
+    {"__typename":"Issue","number":733,"repository":{"nameWithOwner":"jwogrady/spark"}}]}}'
+W="$(wfact "$("$SPARK" facts --issue 774 2>/dev/null)")"
+assert_eq "a truncated reference list is unknown" "UNKNOWN" "$(printf '%s' "$W" | jq -r '.status')"
+assert_eq "and carries no value" "false" "$(printf '%s' "$W" | jq -r 'has("value")')"
+assert_eq "and says why" "bounded" "$(printf '%s' "$W" | jq -r '.detail.reason')"
+# The envelope still conforms: the node's own version WAS observed, which is
+# what separates an unknown value from no fact at all (R6).
+assert_versions_canonical "$W" "the bounded work unit fact"
+
+# --- what is refused rather than emitted ----------------------------------
+unit_refused() { # unit_refused <node json> <label>
+  unit_stub "$1"
+  local out; out="$("$SPARK" facts --issue 733 2>&1 >/dev/null)"
+  case "$out" in
+    *"work_unit: "*) ok ;;
+    *) bad "$2 — the work unit fact was not refused" ;;
+  esac
+}
+# A closing reference is an issue. A pull request cannot close a pull request,
+# so anything else is a reply this class cannot read.
+unit_refused '{"__typename":"PullRequest","number":733,"repository":{"nameWithOwner":"jwogrady/spark"},
+  "updatedAt":"2026-09-08T10:00:00Z",
+  "closingIssuesReferences":{"pageInfo":{"hasNextPage":false},"nodes":[
+    {"__typename":"PullRequest","number":700,"repository":{"nameWithOwner":"jwogrady/spark"}}]}}' \
+  "a pull request cannot be a closing reference"
+# A kind outside the model's vocabulary cannot have its invalidator spelled, so
+# it is not a fact with a reason — it is no fact.
+unit_refused '{"__typename":"Discussion","number":733,"repository":{"nameWithOwner":"jwogrady/spark"},
+  "updatedAt":"2026-09-08T10:00:00Z"}' \
+  "a kind outside the vocabulary is refused"
+# No observed version, no envelope.
+unit_refused '{"__typename":"Issue","number":733,"repository":{"nameWithOwner":"jwogrady/spark"},
+  "updatedAt":"not-a-timestamp","parent":null,
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
+  "a noncanonical version is refused"
+# The node returned must be the node asked for, in both halves of its identity.
+unit_refused '{"__typename":"Issue","number":999,"repository":{"nameWithOwner":"jwogrady/spark"},
+  "updatedAt":"2026-09-08T10:00:00Z","parent":null,
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
+  "another number is not this work unit"
+unit_refused '{"__typename":"Issue","number":733,"repository":{"nameWithOwner":"someone/else"},
+  "updatedAt":"2026-09-08T10:00:00Z","parent":null,
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
+  "and another repository's issue is not this work unit"
+
+# Case is folded, as everywhere else: the same repository spelled differently is
+# the same repository, so the identity check discriminates rather than refusing
+# spellings.
+unit_stub '{"__typename":"Issue","number":733,"repository":{"nameWithOwner":"JWOgrady/Spark"},
+  "updatedAt":"2026-09-08T10:00:00Z","parent":null,
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
+W="$(wfact "$("$SPARK" facts --issue 733 2>/dev/null)")"
+assert_eq "the same repository in another case is the same work unit" "ESTABLISHED" \
+  "$(printf '%s' "$W" | jq -r '.status')"
+assert_eq "and it is named in the canonical case" "github.com/jwogrady/spark#733" \
+  "$(printf '%s' "$W" | jq -r '.value.id')"
 
 finish
