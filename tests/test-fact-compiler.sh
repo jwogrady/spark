@@ -614,12 +614,14 @@ assert_contains "and counted as unknown" '"facts_unknown":1' "$TEL3"
 # the repository query as usual, so a --issue run sees both sources.
 graph_stub() {
   # `issueOrPullRequest` is what the compiler now asks, and the node carries its
-  # own kind. Every fixture below is an issue, so the default is injected here
-  # rather than repeated in each one — a fixture that needs another kind sets
-  # __typename itself and this leaves it alone.
+  # own kind. Every fixture below is an issue with no milestone, so both
+  # defaults are injected here rather than repeated in each one — a fixture
+  # that needs another kind or an actual milestone sets that key itself and
+  # this leaves it alone.
   local node
   node="$(printf '%s' "$1" | jq -c 'if type == "object"
-                                    then . + {__typename: (.__typename // "Issue")}
+                                    then . + {__typename: (.__typename // "Issue"),
+                                              milestone: (if has("milestone") then .milestone else null end)}
                                     else . end')"
   stub_gh "$WORK/bin/gh" <<STUB
 printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
@@ -649,12 +651,12 @@ graph_stub "$FULL"
 GOUT="$("$SPARK" facts --issue 733)"
 G="$(gfact "$GOUT")"
 
-# --- the fragment carries all three classes, and is still a fragment --------
+# --- the fragment carries all four classes, and is still a fragment --------
 [ "$(printf '%s' "$GOUT" | jq -r 'type')" = "array" ] && ok || bad "a fragment is a bare list"
-[ "$(printf '%s' "$GOUT" | jq -r 'length')" = "3" ] && ok \
-  || bad "a --issue run compiles the repository, the work unit and the graph"
-[ "$(printf '%s' "$GOUT" | jq -r '[.[].key] | sort | join(",")')" = "graph.native,repository.identity,work_unit.identity" ] \
-  && ok || bad "and those three classes exactly"
+[ "$(printf '%s' "$GOUT" | jq -r 'length')" = "4" ] && ok \
+  || bad "a --issue run compiles the repository, the work unit, the graph and the placement"
+[ "$(printf '%s' "$GOUT" | jq -r '[.[].key] | sort | join(",")')" = "graph.native,placement.current,repository.identity,work_unit.identity" ] \
+  && ok || bad "and those four classes exactly"
 
 # --- the envelope is the schema's ------------------------------------------
 for field in $(required_fields); do
@@ -911,18 +913,21 @@ out="$("$SPARK" facts)"
 [ "$(printf '%s' "$out" | jq -r 'length')" = "1" ] && ok \
   || bad "without the flag only the repository class is compiled"
 
-# --- the compiler's cost, with three classes ----------------------------
+# --- the compiler's cost, with four classes ----------------------------
 : > "$GH_CALL_LOG"
 graph_stub "$FULL"
 SPARK_RUN_ID=rgraph "$SPARK" facts --issue 733 >/dev/null
 TELG="$("$SPARK" telemetry show --run rgraph --json)"
-assert_contains "three classes compiled means three facts" '"facts_emitted":3' "$TELG"
-# Still TWO reads for three facts: the repository node, and one work-unit node
-# that work_unit and graph share. A third read here would mean the two classes
-# had described the same node from two separate observations.
-assert_contains "from two source reads, not three" '"facts_api_calls":2' "$TELG"
-assert_contains "and the shared observation is reused once" '"facts_cache_hits":1' "$TELG"
-assert_contains "and nothing unknown" '"facts_unknown":0' "$TELG"
+assert_contains "four classes compiled means four facts" '"facts_emitted":4' "$TELG"
+# Still TWO reads for four facts: the repository node, and one work-unit node
+# that work_unit, graph and placement all share. A third read here would mean
+# the classes had described the same node from separate observations.
+assert_contains "from two source reads, not four" '"facts_api_calls":2' "$TELG"
+assert_contains "and the shared observation is reused twice" '"facts_cache_hits":2' "$TELG"
+# placement.current is UNKNOWN here — $FULL carries no authoritative release
+# declaration, and this packet reads none into existence — so exactly one of
+# the four is unknown, not zero.
+assert_contains "and exactly the one placement can't establish" '"facts_unknown":1' "$TELG"
 
 # --- a pageInfo that does not say whether more pages exist ------------------
 # Absence of a completeness signal is not a completeness signal. A list whose
@@ -1304,7 +1309,7 @@ malformed_root '{"data":{"repository":{"issueOrPullRequest":733}}}'     "nor a n
 malformed_root '{"data":{"repository":{"issueOrPullRequest":true}}}'    "nor a boolean"
 
 # The control: an object still reaches the field checks and can establish.
-raw_graph_stub '{"data":{"repository":{"issueOrPullRequest":{"__typename":"Issue","number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"updatedAt":"2026-09-08T10:00:00Z","parent":null,"subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},"blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}}}}'
+raw_graph_stub '{"data":{"repository":{"issueOrPullRequest":{"__typename":"Issue","number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"updatedAt":"2026-09-08T10:00:00Z","milestone":null,"parent":null,"subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},"blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}}}}'
 GO="$(gfact "$("$SPARK" facts --issue 733 2>/dev/null)")"
 assert_contains "an object root still establishes" "ESTABLISHED" \
   "$(printf '%s' "$GO" | jq -r '.status')"
@@ -1807,5 +1812,106 @@ assert_eq "the same repository in another case is the same work unit" "ESTABLISH
   "$(printf '%s' "$W" | jq -r '.status')"
 assert_eq "and it is named in the canonical case" "github.com/jwogrady/spark#733" \
   "$(printf '%s' "$W" | jq -r '.value.id')"
+
+# =========================================================================
+# The placement fact (#733)
+# =========================================================================
+#
+# `placement.current` answers where a work unit sits: its milestone, its
+# release and its gate. This packet reads the milestone half from the shared
+# work-unit observation; gate is out of scope here (packet 4: head + checks).
+#
+# The release half turns on a recorded ruling: ESTABLISHED requires an
+# explicit authoritative declaration binding the work unit to an exact SemVer
+# `vX.Y.Z`, and `release: none` is itself a positive claim, never a default
+# for silence — the `placement:release` reserved boundary fires whenever
+# `release` is not-none, so answering it from an absence of evidence would
+# suppress a human boundary on the strength of nothing. A milestone's name, an
+# inferred version and a release tool's prediction are all insufficient too.
+# Nothing in this repository declares such a source today, so this fact is
+# UNKNOWN — and this compiler does not invent the missing declaration: #733
+# forbids inventing authority semantics in it. What three things a
+# happy-path check would miss:
+#
+#   * a milestone IS read, but only ever as an INVALIDATOR — never as the
+#     answer, however version-like its title looks;
+#   * an omitted `milestone` key is not GitHub saying "none": only an
+#     explicit null is, so a reply that leaves the key out entirely is
+#     malformed, the same way an omitted `parent` is for the graph class;
+#   * placement is a third fact about the SAME node work_unit and graph
+#     already read, so it must cost no third source read.
+
+# pfact — the placement fact out of a --issue run.
+pfact() { printf '%s' "$1" | jq -r '.[] | select(.key=="placement.current")'; }
+
+# --- no milestone: unknown, with the work unit as its only invalidator -----
+unit_stub "$ISSUE_NODE"
+P="$(pfact "$("$SPARK" facts --issue 733 2>/dev/null)")"
+assert_eq "with no authoritative release declaration, placement is unknown" "UNKNOWN" \
+  "$(printf '%s' "$P" | jq -r '.status')"
+assert_contains "and says why" "no authoritative declaration" \
+  "$(printf '%s' "$P" | jq -r '.detail.reason')"
+[ "$(printf '%s' "$P" | jq -r 'has("value")')" = "false" ] && ok \
+  || bad "an unknown placement carries no value (R6)"
+for field in $(required_fields); do
+  [ "$(printf '%s' "$P" | jq -r --arg f "$field" 'has($f)')" = "true" ] && ok \
+    || bad "the placement envelope is missing the required field $field"
+done
+assert_eq "the source is the work unit it was read from" "github.com/jwogrady/spark#733" \
+  "$(printf '%s' "$P" | jq -r '.source.identity')"
+assert_eq "with no milestone, the work unit is its only invalidator" '["issue:github.com/jwogrady/spark#733"]' \
+  "$(printf '%s' "$P" | jq -c '.invalidators')"
+assert_versions_canonical "$P" "the placement fact"
+
+# --- a milestone IS read, as an invalidator — never as the release answer --
+WITH_MS='{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"updatedAt":"2026-09-08T10:00:00Z",
+  "milestone":{"number":7,"updatedAt":"2026-09-05T18:00:00Z"},"parent":null,
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
+unit_stub "$WITH_MS"
+PM="$(pfact "$("$SPARK" facts --issue 733 2>/dev/null)")"
+assert_eq "a milestone does not establish a release, whatever it is titled" "UNKNOWN" \
+  "$(printf '%s' "$PM" | jq -r '.status')"
+assert_contains "the milestone is carried as an invalidator instead" \
+  "milestone:github.com/jwogrady/spark/milestone/7" \
+  "$(printf '%s' "$PM" | jq -r '.invalidators | join(" ")')"
+assert_eq "and its version is the milestone node's own updatedAt" "2026-09-05T18:00:00Z" \
+  "$(printf '%s' "$PM" | jq -r '.versions["milestone:github.com/jwogrady/spark/milestone/7"]')"
+assert_eq "so moving the milestone re-derives the answer: two invalidators here" "2" \
+  "$(printf '%s' "$PM" | jq -r '.invalidators | length')"
+assert_versions_canonical "$PM" "the placement fact with a milestone"
+
+# --- fail-closed: the milestone's own version must be canonical ------------
+# The milestone passes the shared read's shape check (a string IS a string),
+# so this exercises placement's OWN validation of what that string contains.
+unit_stub '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"updatedAt":"2026-09-08T10:00:00Z",
+  "milestone":{"number":7,"updatedAt":"not-a-timestamp"},"parent":null,
+  "subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},
+  "blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
+PBAD="$("$SPARK" facts --issue 733 2>&1)"
+case "$(printf '%s' "$PBAD" | jq -r '[.[].key] | join(",")' 2>/dev/null)" in
+  *placement.current*) bad "a milestone whose updatedAt is not a timestamp must not be an invalidator" ;;
+  *) ok ;;
+esac
+
+# --- fail-closed: an omitted milestone key is not "no milestone" -----------
+# Only an explicit null says the work unit carries none (root_ok,
+# facts_unit_node); a reply that leaves the key out entirely has not said
+# that, so the whole node is malformed and every class reading it refuses —
+# not just placement.
+raw_graph_stub '{"data":{"repository":{"issueOrPullRequest":{"__typename":"Issue","number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"updatedAt":"2026-09-08T10:00:00Z","parent":null,"subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},"blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}}}}'
+NOMS_OUT="$("$SPARK" facts --issue 733 2>&1)"
+case "$(printf '%s' "$NOMS_OUT" | jq -r '[.[].key] | join(",")' 2>/dev/null)" in
+  *placement.current*|*graph.native*|*work_unit.identity*) \
+    bad "a reply that omits milestone entirely must refuse every class reading this node" ;;
+  *) ok ;;
+esac
+
+# --- shared observation: placement adds no third source read ---------------
+: > "$GH_CALL_LOG"
+unit_stub "$ISSUE_NODE"
+"$SPARK" facts --issue 733 >/dev/null
+[ "$(grep -c graphql "$GH_CALL_LOG")" = "1" ] && ok \
+  || bad "placement reuses the work-unit observation graph and work_unit already made"
 
 finish

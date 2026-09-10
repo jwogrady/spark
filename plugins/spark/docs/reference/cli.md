@@ -2246,11 +2246,13 @@ snapshot is not yet possible, which is why one is never claimed.
 | `repository` | `repository.identity` | The canonical `host/owner/name` of this repository and its default branch |
 | `work_unit` | `work_unit.identity` | Which task is being executed: its kind, its canonical id, and the issue a pull request closes |
 | `graph` | `graph.native` | An issue's native parent, children and blockers, each with its current state |
+| `placement` | `placement.current` | Milestone, release and gate placement — this packet reads the milestone half only (see below) |
 
-`work_unit` and `graph` both need a work unit, so they are compiled when
-`--issue <number>` names one. Without the flag, only `repository` is compiled.
-The two are read from **one** request and share that single observation, so they
-can never describe the same node in two different states.
+`work_unit`, `graph` and `placement` all need a work unit, so they are compiled
+when `--issue <number>` names one. Without the flag, only `repository` is
+compiled. The three are read from **one** request and share that single
+observation, so they can never describe the same node in three different
+states.
 
 **`implements` is GitHub's closing reference, never prose.** A pull request that
 merely mentions an issue does not implement it. The field names one issue, so a
@@ -2331,6 +2333,33 @@ vocabulary all yield **no fact**, for the same reason the repository class does.
 The work unit's own state is not part of this class. The value carries the state
 of each relation; the work unit's belongs to another fact.
 
+### The placement fact
+
+`placement.current` answers three questions — milestone, release and gate — and
+this verb answers only the first today. The milestone that the shared
+observation returns is carried purely as an **invalidator**, never as the
+fact's value: a milestone's title is a display name, not a machine-readable
+declaration, so moving the work unit between milestones changes what makes this
+fact stale without ever changing what it establishes. `gate` is untouched by
+this packet.
+
+`release` is governed by a recorded ruling: it is `ESTABLISHED` only from an
+explicit, authoritative declaration binding the work unit to an exact SemVer
+`vX.Y.Z`. A milestone's title, an inferred version and a release tool's
+prediction are all insufficient, and none of them may be read as `release:
+none` either — `none` is itself a positive claim, and the `placement:release`
+boundary applies to a work unit whenever `release` is not `none`, so guessing
+`none` from silence would silently waive a boundary a human placed. This
+repository does not yet declare a source such a decision could be read from,
+and this verb does not invent one — so `placement.current` is `UNKNOWN` here,
+with the reason named, until that declaration exists and is deliberately wired
+in.
+
+A reply that omits the `milestone` key entirely is not read as "no
+milestone" — only an explicit `null` is, the same discipline the graph class
+applies to `parent` — so an omitted key refuses the whole node, not just this
+class.
+
 ### What is verified before a fact is emitted
 
 A fact names nodes, and a consumer acts on those names, so each one is checked
@@ -2353,12 +2382,14 @@ answer of "none".
 
 ### Cost
 
-One request supplies every field of the repository fact, and one more supplies a
-work unit's whole relationship graph, so each node is observed once rather than
-once per field or once per relationship — a fan-out could observe the same node in three
-states and manufacture a conflict the repository does not have. The endpoint and
-the host come from the repository's own locator, so the node that is read is the
-node the fact names.
+One request supplies every field of the repository fact, and one more supplies
+the work unit, its whole relationship graph and its placement's milestone
+together — `work_unit`, `graph` and `placement` all read the one observation,
+so each node is observed once rather than once per field, once per
+relationship or once per class. A fan-out could observe the same node in
+three separate states and manufacture a conflict the repository does not
+have. The endpoint and the host come from the repository's own locator, so
+the node that is read is the node the fact names.
 
 Nothing is cached. Each run observes its source again, which is what keeps a fact
 a statement about now rather than about the last time anyone looked. When a run is
