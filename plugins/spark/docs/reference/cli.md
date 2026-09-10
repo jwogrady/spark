@@ -2254,7 +2254,7 @@ snapshot is not yet possible, which is why one is never claimed.
 `work_unit`, `graph`, `placement`, `head`, `review` and `checks` all need a work
 unit, so they are compiled when `--issue <number>` names one. Without the flag,
 only `repository` is compiled. All six are read from **one** observation of the
-work-unit node, so they can never describe it in five different states.
+work-unit node, so they can never describe it in six different states.
 
 **Required is not the same question as present.** `checks.required` reads what
 the base branch *requires* from the branch rules, and reports one result per
