@@ -2869,4 +2869,22 @@ pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07
 assert_eq "a shallower heading ends the section" "1" \
   "$(printf '%s' "$(afact "$("$SPARK" facts --issue 733)")" | jq -r '.value.items | length')"
 
+# --- a fence closes only on a run at least as long as the one that opened -
+# A three-backtick line inside a four-backtick fence is CONTENT. Closing on
+# the character alone reopened the block early and let genuinely fenced
+# checkboxes read as criteria.
+LONGFENCE='## Acceptance\n\n````\n```\n- [x] still fenced under a four-backtick fence\n````\n\n- [ ] the only real criterion\n'
+pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07:00:00Z",
+                    "repository":{"nameWithOwner":"jwogrady/spark"},"body":"'"$LONGFENCE"'"}]'
+LF="$(afact "$("$SPARK" facts --issue 733)")"
+assert_eq "a shorter run does not close a longer fence" "1=NOT_MET" \
+  "$(printf '%s' "$LF" | jq -r '[.value.items[] | "\(.id)=\(.state)"] | join(",")')"
+
+# And the longer run does close it, so the fence is not left open forever.
+CLOSES='## Acceptance\n\n```\n- [x] fenced\n````\n\n- [ ] the only real criterion\n'
+pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07:00:00Z",
+                    "repository":{"nameWithOwner":"jwogrady/spark"},"body":"'"$CLOSES"'"}]'
+assert_eq "a longer run does close a shorter fence" "1=NOT_MET" \
+  "$(printf '%s' "$(afact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.items[] | "\(.id)=\(.state)"] | join(",")')"
+
 finish

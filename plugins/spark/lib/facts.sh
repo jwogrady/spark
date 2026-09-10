@@ -884,18 +884,24 @@ facts_unit_node() {
     # example of a criterion, never a criterion. Every line is first marked
     # inside or outside a fence, and only lines outside it can be a heading or
     # an item.
-    def fence_char:
-      if test("^ {0,3}`{3,}") then "`"
-      elif test("^ {0,3}~{3,}") then "~"
-      else null end;
+    # The LENGTH matters as much as the character. A fence closes only on a run
+    # of its own character that is at least as long as the one that opened it,
+    # so a three-backtick line inside a four-backtick fence is content rather
+    # than a close. Tracking only the character reopened the block early and
+    # let genuinely fenced checkboxes read as criteria.
+    def fence_run:
+      (capture("^ {0,3}(?<run>`{3,}|~{3,})(?<rest>.*)$") // null)
+      | if . == null then null
+        else {ch: (.run[0:1]), len: (.run | length), rest: .rest} end;
     def acc_lines:
       (. / "\n") as $L
       | (reduce range(0; $L | length) as $i
           ({open: null, inside: []};
-            ($L[$i] | fence_char) as $fc
-            | if $fc == null then .inside += [(.open != null)]
-              elif .open == null then (.inside += [false] | .open = $fc)
-              elif ($fc == .open) and ($L[$i] | test("^ {0,3}(`{3,}|~{3,})[ \t]*$"))
+            ($L[$i] | fence_run) as $f
+            | if $f == null then .inside += [(.open != null)]
+              elif .open == null then (.inside += [false] | .open = $f)
+              elif ($f.ch == .open.ch) and ($f.len >= .open.len)
+                   and ($f.rest | test("^[ \t]*$"))
                 then (.inside += [false] | .open = null)
               else .inside += [true]
               end)
