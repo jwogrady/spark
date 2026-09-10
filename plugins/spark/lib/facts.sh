@@ -874,7 +874,7 @@ facts_unit_node() {
            ($u.commits.nodes[]? | .commit.statusCheckRollup?.contexts.nodes[]?
              | if .__typename == "CheckRun"
                then ["check", .name, (.conclusion // ""), .status]
-               else ["check", .context, .state, "COMPLETED"] end | @tsv),
+               else ["check", .context, .state, "STATUS_CONTEXT"] end | @tsv),
            (if $u.closingIssuesReferences.pageInfo.hasNextPage
             then ["truncated", "implements"] | @tsv else empty end),
            ($u.closingIssuesReferences.nodes[]
@@ -1382,7 +1382,7 @@ FACTS_RULES_KEY=""
 FACTS_RULES_ROWS=""
 FACTS_RULES_RC=0
 facts_rules_read() {
-  local locator="$1" branch="$2" host="${1%%/*}" nwo="${1#*/}" key="$1@$2" out rc=0 digest
+  local locator="$1" branch="$2" host="${1%%/*}" nwo="${1#*/}" key="$1@$2" out rc=0 digest enc
   if [ -n "$FACTS_RULES_KEY" ] && [ "$FACTS_RULES_KEY" = "$key" ]; then
     FACTS_CACHE_HITS=$(( FACTS_CACHE_HITS + 1 ))
     FACTS_RULES="$FACTS_RULES_ROWS"
@@ -1392,9 +1392,19 @@ facts_rules_read() {
   FACTS_API_CALLS=$(( FACTS_API_CALLS + 1 ))
   # The projection is total: anything that is not the expected shape yields no
   # rows, and no rows is then decided by the caller rather than erroring here.
-  out="$(gh api --hostname "$host" "repos/$nwo/rules/branches/$branch" \
+  # The branch is ONE path segment. `feat/x` interpolated raw becomes two, and
+  # the lookup then fails for a base branch that is perfectly valid.
+  enc="$(printf '%s' "$branch" | jq -sRr '@uri' 2>/dev/null)"
+  enc="${enc%%$'\n'*}"
+  [ -n "$enc" ] || enc="$branch"
+  # `ok` is emitted only when the body is the array this endpoint promises, so
+  # its ABSENCE distinguishes a malformed reply from a branch that genuinely
+  # requires nothing. Both would otherwise be an empty required set, and one of
+  # them is a valid answer while the other is no answer at all.
+  out="$(gh api --hostname "$host" "repos/$nwo/rules/branches/$enc" \
     --jq 'if type == "array" then
-            [ .[]
+            "ok",
+            ([ .[]
               | select((type == "object")
                        and (.type? == "required_status_checks")
                        and (.parameters?.required_status_checks? | type) == "array")
@@ -1402,13 +1412,21 @@ facts_rules_read() {
               | .parameters.required_status_checks[]
               | select((type == "object") and ((.context? | type) == "string"))
               | "\($r)|\(.context)" ]
-            | sort | unique | .[]
+             | sort | unique | .[])
           else empty end' 2>/dev/null)" || rc=$?
   if [ "$rc" -ne 0 ]; then
     FACTS_RULES=""
     FACTS_RULES_KEY="$key"; FACTS_RULES_ROWS=""; FACTS_RULES_RC="$rc"
     return "$rc"
   fi
+  # A reply that was not the promised array said nothing about what is
+  # required, and "nothing required" is a claim. Refused rather than hashed.
+  case "$out" in
+    ok|ok$'\n'*) ;;
+    *) FACTS_RULES=""; FACTS_RULES_KEY="$key"; FACTS_RULES_ROWS=""; FACTS_RULES_RC=3
+       return 3 ;;
+  esac
+  out="${out#ok}"; out="${out#$'\n'}"
   # The digest covers the serialization exactly as read, including the empty
   # case: a branch that requires nothing has a stable digest of its own, so
   # "nothing required" is a versioned answer rather than an absent one.
@@ -1437,6 +1455,19 @@ facts_rules_read() {
 # as failure is the fail-closed direction: the cost is a merge that waits, and
 # the cost of the other choice is a merge that should not have happened.
 facts_check_state() {
+  # A legacy status context has no separate status field: its state IS both
+  # what it is doing and how it ended. Synthesizing COMPLETED for it turned
+  # PENDING and EXPECTED into completed non-successes -- a check still running
+  # reported as one that failed, which is the opposite of what a caller waiting
+  # on it needs.
+  if [ "$1" = "STATUS_CONTEXT" ]; then
+    case "$2" in
+      SUCCESS|success)                   printf 'success' ;;
+      PENDING|pending|EXPECTED|expected) printf 'pending' ;;
+      *)                                 printf 'failure' ;;
+    esac
+    return 0
+  fi
   case "$1" in
     COMPLETED|completed) ;;
     *) printf 'pending'; return 0 ;;

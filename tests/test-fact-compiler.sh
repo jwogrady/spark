@@ -2195,4 +2195,69 @@ assert_eq "and names the work unit rather than the repository" "github.com/jwogr
 [ "$(printf '%s' "$CI" | jq -r 'has("detail")')" = "false" ] && ok \
   || bad "a not-applicable checks fact carries a detail"
 
+# --- a legacy status context is not a completed check run ------------------
+# StatusContext carries no separate status: its state is both what it is doing
+# and how it ended. Synthesizing COMPLETED for it turned PENDING and EXPECTED
+# into completed non-successes — a check still running reported as one that
+# failed, which is the opposite of what a caller waiting on it needs.
+
+pr_with_contexts() { # pr_with_contexts <contexts json array>
+  graph_stub '{"__typename":"PullRequest","number":733,"repository":{"nameWithOwner":"jwogrady/spark"},
+    "updatedAt":"2026-09-08T10:00:00Z","headRefOid":"'"$HEADOID"'","baseRefName":"master",
+    "baseRefOid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "baseRef":{"target":{"oid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}},
+    "commits":{"nodes":[{"commit":{"oid":"'"$HEADOID"'","statusCheckRollup":{"contexts":{"pageInfo":{"hasNextPage":false},"nodes":'"$1"'}}}}]},
+    "closingIssuesReferences":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
+}
+
+pr_with_contexts '[{"__typename":"StatusContext","context":"doctor","state":"PENDING"},
+                   {"__typename":"StatusContext","context":"tests","state":"EXPECTED"}]'
+CSC="$(cfact "$("$SPARK" facts --issue 733)")"
+assert_eq "a status context still running is pending, not failed" "doctor=pending,tests=pending" \
+  "$(printf '%s' "$CSC" | jq -r '[.value.results[] | "\(.name)=\(.state)"] | join(",")')"
+
+pr_with_contexts '[{"__typename":"StatusContext","context":"doctor","state":"SUCCESS"},
+                   {"__typename":"StatusContext","context":"tests","state":"FAILURE"}]'
+CSD="$(cfact "$("$SPARK" facts --issue 733)")"
+assert_eq "and a settled status context keeps its own verdict" "doctor=success,tests=failure" \
+  "$(printf '%s' "$CSD" | jq -r '[.value.results[] | "\(.name)=\(.state)"] | join(",")')"
+
+# --- "requires nothing" is a claim; a malformed reply is not that claim -----
+# Both would otherwise be an empty required set. One is a valid answer, the
+# other is no answer at all, and hashing the second would ESTABLISH a fact
+# saying the branch requires nothing.
+RULES_SAVED="$RULES"
+RULES='{"message":"Not Found"}'
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"}]'
+[ -z "$(cfact "$("$SPARK" facts --issue 733 2>/dev/null)")" ] && ok \
+  || bad "a branch-rules reply that was not the promised array established a checks fact"
+RULES="$RULES_SAVED"
+
+# An empty array IS a valid answer: this branch requires nothing, versioned.
+RULES='[]'
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"}]'
+CE="$(cfact "$("$SPARK" facts --issue 733)")"
+assert_contains "a branch that requires nothing still establishes" "ESTABLISHED" \
+  "$(printf '%s' "$CE" | jq -r '.status')"
+assert_eq "with an empty required set" "0" \
+  "$(printf '%s' "$CE" | jq -r '.value.required | length')"
+printf '%s' "$(printf '%s' "$CE" | jq -r '.versions["ruleset:github.com/jwogrady/spark"]')" \
+  | grep -Eq '^[0-9a-f]{40}$' && ok \
+  || bad "requiring nothing produced no digest, so the answer could not go stale"
+RULES="$RULES_SAVED"
+
+# --- a branch name is ONE path segment -------------------------------------
+# `feat/x` interpolated raw becomes two segments and the lookup fails for a
+# base branch that is perfectly valid.
+: > "$GH_CALL_LOG"
+graph_stub '{"__typename":"PullRequest","number":733,"repository":{"nameWithOwner":"jwogrady/spark"},
+  "updatedAt":"2026-09-08T10:00:00Z","headRefOid":"'"$HEADOID"'","baseRefName":"release/v1.0",
+  "baseRefOid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "baseRef":{"target":{"oid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}},
+  "commits":{"nodes":[{"commit":{"oid":"'"$HEADOID"'","statusCheckRollup":{"contexts":{"pageInfo":{"hasNextPage":false},"nodes":[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"},{"__typename":"CheckRun","name":"tests","conclusion":"SUCCESS","status":"COMPLETED"}]}}}}]},
+  "closingIssuesReferences":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
+"$SPARK" facts --issue 733 >/dev/null 2>&1
+grep -q 'rules/branches/release%2Fv1.0' "$GH_CALL_LOG" && ok \
+  || bad "a base branch containing a slash was not asked for as one path segment"
+
 finish

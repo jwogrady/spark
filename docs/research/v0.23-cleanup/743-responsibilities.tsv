@@ -118,7 +118,7 @@ ev_payload	plugins/spark/lib/execution.sh	top-level	-	source-collection	1	1	1	cm
 ev_tokens	plugins/spark/lib/execution.sh	top-level	-	canonicalization	9	1	1	cmd_evidence	cmd_evidence
 ev_write	plugins/spark/lib/execution.sh	top-level	-	domain-semantics	10	1	1	cmd_evidence	cmd_evidence
 facts_canonical	plugins/spark/lib/facts.sh	top-level	-	canonicalization	12	1	8	cmd_facts;facts_checks_fact;facts_graph_fact;facts_head_fact;facts_placement_fact;facts_repository_fact;facts_unit_locator;facts_work_unit_fact	cmd_facts
-facts_check_state	plugins/spark/lib/facts.sh	top-level	-	canonicalization	10	2	1	facts_checks_fact	-
+facts_check_state	plugins/spark/lib/facts.sh	top-level	-	canonicalization	23	4	1	facts_checks_fact	-
 facts_checks_fact	plugins/spark/lib/facts.sh	top-level	-	evidence-authority	122	13	1	cmd_facts	cmd_facts
 facts_envelope_tail	plugins/spark/lib/facts.sh	top-level	-	formatting-reporting	11	1	1	facts_repository_fact	-
 facts_error_absent	plugins/spark/lib/facts.sh	top-level	-	canonicalization	43	1	1	facts_unit_node	-
@@ -131,7 +131,7 @@ facts_placement_fact	plugins/spark/lib/facts.sh	top-level	-	evidence-authority	8
 facts_record_telemetry	plugins/spark/lib/facts.sh	top-level	-	formatting-reporting	10	0	1	cmd_facts	cmd_facts
 facts_repo_node	plugins/spark/lib/facts.sh	top-level	-	source-collection	22	1	2	facts_checks_fact;facts_repository_fact	-
 facts_repository_fact	plugins/spark/lib/facts.sh	top-level	-	evidence-authority	71	4	1	cmd_facts	cmd_facts
-facts_rules_read	plugins/spark/lib/facts.sh	top-level	-	source-collection	42	1	1	facts_checks_fact	-
+facts_rules_read	plugins/spark/lib/facts.sh	top-level	-	source-collection	60	1	1	facts_checks_fact	-
 facts_state_canonical	plugins/spark/lib/facts.sh	top-level	-	canonicalization	7	1	1	facts_graph_entry	-
 facts_unit_kind	plugins/spark/lib/facts.sh	top-level	-	canonicalization	7	1	5	facts_checks_fact;facts_graph_entry;facts_head_fact;facts_placement_fact;facts_work_unit_fact	-
 facts_unit_locator	plugins/spark/lib/facts.sh	top-level	-	canonicalization	6	1	5	facts_checks_fact;facts_graph_entry;facts_head_fact;facts_placement_fact;facts_work_unit_fact	-
