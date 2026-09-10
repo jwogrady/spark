@@ -245,7 +245,11 @@ mut_loaded="$("$MUTANT_PATH" telemetry show --run rt-multi --json 2>/dev/null \
 # paying for every module is the coupling this was meant to remove, wearing new
 # filenames. With modules absent, a core verb must then fail; if it still runs,
 # this suite is not actually proving on-demand loading.
-mutant_runtime "s#telemetry|budget|evidence|route|ci|crossroad) printf 'execution' ;;#*) printf 'execution' ;;#"
+# Anchored on the SHAPE of the execution case arm, not on the verb list inside
+# it. Listing the verbs meant that adding one (#726's merge-authority) silently
+# stopped the substitution from matching, so the control mutated nothing and
+# failed for the wrong reason instead of proving anything.
+mutant_runtime "s#^\( *\)[a-z0-9|_-]*) printf 'execution' ;;#\1*) printf 'execution' ;;#"
 MUT="$MUTANT_PATH"
 if [ "$MUTANT_CHANGED" = "1" ]; then ok
 else bad "MUTATION control changed nothing — it proves nothing"; fi

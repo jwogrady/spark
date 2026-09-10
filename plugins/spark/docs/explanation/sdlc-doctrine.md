@@ -149,6 +149,53 @@ This governs only the human-handoff decision. It changes nothing about `UNKNOWN`
 or CI — those stop work on their own evidence. `spark crossroad` encodes the
 distinction mechanically.
 
+### A broad outcome may own many mergeable increments
+
+"Acceptance is true" needs one more distinction, because the obvious reading
+stalls real work. A broad outcome issue — *prove the performance gate with
+equal-workload benchmarks* — is deliberately not true for a long time. If every
+increment beneath it waits for the parent, each otherwise-routine merge needs a
+human, and the operator becomes a rubber stamp on work they already authorized.
+
+So a broad issue may durably authorize **bounded work units** that carry their
+own acceptance. A bounded unit may merge routinely when its **own** acceptance —
+not the parent's — is true on the exact current HEAD, independent exact-HEAD
+review and required checks are green, exact-head protection holds, the mutation
+is routine and reversible, and no reserved human boundary remains.
+
+Merging the child **advances** the broader outcome. It never closes, satisfies
+or implies it. The parent stays open until its own acceptance is independently
+true, and the release decision remains human-owned exactly as before.
+
+The safety default inverts here, and the inversion is the whole design.
+`crossroad` fails toward `CONTINUE` because its defect was a false stop. Merge
+eligibility fails toward `NOT ELIGIBLE` because its defect would be manufactured
+authority — the failure that silently closes a broad outcome on the strength of
+one small child. **Eligibility is affirmed positively or not at all; the absence
+of a known disqualifier is not proof of permission.** Three things therefore
+create nothing on their own: referencing a broad issue, moving evidence without
+satisfying the bounded acceptance, and coordination — `#585`, relay handoffs and
+a reviewer `PASS` are evidence and sequencing, never permission.
+
+`spark merge-authority` encodes this mechanically, and it is meant to be
+consulted *before* implementation, so the merge question is derivable from
+durable facts rather than discovered after a PR reaches `PASS`.
+
+This **does** move an approval point, and ADR-0032 records that explicitly
+rather than letting it drift. What moves is the *routine trunk integration*:
+where the owning issue durably authorized a bounded unit and its acceptance in
+advance, Spark may verify those facts and integrate without a further per-merge
+human approval. ADR-0032 supersedes ADR-0019 and ADR-0027 in that one respect,
+and in no other.
+
+What does not move: the human still owns intent, judgment, and **acceptance
+definition and authorization**. They author the bounded acceptance durably and
+in advance; the agent only verifies that what the human already accepted is now
+true, and never invents acceptance or reads the absence of a blocker as
+permission. And a merge to the trunk is **integration, not a release** — the
+release act stays exactly where ADR-0026, ADR-0006 and ADR-0009 put it, with the
+human merging the Release Please PR. Nothing ships without human approval.
+
 ## The loop closes
 
 Shipped work that reveals a new problem doesn't get bolted onto the current PR —

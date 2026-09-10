@@ -55,6 +55,13 @@ GitHub an explicit fourth party rather than an implied backdrop.
   agree with it, and `identity.md` names GitHub as the explicit fourth party.
 - Any future decision that shifts a role (for example, moving the human
   approval point) must supersede this ADR explicitly, not drift past it.
+- **Superseded in one narrow respect by ADR-0032** (2026-09-05), which invokes
+  the clause above. ADR-0032 moves the *routine trunk-integration* approval
+  point: where the owning issue durably authorized a bounded work unit and its
+  acceptance in advance, Spark may verify those facts and integrate without a
+  further per-merge human approval. The four-party model is unchanged, and the
+  human continues to own intent, judgment, **acceptance definition and
+  authorization**, and **final release approval** — nothing ships without it.
 
 ## Related Docs
 
