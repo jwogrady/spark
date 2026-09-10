@@ -95,6 +95,7 @@ facts_load_grammars() {
       identifier/repository) FACTS_RE_REPOSITORY="$rest" ;;
       identifier/work-unit)  FACTS_RE_WORK_UNIT="$rest" ;;
       identifier/milestone)  FACTS_RE_MILESTONE="$rest" ;;
+      identifier/commit)     FACTS_RE_COMMIT="$rest" ;;
       identifier/issue-state) FACTS_RE_ISSUE_STATE="$rest" ;;
       constraint/work-unit)  FACTS_CON_WORK_UNIT="$FACTS_CON_WORK_UNIT$rest"$'\n' ;;
       identifier/ref)        FACTS_RE_REF="$rest" ;;
@@ -103,7 +104,7 @@ facts_load_grammars() {
       constraint/ref)        FACTS_CON_REF="$FACTS_CON_REF$rest"$'\n' ;;
     esac
   done < <(awk -F'\t' '
-    $1 == "identifier" && ($2 == "repository" || $2 == "ref" || $2 == "timestamp" || $2 == "work-unit" || $2 == "issue-state" || $2 == "milestone") { print $1 "\t" $2 "\t" $3 }
+    $1 == "identifier" && ($2 == "repository" || $2 == "ref" || $2 == "timestamp" || $2 == "work-unit" || $2 == "issue-state" || $2 == "milestone" || $2 == "commit") { print $1 "\t" $2 "\t" $3 }
     $1 == "constraint" && ($2 == "repository" || $2 == "ref" || $2 == "work-unit") { print $1 "\t" $2 "\t" $3 }' "$FACTS_MODEL")
   FACTS_GRAMMARS_LOADED=1
 }
@@ -696,6 +697,8 @@ facts_unit_node() {
           ... on PullRequest {
             number updatedAt repository{ nameWithOwner }
             milestone{ number updatedAt }
+            headRefOid baseRefName baseRefOid
+            baseRef{ target{ oid } }
             closingIssuesReferences(first:100){
               pageInfo{ hasNextPage }
               nodes{ __typename number repository{ nameWithOwner } }
@@ -738,6 +741,25 @@ facts_unit_node() {
       obj
       and (.number | type) == "number" and (.number == (.number | floor))
       and (.updatedAt | type) == "string";
+    # The HEAD half of the same observation. `base` is the TARGET commit of the
+    # base branch, not the commit the pull request was opened against: R20
+    # makes value.base the version of the `ref:` invalidator, so the two must
+    # be one commit or the freshness contract compares a version against
+    # something it does not name.
+    #
+    # `baseRef` may be null — a base branch can be deleted while the pull
+    # request survives — and that is a fact about the branch rather than a
+    # malformed reply, so the key must be present and either null or whole.
+    # (No apostrophes below: this whole projection is one single-quoted shell
+    # string, and one would end it.)
+    def head_ok:
+      (.headRefOid | type) == "string"
+      and (.baseRefName | type) == "string"
+      and (.baseRefOid | type) == "string"
+      and has("baseRef")
+      and ((.baseRef == null)
+           or ((.baseRef | obj) and (.baseRef.target | obj)
+               and (.baseRef.target.oid | type) == "string"));
     def closing_ok:
       obj and (.nodes | type) == "array"
       and (.pageInfo | obj) and (.pageInfo.hasNextPage | type) == "boolean"
@@ -766,7 +788,7 @@ facts_unit_node() {
       whole
       and has("milestone") and ((.milestone == null) or (.milestone | ms_ok))
       and (if .__typename == "PullRequest"
-           then has("closingIssuesReferences") and (.closingIssuesReferences | closing_ok)
+           then head_ok and has("closingIssuesReferences") and (.closingIssuesReferences | closing_ok)
            elif .__typename == "Issue"
            then has("parent") and ((.parent == null) or (.parent | relation_ok))
                 and (.subIssues | list_ok) and (.blockedBy | list_ok)
@@ -788,6 +810,8 @@ facts_unit_node() {
             $u.milestone.updatedAt] | @tsv
          else empty end),
         (if $u.__typename == "PullRequest" then
+           (["head", $u.headRefOid, $u.baseRefName, $u.baseRefOid,
+             (if $u.baseRef == null then "" else $u.baseRef.target.oid end)] | @tsv),
            (if $u.closingIssuesReferences.pageInfo.hasNextPage
             then ["truncated", "implements"] | @tsv else empty end),
            ($u.closingIssuesReferences.nodes[]
@@ -1149,6 +1173,132 @@ facts_placement_fact() {
   return 0
 }
 
+# facts_head_fact <locator> <number> <observed_at> — the head.exact fact.
+#
+# HEAD-bound, so it is the first class that can be NOT_APPLICABLE: an issue has
+# no change and therefore no HEAD, and that is an answer rather than a gap. Such
+# a fact carries no value and no detail (detail belongs to UNKNOWN and CONFLICT
+# alone), lists no ref, and is invalidated by its work unit — R17 and R18.
+#
+# `base` is the base branch TARGET commit, not the commit the pull request was
+# opened against, and the difference is the whole point of the class. R20 makes
+# value.base the version of the `ref:` invalidator, so if base were the pull
+# request's own base the fact would carry a version for a token naming
+# something else. Measured against the live API, the two genuinely differ:
+# PR #775 sat on c340b093 while master pointed at 35489172.
+#
+#   `current` is that comparison — the pull request is current when what it is
+#   based on is still what the branch points at.
+#
+#   ESTABLISHED     the HEAD, the base ref, the branch target and the staleness
+#                   they imply were all read and are all canonical;
+#   UNKNOWN         the node was read and versioned, but a field is not
+#                   canonical, so the value cannot be asserted (R6);
+#   NOT_APPLICABLE  the work unit is an issue: no HEAD exists to report;
+#   refused         the read failed, the node is absent, cannot be named, or
+#                   its base branch names no target commit — the last because
+#                   the `ref:` token would then have no version, and an
+#                   invalidator that cannot be versioned is not a contract.
+facts_head_fact() {
+  local locator="$1" number="$2" observed="$3" host="${1%%/*}"
+  local wu head tail inv kind self_num self_nwo self_version self_type
+  local h_head h_baseref h_baseoid h_target ref_id ref_inv current
+  FACTS_JSON=""
+  FACTS_REFUSED=""
+  facts_load_grammars
+
+  wu="$(facts_unit_locator "$host" "${locator#*/}" "$number")" || {
+    FACTS_REFUSED="the work unit cannot be named canonically"; return 3; }
+
+  facts_unit_read "$locator" "$number" || {
+    FACTS_REFUSED="$(facts_unreadable_reason "$FACTS_NODE")"; return 3; }
+  case "$FACTS_NODE" in
+    absent*)  FACTS_REFUSED="no work unit by that number"; return 3 ;;
+    partial*|errored*) FACTS_REFUSED="malformed"; return 3 ;;
+  esac
+
+  self_num="$(printf '%s\n' "$FACTS_NODE" | awk -F'\t' '$1 == "self" { print $2; exit }')"
+  self_nwo="$(printf '%s\n' "$FACTS_NODE" | awk -F'\t' '$1 == "self" { print $3; exit }')"
+  self_version="$(printf '%s\n' "$FACTS_NODE" | awk -F'\t' '$1 == "self" { print $4; exit }')"
+  self_type="$(printf '%s\n' "$FACTS_NODE" | awk -F'\t' '$1 == "self" { print $5; exit }')"
+
+  if [ "$self_num" != "$number" ] \
+     || [ "$(printf '%s' "$host/${self_nwo,,}#$number")" != "$wu" ]; then
+    FACTS_REFUSED="malformed"; return 3
+  fi
+  if [ -z "$self_version" ] || ! facts_canonical "$FACTS_RE_TIMESTAMP" "" "$self_version"; then
+    FACTS_REFUSED="malformed"; return 3
+  fi
+  kind="$(facts_unit_kind "$self_type")" || { FACTS_REFUSED="malformed"; return 3; }
+  inv="$kind:$wu"
+
+  head='{"schema_version":'"$FACTS_SCHEMA_VERSION"',"key":"head.exact","class":"head","status":'
+  tail=',"source":{"type":"github-api","identity":"'"$(json_escape "$wu")"'","version":"'"$(json_escape "$self_version")"'"}'
+
+  # An issue has no HEAD. The envelope still names the node it was read from and
+  # is invalidated by it, so the answer goes stale if the issue becomes
+  # something else; it lists no ref, because there is no base to be stale
+  # against.
+  if [ "$kind" = "issue" ]; then
+    FACTS_EMITTED=$(( FACTS_EMITTED + 1 ))
+    FACTS_JSON="$head"'"NOT_APPLICABLE"'"$tail"',"observed_at":"'"$observed"'","invalidators":["'"$(json_escape "$inv")"'"],"versions":{"'"$(json_escape "$inv")"'":"'"$(json_escape "$self_version")"'"},"provenance":"'"$(json_escape "https://$locator/issues/$number")"'"}'
+    return 0
+  fi
+
+  h_head="$(printf '%s\n' "$FACTS_NODE" | awk -F'\t' '$1 == "head" { print $2; exit }')"
+  h_baseref="$(printf '%s\n' "$FACTS_NODE" | awk -F'\t' '$1 == "head" { print $3; exit }')"
+  h_baseoid="$(printf '%s\n' "$FACTS_NODE" | awk -F'\t' '$1 == "head" { print $4; exit }')"
+  h_target="$(printf '%s\n' "$FACTS_NODE" | awk -F'\t' '$1 == "head" { print $5; exit }')"
+
+  # A deleted base branch names no target commit, so the `ref:` token this fact
+  # must carry (R17) could not be versioned (R20). Refused rather than emitted
+  # with a token whose freshness nothing can decide.
+  if [ -z "$h_target" ]; then
+    FACTS_REFUSED="the base branch names no target commit"; return 3
+  fi
+
+  # ENVELOPE-CRITICAL first, and refused rather than reported. The `ref:`
+  # invalidator and its version are part of every status this class can emit,
+  # so a base ref that cannot be canonically named, or a target that is not a
+  # commit, leaves the fact unable to say what it depends on or as of when.
+  #
+  # Emitting an UNKNOWN there would put the malformed token and version inside
+  # the envelope — a fact whose freshness nothing can decide, which is strictly
+  # worse than no fact. It would also contradict the refusal one branch above:
+  # an ABSENT target is refused, so a malformed one cannot be reported.
+  #
+  # Only value-only fields survive into an UNKNOWN, below.
+  ref_id="$locator/$h_baseref"
+  ref_inv="ref:$ref_id"
+  if ! facts_canonical "$FACTS_RE_REF" "$FACTS_CON_REF" "$h_baseref" \
+     || ! facts_canonical "$FACTS_RE_REF" "$FACTS_CON_REF" "$ref_id" \
+     || ! facts_canonical "$FACTS_RE_COMMIT" "" "$h_target"; then
+    FACTS_REFUSED="the base branch cannot be canonically named or versioned"
+    return 3
+  fi
+
+  tail="$tail"',"observed_at":"'"$observed"'","invalidators":["'"$(json_escape "$inv")"'","'"$(json_escape "$ref_inv")"'"]'
+  tail="$tail"',"versions":{"'"$(json_escape "$inv")"'":"'"$(json_escape "$self_version")"'","'"$(json_escape "$ref_inv")"'":"'"$(json_escape "$h_target")"'"}'
+  tail="$tail"',"provenance":"'"$(json_escape "https://$locator/pull/$number")"'"}'
+
+  # Value-only fields. The envelope is already sound, so these can be reported
+  # inside a conforming UNKNOWN (R6): the node was read and versioned, and only
+  # the value is missing.
+  if ! facts_canonical "$FACTS_RE_COMMIT" "" "$h_head" \
+     || ! facts_canonical "$FACTS_RE_COMMIT" "" "$h_baseoid"; then
+    FACTS_EMITTED=$(( FACTS_EMITTED + 1 ))
+    FACTS_UNKNOWN=$(( FACTS_UNKNOWN + 1 ))
+    FACTS_JSON="$head"'"UNKNOWN","detail":{"reason":"malformed","candidates":[]}'"$tail"
+    return 0
+  fi
+
+  if [ "$h_baseoid" = "$h_target" ]; then current=true; else current=false; fi
+
+  FACTS_EMITTED=$(( FACTS_EMITTED + 1 ))
+  FACTS_JSON="$head"'"ESTABLISHED","value":{"head":"'"$(json_escape "$h_head")"'","base_ref":"'"$(json_escape "$h_baseref")"'","base":"'"$(json_escape "$h_target")"'","current":'"$current"'}'"$tail"
+  return 0
+}
+
 facts_record_telemetry() {
   [ -n "${SPARK_RUN_ID:-}" ] || return 0
   SPARK_RECORDING=1 "$SPARK_ROOT/bin/spark" telemetry record --run "$SPARK_RUN_ID" \
@@ -1249,6 +1399,12 @@ cmd_facts() {
       facts="${facts:+$facts,}$FACTS_JSON"
     else
       why="${why:+$why; }placement: $FACTS_REFUSED"
+    fi
+
+    if facts_head_fact "$locator" "$issue" "$observed"; then
+      facts="${facts:+$facts,}$FACTS_JSON"
+    else
+      why="${why:+$why; }head: $FACTS_REFUSED"
     fi
   fi
 

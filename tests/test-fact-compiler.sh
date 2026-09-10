@@ -623,10 +623,22 @@ graph_stub() {
   # that omits it models a reply GitHub does not send. A fixture proving what
   # happens when the key is genuinely ABSENT must bypass this helper —
   # `raw_graph_stub` exists for exactly that.
+  #
+  # A pull request also carries its HEAD, and the same reasoning applies: the
+  # query always asks, so a real reply always answers. The default makes the
+  # base branch target equal the base the pull request sits on, which is the
+  # CURRENT case; a fixture proving staleness sets baseRef itself.
   local node
   node="$(printf '%s' "$1" | jq -c 'if type == "object"
                                     then . + {__typename: (.__typename // "Issue")}
                                          + (if has("milestone") then {} else {milestone: null} end)
+                                         + (if (.__typename // "Issue") != "PullRequest" then {}
+                                            else {headRefOid: (.headRefOid // "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678"),
+                                                  baseRefName: (.baseRefName // "master"),
+                                                  baseRefOid: (.baseRefOid // "b1c2d3e4f5061728394a5b6c7d8e9f0123456789")}
+                                                 + (if has("baseRef") then {}
+                                                    else {baseRef: {target: {oid: (.baseRefOid // "b1c2d3e4f5061728394a5b6c7d8e9f0123456789")}}} end)
+                                            end)
                                     else . end')"
   stub_gh "$WORK/bin/gh" <<STUB
 printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
@@ -656,12 +668,12 @@ graph_stub "$FULL"
 GOUT="$("$SPARK" facts --issue 733)"
 G="$(gfact "$GOUT")"
 
-# --- the fragment carries all four classes, and is still a fragment --------
+# --- the fragment carries all five classes, and is still a fragment --------
 [ "$(printf '%s' "$GOUT" | jq -r 'type')" = "array" ] && ok || bad "a fragment is a bare list"
-[ "$(printf '%s' "$GOUT" | jq -r 'length')" = "4" ] && ok \
-  || bad "a --issue run compiles the repository, the work unit, the graph and the placement"
-[ "$(printf '%s' "$GOUT" | jq -r '[.[].key] | sort | join(",")')" = "graph.native,placement.current,repository.identity,work_unit.identity" ] \
-  && ok || bad "and those four classes exactly"
+[ "$(printf '%s' "$GOUT" | jq -r 'length')" = "5" ] && ok \
+  || bad "a --issue run compiles the repository, work unit, graph, placement and head"
+[ "$(printf '%s' "$GOUT" | jq -r '[.[].key] | sort | join(",")')" = "graph.native,head.exact,placement.current,repository.identity,work_unit.identity" ] \
+  && ok || bad "and those five classes exactly"
 
 # --- the envelope is the schema's ------------------------------------------
 for field in $(required_fields); do
@@ -923,12 +935,12 @@ out="$("$SPARK" facts)"
 graph_stub "$FULL"
 SPARK_RUN_ID=rgraph "$SPARK" facts --issue 733 >/dev/null
 TELG="$("$SPARK" telemetry show --run rgraph --json)"
-assert_contains "four classes compiled means four facts" '"facts_emitted":4' "$TELG"
+assert_contains "five classes compiled means five facts" '"facts_emitted":5' "$TELG"
 # Still TWO reads for three facts: the repository node, and one work-unit node
 # that work_unit and graph share. A third read here would mean the two classes
 # had described the same node from two separate observations.
 assert_contains "from two source reads, not three" '"facts_api_calls":2' "$TELG"
-assert_contains "and the shared observation is reused once" '"facts_cache_hits":2' "$TELG"
+assert_contains "and the shared observation is reused twice more" '"facts_cache_hits":3' "$TELG"
 assert_contains "and the placement is the one unknown" '"facts_unknown":1' "$TELG"
 
 # --- a pageInfo that does not say whether more pages exist ------------------
@@ -1905,5 +1917,153 @@ placement_refused '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"}
 raw_graph_stub '{"data":{"repository":{"issueOrPullRequest":{"__typename":"Issue","number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"updatedAt":"2026-09-08T10:00:00Z","parent":null,"subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},"blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}}}}'
 [ -z "$(pfact "$("$SPARK" facts --issue 733 2>/dev/null)")" ] && ok \
   || bad "a reply that never answered the milestone question compiled a placement"
+
+# --- head.exact: the base is the BRANCH TARGET, and that is the whole class ---
+# R20 makes value.base the version of this fact's own `ref:` invalidator, so
+# base must be the commit the branch points at — not the commit the pull
+# request happens to sit on. Measured against the live API the two genuinely
+# differ (PR #775 sat on c340b093 while master pointed at 35489172), so a
+# implementation that returned the wrong one would look right until a branch
+# moved. `current` is exactly that comparison.
+
+hfact() { printf '%s' "$1" | jq -r '.[] | select(.key=="head.exact")'; }
+
+PR_CUR='{"__typename":"PullRequest","number":733,"repository":{"nameWithOwner":"jwogrady/spark"},
+  "updatedAt":"2026-09-08T10:00:00Z",
+  "headRefOid":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "baseRefName":"master",
+  "baseRefOid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "baseRef":{"target":{"oid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}},
+  "closingIssuesReferences":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
+
+graph_stub "$PR_CUR"
+H="$(hfact "$("$SPARK" facts --issue 733)")"
+assert_contains "a pull request establishes its exact head" "ESTABLISHED" \
+  "$(printf '%s' "$H" | jq -r '.status')"
+assert_eq "the head is the pull request head commit" "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" \
+  "$(printf '%s' "$H" | jq -r '.value.head')"
+assert_eq "the base ref is named" "master" "$(printf '%s' "$H" | jq -r '.value.base_ref')"
+assert_eq "the base is the branch target commit" "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" \
+  "$(printf '%s' "$H" | jq -r '.value.base')"
+assert_eq "and a change sitting on that target is current" "true" \
+  "$(printf '%s' "$H" | jq -r '.value.current')"
+for field in $(required_fields); do
+  if [ "$(printf '%s' "$H" | jq -r "has(\"$field\")")" = "true" ]; then ok
+  else bad "the head envelope is missing the required field '$field'"; fi
+done
+assert_contains "the base ref is carried as an invalidator" "ref:github.com/jwogrady/spark/master" \
+  "$(printf '%s' "$H" | jq -r '.invalidators | join(",")')"
+assert_eq "versioned by the branch target commit, per R20" "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" \
+  "$(printf '%s' "$H" | jq -r '.versions["ref:github.com/jwogrady/spark/master"]')"
+assert_versions_canonical "$H" "head"
+
+# THE control for this class: the branch has moved on. base must follow the
+# BRANCH, and current must say the change no longer sits on it. An
+# implementation returning the pull requests own base passes every assertion
+# above and fails both of these.
+PR_STALE='{"__typename":"PullRequest","number":733,"repository":{"nameWithOwner":"jwogrady/spark"},
+  "updatedAt":"2026-09-08T10:00:00Z",
+  "headRefOid":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "baseRefName":"master",
+  "baseRefOid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "baseRef":{"target":{"oid":"cccccccccccccccccccccccccccccccccccccccc"}},
+  "closingIssuesReferences":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
+graph_stub "$PR_STALE"
+HS="$(hfact "$("$SPARK" facts --issue 733)")"
+assert_eq "base follows the branch, not the commit the change sits on" "cccccccccccccccccccccccccccccccccccccccc" \
+  "$(printf '%s' "$HS" | jq -r '.value.base')"
+assert_eq "and a change left behind by the branch is not current" "false" \
+  "$(printf '%s' "$HS" | jq -r '.value.current')"
+assert_eq "the ref version follows the branch too" "cccccccccccccccccccccccccccccccccccccccc" \
+  "$(printf '%s' "$HS" | jq -r '.versions["ref:github.com/jwogrady/spark/master"]')"
+
+# An issue has no HEAD. That is an answer, and it carries no value, no detail
+# and no ref: there is no base to be stale against (R17, R18).
+graph_stub '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,"subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},"blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
+HI="$(hfact "$("$SPARK" facts --issue 733)")"
+assert_contains "an issue has no head, and says so" "NOT_APPLICABLE" \
+  "$(printf '%s' "$HI" | jq -r '.status')"
+[ "$(printf '%s' "$HI" | jq -r 'has("value")')" = "false" ] && ok \
+  || bad "a not-applicable head carries a value"
+[ "$(printf '%s' "$HI" | jq -r 'has("detail")')" = "false" ] && ok \
+  || bad "a not-applicable head carries a detail, which belongs to unknown and conflict alone"
+[ "$(printf '%s' "$HI" | jq -r '[.invalidators[] | select(startswith("ref:"))] | length')" = "0" ] \
+  && ok || bad "a not-applicable head lists a ref it has no base for"
+assert_contains "and is invalidated by its own work unit" "issue:github.com/jwogrady/spark#733" \
+  "$(printf '%s' "$HI" | jq -r '.invalidators | join(",")')"
+
+# A deleted base branch names no target, so the ref token could not be
+# versioned. Refused rather than emitted with an unversionable invalidator.
+graph_stub '{"__typename":"PullRequest","number":733,"repository":{"nameWithOwner":"jwogrady/spark"},
+  "updatedAt":"2026-09-08T10:00:00Z","headRefOid":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "baseRefName":"master","baseRefOid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","baseRef":null,
+  "closingIssuesReferences":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
+[ -z "$(hfact "$("$SPARK" facts --issue 733 2>/dev/null)")" ] && ok \
+  || bad "a deleted base branch still produced a head fact"
+
+# A head that is not a commit cannot be a value, but the node WAS read and
+# versioned, so this is an unknown rather than a refusal.
+graph_stub '{"__typename":"PullRequest","number":733,"repository":{"nameWithOwner":"jwogrady/spark"},
+  "updatedAt":"2026-09-08T10:00:00Z","headRefOid":"HEAD","baseRefName":"master",
+  "baseRefOid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "baseRef":{"target":{"oid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}},
+  "closingIssuesReferences":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
+HM="$(hfact "$("$SPARK" facts --issue 733)")"
+assert_contains "a head outside the commit grammar is unknown, not established" "UNKNOWN" \
+  "$(printf '%s' "$HM" | jq -r '.status')"
+[ "$(printf '%s' "$HM" | jq -r 'has("value")')" = "false" ] && ok \
+  || bad "an unknown head carries a value"
+
+# --- an envelope cannot carry a token it could not spell --------------------
+# The `ref:` invalidator and its version belong to EVERY status this class
+# emits, so validating them after building the envelope let a malformed ref or
+# target reach a caller inside an UNKNOWN — a fact naming a dependency nothing
+# can resolve and a version nothing can compare. It also contradicted the
+# refusal one branch above: an ABSENT target is refused, so a malformed one
+# cannot be merely reported. Both are refusals now.
+#
+# These two fixtures were not covered by the malformed-head case, which
+# exercises a value-only field and must still produce an UNKNOWN.
+
+head_refused() { # head_refused <pull request json> <label>
+  graph_stub "$1"
+  local out; out="$(hfact "$("$SPARK" facts --issue 733 2>/dev/null)")"
+  [ -z "$out" ] && ok || bad "$2"
+}
+
+# A base ref outside the ref grammar: the token `ref:<repository>/<name>` could
+# not be canonically named.
+head_refused '{"__typename":"PullRequest","number":733,"repository":{"nameWithOwner":"jwogrady/spark"},
+  "updatedAt":"2026-09-08T10:00:00Z","headRefOid":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "baseRefName":"refs//bad name","baseRefOid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "baseRef":{"target":{"oid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}},
+  "closingIssuesReferences":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
+  "a base ref outside the grammar still produced a fact carrying that token"
+
+# A branch target that is not a commit: the token is spellable but its version
+# is not, which is the same freshness hole the absent target has.
+head_refused '{"__typename":"PullRequest","number":733,"repository":{"nameWithOwner":"jwogrady/spark"},
+  "updatedAt":"2026-09-08T10:00:00Z","headRefOid":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "baseRefName":"master","baseRefOid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "baseRef":{"target":{"oid":"not-a-commit"}},
+  "closingIssuesReferences":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
+  "a branch target that is not a commit still produced a fact versioned by it"
+
+# The discrimination in the other direction: a value-only field is still an
+# UNKNOWN, and its envelope is sound — the ref token and its version are both
+# canonical, so freshness remains decidable.
+graph_stub '{"__typename":"PullRequest","number":733,"repository":{"nameWithOwner":"jwogrady/spark"},
+  "updatedAt":"2026-09-08T10:00:00Z","headRefOid":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "baseRefName":"master","baseRefOid":"not-a-commit",
+  "baseRef":{"target":{"oid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}},
+  "closingIssuesReferences":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
+HV="$(hfact "$("$SPARK" facts --issue 733)")"
+assert_contains "a value-only malformed field is still an unknown" "UNKNOWN" \
+  "$(printf '%s' "$HV" | jq -r '.status')"
+assert_contains "and its envelope still names the base ref" "ref:github.com/jwogrady/spark/master" \
+  "$(printf '%s' "$HV" | jq -r '.invalidators | join(",")')"
+assert_eq "and still versions it canonically" "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" \
+  "$(printf '%s' "$HV" | jq -r '.versions["ref:github.com/jwogrady/spark/master"]')"
+assert_versions_canonical "$HV" "head unknown"
 
 finish
