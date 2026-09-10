@@ -2264,6 +2264,15 @@ vocabulary is `success | failure | pending | missing`, and R12 makes a merge
 derivable only when every result is `success`, so a check that never ran its
 assertions must not read as one that passed.
 
+**One name observed in two states is a `CONFLICT`.** A rollup can carry a
+re-run beside the run it replaces, or two workflows that named their jobs
+alike. When a *required* name is observed in states that disagree, the fact is
+`CONFLICT` naming that check rather than a result: R8 says two authoritative
+inputs that disagree are a conflict no first-write, last-write or plausibility
+rule resolves, and picking the first row observed is precisely such a rule.
+Runs that agree are not a disagreement and answer normally, and a contradiction
+on a check nobody requires says nothing about this fact.
+
 **`base` is the branch's commit, not the change's.** `head.exact` reports what
 the base branch points at *now*, and `current` says whether the pull request is
 still sitting on it. Those are different commits the moment anything else lands

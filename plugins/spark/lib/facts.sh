@@ -806,8 +806,14 @@ facts_unit_node() {
       and (.contexts.pageInfo.hasNextPage | type) == "boolean"
       and (.contexts.nodes | type) == "array"
       and ([.contexts.nodes[] | ctx_ok] | all);
+    # EXACTLY one, not at most one. `commits(last:1)` on a pull request always
+    # answers with its head commit, so an empty array is not a pull request
+    # with no commits, it is a reply that did not carry the observation. Left
+    # admissible it binds nothing to the head, every required check reads
+    # `missing`, and the fact ESTABLISHES that state of affairs from no
+    # evidence at all.
     def commits_ok:
-      obj and (.nodes | type) == "array" and ((.nodes | length) <= 1)
+      obj and (.nodes | type) == "array" and ((.nodes | length) == 1)
       and ([.nodes[] | obj and (.commit | obj) and (.commit.oid | type) == "string"
             and has("commit") and (.commit | has("statusCheckRollup"))
             and ((.commit.statusCheckRollup == null)
@@ -1412,8 +1418,7 @@ facts_rules_read() {
     --jq 'if type == "array" then
             [ .[] | select((type == "object") and (.type? == "required_status_checks")) ] as $rel
             | if ($rel | map(select(((.parameters?.required_status_checks? | type) != "array")
-                                    or ((.ruleset_id? | type) as $t
-                                        | ($t != "number") and ($t != "null"))))
+                                    or ((.ruleset_id? | type) != "number")))
                        | length) > 0
               then "malformed"
               elif ($rel | map(.parameters.required_status_checks[]
@@ -1423,7 +1428,7 @@ facts_rules_read() {
               else
                 "ok",
                 ([ $rel[]
-                  | (.ruleset_id? // 0) as $r
+                  | .ruleset_id as $r
                   | .parameters.required_status_checks[]
                   | "\($r)|\(.context)" ]
                  | sort | unique | .[])
@@ -1434,6 +1439,10 @@ facts_rules_read() {
     FACTS_RULES_KEY="$key"; FACTS_RULES_ROWS=""; FACTS_RULES_RC="$rc"
     return "$rc"
   fi
+  # A missing `ruleset_id` is malformed rather than defaulted: the digest is
+  # declared to cover every requiring ruleset, so a fabricated id would make
+  # "some ruleset whose identity was not read" hash the same as a real
+  # ruleset 0, and freshness would then rest on provenance nobody observed.
   # A reply that was not the promised array, or one whose relevant rules were
   # malformed, said nothing about what is required, and "nothing required" is a
   # claim. Both are refused rather than hashed.
@@ -1531,6 +1540,7 @@ facts_checks_fact() {
   local locator="$1" number="$2" observed="$3" host="${1%%/*}"
   local wu head tail inv kind self_num self_nwo self_version self_type
   local h_head h_baseref r_oid r_has digest repo_version rs_inv head_inv
+  local states conflict
   local required results n state row name unit_rows
   FACTS_JSON=""
   FACTS_REFUSED=""
@@ -1630,20 +1640,44 @@ facts_checks_fact() {
   # One result per REQUIRED name, in the required order, whatever else ran. A
   # name with no run observed is `missing`: required and not answered is a
   # state, not an absence.
-  required=""; results=""
+  #
+  # A rollup can carry SEVERAL runs under one name — a re-run beside the run it
+  # replaces, or two workflows that named their jobs alike. Every state derived
+  # for one name is collected, not the first one found: taking the first is a
+  # first-write rule, and R8 says two authoritative inputs that disagree are a
+  # CONFLICT that no first-write, last-write or plausibility rule resolves.
+  # Resolving them properly would need ordering or run identity the model does
+  # not define a precedence over, and inventing one here is exactly what R8
+  # forbids. Duplicates that AGREE are not a disagreement, so they answer
+  # normally: the ambiguity is in contradictory states, not in repetition.
+  required=""; results=""; conflict=""
   while IFS= read -r name; do
     [ -n "$name" ] || continue
     required="${required:+$required,}\"$(json_escape "$name")\""
-    row="$(printf '%s\n' "$unit_rows" | awk -F'\t' -v n="$name" '$1 == "check" && $2 == n { print; exit }')"
-    if [ -z "$row" ]; then
+    states="$(printf '%s\n' "$unit_rows" | awk -F'\t' -v n="$name" '$1 == "check" && $2 == n { print }' \
+      | while IFS= read -r row; do
+          [ -n "$row" ] || continue
+          facts_check_state "$(printf '%s' "$row" | cut -f4)" "$(printf '%s' "$row" | cut -f3)"
+          printf '\n'
+        done | LC_ALL=C sort -u)"
+    if [ -z "$states" ]; then
       state=missing
+    elif [ "$(printf '%s\n' "$states" | wc -l)" -gt 1 ]; then
+      conflict="$name"
+      break
     else
-      state="$(facts_check_state "$(printf '%s' "$row" | cut -f4)" "$(printf '%s' "$row" | cut -f3)")"
+      state="$states"
     fi
     results="${results:+$results,}{\"name\":\"$(json_escape "$name")\",\"state\":\"$state\"}"
   done <<EOF
 $(printf '%s\n' "$FACTS_RULES" | awk -F'\t' '$1 == "required" { print $2 }')
 EOF
+
+  if [ -n "$conflict" ]; then
+    FACTS_EMITTED=$(( FACTS_EMITTED + 1 ))
+    FACTS_JSON="$head"'"CONFLICT","detail":{"reason":"a required check was observed in more than one state: '"$(json_escape "$conflict")"'","candidates":[]}'"$tail"
+    return 0
+  fi
 
   FACTS_EMITTED=$(( FACTS_EMITTED + 1 ))
   FACTS_JSON="$head"'"ESTABLISHED","value":{"head":"'"$(json_escape "$h_head")"'","required":['"$required"'],"results":['"$results"']}'"$tail"

@@ -2314,4 +2314,68 @@ assert_eq "an unrelated rule type does not refuse the read" "doctor" \
   "$(printf '%s' "$CM3" | jq -r '.value.required | join(",")')"
 RULES="$RULES_SAVED"
 
+# --- a pull request that carried no commit observed nothing ---------------
+# `commits(last:1)` always answers with the head commit, so an empty array is
+# a reply that did not carry the observation. Admitted, it binds nothing to
+# the head, every required check reads `missing`, and the fact establishes
+# that from no evidence.
+graph_stub '{"__typename":"PullRequest","number":733,"repository":{"nameWithOwner":"jwogrady/spark"},
+  "updatedAt":"2026-09-08T10:00:00Z","headRefOid":"'"$HEADOID"'","baseRefName":"master",
+  "baseRefOid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "baseRef":{"target":{"oid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}},
+  "commits":{"nodes":[]},
+  "closingIssuesReferences":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
+CN="$("$SPARK" facts --issue 733 2>/dev/null)"
+[ -z "$(cfact "$CN")" ] && ok \
+  || bad "a reply that carried no commit still established the state of every required check"
+
+# --- one name observed in two states is a CONFLICT, not the first row -----
+# A rollup can carry a re-run beside the run it replaces. R8: two authoritative
+# inputs that disagree are a CONFLICT, and no first-write rule resolves them.
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"},
+                 {"__typename":"CheckRun","name":"doctor","conclusion":"FAILURE","status":"COMPLETED"},
+                 {"__typename":"CheckRun","name":"tests","conclusion":"SUCCESS","status":"COMPLETED"}]'
+CC="$(cfact "$("$SPARK" facts --issue 733)")"
+assert_eq "a required check observed in two states conflicts" "CONFLICT" \
+  "$(printf '%s' "$CC" | jq -r '.status')"
+assert_contains "and the conflict names the check" "doctor" \
+  "$(printf '%s' "$CC" | jq -r '.detail.reason')"
+printf '%s' "$CC" | jq -e 'has("value") | not' >/dev/null && ok \
+  || bad "a CONFLICT carried a value, which R6 forbids"
+
+# The order of the two rows must not decide the answer: reversing them is the
+# same contradiction, and a first-write rule would flip the result.
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"FAILURE","status":"COMPLETED"},
+                 {"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"},
+                 {"__typename":"CheckRun","name":"tests","conclusion":"SUCCESS","status":"COMPLETED"}]'
+assert_eq "and conflicts whichever row came first" "CONFLICT" \
+  "$(printf '%s' "$(cfact "$("$SPARK" facts --issue 733)")" | jq -r '.status')"
+
+# Repetition is not contradiction: two runs that AGREE answer normally.
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"},
+                 {"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"},
+                 {"__typename":"CheckRun","name":"tests","conclusion":"SUCCESS","status":"COMPLETED"}]'
+CA="$(cfact "$("$SPARK" facts --issue 733)")"
+assert_eq "two runs that agree are one result" "doctor=success,tests=success" \
+  "$(printf '%s' "$CA" | jq -r '[.value.results[] | "\(.name)=\(.state)"] | join(",")')"
+
+# A duplicate on a name nobody requires says nothing about this fact.
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"},
+                 {"__typename":"CheckRun","name":"tests","conclusion":"SUCCESS","status":"COMPLETED"},
+                 {"__typename":"CheckRun","name":"lint","conclusion":"SUCCESS","status":"COMPLETED"},
+                 {"__typename":"CheckRun","name":"lint","conclusion":"FAILURE","status":"COMPLETED"}]'
+assert_eq "a contradiction on an unrequired check does not conflict" "ESTABLISHED" \
+  "$(printf '%s' "$(cfact "$("$SPARK" facts --issue 733)")" | jq -r '.status')"
+
+# --- a requiring ruleset must say which ruleset it is ---------------------
+# The digest is declared to cover every requiring ruleset id. Defaulting an
+# absent id to 0 makes "some ruleset nobody identified" hash like a real
+# ruleset 0, and freshness then rests on provenance nobody observed.
+RULES='[{"type":"required_status_checks","parameters":{"required_status_checks":[{"context":"doctor"}]}}]'
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"}]'
+CR="$("$SPARK" facts --issue 733 2>/dev/null)"
+[ -z "$(cfact "$CR")" ] && ok \
+  || bad "a requiring ruleset with no id was accepted and its provenance invented"
+RULES="$RULES_SAVED"
+
 finish
