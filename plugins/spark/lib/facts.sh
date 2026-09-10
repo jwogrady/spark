@@ -1401,26 +1401,42 @@ facts_rules_read() {
   # its ABSENCE distinguishes a malformed reply from a branch that genuinely
   # requires nothing. Both would otherwise be an empty required set, and one of
   # them is a valid answer while the other is no answer at all.
+  # A rule of the relevant TYPE that is then the wrong SHAPE is not a rule that
+  # requires nothing; it is a rule that could not be read. Dropping it silently
+  # would let a malformed reply establish "nothing is required", which is the
+  # most dangerous possible answer this endpoint can give: everything merges.
+  # So relevant rules are validated, and any malformed one refuses the read.
+  # Rules of OTHER types are still ignored, because they say nothing about
+  # required checks and their shape is not this function to police.
   out="$(gh api --hostname "$host" "repos/$nwo/rules/branches/$enc" \
     --jq 'if type == "array" then
-            "ok",
-            ([ .[]
-              | select((type == "object")
-                       and (.type? == "required_status_checks")
-                       and (.parameters?.required_status_checks? | type) == "array")
-              | (.ruleset_id? // 0) as $r
-              | .parameters.required_status_checks[]
-              | select((type == "object") and ((.context? | type) == "string"))
-              | "\($r)|\(.context)" ]
-             | sort | unique | .[])
+            [ .[] | select((type == "object") and (.type? == "required_status_checks")) ] as $rel
+            | if ($rel | map(select(((.parameters?.required_status_checks? | type) != "array")
+                                    or ((.ruleset_id? | type) as $t
+                                        | ($t != "number") and ($t != "null"))))
+                       | length) > 0
+              then "malformed"
+              elif ($rel | map(.parameters.required_status_checks[]
+                               | select((type != "object") or ((.context? | type) != "string")))
+                         | length) > 0
+              then "malformed"
+              else
+                "ok",
+                ([ $rel[]
+                  | (.ruleset_id? // 0) as $r
+                  | .parameters.required_status_checks[]
+                  | "\($r)|\(.context)" ]
+                 | sort | unique | .[])
+              end
           else empty end' 2>/dev/null)" || rc=$?
   if [ "$rc" -ne 0 ]; then
     FACTS_RULES=""
     FACTS_RULES_KEY="$key"; FACTS_RULES_ROWS=""; FACTS_RULES_RC="$rc"
     return "$rc"
   fi
-  # A reply that was not the promised array said nothing about what is
-  # required, and "nothing required" is a claim. Refused rather than hashed.
+  # A reply that was not the promised array, or one whose relevant rules were
+  # malformed, said nothing about what is required, and "nothing required" is a
+  # claim. Both are refused rather than hashed.
   case "$out" in
     ok|ok$'\n'*) ;;
     *) FACTS_RULES=""; FACTS_RULES_KEY="$key"; FACTS_RULES_ROWS=""; FACTS_RULES_RC=3
@@ -1434,8 +1450,15 @@ facts_rules_read() {
   if [ -z "$digest" ]; then
     digest="$(printf '%s\n' "$out" | shasum 2>/dev/null | cut -d" " -f1)"
   fi
+  # The DIGEST is over every (ruleset, context) pair, because two rulesets each
+  # requiring `doctor` is a different configuration from one ruleset requiring
+  # it, and R20 versions the collection as read. The required NAMES are the
+  # contexts alone, deduplicated: R12 admits exactly one result per required
+  # check name, and `doctor` required twice is still one check to satisfy.
   FACTS_RULES="$(printf 'digest\t%s\n' "$digest"; printf '%s\n' "$out" \
-    | while IFS= read -r row; do [ -n "$row" ] || continue; printf 'required\t%s\n' "${row#*|}"; done)"
+    | while IFS= read -r row; do [ -n "$row" ] || continue; printf '%s\n' "${row#*|}"; done \
+    | LC_ALL=C sort -u \
+    | while IFS= read -r ctx; do printf 'required\t%s\n' "$ctx"; done)"
   FACTS_RULES_KEY="$key"
   FACTS_RULES_ROWS="$FACTS_RULES"
   FACTS_RULES_RC=0

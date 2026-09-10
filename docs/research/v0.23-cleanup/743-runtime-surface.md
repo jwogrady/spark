@@ -21,7 +21,7 @@ stated rather than smoothed over.
 |---|---|---|---|---|---|
 | `argument-parsing` | 1 | 1 | 12 | 12 | reads flags and arguments |
 | `routing-dispatch` | 10 | 10 | 93 | 94 | resolves a verb and loads what it needs |
-| `source-collection` | 86 | 94 | 1,754 | 2,118 | reads a source of truth (git, gh, the filesystem) and returns it unjudged |
+| `source-collection` | 86 | 94 | 1,754 | 2,141 | reads a source of truth (git, gh, the filesystem) and returns it unjudged |
 | `canonicalization` | 45 | 53 | 631 | 736 | normalizes what was read into this repository's vocabulary |
 | `domain-semantics` | 66 | 67 | 6,809 | 6,918 | owns a rule about what the facts mean |
 | `evidence-authority` | 19 | 25 | 505 | 1,181 | decides what the evidence is admissible for |
@@ -36,7 +36,7 @@ stated rather than smoothed over.
 | `plugins/spark/lib/repository.sh` | 10 | 10 |
 | `plugins/spark/lib/facts.sh` | 0 | 23 |
 
-Module count goes 3 to 4, adding `facts.sh`. The runtime holds 272 functions and 11,308 body lines, against
+Module count goes 3 to 4, adding `facts.sh`. The runtime holds 272 functions and 11,331 body lines, against
 249 and 10,034 before: +23 functions, +1274 body lines.
 
 Those totals count **every** definition, nested ones included — 9 of the 272 are nested
@@ -56,7 +56,7 @@ actual line count is reported too:
 | `plugins/spark/lib/facts.sh` | 0 | 1,760 | +1760 |
 
 **12,166 lines before, 13,981 after (+1815)**, against
-10,034 and 11,308 body lines. Both grow: this tree adds runtime rather than only redistributing it, and the body lines say so rather than being read out of the file total.
+10,034 and 11,331 body lines. Both grow: this tree adds runtime rather than only redistributing it, and the body lines say so rather than being read out of the file total.
 
 **Argument parsing, measured rather than assigned.** The map is exclusive — one responsibility per function — and
 that misrepresents parsing, which no function owns: it sits at the head of every verb. Counting the lines of each
@@ -78,7 +78,7 @@ lines respectively. That is why extracting a shared parser is rejected below: th
 flags, and a shared parser would either normalize what users see or take it all as parameters.
 
 Two buckets hold 161 of 272 functions and
-9,036 of 11,308 body lines. That
+9,059 of 11,331 body lines. That
 concentration is the issue's premise, and it is also the trap: for `cmd_doctor`, `cmd_next` and `cmd_labels` the
 rules *are* the product, and there is no lower layer to defer them to. Relocating them would move ownership
 without reducing it.

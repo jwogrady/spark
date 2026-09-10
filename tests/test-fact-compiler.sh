@@ -2149,7 +2149,7 @@ assert_eq "an incomplete run is pending, and a completed failure is failure" "do
   "$(printf '%s' "$CP" | jq -r '[.value.results[] | "\(.name)=\(.state)"] | join(",")')"
 
 # SKIPPED is deliberately NOT success. The vocabulary has no fifth state, and
-# R15 merges only when every required check is success, so a required check
+# R12 merges only when every required check is success, so a required check
 # that never ran its assertions must not read as one that passed.
 pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SKIPPED","status":"COMPLETED"},
                  {"__typename":"CheckRun","name":"tests","conclusion":"NEUTRAL","status":"COMPLETED"}]'
@@ -2259,5 +2259,59 @@ graph_stub '{"__typename":"PullRequest","number":733,"repository":{"nameWithOwne
 "$SPARK" facts --issue 733 >/dev/null 2>&1
 grep -q 'rules/branches/release%2Fv1.0' "$GH_CALL_LOG" && ok \
   || bad "a base branch containing a slash was not asked for as one path segment"
+
+# --- two rulesets requiring the same check is still one check --------------
+# R12 admits exactly one result per required check name. Overlapping rulesets
+# are ordinary in a repository that layers an org ruleset over a repo one, and
+# emitting `doctor` twice would produce two results for one name and let the
+# same check be counted twice toward merge.
+RULES='[{"type":"required_status_checks","ruleset_id":1,"parameters":{"required_status_checks":[{"context":"doctor"},{"context":"tests"}]}},
+        {"type":"required_status_checks","ruleset_id":2,"parameters":{"required_status_checks":[{"context":"doctor"}]}}]'
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"},
+                 {"__typename":"CheckRun","name":"tests","conclusion":"SUCCESS","status":"COMPLETED"}]'
+CD="$(cfact "$("$SPARK" facts --issue 733)")"
+assert_eq "a check required by two rulesets is named once" "doctor,tests" \
+  "$(printf '%s' "$CD" | jq -r '.value.required | join(",")')"
+assert_eq "and carries exactly one result" "doctor=success,tests=success" \
+  "$(printf '%s' "$CD" | jq -r '[.value.results[] | "\(.name)=\(.state)"] | join(",")')"
+# The digest still distinguishes the two-ruleset configuration from the one-
+# ruleset one: R20 versions the collection as read, not the deduplicated view.
+DIG_TWO="$(printf '%s' "$CD" | jq -r '.versions["ruleset:github.com/jwogrady/spark"]')"
+RULES='[{"type":"required_status_checks","ruleset_id":1,"parameters":{"required_status_checks":[{"context":"doctor"},{"context":"tests"}]}}]'
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"},
+                 {"__typename":"CheckRun","name":"tests","conclusion":"SUCCESS","status":"COMPLETED"}]'
+CD1="$(cfact "$("$SPARK" facts --issue 733)")"
+DIG_ONE="$(printf '%s' "$CD1" | jq -r '.versions["ruleset:github.com/jwogrady/spark"]')"
+[ "$DIG_TWO" != "$DIG_ONE" ] && ok \
+  || bad "dropping a duplicate name also dropped the ruleset it came from, so the digest could not tell the two configurations apart"
+RULES="$RULES_SAVED"
+
+# --- a malformed required-check rule is not "nothing is required" ----------
+# The dangerous failure here is silent: a rule of the right TYPE whose shape
+# cannot be read, discarded quietly, establishes an empty required set, and an
+# empty required set means every check is satisfied and everything merges.
+RULES='[{"type":"required_status_checks","ruleset_id":1,"parameters":{"required_status_checks":"doctor"}}]'
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"}]'
+CM="$("$SPARK" facts --issue 733 2>/dev/null)"
+[ -z "$(cfact "$CM")" ] && ok \
+  || bad "a required-status-checks rule that was not readable still produced a checks fact"
+
+# The same holds one level down: a well-formed rule whose entries are not
+# contexts is unreadable, not empty.
+RULES='[{"type":"required_status_checks","ruleset_id":1,"parameters":{"required_status_checks":[{"context":"doctor"},{"ctx":"tests"}]}}]'
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"}]'
+CM2="$("$SPARK" facts --issue 733 2>/dev/null)"
+[ -z "$(cfact "$CM2")" ] && ok \
+  || bad "an unreadable required-check entry was discarded and the rest established as the whole truth"
+
+# Rules of OTHER types are still ignored: their shape is not this reader to
+# police, and refusing on them would make an unrelated ruleset break checks.
+RULES='[{"type":"deletion","parameters":"whatever"},
+        {"type":"required_status_checks","ruleset_id":1,"parameters":{"required_status_checks":[{"context":"doctor"}]}}]'
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"}]'
+CM3="$(cfact "$("$SPARK" facts --issue 733)")"
+assert_eq "an unrelated rule type does not refuse the read" "doctor" \
+  "$(printf '%s' "$CM3" | jq -r '.value.required | join(",")')"
+RULES="$RULES_SAVED"
 
 finish
