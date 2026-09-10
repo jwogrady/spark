@@ -1257,20 +1257,35 @@ facts_head_fact() {
     FACTS_REFUSED="the base branch names no target commit"; return 3
   fi
 
+  # ENVELOPE-CRITICAL first, and refused rather than reported. The `ref:`
+  # invalidator and its version are part of every status this class can emit,
+  # so a base ref that cannot be canonically named, or a target that is not a
+  # commit, leaves the fact unable to say what it depends on or as of when.
+  #
+  # Emitting an UNKNOWN there would put the malformed token and version inside
+  # the envelope — a fact whose freshness nothing can decide, which is strictly
+  # worse than no fact. It would also contradict the refusal one branch above:
+  # an ABSENT target is refused, so a malformed one cannot be reported.
+  #
+  # Only value-only fields survive into an UNKNOWN, below.
   ref_id="$locator/$h_baseref"
   ref_inv="ref:$ref_id"
+  if ! facts_canonical "$FACTS_RE_REF" "$FACTS_CON_REF" "$h_baseref" \
+     || ! facts_canonical "$FACTS_RE_REF" "$FACTS_CON_REF" "$ref_id" \
+     || ! facts_canonical "$FACTS_RE_COMMIT" "" "$h_target"; then
+    FACTS_REFUSED="the base branch cannot be canonically named or versioned"
+    return 3
+  fi
+
   tail="$tail"',"observed_at":"'"$observed"'","invalidators":["'"$(json_escape "$inv")"'","'"$(json_escape "$ref_inv")"'"]'
   tail="$tail"',"versions":{"'"$(json_escape "$inv")"'":"'"$(json_escape "$self_version")"'","'"$(json_escape "$ref_inv")"'":"'"$(json_escape "$h_target")"'"}'
   tail="$tail"',"provenance":"'"$(json_escape "https://$locator/pull/$number")"'"}'
 
-  # Each field is held to its own grammar before any of it becomes a value. A
-  # present field is not a canonical one, and an ESTABLISHED fact carrying a
-  # commit Git could not name would violate the schema it declares.
+  # Value-only fields. The envelope is already sound, so these can be reported
+  # inside a conforming UNKNOWN (R6): the node was read and versioned, and only
+  # the value is missing.
   if ! facts_canonical "$FACTS_RE_COMMIT" "" "$h_head" \
-     || ! facts_canonical "$FACTS_RE_COMMIT" "" "$h_target" \
-     || ! facts_canonical "$FACTS_RE_COMMIT" "" "$h_baseoid" \
-     || ! facts_canonical "$FACTS_RE_REF" "$FACTS_CON_REF" "$h_baseref" \
-     || ! facts_canonical "$FACTS_RE_REF" "$FACTS_CON_REF" "$ref_id"; then
+     || ! facts_canonical "$FACTS_RE_COMMIT" "" "$h_baseoid"; then
     FACTS_EMITTED=$(( FACTS_EMITTED + 1 ))
     FACTS_UNKNOWN=$(( FACTS_UNKNOWN + 1 ))
     FACTS_JSON="$head"'"UNKNOWN","detail":{"reason":"malformed","candidates":[]}'"$tail"

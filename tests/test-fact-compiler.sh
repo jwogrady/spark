@@ -2014,4 +2014,56 @@ assert_contains "a head outside the commit grammar is unknown, not established" 
 [ "$(printf '%s' "$HM" | jq -r 'has("value")')" = "false" ] && ok \
   || bad "an unknown head carries a value"
 
+# --- an envelope cannot carry a token it could not spell --------------------
+# The `ref:` invalidator and its version belong to EVERY status this class
+# emits, so validating them after building the envelope let a malformed ref or
+# target reach a caller inside an UNKNOWN — a fact naming a dependency nothing
+# can resolve and a version nothing can compare. It also contradicted the
+# refusal one branch above: an ABSENT target is refused, so a malformed one
+# cannot be merely reported. Both are refusals now.
+#
+# These two fixtures were not covered by the malformed-head case, which
+# exercises a value-only field and must still produce an UNKNOWN.
+
+head_refused() { # head_refused <pull request json> <label>
+  graph_stub "$1"
+  local out; out="$(hfact "$("$SPARK" facts --issue 733 2>/dev/null)")"
+  [ -z "$out" ] && ok || bad "$2"
+}
+
+# A base ref outside the ref grammar: the token `ref:<repository>/<name>` could
+# not be canonically named.
+head_refused '{"__typename":"PullRequest","number":733,"repository":{"nameWithOwner":"jwogrady/spark"},
+  "updatedAt":"2026-09-08T10:00:00Z","headRefOid":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "baseRefName":"refs//bad name","baseRefOid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "baseRef":{"target":{"oid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}},
+  "closingIssuesReferences":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
+  "a base ref outside the grammar still produced a fact carrying that token"
+
+# A branch target that is not a commit: the token is spellable but its version
+# is not, which is the same freshness hole the absent target has.
+head_refused '{"__typename":"PullRequest","number":733,"repository":{"nameWithOwner":"jwogrady/spark"},
+  "updatedAt":"2026-09-08T10:00:00Z","headRefOid":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "baseRefName":"master","baseRefOid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "baseRef":{"target":{"oid":"not-a-commit"}},
+  "closingIssuesReferences":{"pageInfo":{"hasNextPage":false},"nodes":[]}}' \
+  "a branch target that is not a commit still produced a fact versioned by it"
+
+# The discrimination in the other direction: a value-only field is still an
+# UNKNOWN, and its envelope is sound — the ref token and its version are both
+# canonical, so freshness remains decidable.
+graph_stub '{"__typename":"PullRequest","number":733,"repository":{"nameWithOwner":"jwogrady/spark"},
+  "updatedAt":"2026-09-08T10:00:00Z","headRefOid":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "baseRefName":"master","baseRefOid":"not-a-commit",
+  "baseRef":{"target":{"oid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}},
+  "closingIssuesReferences":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
+HV="$(hfact "$("$SPARK" facts --issue 733)")"
+assert_contains "a value-only malformed field is still an unknown" "UNKNOWN" \
+  "$(printf '%s' "$HV" | jq -r '.status')"
+assert_contains "and its envelope still names the base ref" "ref:github.com/jwogrady/spark/master" \
+  "$(printf '%s' "$HV" | jq -r '.invalidators | join(",")')"
+assert_eq "and still versions it canonically" "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" \
+  "$(printf '%s' "$HV" | jq -r '.versions["ref:github.com/jwogrady/spark/master"]')"
+assert_versions_canonical "$HV" "head unknown"
+
 finish
