@@ -2246,11 +2246,27 @@ snapshot is not yet possible, which is why one is never claimed.
 | `repository` | `repository.identity` | The canonical `host/owner/name` of this repository and its default branch |
 | `work_unit` | `work_unit.identity` | Which task is being executed: its kind, its canonical id, and the issue a pull request closes |
 | `graph` | `graph.native` | An issue's native parent, children and blockers, each with its current state |
+| `placement` | `placement.current` | Where the work unit sits in the release, milestone and gate structure |
 
-`work_unit` and `graph` both need a work unit, so they are compiled when
-`--issue <number>` names one. Without the flag, only `repository` is compiled.
-The two are read from **one** request and share that single observation, so they
-can never describe the same node in two different states.
+`work_unit`, `graph` and `placement` all need a work unit, so they are compiled
+when `--issue <number>` names one. Without the flag, only `repository` is
+compiled. The three are read from **one** request and share that single
+observation, so they can never describe the same node in three different
+states.
+
+**Placement is `UNKNOWN` until a release declares the work unit.** `release`
+may be established only from an explicit authoritative declaration mapping the
+work unit to an exact SemVer `vX.Y.Z`. A milestone's title, a version inferred
+from a branch or tag, and a release tool's prediction are all names rather than
+declarations, and none of them establishes placement.
+
+The alternative would be to answer `release: none`, and that is a different
+claim: that the work sits outside every release. Answering it from an absence
+of evidence would suppress a reserved human boundary, because `placement:release`
+is exactly what a routine merge must stop for when a release is at stake. So a
+placement nobody declared is unknown, and the milestone that *was* observed is
+carried as an invalidator — enough to make the answer go stale when the work
+unit moves, without pretending it was the answer.
 
 **`implements` is GitHub's closing reference, never prose.** A pull request that
 merely mentions an issue does not implement it. The field names one issue, so a

@@ -94,6 +94,7 @@ facts_load_grammars() {
     case "$kind/$name" in
       identifier/repository) FACTS_RE_REPOSITORY="$rest" ;;
       identifier/work-unit)  FACTS_RE_WORK_UNIT="$rest" ;;
+      identifier/milestone)  FACTS_RE_MILESTONE="$rest" ;;
       identifier/issue-state) FACTS_RE_ISSUE_STATE="$rest" ;;
       constraint/work-unit)  FACTS_CON_WORK_UNIT="$FACTS_CON_WORK_UNIT$rest"$'\n' ;;
       identifier/ref)        FACTS_RE_REF="$rest" ;;
@@ -102,7 +103,7 @@ facts_load_grammars() {
       constraint/ref)        FACTS_CON_REF="$FACTS_CON_REF$rest"$'\n' ;;
     esac
   done < <(awk -F'\t' '
-    $1 == "identifier" && ($2 == "repository" || $2 == "ref" || $2 == "timestamp" || $2 == "work-unit" || $2 == "issue-state") { print $1 "\t" $2 "\t" $3 }
+    $1 == "identifier" && ($2 == "repository" || $2 == "ref" || $2 == "timestamp" || $2 == "work-unit" || $2 == "issue-state" || $2 == "milestone") { print $1 "\t" $2 "\t" $3 }
     $1 == "constraint" && ($2 == "repository" || $2 == "ref" || $2 == "work-unit") { print $1 "\t" $2 "\t" $3 }' "$FACTS_MODEL")
   FACTS_GRAMMARS_LOADED=1
 }
@@ -687,12 +688,14 @@ facts_unit_node() {
           __typename
           ... on Issue {
             number updatedAt repository{ nameWithOwner }
+            milestone{ number updatedAt }
             parent{ __typename number state updatedAt repository{ nameWithOwner } }
             subIssues(first:100){ pageInfo{ hasNextPage } nodes{ __typename number state updatedAt repository{ nameWithOwner } } }
             blockedBy(first:100){ pageInfo{ hasNextPage } nodes{ __typename number state updatedAt repository{ nameWithOwner } } }
           }
           ... on PullRequest {
             number updatedAt repository{ nameWithOwner }
+            milestone{ number updatedAt }
             closingIssuesReferences(first:100){
               pageInfo{ hasNextPage }
               nodes{ __typename number repository{ nameWithOwner } }
@@ -725,6 +728,16 @@ facts_unit_node() {
       and (.number | type) == "number" and (.number == (.number | floor))
       and (.__typename == "Issue")
       and (.repository | obj) and (.repository.nameWithOwner | type) == "string";
+    # A milestone carries an identity and nothing else this fact reads: its
+    # title is a name, never an identity, which is precisely the distinction
+    # the placement ruling turns on. `none` is a real answer here — GitHub
+    # saying the work unit carries no milestone is authoritative — so the key
+    # must be PRESENT and either null or whole. A reply that omits it has not
+    # said the work unit has no milestone, and silence is not that answer.
+    def ms_ok:
+      obj
+      and (.number | type) == "number" and (.number == (.number | floor))
+      and (.updatedAt | type) == "string";
     def closing_ok:
       obj and (.nodes | type) == "array"
       and (.pageInfo | obj) and (.pageInfo.hasNextPage | type) == "boolean"
@@ -751,6 +764,7 @@ facts_unit_node() {
     # that has none because it is not a work unit at all.
     def root_ok:
       whole
+      and has("milestone") and ((.milestone == null) or (.milestone | ms_ok))
       and (if .__typename == "PullRequest"
            then has("closingIssuesReferences") and (.closingIssuesReferences | closing_ok)
            elif .__typename == "Issue"
@@ -769,6 +783,10 @@ facts_unit_node() {
       |
         (["self", ($u.number | tostring), $u.repository.nameWithOwner,
           $u.updatedAt, $u.__typename] | @tsv),
+        (if $u.milestone != null then
+           ["milestone", ($u.milestone.number | tostring), $u.repository.nameWithOwner,
+            $u.milestone.updatedAt] | @tsv
+         else empty end),
         (if $u.__typename == "PullRequest" then
            (if $u.closingIssuesReferences.pageInfo.hasNextPage
             then ["truncated", "implements"] | @tsv else empty end),
@@ -999,6 +1017,113 @@ EOF
 # found nothing it could name — and it is precisely the answer that would be
 # lost if a not-assessed return skipped recording, leaving an observed run
 # indistinguishable from a run that never happened.
+# facts_placement_fact <locator> <number> <observed_at> — the placement.current
+# fact for one work unit.
+#
+# The class carries three placements — milestone, release and gate — and the
+# release half is governed by a recorded human decision (#733, comment
+# 5608275480):
+#
+#   `placement.release` may be ESTABLISHED only from an explicit authoritative
+#   release declaration that maps the work unit to an exact SemVer `vX.Y.Z`. A
+#   milestone name, an inferred version, a Release Please prediction, or the
+#   absence of evidence is not sufficient. Where no such declaration exists,
+#   `placement.current` is UNKNOWN — never `release: none`.
+#
+# The distinction is load-bearing rather than pedantic. `release: none` is a
+# positive claim that the work sits outside every release, and the model fires
+# the `placement:release` reserved boundary whenever release is `not-none`
+# (fact-model.tsv:241). Reporting `none` from an absence of evidence would
+# therefore SUPPRESS a human boundary by asserting the one thing nobody
+# observed. The <release> grammar says it mechanically too: `^v[0-9]+\.[0-9]+\.[0-9]+$`
+# admits a published tag and nothing else, so a milestone titled
+# `v0.23 — Never automate inefficiency` could never satisfy it.
+#
+# This repository declares no authoritative exact-release mapping anywhere this
+# compiler may read, so the fact is UNKNOWN here today. That is the ruling's
+# answer rather than a gap in it, and the compiler does not supply the missing
+# declaration: #733 forbids inventing authority semantics in the compiler.
+#
+#   UNKNOWN   the node was read and its version observed, and no authoritative
+#             declaration places it in a release. The milestone that WAS
+#             observed is carried as an invalidator, so the answer re-derives
+#             when the work unit is moved between milestones;
+#   refused   the read failed, the node is absent, or it cannot be named
+#             canonically — there is no observed version, so no envelope (R6).
+facts_placement_fact() {
+  local locator="$1" number="$2" observed="$3" host="${1%%/*}"
+  local wu head tail inv kind self_num self_nwo self_version self_type
+  local ms_num ms_nwo ms_version ms_id ms_inv
+  FACTS_JSON=""
+  FACTS_REFUSED=""
+  facts_load_grammars
+
+  wu="$(facts_unit_locator "$host" "${locator#*/}" "$number")" || {
+    FACTS_REFUSED="the work unit cannot be named canonically"; return 3; }
+
+  # The SAME observation the work-unit and graph classes read. Placement is a
+  # third fact about one node, and reading it again would let the three
+  # describe that node in three different states.
+  facts_unit_read "$locator" "$number" || {
+    FACTS_REFUSED="$(facts_unreadable_reason "$FACTS_NODE")"; return 3; }
+
+  case "$FACTS_NODE" in
+    absent*)  FACTS_REFUSED="no work unit by that number"; return 3 ;;
+    partial*|errored*) FACTS_REFUSED="malformed"; return 3 ;;
+  esac
+
+  self_num="$(printf '%s\n' "$FACTS_NODE" | awk -F'\t' '$1 == "self" { print $2; exit }')"
+  self_nwo="$(printf '%s\n' "$FACTS_NODE" | awk -F'\t' '$1 == "self" { print $3; exit }')"
+  self_version="$(printf '%s\n' "$FACTS_NODE" | awk -F'\t' '$1 == "self" { print $4; exit }')"
+  self_type="$(printf '%s\n' "$FACTS_NODE" | awk -F'\t' '$1 == "self" { print $5; exit }')"
+
+  if [ "$self_num" != "$number" ] \
+     || [ "$(printf '%s' "$host/${self_nwo,,}#$number")" != "$wu" ]; then
+    FACTS_REFUSED="malformed"; return 3
+  fi
+  if [ -z "$self_version" ] || ! facts_canonical "$FACTS_RE_TIMESTAMP" "" "$self_version"; then
+    FACTS_REFUSED="malformed"; return 3
+  fi
+
+  kind="$(facts_unit_kind "$self_type")" || {
+    FACTS_REFUSED="malformed"; return 3; }
+  inv="$kind:$wu"
+
+  # The milestone is an INVALIDATOR, not the answer. It is read so that moving
+  # the work unit between milestones changes this fact's freshness — and it is
+  # held to its own grammar first, because an invalidator token outside its
+  # grammar is a freshness contract that cannot be spelled (R20). Its version
+  # is the milestone node's own updated_at, which is why the query asks for it.
+  ms_num="$(printf '%s\n' "$FACTS_NODE" | awk -F'\t' '$1 == "milestone" { print $2; exit }')"
+  ms_nwo="$(printf '%s\n' "$FACTS_NODE" | awk -F'\t' '$1 == "milestone" { print $3; exit }')"
+  ms_version="$(printf '%s\n' "$FACTS_NODE" | awk -F'\t' '$1 == "milestone" { print $4; exit }')"
+  ms_inv=""
+  if [ -n "$ms_num" ]; then
+    ms_id="$host/${ms_nwo,,}/milestone/$ms_num"
+    if ! facts_canonical "$FACTS_RE_MILESTONE" "" "$ms_id" \
+       || [ -z "$ms_version" ] \
+       || ! facts_canonical "$FACTS_RE_TIMESTAMP" "" "$ms_version"; then
+      FACTS_REFUSED="malformed"; return 3
+    fi
+    ms_inv="milestone:$ms_id"
+  fi
+
+  head='{"schema_version":'"$FACTS_SCHEMA_VERSION"',"key":"placement.current","class":"placement","status":'
+  tail=',"source":{"type":"github-api","identity":"'"$(json_escape "$wu")"'","version":"'"$(json_escape "$self_version")"'"}'
+  tail="$tail"',"observed_at":"'"$observed"'","invalidators":["'"$(json_escape "$inv")"'"'
+  [ -z "$ms_inv" ] || tail="$tail"',"'"$(json_escape "$ms_inv")"'"'
+  tail="$tail"']'
+  tail="$tail"',"versions":{"'"$(json_escape "$inv")"'":"'"$(json_escape "$self_version")"'"'
+  [ -z "$ms_inv" ] || tail="$tail"',"'"$(json_escape "$ms_inv")"'":"'"$(json_escape "$ms_version")"'"'
+  tail="$tail"'}'
+  tail="$tail"',"provenance":"'"$(json_escape "https://$locator/issues/$number")"'"}'
+
+  FACTS_EMITTED=$(( FACTS_EMITTED + 1 ))
+  FACTS_UNKNOWN=$(( FACTS_UNKNOWN + 1 ))
+  FACTS_JSON="$head"'"UNKNOWN","detail":{"reason":"no authoritative declaration places this work unit in an exact release","candidates":[]}'"$tail"
+  return 0
+}
+
 facts_record_telemetry() {
   [ -n "${SPARK_RUN_ID:-}" ] || return 0
   SPARK_RECORDING=1 "$SPARK_ROOT/bin/spark" telemetry record --run "$SPARK_RUN_ID" \
@@ -1093,6 +1218,12 @@ cmd_facts() {
       facts="${facts:+$facts,}$FACTS_JSON"
     else
       why="${why:+$why; }graph: $FACTS_REFUSED"
+    fi
+
+    if facts_placement_fact "$locator" "$issue" "$observed"; then
+      facts="${facts:+$facts,}$FACTS_JSON"
+    else
+      why="${why:+$why; }placement: $FACTS_REFUSED"
     fi
   fi
 
