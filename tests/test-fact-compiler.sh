@@ -2887,4 +2887,45 @@ pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07
 assert_eq "a longer run does close a shorter fence" "1=NOT_MET" \
   "$(printf '%s' "$(afact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.items[] | "\(.id)=\(.state)"] | join(",")')"
 
+# --- a task-list item is markdown, not any line with brackets -------------
+# Four or more spaces is an INDENTED CODE BLOCK. A sample criterion written
+# that way is an example, and counting it invents a met criterion nobody
+# agreed to.
+INDENTED='## Acceptance\n\nSome paragraph.\n\n    - [x] a four-space indented sample\n\n- [ ] the only real criterion\n'
+pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07:00:00Z",
+                    "repository":{"nameWithOwner":"jwogrady/spark"},"body":"'"$INDENTED"'"}]'
+assert_eq "an indented code sample is not a criterion" "1=NOT_MET" \
+  "$(printf '%s' "$(afact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.items[] | "\(.id)=\(.state)"] | join(",")')"
+
+# A NESTED item is different: it continues its parent list rather than
+# following a paragraph, so it is a criterion however far it is indented.
+NESTED='## Acceptance\n\n- [ ] the parent\n  - [x] nested beneath it\n'
+pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07:00:00Z",
+                    "repository":{"nameWithOwner":"jwogrady/spark"},"body":"'"$NESTED"'"}]'
+assert_eq "a nested item is still a criterion" "1=NOT_MET,2=MET" \
+  "$(printf '%s' "$(afact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.items[] | "\(.id)=\(.state)"] | join(",")')"
+
+# The checkbox must be followed by whitespace or the end of the line.
+NOSPACE='## Acceptance\n\n- [x]not a task item\n- [ ] the only real criterion\n'
+pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07:00:00Z",
+                    "repository":{"nameWithOwner":"jwogrady/spark"},"body":"'"$NOSPACE"'"}]'
+assert_eq "a bracket with no space after it is not a task item" "1=NOT_MET" \
+  "$(printf '%s' "$(afact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.items[] | "\(.id)=\(.state)"] | join(",")')"
+
+# Every marker GitHub renders as a task list is one here: omitting a marker
+# drops real criteria and can report a real contract as declaring none.
+MARKERS='## Acceptance\n\n- [ ] dash\n* [x] star\n+ [ ] plus\n1. [x] ordered with a dot\n2) [ ] ordered with a paren\n'
+pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07:00:00Z",
+                    "repository":{"nameWithOwner":"jwogrady/spark"},"body":"'"$MARKERS"'"}]'
+assert_eq "every task-list marker is recognised" "1=NOT_MET,2=MET,3=NOT_MET,4=MET,5=NOT_MET" \
+  "$(printf '%s' "$(afact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.items[] | "\(.id)=\(.state)"] | join(",")')"
+
+# A contract whose only criteria use a marker the reader does not know would
+# read as declaring none, which is the omission failure in its worst form.
+PLUSONLY='## Acceptance\n\n+ [ ] the only criterion, written with a plus\n'
+pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07:00:00Z",
+                    "repository":{"nameWithOwner":"jwogrady/spark"},"body":"'"$PLUSONLY"'"}]'
+assert_eq "a contract written entirely with one marker still establishes" "ESTABLISHED" \
+  "$(printf '%s' "$(afact "$("$SPARK" facts --issue 733)")" | jq -r '.status')"
+
 finish

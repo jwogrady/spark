@@ -889,10 +889,22 @@ facts_unit_node() {
     # so a three-backtick line inside a four-backtick fence is content rather
     # than a close. Tracking only the character reopened the block early and
     # let genuinely fenced checkboxes read as criteria.
+    # The LENGTH matters as much as the character. A fence closes only on a run
+    # of its own character that is at least as long as the one that opened it,
+    # so a three-backtick line inside a four-backtick fence is content rather
+    # than a close.
     def fence_run:
       (capture("^ {0,3}(?<run>`{3,}|~{3,})(?<rest>.*)$") // null)
       | if . == null then null
         else {ch: (.run[0:1]), len: (.run | length), rest: .rest} end;
+    # A GFM task-list item is a bullet (-, *, +) OR an ordered marker (1. or
+    # 1)), then a checkbox, then whitespace or the end of the line. Requiring
+    # what follows the bracket is what keeps `- [x]not an item` out; admitting
+    # the other markers is what keeps a real contract from reading as empty.
+    def task_item:
+      (capture("^(?<ind> *)(?:[-*+]|[0-9]{1,9}[.)])[ \t]+\\[(?<mark>[ xX])\\](?=[ \t]|$)") // null);
+    def list_item:
+      test("^ *(?:[-*+]|[0-9]{1,9}[.)])[ \t]");
     def acc_lines:
       (. / "\n") as $L
       | (reduce range(0; $L | length) as $i
@@ -913,17 +925,28 @@ facts_unit_node() {
         else $A[0] as $a
           | ($L[$a] | capture("^ {0,3}(?<h>#{1,6})") | .h | length) as $lvl
           # The section ends at the next heading of the SAME or HIGHER level.
-          # A DEEPER heading groups criteria rather than ending them, so
-          # stopping at the first heading of any depth silently dropped every
-          # item under a subsection and could report a contract as declaring
-          # none.
+          # A DEEPER heading groups criteria rather than ending them.
           | ([ $H[] | select(. > $a)
                | select(($L[.] | capture("^ {0,3}(?<h>#{1,6})") | .h | length) <= $lvl) ]) as $ends
           | (if ($ends | length) == 0 then ($L | length) else $ends[0] end) as $e
-          | [ range($a + 1; $e)
-              | select($F[.] | not)
-              | $L[.]
-              | select(test("^[ \t]*[-*][ \t]+\\[[ xX]\\]")) ]
+          # Four or more spaces is an indented CODE block unless a list is
+          # open: a nested item continues its parent, while an indented sample
+          # after a paragraph does not. Only the tick is carried out.
+          | (reduce range($a + 1; $e) as $i
+              ({open_list: false, items: []};
+                ($L[$i]) as $ln
+                | if $F[$i] then .
+                  elif ($ln | test("^[ \t]*$")) then .
+                  else ($ln | task_item) as $t
+                    | if $t == null
+                      then .open_list = ($ln | list_item)
+                      else
+                        if (($t.ind | length) >= 4) and (.open_list | not) then .
+                        else .items += [$t.mark] end
+                        | .open_list = true
+                      end
+                  end)
+             | .items)
         end;
     def closing_ok:
       obj and (.nodes | type) == "array"
@@ -1023,7 +1046,7 @@ facts_unit_node() {
              | if $items == null then empty
                else range(0; $items | length)
                  | ["acc_item", ($c.number|tostring), ((. + 1)|tostring),
-                    (if $items[.] | test("^[ \t]*[-*][ \t]+\\[[xX]\\]") then "MET" else "NOT_MET" end)] | @tsv
+                    (if ($items[.] | test("[xX]")) then "MET" else "NOT_MET" end)] | @tsv
                end)
          elif $u.__typename == "Issue" then
            (if $u.parent != null then
