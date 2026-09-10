@@ -735,7 +735,7 @@ facts_unit_node() {
             }
             closingIssuesReferences(first:100){
               pageInfo{ hasNextPage }
-              nodes{ __typename number repository{ nameWithOwner } }
+              nodes{ __typename number updatedAt body repository{ nameWithOwner } }
             }
           }
         }
@@ -764,6 +764,11 @@ facts_unit_node() {
       obj
       and (.number | type) == "number" and (.number == (.number | floor))
       and (.__typename == "Issue")
+      # The contract is versioned by its node updated_at (R20) and its items
+      # are read from its body, so a reference that carries neither names a
+      # contract this compiler cannot judge or invalidate.
+      and (.updatedAt | type) == "string"
+      and (.body | type) == "string"
       and (.repository | obj) and (.repository.nameWithOwner | type) == "string";
     # A milestone carries an identity and nothing else this fact reads: its
     # title is a name, never an identity, which is precisely the distinction
@@ -865,6 +870,84 @@ facts_unit_node() {
       obj and (.nodes | type) == "array"
       and (.pageInfo | obj) and (.pageInfo.hasPreviousPage | type) == "boolean"
       and ([.nodes[] | comment_ok] | all);
+    # The acceptance CONTRACT is the checkbox list under an Acceptance heading
+    # in the contract node body, which is the shape this repository issues.
+    # Only the ordinal and the tick are carried out: the wording is prose,
+    # arbitrarily long and arbitrarily punctuated, and nothing here judges it.
+    # An item id is its POSITION in that list, which is a token with no
+    # whitespace and unique within the fact, as the schema requires. Position
+    # is not stable across an edit that reorders the list — but the contract
+    # node updated_at invalidates the fact on any edit at all, so the answer is
+    # restated rather than silently renumbered.
+    # A FENCED block is not structure. An issue body routinely quotes markdown
+    # in a fence, and a sample heading or sample checkbox inside one is an
+    # example of a criterion, never a criterion. Every line is first marked
+    # inside or outside a fence, and only lines outside it can be a heading or
+    # an item.
+    # The LENGTH matters as much as the character. A fence closes only on a run
+    # of its own character that is at least as long as the one that opened it,
+    # so a three-backtick line inside a four-backtick fence is content rather
+    # than a close. Tracking only the character reopened the block early and
+    # let genuinely fenced checkboxes read as criteria.
+    # The LENGTH matters as much as the character. A fence closes only on a run
+    # of its own character that is at least as long as the one that opened it,
+    # so a three-backtick line inside a four-backtick fence is content rather
+    # than a close.
+    def fence_run:
+      (capture("^ {0,3}(?<run>`{3,}|~{3,})(?<rest>.*)$") // null)
+      | if . == null then null
+        else {ch: (.run[0:1]), len: (.run | length), rest: .rest} end;
+    # A GFM task-list item is a bullet (-, *, +) OR an ordered marker (1. or
+    # 1)), then a checkbox, then whitespace or the end of the line. Requiring
+    # what follows the bracket is what keeps `- [x]not an item` out; admitting
+    # the other markers is what keeps a real contract from reading as empty.
+    def task_item:
+      (capture("^(?<ind> *)(?:[-*+]|[0-9]{1,9}[.)])[ \t]+\\[(?<mark>[ xX])\\](?=[ \t]|$)") // null);
+    def list_item:
+      test("^ *(?:[-*+]|[0-9]{1,9}[.)])[ \t]");
+    def acc_lines:
+      (. / "\n") as $L
+      | (reduce range(0; $L | length) as $i
+          ({open: null, inside: []};
+            ($L[$i] | fence_run) as $f
+            | if $f == null then .inside += [(.open != null)]
+              elif .open == null then (.inside += [false] | .open = $f)
+              elif ($f.ch == .open.ch) and ($f.len >= .open.len)
+                   and ($f.rest | test("^[ \t]*$"))
+                then (.inside += [false] | .open = null)
+              else .inside += [true]
+              end)
+         | .inside) as $F
+      | [ range(0; $L | length)
+          | select(($F[.] | not) and ($L[.] | test("^ {0,3}#{1,6}[ \t]+\\S"))) ] as $H
+      | ($H | map(select($L[.] | test("^ {0,3}#{1,6}[ \t]+Acceptance\\b"; "i")))) as $A
+      | if ($A | length) == 0 then null
+        else $A[0] as $a
+          | ($L[$a] | capture("^ {0,3}(?<h>#{1,6})") | .h | length) as $lvl
+          # The section ends at the next heading of the SAME or HIGHER level.
+          # A DEEPER heading groups criteria rather than ending them.
+          | ([ $H[] | select(. > $a)
+               | select(($L[.] | capture("^ {0,3}(?<h>#{1,6})") | .h | length) <= $lvl) ]) as $ends
+          | (if ($ends | length) == 0 then ($L | length) else $ends[0] end) as $e
+          # Four or more spaces is an indented CODE block unless a list is
+          # open: a nested item continues its parent, while an indented sample
+          # after a paragraph does not. Only the tick is carried out.
+          | (reduce range($a + 1; $e) as $i
+              ({open_list: false, items: []};
+                ($L[$i]) as $ln
+                | if $F[$i] then .
+                  elif ($ln | test("^[ \t]*$")) then .
+                  else ($ln | task_item) as $t
+                    | if $t == null
+                      then .open_list = ($ln | list_item)
+                      else
+                        if (($t.ind | length) >= 4) and (.open_list | not) then .
+                        else .items += [$t.mark] end
+                        | .open_list = true
+                      end
+                  end)
+             | .items)
+        end;
     def closing_ok:
       obj and (.nodes | type) == "array"
       and (.pageInfo | obj) and (.pageInfo.hasNextPage | type) == "boolean"
@@ -950,7 +1033,21 @@ facts_unit_node() {
            (if $u.closingIssuesReferences.pageInfo.hasNextPage
             then ["truncated", "implements"] | @tsv else empty end),
            ($u.closingIssuesReferences.nodes[]
-             | ["implements", (.number|tostring), .repository.nameWithOwner, .__typename] | @tsv)
+             | ["implements", (.number|tostring), .repository.nameWithOwner, .__typename,
+                .updatedAt] | @tsv),
+           ($u.closingIssuesReferences.nodes[]
+             | . as $c
+             | ($c.body | acc_lines) as $items
+             | ["acc_section", ($c.number|tostring),
+                (if $items == null then "absent" else "present" end)] | @tsv),
+           ($u.closingIssuesReferences.nodes[]
+             | . as $c
+             | ($c.body | acc_lines) as $items
+             | if $items == null then empty
+               else range(0; $items | length)
+                 | ["acc_item", ($c.number|tostring), ((. + 1)|tostring),
+                    (if ($items[.] | test("[xX]")) then "MET" else "NOT_MET" end)] | @tsv
+               end)
          elif $u.__typename == "Issue" then
            (if $u.parent != null then
               ["parent", ($u.parent.number|tostring), $u.parent.state, $u.parent.updatedAt,
@@ -1305,6 +1402,184 @@ facts_placement_fact() {
   FACTS_EMITTED=$(( FACTS_EMITTED + 1 ))
   FACTS_UNKNOWN=$(( FACTS_UNKNOWN + 1 ))
   FACTS_JSON="$head"'"UNKNOWN","detail":{"reason":"no authoritative declaration places this work unit in an exact release","candidates":[]}'"$tail"
+  return 0
+}
+
+# facts_acceptance_fact <locator> <number> <observed_at> — acceptance.contract.
+#
+# Which contract this change is judged against, and how that contract's items
+# stand on an exact HEAD. HEAD-bound, so an issue is NOT_APPLICABLE: a contract
+# with no change in front of it has nothing to be satisfied ON.
+#
+# The contract is the issue the pull request implements, and the compiler does
+# not choose between several. R17 admits one contract per fact, so a change
+# declaring two is a CONFLICT naming both: which criteria a change is judged
+# against is a question about the work, not a tie for this reader to break.
+#
+# WHAT AN ITEM ID IS. The schema wants a scalar token, and the wording of a
+# criterion is prose. The id is therefore the item POSITION in the contract
+# acceptance list. That is stable within a fact and unique within it, and it is
+# NOT stable across an edit that reorders the list — but the contract node
+# updated_at is an invalidator of this fact, so any edit to that body stales
+# the whole answer and it is recomputed rather than silently renumbered.
+#
+# A tick is what the contract records, not what this compiler judges. Reading
+# it is reading the contract; deciding whether the tick is deserved is not a
+# question the compiler is entitled to answer, and inventing one would be the
+# new authority semantics this issue forbids.
+facts_acceptance_fact() {
+  local locator="$1" number="$2" observed="$3" host="${1%%/*}" nwo="${1#*/}"
+  local wu head tail inv kind self_num self_nwo self_version self_type
+  local h_head head_inv rows n c_num c_nwo c_ver contract c_inv section
+  local items item_json cands invs vers
+  FACTS_JSON=""
+  FACTS_REFUSED=""
+  facts_load_grammars
+
+  wu="$(facts_unit_locator "$host" "$nwo" "$number")" || {
+    FACTS_REFUSED="the work unit cannot be named canonically"; return 3; }
+
+  facts_unit_read "$locator" "$number" || {
+    FACTS_REFUSED="$(facts_unreadable_reason "$FACTS_NODE")"; return 3; }
+  case "$FACTS_NODE" in
+    absent*)  FACTS_REFUSED="no work unit by that number"; return 3 ;;
+    partial*|errored*) FACTS_REFUSED="malformed"; return 3 ;;
+  esac
+
+  self_num="$(printf '%s\n' "$FACTS_NODE" | awk -F'\t' '$1 == "self" { print $2; exit }')"
+  self_nwo="$(printf '%s\n' "$FACTS_NODE" | awk -F'\t' '$1 == "self" { print $3; exit }')"
+  self_version="$(printf '%s\n' "$FACTS_NODE" | awk -F'\t' '$1 == "self" { print $4; exit }')"
+  self_type="$(printf '%s\n' "$FACTS_NODE" | awk -F'\t' '$1 == "self" { print $5; exit }')"
+
+  if [ "$self_num" != "$number" ] \
+     || [ "$(printf '%s' "$host/${self_nwo,,}#$number")" != "$wu" ]; then
+    FACTS_REFUSED="malformed"; return 3
+  fi
+  if [ -z "$self_version" ] || ! facts_canonical "$FACTS_RE_TIMESTAMP" "" "$self_version"; then
+    FACTS_REFUSED="malformed"; return 3
+  fi
+  kind="$(facts_unit_kind "$self_type")" || { FACTS_REFUSED="malformed"; return 3; }
+  inv="$kind:$wu"
+
+  head='{"schema_version":'"$FACTS_SCHEMA_VERSION"',"class":"acceptance","key":"acceptance.contract","status":'
+
+  if [ "$kind" = "issue" ]; then
+    FACTS_EMITTED=$(( FACTS_EMITTED + 1 ))
+    FACTS_JSON="$head"'"NOT_APPLICABLE","source":{"type":"github-api","identity":"'"$(json_escape "$wu")"'","version":"'"$(json_escape "$self_version")"'"},"observed_at":"'"$observed"'","invalidators":["'"$(json_escape "$inv")"'"],"versions":{"'"$(json_escape "$inv")"'":"'"$(json_escape "$self_version")"'"},"provenance":"'"$(json_escape "https://$locator/issues/$number")"'"}'
+    return 0
+  fi
+
+  h_head="$(printf '%s\n' "$FACTS_NODE" | awk -F'\t' '$1 == "head" { print $2; exit }')"
+  if ! facts_canonical "$FACTS_RE_COMMIT" "" "$h_head"; then
+    FACTS_REFUSED="the head is not a commit, so no contract could be judged on it"; return 3
+  fi
+  head_inv="head:$h_head"
+
+  invs='"'"$(json_escape "$head_inv")"'","'"$(json_escape "$inv")"'"'
+  vers='"'"$(json_escape "$head_inv")"'":"'"$(json_escape "$h_head")"'","'"$(json_escape "$inv")"'":"'"$(json_escape "$self_version")"'"'
+  tail=',"source":{"type":"github-api","identity":"'"$(json_escape "$wu")"'","version":"'"$(json_escape "$self_version")"'"}'
+  tail="$tail"',"observed_at":"'"$observed"'","invalidators":['"$invs"'],"versions":{'"$vers"'}'
+  tail="$tail"',"provenance":"'"$(json_escape "https://$locator/pull/$number")"'"}'
+
+  # A reference list that did not fit cannot say which contract this change
+  # declares, nor that it declares only one.
+  if printf '%s\n' "$FACTS_NODE" \
+     | awk -F'\t' '$1 == "truncated" && $2 == "implements" { found = 1 } END { exit !found }'; then
+    FACTS_EMITTED=$(( FACTS_EMITTED + 1 ))
+    FACTS_UNKNOWN=$(( FACTS_UNKNOWN + 1 ))
+    FACTS_JSON="$head"'"UNKNOWN","detail":{"reason":"bounded","candidates":[]}'"$tail"
+    return 0
+  fi
+
+  rows="$(printf '%s\n' "$FACTS_NODE" | awk -F'\t' '$1 == "implements" { print }')"
+  n=0
+  [ -z "$rows" ] || n="$(printf '%s\n' "$rows" | wc -l)"
+
+  if [ "$n" -eq 0 ]; then
+    FACTS_EMITTED=$(( FACTS_EMITTED + 1 ))
+    FACTS_UNKNOWN=$(( FACTS_UNKNOWN + 1 ))
+    FACTS_JSON="$head"'"UNKNOWN","detail":{"reason":"the change declares no contract to be judged against","candidates":[]}'"$tail"
+    return 0
+  fi
+
+  if [ "$n" -gt 1 ]; then
+    cands=""
+    while IFS= read -r r; do
+      [ -n "$r" ] || continue
+      c_num="$(printf '%s' "$r" | cut -f2)"
+      c_nwo="$(printf '%s' "$r" | cut -f3)"
+      contract="$(facts_unit_locator "$host" "$c_nwo" "$c_num")" || {
+        FACTS_REFUSED="a declared contract cannot be named canonically"; return 3; }
+      cands="${cands:+$cands,}\"$(json_escape "$contract")\""
+    done <<EOF
+$rows
+EOF
+    FACTS_EMITTED=$(( FACTS_EMITTED + 1 ))
+    FACTS_JSON="$head"'"CONFLICT","detail":{"reason":"the change declares more than one contract","candidates":['"$cands"']}'"$tail"
+    return 0
+  fi
+
+  c_num="$(printf '%s' "$rows" | cut -f2)"
+  c_nwo="$(printf '%s' "$rows" | cut -f3)"
+  c_ver="$(printf '%s' "$rows" | cut -f5)"
+  contract="$(facts_unit_locator "$host" "$c_nwo" "$c_num")" || {
+    FACTS_REFUSED="the declared contract cannot be named canonically"; return 3; }
+
+  # R17 keeps one set inside one repository: a contract in another repository
+  # is a real relationship, and the graph fact reports it, but it is not a
+  # contract this set can name as its own source.
+  if [ "${c_nwo,,}" != "${nwo,,}" ]; then
+    FACTS_EMITTED=$(( FACTS_EMITTED + 1 ))
+    FACTS_UNKNOWN=$(( FACTS_UNKNOWN + 1 ))
+    FACTS_JSON="$head"'"UNKNOWN","detail":{"reason":"the declared contract lives in another repository","candidates":["'"$(json_escape "$contract")"'"]}'"$tail"
+    return 0
+  fi
+
+  # ENVELOPE-CRITICAL, and refused rather than reported. R17 lists the contract
+  # as an invalidator whatever the status, and R20 versions every invalidator,
+  # so a contract that cannot be versioned cannot be listed — and a fact that
+  # omits the token it depends on is a judgement nothing could ever stale.
+  # This is the cross-repository case's opposite: there the contract is
+  # inadmissible and so there is none to list, here it is admissible and
+  # unusable.
+  if [ -z "$c_ver" ] || ! facts_canonical "$FACTS_RE_TIMESTAMP" "" "$c_ver"; then
+    FACTS_REFUSED="the declared contract cannot be versioned"
+    return 3
+  fi
+
+  # The contract is named and versioned for every status from here on: R17
+  # lists it once whatever the answer, and R20 versions it by its updated_at so
+  # an edited contract stales the judgement rather than leaving it standing.
+  c_inv="issue:$contract"
+  invs="$invs,\"$(json_escape "$c_inv")\""
+  vers="$vers,\"$(json_escape "$c_inv")\":\"$(json_escape "$c_ver")\""
+  tail=',"source":{"type":"github-api","identity":"'"$(json_escape "$contract")"'","version":"'"$(json_escape "$c_ver")"'"}'
+  tail="$tail"',"observed_at":"'"$observed"'","invalidators":['"$invs"'],"versions":{'"$vers"'}'
+  tail="$tail"',"provenance":"'"$(json_escape "https://$locator/pull/$number")"'"}'
+
+  section="$(printf '%s\n' "$FACTS_NODE" | awk -F'\t' -v c="$c_num" '$1 == "acc_section" && $2 == c { print $3; exit }')"
+  items="$(printf '%s\n' "$FACTS_NODE" | awk -F'\t' -v c="$c_num" '$1 == "acc_item" && $2 == c { print $3 "\t" $4 }')"
+
+  # A contract that declares no criteria, or declares a heading with nothing
+  # under it, has not said what would satisfy it. An empty item list would read
+  # as every item met, which is the same fail-open as an empty required set.
+  if [ "$section" != "present" ] || [ -z "$items" ]; then
+    FACTS_EMITTED=$(( FACTS_EMITTED + 1 ))
+    FACTS_UNKNOWN=$(( FACTS_UNKNOWN + 1 ))
+    FACTS_JSON="$head"'"UNKNOWN","detail":{"reason":"the contract declares no acceptance criteria","candidates":["'"$(json_escape "$contract")"'"]}'"$tail"
+    return 0
+  fi
+
+  item_json=""
+  while IFS=$'\t' read -r id state; do
+    [ -n "$id" ] || continue
+    item_json="${item_json:+$item_json,}{\"id\":\"$(json_escape "$id")\",\"state\":\"$(json_escape "$state")\"}"
+  done <<EOF
+$items
+EOF
+
+  FACTS_EMITTED=$(( FACTS_EMITTED + 1 ))
+  FACTS_JSON="$head"'"ESTABLISHED","value":{"contract":"'"$(json_escape "$contract")"'","head":"'"$(json_escape "$h_head")"'","items":['"$item_json"']}'"$tail"
   return 0
 }
 
@@ -2100,6 +2375,12 @@ cmd_facts() {
       facts="${facts:+$facts,}$FACTS_JSON"
     else
       why="${why:+$why; }placement: $FACTS_REFUSED"
+    fi
+
+    if facts_acceptance_fact "$locator" "$issue" "$observed"; then
+      facts="${facts:+$facts,}$FACTS_JSON"
+    else
+      why="${why:+$why; }acceptance: $FACTS_REFUSED"
     fi
 
     if facts_head_fact "$locator" "$issue" "$observed"; then

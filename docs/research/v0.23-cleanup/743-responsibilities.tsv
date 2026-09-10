@@ -69,7 +69,7 @@ cmd_crossroad	plugins/spark/lib/execution.sh	top-level	-	domain-semantics	13	3	0
 cmd_docs_impact	plugins/spark/bin/spark	top-level	-	domain-semantics	267	20	0	-	-
 cmd_doctor	plugins/spark/bin/spark	top-level	-	domain-semantics	847	19	0	-	-
 cmd_evidence	plugins/spark/lib/execution.sh	top-level	-	domain-semantics	213	31	0	-	-
-cmd_facts	plugins/spark/lib/facts.sh	top-level	-	domain-semantics	126	8	0	-	-
+cmd_facts	plugins/spark/lib/facts.sh	top-level	-	domain-semantics	132	8	0	-	-
 cmd_footprint	plugins/spark/bin/spark	top-level	-	domain-semantics	109	11	0	-	-
 cmd_governance	plugins/spark/bin/spark	top-level	-	domain-semantics	202	25	0	-	-
 cmd_hub	plugins/spark/bin/spark	top-level	-	domain-semantics	60	11	0	-	-
@@ -117,7 +117,8 @@ ev_load	plugins/spark/lib/execution.sh	top-level	-	source-collection	9	1	1	cmd_e
 ev_payload	plugins/spark/lib/execution.sh	top-level	-	source-collection	1	1	1	cmd_evidence	cmd_evidence
 ev_tokens	plugins/spark/lib/execution.sh	top-level	-	canonicalization	9	1	1	cmd_evidence	cmd_evidence
 ev_write	plugins/spark/lib/execution.sh	top-level	-	domain-semantics	10	1	1	cmd_evidence	cmd_evidence
-facts_canonical	plugins/spark/lib/facts.sh	top-level	-	canonicalization	12	1	9	cmd_facts;facts_checks_fact;facts_graph_fact;facts_head_fact;facts_placement_fact;facts_repository_fact;facts_review_fact;facts_unit_locator;facts_work_unit_fact	cmd_facts
+facts_acceptance_fact	plugins/spark/lib/facts.sh	top-level	-	evidence-authority	155	10	1	cmd_facts	cmd_facts
+facts_canonical	plugins/spark/lib/facts.sh	top-level	-	canonicalization	12	1	10	cmd_facts;facts_acceptance_fact;facts_checks_fact;facts_graph_fact;facts_head_fact;facts_placement_fact;facts_repository_fact;facts_review_fact;facts_unit_locator;facts_work_unit_fact	cmd_facts
 facts_check_state	plugins/spark/lib/facts.sh	top-level	-	canonicalization	23	4	1	facts_checks_fact	-
 facts_check_worse	plugins/spark/lib/facts.sh	top-level	-	canonicalization	9	2	1	facts_checks_fact	-
 facts_checks_fact	plugins/spark/lib/facts.sh	top-level	-	evidence-authority	167	14	1	cmd_facts	cmd_facts
@@ -126,7 +127,7 @@ facts_error_absent	plugins/spark/lib/facts.sh	top-level	-	canonicalization	43	1	
 facts_graph_entry	plugins/spark/lib/facts.sh	top-level	-	canonicalization	8	1	1	facts_graph_fact	-
 facts_graph_fact	plugins/spark/lib/facts.sh	top-level	-	evidence-authority	193	6	1	cmd_facts	cmd_facts
 facts_head_fact	plugins/spark/lib/facts.sh	top-level	-	evidence-authority	99	9	1	cmd_facts	cmd_facts
-facts_load_grammars	plugins/spark/lib/facts.sh	top-level	-	source-collection	24	2	8	cmd_facts;facts_checks_fact;facts_graph_fact;facts_head_fact;facts_placement_fact;facts_repository_fact;facts_review_fact;facts_work_unit_fact	cmd_facts
+facts_load_grammars	plugins/spark/lib/facts.sh	top-level	-	source-collection	24	2	9	cmd_facts;facts_acceptance_fact;facts_checks_fact;facts_graph_fact;facts_head_fact;facts_placement_fact;facts_repository_fact;facts_review_fact;facts_work_unit_fact	cmd_facts
 facts_now	plugins/spark/lib/facts.sh	top-level	-	source-collection	1	0	1	cmd_facts	cmd_facts
 facts_placement_fact	plugins/spark/lib/facts.sh	top-level	-	evidence-authority	83	8	1	cmd_facts	cmd_facts
 facts_record_telemetry	plugins/spark/lib/facts.sh	top-level	-	formatting-reporting	10	0	1	cmd_facts	cmd_facts
@@ -135,11 +136,11 @@ facts_repository_fact	plugins/spark/lib/facts.sh	top-level	-	evidence-authority	
 facts_review_fact	plugins/spark/lib/facts.sh	top-level	-	evidence-authority	154	8	1	cmd_facts	cmd_facts
 facts_rules_read	plugins/spark/lib/facts.sh	top-level	-	source-collection	125	1	1	facts_checks_fact	-
 facts_state_canonical	plugins/spark/lib/facts.sh	top-level	-	canonicalization	7	1	1	facts_graph_entry	-
-facts_unit_kind	plugins/spark/lib/facts.sh	top-level	-	canonicalization	7	1	6	facts_checks_fact;facts_graph_entry;facts_head_fact;facts_placement_fact;facts_review_fact;facts_work_unit_fact	-
-facts_unit_locator	plugins/spark/lib/facts.sh	top-level	-	canonicalization	6	1	6	facts_checks_fact;facts_graph_entry;facts_head_fact;facts_placement_fact;facts_review_fact;facts_work_unit_fact	-
-facts_unit_node	plugins/spark/lib/facts.sh	top-level	-	source-collection	310	1	1	facts_unit_read	-
-facts_unit_read	plugins/spark/lib/facts.sh	top-level	-	source-collection	14	2	6	facts_checks_fact;facts_graph_fact;facts_head_fact;facts_placement_fact;facts_review_fact;facts_work_unit_fact	-
-facts_unreadable_reason	plugins/spark/lib/facts.sh	top-level	-	canonicalization	15	1	7	facts_checks_fact;facts_graph_fact;facts_head_fact;facts_placement_fact;facts_repository_fact;facts_review_fact;facts_work_unit_fact	-
+facts_unit_kind	plugins/spark/lib/facts.sh	top-level	-	canonicalization	7	1	7	facts_acceptance_fact;facts_checks_fact;facts_graph_entry;facts_head_fact;facts_placement_fact;facts_review_fact;facts_work_unit_fact	-
+facts_unit_locator	plugins/spark/lib/facts.sh	top-level	-	canonicalization	6	1	7	facts_acceptance_fact;facts_checks_fact;facts_graph_entry;facts_head_fact;facts_placement_fact;facts_review_fact;facts_work_unit_fact	-
+facts_unit_node	plugins/spark/lib/facts.sh	top-level	-	source-collection	407	1	1	facts_unit_read	-
+facts_unit_read	plugins/spark/lib/facts.sh	top-level	-	source-collection	14	2	7	facts_acceptance_fact;facts_checks_fact;facts_graph_fact;facts_head_fact;facts_placement_fact;facts_review_fact;facts_work_unit_fact	-
+facts_unreadable_reason	plugins/spark/lib/facts.sh	top-level	-	canonicalization	15	1	8	facts_acceptance_fact;facts_checks_fact;facts_graph_fact;facts_head_fact;facts_placement_fact;facts_repository_fact;facts_review_fact;facts_work_unit_fact	-
 facts_work_unit_fact	plugins/spark/lib/facts.sh	top-level	-	evidence-authority	108	7	1	cmd_facts	cmd_facts
 fp_bytes_lines	plugins/spark/bin/spark	top-level	-	source-collection	10	1	2	cmd_footprint;fp_plugin_bytes	cmd_footprint
 fp_cache_stability	plugins/spark/bin/spark	top-level	-	domain-semantics	11	1	1	cmd_doctor	cmd_doctor
@@ -187,7 +188,7 @@ hub_set	plugins/spark/bin/spark	top-level	-	domain-semantics	59	2	1	cmd_hub	cmd_
 intent_liveness	plugins/spark/bin/spark	top-level	-	source-collection	17	1	2	rec_rows;triage_rows	-
 is_legacy_key	plugins/spark/bin/spark	top-level	-	compatibility-fallback	1	1	2	cmd_resume;cmd_state	cmd_resume;cmd_state
 issue_refs	plugins/spark/bin/spark	top-level	-	canonicalization	18	1	2	check_tier_boundary;intent_liveness	-
-json_escape	plugins/spark/bin/spark	top-level	-	formatting-reporting	1	1	12	cmd_budget;cmd_state;cmd_telemetry;facts_checks_fact;facts_envelope_tail;facts_graph_entry;facts_graph_fact;facts_head_fact;facts_placement_fact;facts_repository_fact;facts_review_fact;facts_work_unit_fact	cmd_budget;cmd_state;cmd_telemetry
+json_escape	plugins/spark/bin/spark	top-level	-	formatting-reporting	1	1	13	cmd_budget;cmd_state;cmd_telemetry;facts_acceptance_fact;facts_checks_fact;facts_envelope_tail;facts_graph_entry;facts_graph_fact;facts_head_fact;facts_placement_fact;facts_repository_fact;facts_review_fact;facts_work_unit_fact	cmd_budget;cmd_state;cmd_telemetry
 label_set_equal	plugins/spark/lib/planning.sh	top-level	-	canonicalization	4	2	2	plan_created_rows;plan_live_rows	-
 label_set_show	plugins/spark/lib/planning.sh	top-level	-	formatting-reporting	3	1	2	plan_created_rows;plan_live_rows	-
 leaves_in_inventory	plugins/spark/bin/spark	top-level	-	canonicalization	4	1	1	course_evidence	-
