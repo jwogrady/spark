@@ -2260,8 +2260,9 @@ the base branch *requires* from the branch rules, and reports one result per
 required name — so a check that runs without being required is not in the
 answer, and a required check with no run observed is `missing` rather than
 absent. A skipped or neutral required check is reported as `failure`: the
-vocabulary is `success | failure | pending | missing`, and a check that never
-ran its assertions is not one that passed.
+vocabulary is `success | failure | pending | missing`, and R12 makes a merge
+derivable only when every result is `success`, so a check that never ran its
+assertions must not read as one that passed.
 
 **`base` is the branch's commit, not the change's.** `head.exact` reports what
 the base branch points at *now*, and `current` says whether the pull request is

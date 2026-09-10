@@ -1449,11 +1449,17 @@ facts_rules_read() {
 # completed run is success only when it concluded SUCCESS.
 #
 # SKIPPED and NEUTRAL land in failure DELIBERATELY. The vocabulary admits no
-# fifth state, and R15 lets a merge proceed only when every required check is
-# success — so mapping a required check that never ran its assertions to
-# success would open exactly the hole this class exists to close. Reporting it
-# as failure is the fail-closed direction: the cost is a merge that waits, and
-# the cost of the other choice is a merge that should not have happened.
+# fifth state, and R12 — the rule governing THIS class — makes merge derivable
+# only when every result is success. Mapping a required check that never ran
+# its assertions to success would open exactly the hole this class exists to
+# close. Reporting it as failure is the fail-closed direction: the cost is a
+# merge that waits, and the cost of the other choice is a merge that should not
+# have happened.
+#
+# Ruled for schema v1 on #779 (comment 5618697944): SKIPPED and NEUTRAL are
+# observed and completed, and do not satisfy the required-check contract.
+# Anything more permissive is a schema or governance change, and belongs to a
+# future one rather than to #733.
 facts_check_state() {
   # A legacy status context has no separate status field: its state IS both
   # what it is doing and how it ended. Synthesizing COMPLETED for it turned
