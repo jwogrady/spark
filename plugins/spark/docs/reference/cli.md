@@ -2247,12 +2247,22 @@ snapshot is not yet possible, which is why one is never claimed.
 | `work_unit` | `work_unit.identity` | Which task is being executed: its kind, its canonical id, and the issue a pull request closes |
 | `graph` | `graph.native` | An issue's native parent, children and blockers, each with its current state |
 | `placement` | `placement.current` | Where the work unit sits in the release, milestone and gate structure |
+| `head` | `head.exact` | A pull request's exact HEAD, the branch it targets, that branch's current commit, and whether the change still sits on it |
 
-`work_unit`, `graph` and `placement` all need a work unit, so they are compiled
-when `--issue <number>` names one. Without the flag, only `repository` is
-compiled. The three are read from **one** request and share that single
-observation, so they can never describe the same node in three different
-states.
+`work_unit`, `graph`, `placement` and `head` all need a work unit, so they are
+compiled when `--issue <number>` names one. Without the flag, only `repository`
+is compiled. The four are read from **one** request and share that single
+observation, so they can never describe the same node in four different states.
+
+**`base` is the branch's commit, not the change's.** `head.exact` reports what
+the base branch points at *now*, and `current` says whether the pull request is
+still sitting on it. Those are different commits the moment anything else lands
+— GitHub reports both — and reading the second as the first would make a stale
+change look current until someone checked by hand.
+
+An issue has no change and therefore no HEAD, so `head.exact` is
+`NOT_APPLICABLE` for one: an answer, not a gap. Such a fact carries no value and
+no detail, and lists no base to be stale against.
 
 **Placement is `UNKNOWN` until a release declares the work unit.** `release`
 may be established only from an explicit authoritative declaration mapping the

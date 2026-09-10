@@ -31,7 +31,7 @@ MODULE_RESP = {
 "evidence-authority": [
     "tm_no_progress", "tm_binding_status", "bg_reject_framing", "ci_sentinel_state", "ci_verdict",
     "tm_secret_shaped", "facts_repository_fact", "facts_graph_fact", "facts_work_unit_fact",
-    "facts_placement_fact"],
+    "facts_placement_fact", "facts_head_fact"],
 "formatting-reporting": [
     "facts_envelope_tail", "facts_record_telemetry","label_set_show", "ci_sentinel_report", "json_escape_out", "bg_json_escape",
     # nested helpers: row printers inside the verb that prints them
