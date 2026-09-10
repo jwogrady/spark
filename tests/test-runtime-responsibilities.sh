@@ -184,7 +184,7 @@ done <<EOF_ONELINERS
 $oneliners
 EOF_ONELINERS
 assert_eq "no one-line function consumes what its single line does not name" "" "$(printf '%s' "$bad_edges" | sed 's/^ //')"
-assert_eq "the canonical escaper has exactly ten consumers" "10" "$(rows | awk -F'\t' '$1 == "json_escape" {print $8}')"
+assert_eq "the canonical escaper has exactly eleven consumers" "11" "$(rows | awk -F'\t' '$1 == "json_escape" {print $8}')"
 for f in $FILES; do
   pa="$(rows | awk -F'\t' -v f="$f" '$2 == f {s+=$7} END {printf "%d", s}' | sed ':a;s/\B[0-9]\{3\}\>/,&/;ta')"
   pb="$(rows_before | awk -F'\t' -v f="$f" '$2 == f {s+=$7} END {printf "%d", s}' | sed ':a;s/\B[0-9]\{3\}\>/,&/;ta')"

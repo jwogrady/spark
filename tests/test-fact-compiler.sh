@@ -639,11 +639,28 @@ graph_stub() {
                                                  + (if has("baseRef") then {}
                                                     else {baseRef: {target: {oid: (.baseRefOid // "b1c2d3e4f5061728394a5b6c7d8e9f0123456789")}}} end)
                                             end)
+                                    else . end
+                                  | if (type == "object") and (.__typename == "PullRequest")
+                                       and (has("commits") | not)
+                                    then . + {commits: {nodes: [{commit: {oid: .headRefOid,
+                                                                 statusCheckRollup: null}}]}}
+                                    else . end
+                                  | if (type == "object") and (.__typename == "PullRequest")
+                                       and (((.commits.nodes // []) | length) > 0)
+                                    then .commits.nodes |= map(
+                                           if (.commit.statusCheckRollup // null) == null then .
+                                           else .commit.statusCheckRollup.contexts.nodes |= map(
+                                                  if (.__typename == "CheckRun")
+                                                  then (if has("conclusion") then . else . + {conclusion: null} end)
+                                                       | (if has("checkSuite") then . else . + {checkSuite: null} end)
+                                                  else . end)
+                                           end)
                                     else . end')"
   stub_gh "$WORK/bin/gh" <<STUB
 printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
 case "\$*" in
   *graphql*) answer_json '{"data":{"repository":{"issueOrPullRequest":$node}}}' ;;
+  *"repos/jwogrady/spark/rules/branches/"*) answer_json '$RULES' ;;
   *"--hostname github.com repos/jwogrady/spark"*) answer_json '$NODE' ;;
   *) exit 1 ;;
 esac
@@ -652,6 +669,11 @@ STUB
 
 # gfact — the graph fact out of a --issue run.
 gfact() { printf '%s' "$1" | jq -r '.[] | select(.key=="graph.native")'; }
+
+# The branch rules answer: what the base branch REQUIRES, which is not what
+# runs. Two required here, as this repository actually has, so a fixture can
+# show a check that runs and is not required.
+RULES='[{"type":"required_status_checks","ruleset_id":1,"parameters":{"required_status_checks":[{"context":"doctor"},{"context":"tests"}]}}]'
 
 REL='{"__typename":"Issue","number":%d,"state":"%s","updatedAt":"%s","repository":{"nameWithOwner":"jwogrady/spark"}}'
 
@@ -668,12 +690,12 @@ graph_stub "$FULL"
 GOUT="$("$SPARK" facts --issue 733)"
 G="$(gfact "$GOUT")"
 
-# --- the fragment carries all five classes, and is still a fragment --------
+# --- the fragment carries all six classes, and is still a fragment ---------
 [ "$(printf '%s' "$GOUT" | jq -r 'type')" = "array" ] && ok || bad "a fragment is a bare list"
-[ "$(printf '%s' "$GOUT" | jq -r 'length')" = "5" ] && ok \
-  || bad "a --issue run compiles the repository, work unit, graph, placement and head"
-[ "$(printf '%s' "$GOUT" | jq -r '[.[].key] | sort | join(",")')" = "graph.native,head.exact,placement.current,repository.identity,work_unit.identity" ] \
-  && ok || bad "and those five classes exactly"
+[ "$(printf '%s' "$GOUT" | jq -r 'length')" = "6" ] && ok \
+  || bad "a --issue run compiles repository, work unit, graph, placement, head and checks"
+[ "$(printf '%s' "$GOUT" | jq -r '[.[].key] | sort | join(",")')" = "checks.required,graph.native,head.exact,placement.current,repository.identity,work_unit.identity" ] \
+  && ok || bad "and those six classes exactly"
 
 # --- the envelope is the schema's ------------------------------------------
 for field in $(required_fields); do
@@ -930,17 +952,22 @@ out="$("$SPARK" facts)"
 [ "$(printf '%s' "$out" | jq -r 'length')" = "1" ] && ok \
   || bad "without the flag only the repository class is compiled"
 
-# --- the compiler's cost, with three classes ----------------------------
+# --- the compiler's cost, with six classes ------------------------------
 : > "$GH_CALL_LOG"
 graph_stub "$FULL"
 SPARK_RUN_ID=rgraph "$SPARK" facts --issue 733 >/dev/null
 TELG="$("$SPARK" telemetry show --run rgraph --json)"
-assert_contains "five classes compiled means five facts" '"facts_emitted":5' "$TELG"
-# Still TWO reads for three facts: the repository node, and one work-unit node
-# that work_unit and graph share. A third read here would mean the two classes
-# had described the same node from two separate observations.
+assert_contains "six classes compiled means six facts" '"facts_emitted":6' "$TELG"
+# Still TWO reads for six facts: the repository node, and one work-unit node
+# that work_unit, graph, placement, head and checks all share. Another read
+# here would mean two classes had described the same node from two separate
+# observations -- the defect this compiler exists to prevent.
+#
+# This fixture is an ISSUE, so head and checks are both NOT_APPLICABLE and
+# checks answers before it needs the repository or the branch rules. The
+# pull-request path costs more, and is measured where it is exercised.
 assert_contains "from two source reads, not three" '"facts_api_calls":2' "$TELG"
-assert_contains "and the shared observation is reused twice more" '"facts_cache_hits":3' "$TELG"
+assert_contains "and the shared observation is reused four times" '"facts_cache_hits":4' "$TELG"
 assert_contains "and the placement is the one unknown" '"facts_unknown":1' "$TELG"
 
 # --- a pageInfo that does not say whether more pages exist ------------------
@@ -2065,5 +2092,485 @@ assert_contains "and its envelope still names the base ref" "ref:github.com/jwog
 assert_eq "and still versions it canonically" "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" \
   "$(printf '%s' "$HV" | jq -r '.versions["ref:github.com/jwogrady/spark/master"]')"
 assert_versions_canonical "$HV" "head unknown"
+
+# --- checks.required: required is not the same question as present ----------
+# This repository runs five checks and requires two. The value is therefore
+# keyed by the REQUIRED set read from the branch rules, and a required name
+# with no run observed is `missing` — required and unanswered is a state, not
+# an absence. R17 also gives this class a source the others do not have: it
+# names the REPOSITORY and lists ruleset:<repository>.
+
+cfact() { printf '%s' "$1" | jq -r '.[] | select(.key=="checks.required")'; }
+
+HEADOID="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+pr_with_checks() { # pr_with_checks <contexts json array>
+  graph_stub '{"__typename":"PullRequest","number":733,"repository":{"nameWithOwner":"jwogrady/spark"},
+    "updatedAt":"2026-09-08T10:00:00Z","headRefOid":"'"$HEADOID"'","baseRefName":"master",
+    "baseRefOid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "baseRef":{"target":{"oid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}},
+    "commits":{"nodes":[{"commit":{"oid":"'"$HEADOID"'","statusCheckRollup":{"contexts":{"pageInfo":{"hasNextPage":false},"nodes":'"$1"'}}}}]},
+    "closingIssuesReferences":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
+}
+
+# Both required checks green, plus one that ran and is NOT required.
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"},
+                 {"__typename":"CheckRun","name":"tests","conclusion":"SUCCESS","status":"COMPLETED"},
+                 {"__typename":"CheckRun","name":"gate","conclusion":"FAILURE","status":"COMPLETED"}]'
+C="$(cfact "$("$SPARK" facts --issue 733)")"
+assert_contains "a pull request establishes its required checks" "ESTABLISHED" \
+  "$(printf '%s' "$C" | jq -r '.status')"
+assert_eq "the required set is the branch rules, not what ran" "doctor,tests" \
+  "$(printf '%s' "$C" | jq -r '.value.required | join(",")')"
+assert_eq "one result per required name, and only those" "doctor=success,tests=success" \
+  "$(printf '%s' "$C" | jq -r '[.value.results[] | "\(.name)=\(.state)"] | join(",")')"
+assert_eq "the value is bound to the exact head" "$HEADOID" \
+  "$(printf '%s' "$C" | jq -r '.value.head')"
+for field in $(required_fields); do
+  if [ "$(printf '%s' "$C" | jq -r "has(\"$field\")")" = "true" ]; then ok
+  else bad "the checks envelope is missing the required field '$field'"; fi
+done
+
+# R17: this class names the REPOSITORY, not the work unit. Every sibling names
+# the work unit, so an implementation copying one of them passes everything
+# above and fails here.
+assert_eq "the source is the repository, per R17" "github.com/jwogrady/spark" \
+  "$(printf '%s' "$C" | jq -r '.source.identity')"
+assert_contains "the exact head is an invalidator" "head:$HEADOID" \
+  "$(printf '%s' "$C" | jq -r '.invalidators | join(",")')"
+assert_contains "and the rulesets that require them" "ruleset:github.com/jwogrady/spark" \
+  "$(printf '%s' "$C" | jq -r '.invalidators | join(",")')"
+assert_eq "the head token is versioned by the commit itself, per R20" "$HEADOID" \
+  "$(printf '%s' "$C" | jq -r '.versions["head:'"$HEADOID"'"]')"
+printf '%s' "$(printf '%s' "$C" | jq -r '.versions["ruleset:github.com/jwogrady/spark"]')" \
+  | grep -Eq '^[0-9a-f]{40}$' && ok \
+  || bad "the ruleset token is not versioned by a collection digest"
+assert_versions_canonical "$C" "checks"
+
+# A required check that never ran is `missing`, not absent from the answer.
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"}]'
+CM="$(cfact "$("$SPARK" facts --issue 733)")"
+assert_eq "a required check with no run observed is missing" "doctor=success,tests=missing" \
+  "$(printf '%s' "$CM" | jq -r '[.value.results[] | "\(.name)=\(.state)"] | join(",")')"
+
+# A run that has not completed is pending, whatever it currently reports.
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":null,"status":"IN_PROGRESS"},
+                 {"__typename":"CheckRun","name":"tests","conclusion":"FAILURE","status":"COMPLETED"}]'
+CP="$(cfact "$("$SPARK" facts --issue 733)")"
+assert_eq "an incomplete run is pending, and a completed failure is failure" "doctor=pending,tests=failure" \
+  "$(printf '%s' "$CP" | jq -r '[.value.results[] | "\(.name)=\(.state)"] | join(",")')"
+
+# SKIPPED is deliberately NOT success. The vocabulary has no fifth state, and
+# R12 merges only when every required check is success, so a required check
+# that never ran its assertions must not read as one that passed.
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SKIPPED","status":"COMPLETED"},
+                 {"__typename":"CheckRun","name":"tests","conclusion":"NEUTRAL","status":"COMPLETED"}]'
+CS="$(cfact "$("$SPARK" facts --issue 733)")"
+assert_eq "a skipped or neutral required check is not a passing one" "doctor=failure,tests=failure" \
+  "$(printf '%s' "$CS" | jq -r '[.value.results[] | "\(.name)=\(.state)"] | join(",")')"
+
+# A rollup belonging to another commit is not the state of THIS head.
+graph_stub '{"__typename":"PullRequest","number":733,"repository":{"nameWithOwner":"jwogrady/spark"},
+  "updatedAt":"2026-09-08T10:00:00Z","headRefOid":"'"$HEADOID"'","baseRefName":"master",
+  "baseRefOid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "baseRef":{"target":{"oid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}},
+  "commits":{"nodes":[{"commit":{"oid":"dddddddddddddddddddddddddddddddddddddddd","statusCheckRollup":{"contexts":{"pageInfo":{"hasNextPage":false},"nodes":[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"},{"__typename":"CheckRun","name":"tests","conclusion":"SUCCESS","status":"COMPLETED"}]}}}}]},
+  "closingIssuesReferences":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
+CW="$(cfact "$("$SPARK" facts --issue 733)")"
+assert_contains "a rollup for another commit is not this head's state" "UNKNOWN" \
+  "$(printf '%s' "$CW" | jq -r '.status')"
+[ "$(printf '%s' "$CW" | jq -r 'has("value")')" = "false" ] && ok \
+  || bad "a mismatched rollup still produced a value"
+
+# A bounded rollup has not told us every state, so it is an unknown rather than
+# a shorter answer.
+graph_stub '{"__typename":"PullRequest","number":733,"repository":{"nameWithOwner":"jwogrady/spark"},
+  "updatedAt":"2026-09-08T10:00:00Z","headRefOid":"'"$HEADOID"'","baseRefName":"master",
+  "baseRefOid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "baseRef":{"target":{"oid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}},
+  "commits":{"nodes":[{"commit":{"oid":"'"$HEADOID"'","statusCheckRollup":{"contexts":{"pageInfo":{"hasNextPage":true},"nodes":[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"}]}}}}]},
+  "closingIssuesReferences":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
+CB="$(cfact "$("$SPARK" facts --issue 733)")"
+assert_contains "a bounded rollup is an unknown, not a shorter answer" "bounded" \
+  "$(printf '%s' "$CB" | jq -r '.detail.reason')"
+
+# An issue has no head, so no required check can be in a state against it. R17
+# says such a fact names the WORK UNIT rather than the repository.
+graph_stub '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,"subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},"blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
+CI="$(cfact "$("$SPARK" facts --issue 733)")"
+assert_contains "an issue has no required checks to be in a state" "NOT_APPLICABLE" \
+  "$(printf '%s' "$CI" | jq -r '.status')"
+assert_eq "and names the work unit rather than the repository" "github.com/jwogrady/spark#733" \
+  "$(printf '%s' "$CI" | jq -r '.source.identity')"
+[ "$(printf '%s' "$CI" | jq -r '[.invalidators[] | select(startswith("ruleset:"))] | length')" = "0" ] \
+  && ok || bad "a not-applicable checks fact lists a ruleset it never consulted"
+[ "$(printf '%s' "$CI" | jq -r 'has("detail")')" = "false" ] && ok \
+  || bad "a not-applicable checks fact carries a detail"
+
+# --- a legacy status context is not a completed check run ------------------
+# StatusContext carries no separate status: its state is both what it is doing
+# and how it ended. Synthesizing COMPLETED for it turned PENDING and EXPECTED
+# into completed non-successes — a check still running reported as one that
+# failed, which is the opposite of what a caller waiting on it needs.
+
+pr_with_contexts() { # pr_with_contexts <contexts json array>
+  graph_stub '{"__typename":"PullRequest","number":733,"repository":{"nameWithOwner":"jwogrady/spark"},
+    "updatedAt":"2026-09-08T10:00:00Z","headRefOid":"'"$HEADOID"'","baseRefName":"master",
+    "baseRefOid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "baseRef":{"target":{"oid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}},
+    "commits":{"nodes":[{"commit":{"oid":"'"$HEADOID"'","statusCheckRollup":{"contexts":{"pageInfo":{"hasNextPage":false},"nodes":'"$1"'}}}}]},
+    "closingIssuesReferences":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
+}
+
+pr_with_contexts '[{"__typename":"StatusContext","context":"doctor","state":"PENDING"},
+                   {"__typename":"StatusContext","context":"tests","state":"EXPECTED"}]'
+CSC="$(cfact "$("$SPARK" facts --issue 733)")"
+assert_eq "a status context still running is pending, not failed" "doctor=pending,tests=pending" \
+  "$(printf '%s' "$CSC" | jq -r '[.value.results[] | "\(.name)=\(.state)"] | join(",")')"
+
+pr_with_contexts '[{"__typename":"StatusContext","context":"doctor","state":"SUCCESS"},
+                   {"__typename":"StatusContext","context":"tests","state":"FAILURE"}]'
+CSD="$(cfact "$("$SPARK" facts --issue 733)")"
+assert_eq "and a settled status context keeps its own verdict" "doctor=success,tests=failure" \
+  "$(printf '%s' "$CSD" | jq -r '[.value.results[] | "\(.name)=\(.state)"] | join(",")')"
+
+# --- "requires nothing" is a claim; a malformed reply is not that claim -----
+# Both would otherwise be an empty required set. One is a valid answer, the
+# other is no answer at all, and hashing the second would ESTABLISH a fact
+# saying the branch requires nothing.
+RULES_SAVED="$RULES"
+RULES='{"message":"Not Found"}'
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"}]'
+[ -z "$(cfact "$("$SPARK" facts --issue 733 2>/dev/null)")" ] && ok \
+  || bad "a branch-rules reply that was not the promised array established a checks fact"
+RULES="$RULES_SAVED"
+
+# An empty array IS a valid answer: this branch requires nothing, versioned.
+RULES='[]'
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"}]'
+CE="$(cfact "$("$SPARK" facts --issue 733)")"
+assert_contains "a branch that requires nothing still establishes" "ESTABLISHED" \
+  "$(printf '%s' "$CE" | jq -r '.status')"
+assert_eq "with an empty required set" "0" \
+  "$(printf '%s' "$CE" | jq -r '.value.required | length')"
+printf '%s' "$(printf '%s' "$CE" | jq -r '.versions["ruleset:github.com/jwogrady/spark"]')" \
+  | grep -Eq '^[0-9a-f]{40}$' && ok \
+  || bad "requiring nothing produced no digest, so the answer could not go stale"
+RULES="$RULES_SAVED"
+
+# --- a branch name is ONE path segment -------------------------------------
+# `feat/x` interpolated raw becomes two segments and the lookup fails for a
+# base branch that is perfectly valid.
+: > "$GH_CALL_LOG"
+graph_stub '{"__typename":"PullRequest","number":733,"repository":{"nameWithOwner":"jwogrady/spark"},
+  "updatedAt":"2026-09-08T10:00:00Z","headRefOid":"'"$HEADOID"'","baseRefName":"release/v1.0",
+  "baseRefOid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "baseRef":{"target":{"oid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}},
+  "commits":{"nodes":[{"commit":{"oid":"'"$HEADOID"'","statusCheckRollup":{"contexts":{"pageInfo":{"hasNextPage":false},"nodes":[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"},{"__typename":"CheckRun","name":"tests","conclusion":"SUCCESS","status":"COMPLETED"}]}}}}]},
+  "closingIssuesReferences":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
+"$SPARK" facts --issue 733 >/dev/null 2>&1
+grep -q 'rules/branches/release%2Fv1.0' "$GH_CALL_LOG" && ok \
+  || bad "a base branch containing a slash was not asked for as one path segment"
+
+# --- two rulesets requiring the same check is still one check --------------
+# R12 admits exactly one result per required check name. Overlapping rulesets
+# are ordinary in a repository that layers an org ruleset over a repo one, and
+# emitting `doctor` twice would produce two results for one name and let the
+# same check be counted twice toward merge.
+RULES='[{"type":"required_status_checks","ruleset_id":1,"parameters":{"required_status_checks":[{"context":"doctor"},{"context":"tests"}]}},
+        {"type":"required_status_checks","ruleset_id":2,"parameters":{"required_status_checks":[{"context":"doctor"}]}}]'
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"},
+                 {"__typename":"CheckRun","name":"tests","conclusion":"SUCCESS","status":"COMPLETED"}]'
+CD="$(cfact "$("$SPARK" facts --issue 733)")"
+assert_eq "a check required by two rulesets is named once" "doctor,tests" \
+  "$(printf '%s' "$CD" | jq -r '.value.required | join(",")')"
+assert_eq "and carries exactly one result" "doctor=success,tests=success" \
+  "$(printf '%s' "$CD" | jq -r '[.value.results[] | "\(.name)=\(.state)"] | join(",")')"
+# The digest still distinguishes the two-ruleset configuration from the one-
+# ruleset one: R20 versions the collection as read, not the deduplicated view.
+DIG_TWO="$(printf '%s' "$CD" | jq -r '.versions["ruleset:github.com/jwogrady/spark"]')"
+RULES='[{"type":"required_status_checks","ruleset_id":1,"parameters":{"required_status_checks":[{"context":"doctor"},{"context":"tests"}]}}]'
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"},
+                 {"__typename":"CheckRun","name":"tests","conclusion":"SUCCESS","status":"COMPLETED"}]'
+CD1="$(cfact "$("$SPARK" facts --issue 733)")"
+DIG_ONE="$(printf '%s' "$CD1" | jq -r '.versions["ruleset:github.com/jwogrady/spark"]')"
+[ "$DIG_TWO" != "$DIG_ONE" ] && ok \
+  || bad "dropping a duplicate name also dropped the ruleset it came from, so the digest could not tell the two configurations apart"
+RULES="$RULES_SAVED"
+
+# --- a malformed required-check rule is not "nothing is required" ----------
+# The dangerous failure here is silent: a rule of the right TYPE whose shape
+# cannot be read, discarded quietly, establishes an empty required set, and an
+# empty required set means every check is satisfied and everything merges.
+RULES='[{"type":"required_status_checks","ruleset_id":1,"parameters":{"required_status_checks":"doctor"}}]'
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"}]'
+CM="$("$SPARK" facts --issue 733 2>/dev/null)"
+[ -z "$(cfact "$CM")" ] && ok \
+  || bad "a required-status-checks rule that was not readable still produced a checks fact"
+
+# The same holds one level down: a well-formed rule whose entries are not
+# contexts is unreadable, not empty.
+RULES='[{"type":"required_status_checks","ruleset_id":1,"parameters":{"required_status_checks":[{"context":"doctor"},{"ctx":"tests"}]}}]'
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"}]'
+CM2="$("$SPARK" facts --issue 733 2>/dev/null)"
+[ -z "$(cfact "$CM2")" ] && ok \
+  || bad "an unreadable required-check entry was discarded and the rest established as the whole truth"
+
+# Rules of OTHER types are still ignored: their shape is not this reader to
+# police, and refusing on them would make an unrelated ruleset break checks.
+RULES='[{"type":"deletion","parameters":"whatever"},
+        {"type":"required_status_checks","ruleset_id":1,"parameters":{"required_status_checks":[{"context":"doctor"}]}}]'
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"}]'
+CM3="$(cfact "$("$SPARK" facts --issue 733)")"
+assert_eq "an unrelated rule type does not refuse the read" "doctor" \
+  "$(printf '%s' "$CM3" | jq -r '.value.required | join(",")')"
+RULES="$RULES_SAVED"
+
+# --- a pull request that carried no commit observed nothing ---------------
+# `commits(last:1)` always answers with the head commit, so an empty array is
+# a reply that did not carry the observation. Admitted, it binds nothing to
+# the head, every required check reads `missing`, and the fact establishes
+# that from no evidence.
+graph_stub '{"__typename":"PullRequest","number":733,"repository":{"nameWithOwner":"jwogrady/spark"},
+  "updatedAt":"2026-09-08T10:00:00Z","headRefOid":"'"$HEADOID"'","baseRefName":"master",
+  "baseRefOid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "baseRef":{"target":{"oid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}},
+  "commits":{"nodes":[]},
+  "closingIssuesReferences":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
+CN="$("$SPARK" facts --issue 733 2>/dev/null)"
+[ -z "$(cfact "$CN")" ] && ok \
+  || bad "a reply that carried no commit still established the state of every required check"
+
+# --- one name observed in two states is a CONFLICT, not the first row -----
+# A rollup can carry a re-run beside the run it replaces. R8: two authoritative
+# inputs that disagree are a CONFLICT, and no first-write rule resolves them.
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"},
+                 {"__typename":"CheckRun","name":"doctor","conclusion":"FAILURE","status":"COMPLETED"},
+                 {"__typename":"CheckRun","name":"tests","conclusion":"SUCCESS","status":"COMPLETED"}]'
+CC="$(cfact "$("$SPARK" facts --issue 733)")"
+assert_eq "a required check observed in two states conflicts" "CONFLICT" \
+  "$(printf '%s' "$CC" | jq -r '.status')"
+assert_contains "and the conflict names the check" "doctor" \
+  "$(printf '%s' "$CC" | jq -r '.detail.reason')"
+printf '%s' "$CC" | jq -e 'has("value") | not' >/dev/null && ok \
+  || bad "a CONFLICT carried a value, which R6 forbids"
+
+# The order of the two rows must not decide the answer: reversing them is the
+# same contradiction, and a first-write rule would flip the result.
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"FAILURE","status":"COMPLETED"},
+                 {"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"},
+                 {"__typename":"CheckRun","name":"tests","conclusion":"SUCCESS","status":"COMPLETED"}]'
+assert_eq "and conflicts whichever row came first" "CONFLICT" \
+  "$(printf '%s' "$(cfact "$("$SPARK" facts --issue 733)")" | jq -r '.status')"
+
+# Repetition is not contradiction: two runs that AGREE answer normally.
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"},
+                 {"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"},
+                 {"__typename":"CheckRun","name":"tests","conclusion":"SUCCESS","status":"COMPLETED"}]'
+CA="$(cfact "$("$SPARK" facts --issue 733)")"
+assert_eq "two runs that agree are one result" "doctor=success,tests=success" \
+  "$(printf '%s' "$CA" | jq -r '[.value.results[] | "\(.name)=\(.state)"] | join(",")')"
+
+# A duplicate on a name nobody requires says nothing about this fact.
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"},
+                 {"__typename":"CheckRun","name":"tests","conclusion":"SUCCESS","status":"COMPLETED"},
+                 {"__typename":"CheckRun","name":"lint","conclusion":"SUCCESS","status":"COMPLETED"},
+                 {"__typename":"CheckRun","name":"lint","conclusion":"FAILURE","status":"COMPLETED"}]'
+assert_eq "a contradiction on an unrequired check does not conflict" "ESTABLISHED" \
+  "$(printf '%s' "$(cfact "$("$SPARK" facts --issue 733)")" | jq -r '.status')"
+
+# --- a requiring ruleset must say which ruleset it is ---------------------
+# The digest is declared to cover every requiring ruleset id. Defaulting an
+# absent id to 0 makes "some ruleset nobody identified" hash like a real
+# ruleset 0, and freshness then rests on provenance nobody observed.
+RULES='[{"type":"required_status_checks","parameters":{"required_status_checks":[{"context":"doctor"}]}}]'
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"}]'
+CR="$("$SPARK" facts --issue 733 2>/dev/null)"
+[ -z "$(cfact "$CR")" ] && ok \
+  || bad "a requiring ruleset with no id was accepted and its provenance invented"
+RULES="$RULES_SAVED"
+
+# --- a requirement can bind the app that must answer it -------------------
+# GitHub lets a rule require `doctor` FROM a named app. A check of that name
+# from anyone else does not satisfy it, and reading only the name would let a
+# look-alike pass the gate.
+RULES='[{"type":"required_status_checks","ruleset_id":1,"parameters":{"required_status_checks":[{"context":"doctor","integration_id":15368}]}}]'
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED","checkSuite":{"app":{"databaseId":15368}}}]'
+assert_eq "the required app answering satisfies the requirement" "doctor=success" \
+  "$(printf '%s' "$(cfact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.results[] | "\(.name)=\(.state)"] | join(",")')"
+
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED","checkSuite":{"app":{"databaseId":99999}}}]'
+assert_eq "the same name from another app does not" "doctor=missing" \
+  "$(printf '%s' "$(cfact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.results[] | "\(.name)=\(.state)"] | join(",")')"
+
+# A status context carries no app, so it cannot answer an app-bound
+# requirement however green it is.
+pr_with_checks '[{"__typename":"StatusContext","context":"doctor","state":"SUCCESS"}]'
+assert_eq "and neither does a status context with no producer" "doctor=missing" \
+  "$(printf '%s' "$(cfact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.results[] | "\(.name)=\(.state)"] | join(",")')"
+
+# Swapping the required app is a change in what is required, so freshness must
+# see it: the digest cannot be blind to the binding.
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED","checkSuite":{"app":{"databaseId":15368}}}]'
+DIG_A="$(printf '%s' "$(cfact "$("$SPARK" facts --issue 733)")" | jq -r '.versions["ruleset:github.com/jwogrady/spark"]')"
+RULES='[{"type":"required_status_checks","ruleset_id":1,"parameters":{"required_status_checks":[{"context":"doctor","integration_id":424242}]}}]'
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED","checkSuite":{"app":{"databaseId":15368}}}]'
+DIG_B="$(printf '%s' "$(cfact "$("$SPARK" facts --issue 733)")" | jq -r '.versions["ruleset:github.com/jwogrady/spark"]')"
+[ -n "$DIG_A" ] && [ "$DIG_A" != "$DIG_B" ] && ok \
+  || bad "changing the app a check is required from left the ruleset digest unchanged"
+
+# An unbound requirement is still satisfied by the name alone: binding is
+# optional, and this repository's own rules do not use it.
+RULES='[{"type":"required_status_checks","ruleset_id":1,"parameters":{"required_status_checks":[{"context":"doctor"}]}}]'
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED","checkSuite":{"app":{"databaseId":15368}}}]'
+assert_eq "an unbound requirement takes the name from any producer" "doctor=success" \
+  "$(printf '%s' "$(cfact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.results[] | "\(.name)=\(.state)"] | join(",")')"
+
+# --- two requirements wearing one name are aggregated conservatively ------
+# R12 admits one result per name, so a name required from two apps reports
+# `success` only when both answered.
+RULES='[{"type":"required_status_checks","ruleset_id":1,"parameters":{"required_status_checks":[{"context":"doctor","integration_id":1},{"context":"doctor","integration_id":2}]}}]'
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED","checkSuite":{"app":{"databaseId":1}}},
+                 {"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED","checkSuite":{"app":{"databaseId":2}}}]'
+CG="$(cfact "$("$SPARK" facts --issue 733)")"
+assert_eq "one name required twice is one result" "1" \
+  "$(printf '%s' "$CG" | jq -r '.value.results | length')"
+assert_eq "and both answering is success" "doctor=success" \
+  "$(printf '%s' "$CG" | jq -r '[.value.results[] | "\(.name)=\(.state)"] | join(",")')"
+
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED","checkSuite":{"app":{"databaseId":1}}}]'
+assert_eq "one of the two silent is not success" "doctor=missing" \
+  "$(printf '%s' "$(cfact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.results[] | "\(.name)=\(.state)"] | join(",")')"
+
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED","checkSuite":{"app":{"databaseId":1}}},
+                 {"__typename":"CheckRun","name":"doctor","conclusion":"FAILURE","status":"COMPLETED","checkSuite":{"app":{"databaseId":2}}}]'
+assert_eq "and one of the two failing is failure" "doctor=failure" \
+  "$(printf '%s' "$(cfact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.results[] | "\(.name)=\(.state)"] | join(",")')"
+RULES="$RULES_SAVED"
+
+# --- a context bearing a delimiter is refused, not transported ------------
+# These rows are TSV and the required names travel newline-delimited. A tab or
+# newline inside a context splits a row, mismatches an observed name, and lets
+# two different collections serialize to one digest.
+RULES="$(printf '[{"type":"required_status_checks","ruleset_id":1,"parameters":{"required_status_checks":[{"context":"doc\\ttor"}]}}]')"
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"}]'
+[ -z "$(cfact "$("$SPARK" facts --issue 733 2>/dev/null)")" ] && ok \
+  || bad "a required context containing a tab was carried into the rows anyway"
+
+RULES="$(printf '[{"type":"required_status_checks","ruleset_id":1,"parameters":{"required_status_checks":[{"context":"doc\\ntor"}]}}]')"
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"}]'
+[ -z "$(cfact "$("$SPARK" facts --issue 733 2>/dev/null)")" ] && ok \
+  || bad "a required context containing a newline was carried into the rows anyway"
+RULES="$RULES_SAVED"
+
+# --- an app id that is not a number is malformed --------------------------
+RULES='[{"type":"required_status_checks","ruleset_id":1,"parameters":{"required_status_checks":[{"context":"doctor","integration_id":"15368"}]}}]'
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"}]'
+[ -z "$(cfact "$("$SPARK" facts --issue 733 2>/dev/null)")" ] && ok \
+  || bad "a requirement whose app id was not a number was accepted"
+RULES="$RULES_SAVED"
+
+# --- a required name of no characters is not "nothing is required" -------
+# An empty context survives every string check and is then skipped when the
+# results are built, so the rule establishes an empty required set — and an
+# empty required set means every check is satisfied and everything merges.
+RULES='[{"type":"required_status_checks","ruleset_id":1,"parameters":{"required_status_checks":[{"context":""}]}}]'
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"}]'
+[ -z "$(cfact "$("$SPARK" facts --issue 733 2>/dev/null)")" ] && ok \
+  || bad "a required context of no characters established a required set anyway"
+
+# The same emptiness beside a real requirement must not be silently dropped
+# either: the reply is unreadable, not partially readable.
+RULES='[{"type":"required_status_checks","ruleset_id":1,"parameters":{"required_status_checks":[{"context":"doctor"},{"context":""}]}}]'
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"}]'
+[ -z "$(cfact "$("$SPARK" facts --issue 733 2>/dev/null)")" ] && ok \
+  || bad "an empty context beside a real one was quietly discarded"
+RULES="$RULES_SAVED"
+
+# --- a name @tsv would rewrite is refused, so what is carried round-trips -
+# `@tsv` escapes backslash, tab, newline and carriage return, and nothing
+# decodes them, so a real context of `foo\bar` would be carried and reported
+# as `foo\\bar` — a different check name than the one required. Refusing the
+# characters the encoding rewrites makes it an identity for what is admitted.
+RULES="$(printf '[{"type":"required_status_checks","ruleset_id":1,"parameters":{"required_status_checks":[{"context":"foo\\\\bar"}]}}]')"
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"}]'
+[ -z "$(cfact "$("$SPARK" facts --issue 733 2>/dev/null)")" ] && ok \
+  || bad "a required context containing a backslash was carried and silently rewritten"
+
+# A control character that TSV would survive but rendering would not.
+RULES="$(printf '[{"type":"required_status_checks","ruleset_id":1,"parameters":{"required_status_checks":[{"context":"doc\\u0001tor"}]}}]')"
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"}]'
+[ -z "$(cfact "$("$SPARK" facts --issue 733 2>/dev/null)")" ] && ok \
+  || bad "a required context containing a control character was carried anyway"
+
+# What IS admitted round-trips exactly, including the punctuation real check
+# names use.
+RULES='[{"type":"required_status_checks","ruleset_id":1,"parameters":{"required_status_checks":[{"context":"build (ubuntu-latest, 3.11) / test"}]}}]'
+pr_with_checks '[{"__typename":"CheckRun","name":"build (ubuntu-latest, 3.11) / test","conclusion":"SUCCESS","status":"COMPLETED"}]'
+CRT="$(cfact "$("$SPARK" facts --issue 733)")"
+assert_eq "an ordinary check name round-trips exactly" "build (ubuntu-latest, 3.11) / test" \
+  "$(printf '%s' "$CRT" | jq -r '.value.required[0]')"
+assert_eq "and is matched against the run of that name" "success" \
+  "$(printf '%s' "$CRT" | jq -r '.value.results[0].state')"
+RULES="$RULES_SAVED"
+
+# --- a malformed run is no observation of a run --------------------------
+# jq resolves a MISSING field to null, so `.checkSuite == null` alone cannot
+# tell a run that genuinely has no suite from a reply that omitted the field —
+# and they mean opposite things: evidence that no installation produced the
+# run, versus no evidence at all. The query always asks, so absence is
+# malformed. Each of these must refuse the fact rather than normalize into it.
+# The shared stub fills in a missing conclusion and checkSuite, because almost
+# every fixture is about something else. These assertions are about ABSENCE
+# itself, so they build the reply without that help.
+raw_pr_checks() { # raw_pr_checks <contexts json array> — no stub defaults
+  local node='{"__typename":"PullRequest","number":733,"repository":{"nameWithOwner":"jwogrady/spark"},
+    "updatedAt":"2026-09-08T10:00:00Z","headRefOid":"'"$HEADOID"'","baseRefName":"master",
+    "baseRefOid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","milestone":null,
+    "baseRef":{"target":{"oid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}},
+    "commits":{"nodes":[{"commit":{"oid":"'"$HEADOID"'","statusCheckRollup":{"contexts":{"pageInfo":{"hasNextPage":false},"nodes":'"$1"'}}}}]},
+    "closingIssuesReferences":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
+  stub_gh "$WORK/bin/gh" <<STUB
+printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
+case "\$*" in
+  *graphql*) answer_json '{"data":{"repository":{"issueOrPullRequest":$node}}}' ;;
+  *"repos/jwogrady/spark/rules/branches/"*) answer_json '$RULES' ;;
+  *"--hostname github.com repos/jwogrady/spark"*) answer_json '$NODE' ;;
+  *) exit 1 ;;
+esac
+STUB
+}
+refuses_checks() { # refuses_checks <label> <contexts json array>
+  raw_pr_checks "$2"
+  [ -z "$(cfact "$("$SPARK" facts --issue 733 2>/dev/null)")" ] && ok || bad "$1"
+}
+
+refuses_checks "a conclusion that is not null or a string was normalized anyway" \
+  '[{"__typename":"CheckRun","name":"doctor","conclusion":7,"status":"COMPLETED","checkSuite":null}]'
+refuses_checks "a run with no conclusion field at all was read as inconclusive" \
+  '[{"__typename":"CheckRun","name":"doctor","status":"COMPLETED","checkSuite":null}]'
+refuses_checks "an omitted checkSuite was read as a run produced by nobody" \
+  '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"}]'
+refuses_checks "a suite with no app field was read as a suite with no app" \
+  '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED","checkSuite":{}}]'
+refuses_checks "an app with no id was read as an app" \
+  '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED","checkSuite":{"app":{}}}]'
+refuses_checks "an app id that is not a number was accepted" \
+  '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED","checkSuite":{"app":{"databaseId":"15368"}}}]'
+refuses_checks "a suite that is not an object was accepted" \
+  '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED","checkSuite":7}]'
+
+# The legitimately absent shapes are still admitted, explicitly stated: a run
+# with no suite, and a suite with no app, are evidence rather than gaps.
+raw_pr_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED","checkSuite":null},
+                {"__typename":"CheckRun","name":"tests","conclusion":"SUCCESS","status":"COMPLETED","checkSuite":{"app":null}}]'
+assert_eq "a run with no suite and a suite with no app are both evidence" "doctor=success,tests=success" \
+  "$(printf '%s' "$(cfact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.results[] | "\(.name)=\(.state)"] | join(",")')"
+
+# A run still in flight has a null conclusion, which is the ordinary case the
+# strictness must not break.
+raw_pr_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":null,"status":"IN_PROGRESS","checkSuite":null},
+                {"__typename":"CheckRun","name":"tests","conclusion":"SUCCESS","status":"COMPLETED","checkSuite":null}]'
+assert_eq "a run in flight carries a null conclusion and stays pending" "doctor=pending,tests=success" \
+  "$(printf '%s' "$(cfact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.results[] | "\(.name)=\(.state)"] | join(",")')"
 
 finish
