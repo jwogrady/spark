@@ -22,7 +22,7 @@ MODULE_RESP = {
 "canonicalization": [
     "tm_is_key", "tm_is_int_key", "tm_valid_run", "tm_cache_ratio", "tm_delta", "bg_is_key", "bg_is_int_key",
     "bg_stage", "ev_tokens", "plan_label_scope", "artifact_labels", "label_set_equal", "plan_body_matches",
-    "repo_locator_normalize", "repo_identity", "facts_unreadable_reason", "facts_canonical", "facts_state_canonical", "facts_check_state", "facts_graph_entry",
+    "repo_locator_normalize", "repo_identity", "facts_unreadable_reason", "facts_canonical", "facts_state_canonical", "facts_check_state", "facts_check_worse", "facts_graph_entry",
     "facts_unit_kind", "facts_unit_locator", "facts_error_absent"],
 "domain-semantics": [
     "tm_hot_cycle", "cmd_telemetry", "bg_apply_staged", "bg_ambiguous", "bg_write", "bg_over", "bg_over_cost",

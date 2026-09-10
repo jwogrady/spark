@@ -2378,4 +2378,84 @@ CR="$("$SPARK" facts --issue 733 2>/dev/null)"
   || bad "a requiring ruleset with no id was accepted and its provenance invented"
 RULES="$RULES_SAVED"
 
+# --- a requirement can bind the app that must answer it -------------------
+# GitHub lets a rule require `doctor` FROM a named app. A check of that name
+# from anyone else does not satisfy it, and reading only the name would let a
+# look-alike pass the gate.
+RULES='[{"type":"required_status_checks","ruleset_id":1,"parameters":{"required_status_checks":[{"context":"doctor","integration_id":15368}]}}]'
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED","checkSuite":{"app":{"databaseId":15368}}}]'
+assert_eq "the required app answering satisfies the requirement" "doctor=success" \
+  "$(printf '%s' "$(cfact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.results[] | "\(.name)=\(.state)"] | join(",")')"
+
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED","checkSuite":{"app":{"databaseId":99999}}}]'
+assert_eq "the same name from another app does not" "doctor=missing" \
+  "$(printf '%s' "$(cfact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.results[] | "\(.name)=\(.state)"] | join(",")')"
+
+# A status context carries no app, so it cannot answer an app-bound
+# requirement however green it is.
+pr_with_checks '[{"__typename":"StatusContext","context":"doctor","state":"SUCCESS"}]'
+assert_eq "and neither does a status context with no producer" "doctor=missing" \
+  "$(printf '%s' "$(cfact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.results[] | "\(.name)=\(.state)"] | join(",")')"
+
+# Swapping the required app is a change in what is required, so freshness must
+# see it: the digest cannot be blind to the binding.
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED","checkSuite":{"app":{"databaseId":15368}}}]'
+DIG_A="$(printf '%s' "$(cfact "$("$SPARK" facts --issue 733)")" | jq -r '.versions["ruleset:github.com/jwogrady/spark"]')"
+RULES='[{"type":"required_status_checks","ruleset_id":1,"parameters":{"required_status_checks":[{"context":"doctor","integration_id":424242}]}}]'
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED","checkSuite":{"app":{"databaseId":15368}}}]'
+DIG_B="$(printf '%s' "$(cfact "$("$SPARK" facts --issue 733)")" | jq -r '.versions["ruleset:github.com/jwogrady/spark"]')"
+[ -n "$DIG_A" ] && [ "$DIG_A" != "$DIG_B" ] && ok \
+  || bad "changing the app a check is required from left the ruleset digest unchanged"
+
+# An unbound requirement is still satisfied by the name alone: binding is
+# optional, and this repository's own rules do not use it.
+RULES='[{"type":"required_status_checks","ruleset_id":1,"parameters":{"required_status_checks":[{"context":"doctor"}]}}]'
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED","checkSuite":{"app":{"databaseId":15368}}}]'
+assert_eq "an unbound requirement takes the name from any producer" "doctor=success" \
+  "$(printf '%s' "$(cfact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.results[] | "\(.name)=\(.state)"] | join(",")')"
+
+# --- two requirements wearing one name are aggregated conservatively ------
+# R12 admits one result per name, so a name required from two apps reports
+# `success` only when both answered.
+RULES='[{"type":"required_status_checks","ruleset_id":1,"parameters":{"required_status_checks":[{"context":"doctor","integration_id":1},{"context":"doctor","integration_id":2}]}}]'
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED","checkSuite":{"app":{"databaseId":1}}},
+                 {"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED","checkSuite":{"app":{"databaseId":2}}}]'
+CG="$(cfact "$("$SPARK" facts --issue 733)")"
+assert_eq "one name required twice is one result" "1" \
+  "$(printf '%s' "$CG" | jq -r '.value.results | length')"
+assert_eq "and both answering is success" "doctor=success" \
+  "$(printf '%s' "$CG" | jq -r '[.value.results[] | "\(.name)=\(.state)"] | join(",")')"
+
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED","checkSuite":{"app":{"databaseId":1}}}]'
+assert_eq "one of the two silent is not success" "doctor=missing" \
+  "$(printf '%s' "$(cfact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.results[] | "\(.name)=\(.state)"] | join(",")')"
+
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED","checkSuite":{"app":{"databaseId":1}}},
+                 {"__typename":"CheckRun","name":"doctor","conclusion":"FAILURE","status":"COMPLETED","checkSuite":{"app":{"databaseId":2}}}]'
+assert_eq "and one of the two failing is failure" "doctor=failure" \
+  "$(printf '%s' "$(cfact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.results[] | "\(.name)=\(.state)"] | join(",")')"
+RULES="$RULES_SAVED"
+
+# --- a context bearing a delimiter is refused, not transported ------------
+# These rows are TSV and the required names travel newline-delimited. A tab or
+# newline inside a context splits a row, mismatches an observed name, and lets
+# two different collections serialize to one digest.
+RULES="$(printf '[{"type":"required_status_checks","ruleset_id":1,"parameters":{"required_status_checks":[{"context":"doc\\ttor"}]}}]')"
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"}]'
+[ -z "$(cfact "$("$SPARK" facts --issue 733 2>/dev/null)")" ] && ok \
+  || bad "a required context containing a tab was carried into the rows anyway"
+
+RULES="$(printf '[{"type":"required_status_checks","ruleset_id":1,"parameters":{"required_status_checks":[{"context":"doc\\ntor"}]}}]')"
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"}]'
+[ -z "$(cfact "$("$SPARK" facts --issue 733 2>/dev/null)")" ] && ok \
+  || bad "a required context containing a newline was carried into the rows anyway"
+RULES="$RULES_SAVED"
+
+# --- an app id that is not a number is malformed --------------------------
+RULES='[{"type":"required_status_checks","ruleset_id":1,"parameters":{"required_status_checks":[{"context":"doctor","integration_id":"15368"}]}}]'
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"}]'
+[ -z "$(cfact "$("$SPARK" facts --issue 733 2>/dev/null)")" ] && ok \
+  || bad "a requirement whose app id was not a number was accepted"
+RULES="$RULES_SAVED"
+
 finish

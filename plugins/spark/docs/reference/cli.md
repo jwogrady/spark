@@ -2264,6 +2264,17 @@ vocabulary is `success | failure | pending | missing`, and R12 makes a merge
 derivable only when every result is `success`, so a check that never ran its
 assertions must not read as one that passed.
 
+**A requirement can name the app that must answer it.** GitHub lets a rule bind
+a context to an integration, and a check of that name from any other producer
+then does not satisfy it — so the fact reads producer identity as well as name,
+and an unanswered binding is `missing` rather than satisfied by a look-alike. A
+status context carries no producer and so can never answer an app-bound
+requirement. The binding is part of the ruleset digest, because swapping which
+app must answer is a change in what is required and freshness has to see it.
+Where several requirements wear one displayed context, R12 still admits one
+result: the name is `success` only when every requirement wearing it is
+satisfied, and otherwise reports the most decisive obstacle among them.
+
 **One name observed in two states is a `CONFLICT`.** A rollup can carry a
 re-run beside the run it replaces, or two workflows that named their jobs
 alike. When a *required* name is observed in states that disagree, the fact is

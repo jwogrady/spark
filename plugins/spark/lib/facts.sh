@@ -719,7 +719,7 @@ facts_unit_node() {
             commits(last:1){ nodes{ commit{ oid statusCheckRollup{
               contexts(first:100){ pageInfo{ hasNextPage } nodes{
                 __typename
-                ... on CheckRun { name conclusion status }
+                ... on CheckRun { name conclusion status checkSuite{ app{ databaseId } } }
                 ... on StatusContext { context state }
               } }
             } } } }
@@ -797,6 +797,15 @@ facts_unit_node() {
       and (if .__typename == "CheckRun"
            then (.name | type) == "string" and (.status | type) == "string"
                 and (has("conclusion"))
+                # A run may legitimately have no suite and a suite no app — a
+                # status posted by a user is not produced by an installation.
+                # What is not admissible is an app whose id is not a number,
+                # because that id is what a requirement binds to.
+                and ((.checkSuite == null)
+                     or (((.checkSuite | type) == "object")
+                         and ((.checkSuite.app == null)
+                              or (((.checkSuite.app | type) == "object")
+                                  and ((.checkSuite.app.databaseId | type) == "number")))))
            elif .__typename == "StatusContext"
            then (.context | type) == "string" and (.state | type) == "string"
            else false end);
@@ -879,8 +888,10 @@ facts_unit_node() {
             then ["truncated", "checks"] | @tsv else empty end),
            ($u.commits.nodes[]? | .commit.statusCheckRollup?.contexts.nodes[]?
              | if .__typename == "CheckRun"
-               then ["check", .name, (.conclusion // ""), .status]
-               else ["check", .context, .state, "STATUS_CONTEXT"] end | @tsv),
+               then ["check", .name, (.conclusion // ""), .status,
+                     (if (.checkSuite != null) and (.checkSuite.app != null)
+                      then (.checkSuite.app.databaseId | tostring) else "" end)]
+               else ["check", .context, .state, "STATUS_CONTEXT", ""] end | @tsv),
            (if $u.closingIssuesReferences.pageInfo.hasNextPage
             then ["truncated", "implements"] | @tsv else empty end),
            ($u.closingIssuesReferences.nodes[]
@@ -1414,6 +1425,19 @@ facts_rules_read() {
   # So relevant rules are validated, and any malformed one refuses the read.
   # Rules of OTHER types are still ignored, because they say nothing about
   # required checks and their shape is not this function to police.
+  # A requirement is (ruleset, integration, context), not a context. GitHub
+  # lets a rule bind a context to the app that must produce it, and a check of
+  # that NAME from any other producer then does not satisfy it. Dropping the
+  # binding would let a look-alike check satisfy a requirement, and would leave
+  # the digest unchanged when the required producer is swapped — a change in
+  # what is required that freshness could not see.
+  #
+  # A context carrying a tab or a newline is refused rather than transported.
+  # These rows are TSV and the required names travel newline-delimited, so a
+  # control character inside a context splits a row, mismatches an observed
+  # name, and lets two different collections serialize to one digest. GitHub
+  # does not issue such names; a reply bearing one is not a requirement this
+  # reader can carry faithfully, so it carries none.
   out="$(gh api --hostname "$host" "repos/$nwo/rules/branches/$enc" \
     --jq 'if type == "array" then
             [ .[] | select((type == "object") and (.type? == "required_status_checks")) ] as $rel
@@ -1422,7 +1446,11 @@ facts_rules_read() {
                        | length) > 0
               then "malformed"
               elif ($rel | map(.parameters.required_status_checks[]
-                               | select((type != "object") or ((.context? | type) != "string")))
+                               | select((type != "object")
+                                        or ((.context? | type) != "string")
+                                        or (.context | test("[\\t\\n\\r]"))
+                                        or ((.integration_id? | type) as $t
+                                            | ($t != "number") and ($t != "null"))))
                          | length) > 0
               then "malformed"
               else
@@ -1430,7 +1458,9 @@ facts_rules_read() {
                 ([ $rel[]
                   | .ruleset_id as $r
                   | .parameters.required_status_checks[]
-                  | "\($r)|\(.context)" ]
+                  | [($r | tostring),
+                     (if .integration_id == null then "" else (.integration_id | tostring) end),
+                     .context] | @tsv ]
                  | sort | unique | .[])
               end
           else empty end' 2>/dev/null)" || rc=$?
@@ -1459,13 +1489,17 @@ facts_rules_read() {
   if [ -z "$digest" ]; then
     digest="$(printf '%s\n' "$out" | shasum 2>/dev/null | cut -d" " -f1)"
   fi
-  # The DIGEST is over every (ruleset, context) pair, because two rulesets each
-  # requiring `doctor` is a different configuration from one ruleset requiring
-  # it, and R20 versions the collection as read. The required NAMES are the
-  # contexts alone, deduplicated: R12 admits exactly one result per required
-  # check name, and `doctor` required twice is still one check to satisfy.
+  # The DIGEST is over every (ruleset, integration, context) triple, because
+  # two rulesets each requiring `doctor`, or one ruleset requiring it from a
+  # different app, is a different configuration; R20 versions the collection as
+  # read. The REQUIREMENT rows drop the ruleset and keep the producer binding,
+  # deduplicated: which ruleset asked does not change what must be satisfied,
+  # but which app must answer does.
   FACTS_RULES="$(printf 'digest\t%s\n' "$digest"; printf '%s\n' "$out" \
-    | while IFS= read -r row; do [ -n "$row" ] || continue; printf '%s\n' "${row#*|}"; done \
+    | while IFS= read -r row; do
+        [ -n "$row" ] || continue
+        printf '%s\t%s\n' "$(printf '%s' "$row" | cut -f2)" "$(printf '%s' "$row" | cut -f3-)"
+      done \
     | LC_ALL=C sort -u \
     | while IFS= read -r ctx; do printf 'required\t%s\n' "$ctx"; done)"
   FACTS_RULES_KEY="$key"
@@ -1492,6 +1526,22 @@ facts_rules_read() {
 # observed and completed, and do not satisfy the required-check contract.
 # Anything more permissive is a schema or governance change, and belongs to a
 # future one rather than to #733.
+# Which of two states a name should report when several requirements wear it.
+# `success` survives only when nothing else appears; otherwise the most
+# decisive obstacle wins, decisive meaning what a reader must act on first: a
+# failure is settled, a check that never ran is a gap, and a pending one is
+# merely unfinished. An empty left operand is the identity, so the first
+# requirement examined sets the state.
+facts_check_worse() {
+  case "$1" in "") printf '%s' "$2"; return 0 ;; esac
+  case "$1$2" in
+    *failure*) printf 'failure' ;;
+    *missing*) printf 'missing' ;;
+    *pending*) printf 'pending' ;;
+    *)         printf 'success' ;;
+  esac
+}
+
 facts_check_state() {
   # A legacy status context has no separate status field: its state IS both
   # what it is doing and how it ended. Synthesizing COMPLETED for it turned
@@ -1650,27 +1700,47 @@ facts_checks_fact() {
   # not define a precedence over, and inventing one here is exactly what R8
   # forbids. Duplicates that AGREE are not a disagreement, so they answer
   # normally: the ambiguity is in contradictory states, not in repetition.
+  # Several REQUIREMENTS can share one displayed context — the same name bound
+  # to two apps, or required by two rulesets — while R12 admits exactly one
+  # result per name. They are aggregated conservatively: the name is `success`
+  # only when every requirement wearing it is satisfied, and otherwise reports
+  # the most decisive obstacle among them. That is a derivation over DIFFERENT
+  # requirements, not a resolution of contradictory claims about one, so it is
+  # not the precedence R8 forbids.
   required=""; results=""; conflict=""
   while IFS= read -r name; do
     [ -n "$name" ] || continue
     required="${required:+$required,}\"$(json_escape "$name")\""
-    states="$(printf '%s\n' "$unit_rows" | awk -F'\t' -v n="$name" '$1 == "check" && $2 == n { print }' \
-      | while IFS= read -r row; do
-          [ -n "$row" ] || continue
-          facts_check_state "$(printf '%s' "$row" | cut -f4)" "$(printf '%s' "$row" | cut -f3)"
-          printf '\n'
-        done | LC_ALL=C sort -u)"
-    if [ -z "$states" ]; then
-      state=missing
-    elif [ "$(printf '%s\n' "$states" | wc -l)" -gt 1 ]; then
-      conflict="$name"
-      break
-    else
-      state="$states"
-    fi
+    state=""
+    while IFS= read -r integ; do
+      # A requirement that binds no integration is satisfied by the name alone;
+      # one that binds an app is satisfied only by that app's run. A status
+      # context carries no app, so it can never answer an app-bound
+      # requirement, and reads `missing` rather than being counted.
+      states="$(printf '%s\n' "$unit_rows" \
+        | awk -F'\t' -v n="$name" -v i="$integ" \
+              '$1 == "check" && $2 == n && (i == "" || $5 == i) { print }' \
+        | while IFS= read -r row; do
+            [ -n "$row" ] || continue
+            facts_check_state "$(printf '%s' "$row" | cut -f4)" "$(printf '%s' "$row" | cut -f3)"
+            printf '\n'
+          done | LC_ALL=C sort -u)"
+      if [ -z "$states" ]; then
+        one=missing
+      elif [ "$(printf '%s\n' "$states" | wc -l)" -gt 1 ]; then
+        conflict="$name"
+        break
+      else
+        one="$states"
+      fi
+      state="$(facts_check_worse "$state" "$one")"
+    done <<REQ
+$(printf '%s\n' "$FACTS_RULES" | awk -F'\t' -v c="$name" '$1 == "required" && $3 == c { print $2 }')
+REQ
+    [ -z "$conflict" ] || break
     results="${results:+$results,}{\"name\":\"$(json_escape "$name")\",\"state\":\"$state\"}"
   done <<EOF
-$(printf '%s\n' "$FACTS_RULES" | awk -F'\t' '$1 == "required" { print $2 }')
+$(printf '%s\n' "$FACTS_RULES" | awk -F'\t' '$1 == "required" { print $3 }' | LC_ALL=C sort -u)
 EOF
 
   if [ -n "$conflict" ]; then
