@@ -879,14 +879,45 @@ facts_unit_node() {
     # is not stable across an edit that reorders the list — but the contract
     # node updated_at invalidates the fact on any edit at all, so the answer is
     # restated rather than silently renumbered.
+    # A FENCED block is not structure. An issue body routinely quotes markdown
+    # in a fence, and a sample heading or sample checkbox inside one is an
+    # example of a criterion, never a criterion. Every line is first marked
+    # inside or outside a fence, and only lines outside it can be a heading or
+    # an item.
+    def fence_char:
+      if test("^ {0,3}`{3,}") then "`"
+      elif test("^ {0,3}~{3,}") then "~"
+      else null end;
     def acc_lines:
       (. / "\n") as $L
-      | [ range(0; $L | length) | select($L[.] | test("^#{1,6}[ \t]+Acceptance\\b"; "i")) ] as $starts
-      | if ($starts | length) == 0 then null
-        else ($starts[0] + 1) as $b
-          | ([ range($b; $L | length) | select($L[.] | test("^#{1,6}[ \t]")) ]) as $ends
+      | (reduce range(0; $L | length) as $i
+          ({open: null, inside: []};
+            ($L[$i] | fence_char) as $fc
+            | if $fc == null then .inside += [(.open != null)]
+              elif .open == null then (.inside += [false] | .open = $fc)
+              elif ($fc == .open) and ($L[$i] | test("^ {0,3}(`{3,}|~{3,})[ \t]*$"))
+                then (.inside += [false] | .open = null)
+              else .inside += [true]
+              end)
+         | .inside) as $F
+      | [ range(0; $L | length)
+          | select(($F[.] | not) and ($L[.] | test("^ {0,3}#{1,6}[ \t]+\\S"))) ] as $H
+      | ($H | map(select($L[.] | test("^ {0,3}#{1,6}[ \t]+Acceptance\\b"; "i")))) as $A
+      | if ($A | length) == 0 then null
+        else $A[0] as $a
+          | ($L[$a] | capture("^ {0,3}(?<h>#{1,6})") | .h | length) as $lvl
+          # The section ends at the next heading of the SAME or HIGHER level.
+          # A DEEPER heading groups criteria rather than ending them, so
+          # stopping at the first heading of any depth silently dropped every
+          # item under a subsection and could report a contract as declaring
+          # none.
+          | ([ $H[] | select(. > $a)
+               | select(($L[.] | capture("^ {0,3}(?<h>#{1,6})") | .h | length) <= $lvl) ]) as $ends
           | (if ($ends | length) == 0 then ($L | length) else $ends[0] end) as $e
-          | [ $L[$b:$e][] | select(test("^[ \t]*[-*][ \t]+\\[[ xX]\\]")) ]
+          | [ range($a + 1; $e)
+              | select($F[.] | not)
+              | $L[.]
+              | select(test("^[ \t]*[-*][ \t]+\\[[ xX]\\]")) ]
         end;
     def closing_ok:
       obj and (.nodes | type) == "array"

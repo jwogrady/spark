@@ -2826,4 +2826,47 @@ pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"whenever",
 [ -z "$(afact "$("$SPARK" facts --issue 733 2>/dev/null)")" ] && ok \
   || bad "a contract whose version was not a timestamp was read as an observation anyway"
 
+# --- the contract is markdown, and a fence is not structure ---------------
+# An issue body routinely quotes markdown inside a fence. A sample heading or
+# a sample checkbox in one is an EXAMPLE of a criterion, never a criterion,
+# and reading it as structure can select the wrong section entirely.
+FENCED='## Purpose\nprose\n\n```md\n## Acceptance\n- [x] a sample inside a fence\n```\n\n## Acceptance\n\n- [ ] the real first criterion\n- [x] the real second\n\n## Non-goals\n- [ ] not one\n'
+pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07:00:00Z",
+                    "repository":{"nameWithOwner":"jwogrady/spark"},"body":"'"$FENCED"'"}]'
+CF="$(afact "$("$SPARK" facts --issue 733)")"
+assert_eq "a fenced sample section is not the contract" "1=NOT_MET,2=MET" \
+  "$(printf '%s' "$CF" | jq -r '[.value.items[] | "\(.id)=\(.state)"] | join(",")')"
+
+# The same inside the real section: a fenced checkbox is not an item.
+INFENCE='## Acceptance\n\n- [ ] the only criterion\n\n```\n- [x] fenced, not a criterion\n```\n\n## Non-goals\n'
+pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07:00:00Z",
+                    "repository":{"nameWithOwner":"jwogrady/spark"},"body":"'"$INFENCE"'"}]'
+assert_eq "a fenced checkbox inside the section is not an item" "1" \
+  "$(printf '%s' "$(afact "$("$SPARK" facts --issue 733)")" | jq -r '.value.items | length')"
+
+# A tilde fence is a fence too, and a backtick run does not close it.
+TILDE='## Acceptance\n\n~~~\n- [x] fenced with tildes\n~~~\n\n- [ ] the only criterion\n'
+pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07:00:00Z",
+                    "repository":{"nameWithOwner":"jwogrady/spark"},"body":"'"$TILDE"'"}]'
+assert_eq "a tilde fence is honoured, and closes only on tildes" "1=NOT_MET" \
+  "$(printf '%s' "$(afact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.items[] | "\(.id)=\(.state)"] | join(",")')"
+
+# --- a deeper heading groups criteria, it does not end them ---------------
+# Stopping at the first heading of any depth silently dropped every item under
+# a subsection, and a contract whose criteria are all grouped that way would
+# have reported as declaring none.
+DEEP='## Acceptance\n\n- [ ] the ungrouped one\n\n### Functional requirements\n\n- [x] grouped, still a criterion\n\n### Non-functional\n\n- [ ] also still one\n\n## Non-goals\n\n- [ ] not one\n'
+pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07:00:00Z",
+                    "repository":{"nameWithOwner":"jwogrady/spark"},"body":"'"$DEEP"'"}]'
+CD2="$(afact "$("$SPARK" facts --issue 733)")"
+assert_eq "criteria under a deeper heading are still criteria" "1=NOT_MET,2=MET,3=NOT_MET" \
+  "$(printf '%s' "$CD2" | jq -r '[.value.items[] | "\(.id)=\(.state)"] | join(",")')"
+
+# A heading of the SAME level still ends it, and so does a shallower one.
+SHALLOW='# Top\n\n## Acceptance\n\n- [ ] the only criterion\n\n# Another top-level\n\n- [x] not one\n'
+pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07:00:00Z",
+                    "repository":{"nameWithOwner":"jwogrady/spark"},"body":"'"$SHALLOW"'"}]'
+assert_eq "a shallower heading ends the section" "1" \
+  "$(printf '%s' "$(afact "$("$SPARK" facts --issue 733)")" | jq -r '.value.items | length')"
+
 finish
