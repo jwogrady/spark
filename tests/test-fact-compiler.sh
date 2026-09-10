@@ -644,6 +644,17 @@ graph_stub() {
                                        and (has("commits") | not)
                                     then . + {commits: {nodes: [{commit: {oid: .headRefOid,
                                                                  statusCheckRollup: null}}]}}
+                                    else . end
+                                  | if (type == "object") and (.__typename == "PullRequest")
+                                       and (((.commits.nodes // []) | length) > 0)
+                                    then .commits.nodes |= map(
+                                           if (.commit.statusCheckRollup // null) == null then .
+                                           else .commit.statusCheckRollup.contexts.nodes |= map(
+                                                  if (.__typename == "CheckRun")
+                                                  then (if has("conclusion") then . else . + {conclusion: null} end)
+                                                       | (if has("checkSuite") then . else . + {checkSuite: null} end)
+                                                  else . end)
+                                           end)
                                     else . end')"
   stub_gh "$WORK/bin/gh" <<STUB
 printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
@@ -2501,5 +2512,65 @@ assert_eq "an ordinary check name round-trips exactly" "build (ubuntu-latest, 3.
 assert_eq "and is matched against the run of that name" "success" \
   "$(printf '%s' "$CRT" | jq -r '.value.results[0].state')"
 RULES="$RULES_SAVED"
+
+# --- a malformed run is no observation of a run --------------------------
+# jq resolves a MISSING field to null, so `.checkSuite == null` alone cannot
+# tell a run that genuinely has no suite from a reply that omitted the field —
+# and they mean opposite things: evidence that no installation produced the
+# run, versus no evidence at all. The query always asks, so absence is
+# malformed. Each of these must refuse the fact rather than normalize into it.
+# The shared stub fills in a missing conclusion and checkSuite, because almost
+# every fixture is about something else. These assertions are about ABSENCE
+# itself, so they build the reply without that help.
+raw_pr_checks() { # raw_pr_checks <contexts json array> — no stub defaults
+  local node='{"__typename":"PullRequest","number":733,"repository":{"nameWithOwner":"jwogrady/spark"},
+    "updatedAt":"2026-09-08T10:00:00Z","headRefOid":"'"$HEADOID"'","baseRefName":"master",
+    "baseRefOid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","milestone":null,
+    "baseRef":{"target":{"oid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}},
+    "commits":{"nodes":[{"commit":{"oid":"'"$HEADOID"'","statusCheckRollup":{"contexts":{"pageInfo":{"hasNextPage":false},"nodes":'"$1"'}}}}]},
+    "closingIssuesReferences":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
+  stub_gh "$WORK/bin/gh" <<STUB
+printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
+case "\$*" in
+  *graphql*) answer_json '{"data":{"repository":{"issueOrPullRequest":$node}}}' ;;
+  *"repos/jwogrady/spark/rules/branches/"*) answer_json '$RULES' ;;
+  *"--hostname github.com repos/jwogrady/spark"*) answer_json '$NODE' ;;
+  *) exit 1 ;;
+esac
+STUB
+}
+refuses_checks() { # refuses_checks <label> <contexts json array>
+  raw_pr_checks "$2"
+  [ -z "$(cfact "$("$SPARK" facts --issue 733 2>/dev/null)")" ] && ok || bad "$1"
+}
+
+refuses_checks "a conclusion that is not null or a string was normalized anyway" \
+  '[{"__typename":"CheckRun","name":"doctor","conclusion":7,"status":"COMPLETED","checkSuite":null}]'
+refuses_checks "a run with no conclusion field at all was read as inconclusive" \
+  '[{"__typename":"CheckRun","name":"doctor","status":"COMPLETED","checkSuite":null}]'
+refuses_checks "an omitted checkSuite was read as a run produced by nobody" \
+  '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"}]'
+refuses_checks "a suite with no app field was read as a suite with no app" \
+  '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED","checkSuite":{}}]'
+refuses_checks "an app with no id was read as an app" \
+  '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED","checkSuite":{"app":{}}}]'
+refuses_checks "an app id that is not a number was accepted" \
+  '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED","checkSuite":{"app":{"databaseId":"15368"}}}]'
+refuses_checks "a suite that is not an object was accepted" \
+  '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED","checkSuite":7}]'
+
+# The legitimately absent shapes are still admitted, explicitly stated: a run
+# with no suite, and a suite with no app, are evidence rather than gaps.
+raw_pr_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED","checkSuite":null},
+                {"__typename":"CheckRun","name":"tests","conclusion":"SUCCESS","status":"COMPLETED","checkSuite":{"app":null}}]'
+assert_eq "a run with no suite and a suite with no app are both evidence" "doctor=success,tests=success" \
+  "$(printf '%s' "$(cfact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.results[] | "\(.name)=\(.state)"] | join(",")')"
+
+# A run still in flight has a null conclusion, which is the ordinary case the
+# strictness must not break.
+raw_pr_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":null,"status":"IN_PROGRESS","checkSuite":null},
+                {"__typename":"CheckRun","name":"tests","conclusion":"SUCCESS","status":"COMPLETED","checkSuite":null}]'
+assert_eq "a run in flight carries a null conclusion and stays pending" "doctor=pending,tests=success" \
+  "$(printf '%s' "$(cfact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.results[] | "\(.name)=\(.state)"] | join(",")')"
 
 finish

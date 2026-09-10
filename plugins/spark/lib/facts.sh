@@ -796,15 +796,28 @@ facts_unit_node() {
       obj
       and (if .__typename == "CheckRun"
            then (.name | type) == "string" and (.status | type) == "string"
-                and (has("conclusion"))
-                # A run may legitimately have no suite and a suite no app — a
-                # status posted by a user is not produced by an installation.
-                # What is not admissible is an app whose id is not a number,
-                # because that id is what a requirement binds to.
+                # PRESENT AND WELL-TYPED, at every level. jq resolves a missing
+                # field to null, so `.checkSuite == null` alone cannot tell a
+                # run that genuinely has no suite from a reply that omitted the
+                # field — and the two mean opposite things: the first is
+                # evidence that no installation produced this run, the second
+                # is no evidence at all. The query always asks for these
+                # fields, so an absent one is a malformed reply.
+                #
+                # A run may legitimately have no suite and a suite no app: a
+                # status posted by a person is not produced by an installation.
+                # What is never admissible is a level that is present but the
+                # wrong shape, because the app id is what a requirement binds
+                # to and a conclusion is what a state is derived from.
+                and has("conclusion")
+                and ((.conclusion == null) or ((.conclusion | type) == "string"))
+                and has("checkSuite")
                 and ((.checkSuite == null)
                      or (((.checkSuite | type) == "object")
+                         and (.checkSuite | has("app"))
                          and ((.checkSuite.app == null)
                               or (((.checkSuite.app | type) == "object")
+                                  and (.checkSuite.app | has("databaseId"))
                                   and ((.checkSuite.app.databaseId | type) == "number")))))
            elif .__typename == "StatusContext"
            then (.context | type) == "string" and (.state | type) == "string"
