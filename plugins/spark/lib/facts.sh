@@ -1432,12 +1432,26 @@ facts_rules_read() {
   # the digest unchanged when the required producer is swapped — a change in
   # what is required that freshness could not see.
   #
-  # A context carrying a tab or a newline is refused rather than transported.
-  # These rows are TSV and the required names travel newline-delimited, so a
-  # control character inside a context splits a row, mismatches an observed
-  # name, and lets two different collections serialize to one digest. GitHub
-  # does not issue such names; a reply bearing one is not a requirement this
-  # reader can carry faithfully, so it carries none.
+  # A context is refused rather than transported when it is empty, carries any
+  # ASCII control character, or carries a backslash.
+  #
+  # EMPTY is the dangerous one: a name of no characters survives every string
+  # check and is then skipped when the results are built, so a rule requiring
+  # "" establishes an empty required set, and an empty required set means
+  # everything merges.
+  #
+  # BACKSLASH and controls are a transport question. These rows are @tsv and
+  # the required names travel newline-delimited; @tsv escapes tab, newline,
+  # carriage return and backslash, and nothing here decodes them, so a real
+  # context of foo\bar would be carried and reported as foo\\bar — a
+  # different check name than the one required. Refusing the characters that
+  # @tsv rewrites makes the encoding an identity for everything admitted, so a
+  # required name round-trips exactly or is not carried at all. The remaining
+  # control characters are refused on the same principle: they would survive
+  # TSV but corrupt what the fact renders.
+  #
+  # GitHub does not issue such names. A reply bearing one is not a requirement
+  # this reader can carry faithfully, so it carries none.
   out="$(gh api --hostname "$host" "repos/$nwo/rules/branches/$enc" \
     --jq 'if type == "array" then
             [ .[] | select((type == "object") and (.type? == "required_status_checks")) ] as $rel
@@ -1448,7 +1462,9 @@ facts_rules_read() {
               elif ($rel | map(.parameters.required_status_checks[]
                                | select((type != "object")
                                         or ((.context? | type) != "string")
-                                        or (.context | test("[\\t\\n\\r]"))
+                                        or (.context == "")
+                                        or (.context | test("[[:cntrl:]]"))
+                                        or (.context | test("\\\\"))
                                         or ((.integration_id? | type) as $t
                                             | ($t != "number") and ($t != "null"))))
                          | length) > 0

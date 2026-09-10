@@ -2458,4 +2458,48 @@ pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS"
   || bad "a requirement whose app id was not a number was accepted"
 RULES="$RULES_SAVED"
 
+# --- a required name of no characters is not "nothing is required" -------
+# An empty context survives every string check and is then skipped when the
+# results are built, so the rule establishes an empty required set — and an
+# empty required set means every check is satisfied and everything merges.
+RULES='[{"type":"required_status_checks","ruleset_id":1,"parameters":{"required_status_checks":[{"context":""}]}}]'
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"}]'
+[ -z "$(cfact "$("$SPARK" facts --issue 733 2>/dev/null)")" ] && ok \
+  || bad "a required context of no characters established a required set anyway"
+
+# The same emptiness beside a real requirement must not be silently dropped
+# either: the reply is unreadable, not partially readable.
+RULES='[{"type":"required_status_checks","ruleset_id":1,"parameters":{"required_status_checks":[{"context":"doctor"},{"context":""}]}}]'
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"}]'
+[ -z "$(cfact "$("$SPARK" facts --issue 733 2>/dev/null)")" ] && ok \
+  || bad "an empty context beside a real one was quietly discarded"
+RULES="$RULES_SAVED"
+
+# --- a name @tsv would rewrite is refused, so what is carried round-trips -
+# `@tsv` escapes backslash, tab, newline and carriage return, and nothing
+# decodes them, so a real context of `foo\bar` would be carried and reported
+# as `foo\\bar` — a different check name than the one required. Refusing the
+# characters the encoding rewrites makes it an identity for what is admitted.
+RULES="$(printf '[{"type":"required_status_checks","ruleset_id":1,"parameters":{"required_status_checks":[{"context":"foo\\\\bar"}]}}]')"
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"}]'
+[ -z "$(cfact "$("$SPARK" facts --issue 733 2>/dev/null)")" ] && ok \
+  || bad "a required context containing a backslash was carried and silently rewritten"
+
+# A control character that TSV would survive but rendering would not.
+RULES="$(printf '[{"type":"required_status_checks","ruleset_id":1,"parameters":{"required_status_checks":[{"context":"doc\\u0001tor"}]}}]')"
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"}]'
+[ -z "$(cfact "$("$SPARK" facts --issue 733 2>/dev/null)")" ] && ok \
+  || bad "a required context containing a control character was carried anyway"
+
+# What IS admitted round-trips exactly, including the punctuation real check
+# names use.
+RULES='[{"type":"required_status_checks","ruleset_id":1,"parameters":{"required_status_checks":[{"context":"build (ubuntu-latest, 3.11) / test"}]}}]'
+pr_with_checks '[{"__typename":"CheckRun","name":"build (ubuntu-latest, 3.11) / test","conclusion":"SUCCESS","status":"COMPLETED"}]'
+CRT="$(cfact "$("$SPARK" facts --issue 733)")"
+assert_eq "an ordinary check name round-trips exactly" "build (ubuntu-latest, 3.11) / test" \
+  "$(printf '%s' "$CRT" | jq -r '.value.required[0]')"
+assert_eq "and is matched against the run of that name" "success" \
+  "$(printf '%s' "$CRT" | jq -r '.value.results[0].state')"
+RULES="$RULES_SAVED"
+
 finish
