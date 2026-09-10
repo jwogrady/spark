@@ -82,6 +82,9 @@ FACTS_RE_REF=""
 FACTS_RE_TIMESTAMP=""
 FACTS_RE_WORK_UNIT=""
 FACTS_RE_ISSUE_STATE=""
+FACTS_RE_VERDICT=""
+FACTS_RE_LOGIN=""
+FACTS_RE_COMMENT=""
 FACTS_CON_REPOSITORY=""
 FACTS_CON_REF=""
 FACTS_CON_WORK_UNIT=""
@@ -97,6 +100,9 @@ facts_load_grammars() {
       identifier/milestone)  FACTS_RE_MILESTONE="$rest" ;;
       identifier/commit)     FACTS_RE_COMMIT="$rest" ;;
       identifier/issue-state) FACTS_RE_ISSUE_STATE="$rest" ;;
+      identifier/verdict)    FACTS_RE_VERDICT="$rest" ;;
+      identifier/login)      FACTS_RE_LOGIN="$rest" ;;
+      identifier/comment)    FACTS_RE_COMMENT="$rest" ;;
       constraint/work-unit)  FACTS_CON_WORK_UNIT="$FACTS_CON_WORK_UNIT$rest"$'\n' ;;
       identifier/ref)        FACTS_RE_REF="$rest" ;;
       identifier/timestamp)  FACTS_RE_TIMESTAMP="$rest" ;;
@@ -104,7 +110,7 @@ facts_load_grammars() {
       constraint/ref)        FACTS_CON_REF="$FACTS_CON_REF$rest"$'\n' ;;
     esac
   done < <(awk -F'\t' '
-    $1 == "identifier" && ($2 == "repository" || $2 == "ref" || $2 == "timestamp" || $2 == "work-unit" || $2 == "issue-state" || $2 == "milestone" || $2 == "commit") { print $1 "\t" $2 "\t" $3 }
+    $1 == "identifier" && ($2 == "repository" || $2 == "ref" || $2 == "timestamp" || $2 == "work-unit" || $2 == "issue-state" || $2 == "milestone" || $2 == "commit" || $2 == "verdict" || $2 == "login" || $2 == "comment") { print $1 "\t" $2 "\t" $3 }
     $1 == "constraint" && ($2 == "repository" || $2 == "ref" || $2 == "work-unit") { print $1 "\t" $2 "\t" $3 }' "$FACTS_MODEL")
   FACTS_GRAMMARS_LOADED=1
 }
@@ -723,6 +729,10 @@ facts_unit_node() {
                 ... on StatusContext { context state }
               } }
             } } } }
+            comments(last:100){
+              pageInfo{ hasPreviousPage }
+              nodes{ databaseId updatedAt author{ login } body }
+            }
             closingIssuesReferences(first:100){
               pageInfo{ hasNextPage }
               nodes{ __typename number repository{ nameWithOwner } }
@@ -840,6 +850,21 @@ facts_unit_node() {
             and has("commit") and (.commit | has("statusCheckRollup"))
             and ((.commit.statusCheckRollup == null)
                  or (.commit.statusCheckRollup | rollup_ok))] | all);
+    # A comment carries the verdict, so its identity and its instant matter as
+    # much as its text: an id that is not a number names nothing, and a record
+    # with no updatedAt cannot be versioned, so an edit to it could never make
+    # the fact stale. `author` is null for a deleted account, which is a
+    # readable comment by nobody — not a malformed one.
+    def comment_ok:
+      obj and (.databaseId | type) == "number"
+      and (.updatedAt | type) == "string"
+      and (.body | type) == "string"
+      and ((.author == null) or (((.author | type) == "object")
+                                 and ((.author.login | type) == "string")));
+    def comments_ok:
+      obj and (.nodes | type) == "array"
+      and (.pageInfo | obj) and (.pageInfo.hasPreviousPage | type) == "boolean"
+      and ([.nodes[] | comment_ok] | all);
     def closing_ok:
       obj and (.nodes | type) == "array"
       and (.pageInfo | obj) and (.pageInfo.hasNextPage | type) == "boolean"
@@ -869,6 +894,7 @@ facts_unit_node() {
       and has("milestone") and ((.milestone == null) or (.milestone | ms_ok))
       and (if .__typename == "PullRequest"
            then head_ok and (.commits | commits_ok)
+                and has("comments") and (.comments | comments_ok)
                 and has("closingIssuesReferences") and (.closingIssuesReferences | closing_ok)
            elif .__typename == "Issue"
            then has("parent") and ((.parent == null) or (.parent | relation_ok))
@@ -905,6 +931,22 @@ facts_unit_node() {
                      (if (.checkSuite != null) and (.checkSuite.app != null)
                       then (.checkSuite.app.databaseId | tostring) else "" end)]
                else ["check", .context, .state, "STATUS_CONTEXT", ""] end | @tsv),
+           (if $u.comments.pageInfo.hasPreviousPage
+            then ["truncated", "comments"] | @tsv else empty end),
+           # Only the marker is carried out of a comment. A body is arbitrary
+           # prose and can be enormous; what decides this fact is the machine
+           # marker the reviewer lane writes, and it must be at the START of
+           # the body. A marker quoted inside another comment is a quotation
+           # of a verdict, never a verdict. (No apostrophes in this jq program:
+           # it is a single-quoted shell string and one would close it.)
+           ($u.comments.nodes[]
+             | . as $c
+             | ($c.body | capture("^<!-- spark-openai-review pr=(?<pr>[1-9][0-9]*) head=(?<head>[0-9a-f]{40}) verdict=(?<verdict>PASS|CHANGES REQUIRED|DECISION REQUIRED|NOT ASSESSED) -->")?)
+             | select(. != null)
+             | select(.pr == ($u.number | tostring))
+             | ["verdict", ($c.databaseId | tostring), $c.updatedAt,
+                (if $c.author == null then "" else $c.author.login end),
+                .head, .verdict] | @tsv),
            (if $u.closingIssuesReferences.pageInfo.hasNextPage
             then ["truncated", "implements"] | @tsv else empty end),
            ($u.closingIssuesReferences.nodes[]
@@ -1595,6 +1637,181 @@ facts_check_state() {
   esac
 }
 
+# facts_review_fact <locator> <number> <observed_at> — the review.independent fact.
+#
+# The independent verdict bound to an exact HEAD. HEAD-bound, so an issue is
+# NOT_APPLICABLE: there is no change to have been reviewed.
+#
+# WHAT THIS FACT DOES NOT DECIDE. The model gives the value a `reviewer` field,
+# not a trusted-producer filter, and #733 must not invent authority semantics.
+# So this fact reports the verdict record it found and NAMES its author; it
+# does not judge whether that author holds review authority. That judgement is
+# `authority.standing`, a class of this same model and a remaining packet of
+# this same issue, and a consumer deciding a merge needs both facts, never this
+# one alone. Recording that here so the gap is visible at the point of use:
+# a lone verdict comment establishes what the comment SAYS, not that the person
+# who wrote it was entitled to say it.
+#
+# What does protect the fact without inventing authority is R8. Two records
+# naming this HEAD are a CONFLICT with both named as candidates, so a forged
+# verdict beside a real one cannot resolve to either. The marker must also open
+# the comment body and name this pull request, because a marker quoted inside
+# another comment is a quotation of a verdict rather than one.
+facts_review_fact() {
+  local locator="$1" number="$2" observed="$3" host="${1%%/*}"
+  local wu head tail inv kind self_num self_nwo self_version self_type
+  local h_head head_inv rows n rec_id rec_at rec_login rec_head rec_verdict
+  local record rec_inv login cands invs vers
+  FACTS_JSON=""
+  FACTS_REFUSED=""
+  facts_load_grammars
+
+  wu="$(facts_unit_locator "$host" "${locator#*/}" "$number")" || {
+    FACTS_REFUSED="the work unit cannot be named canonically"; return 3; }
+
+  facts_unit_read "$locator" "$number" || {
+    FACTS_REFUSED="$(facts_unreadable_reason "$FACTS_NODE")"; return 3; }
+  case "$FACTS_NODE" in
+    absent*)  FACTS_REFUSED="no work unit by that number"; return 3 ;;
+    partial*|errored*) FACTS_REFUSED="malformed"; return 3 ;;
+  esac
+
+  self_num="$(printf '%s\n' "$FACTS_NODE" | awk -F'\t' '$1 == "self" { print $2; exit }')"
+  self_nwo="$(printf '%s\n' "$FACTS_NODE" | awk -F'\t' '$1 == "self" { print $3; exit }')"
+  self_version="$(printf '%s\n' "$FACTS_NODE" | awk -F'\t' '$1 == "self" { print $4; exit }')"
+  self_type="$(printf '%s\n' "$FACTS_NODE" | awk -F'\t' '$1 == "self" { print $5; exit }')"
+
+  if [ "$self_num" != "$number" ] \
+     || [ "$(printf '%s' "$host/${self_nwo,,}#$number")" != "$wu" ]; then
+    FACTS_REFUSED="malformed"; return 3
+  fi
+  if [ -z "$self_version" ] || ! facts_canonical "$FACTS_RE_TIMESTAMP" "" "$self_version"; then
+    FACTS_REFUSED="malformed"; return 3
+  fi
+  kind="$(facts_unit_kind "$self_type")" || { FACTS_REFUSED="malformed"; return 3; }
+  inv="$kind:$wu"
+
+  head='{"schema_version":'"$FACTS_SCHEMA_VERSION"',"key":"review.independent","class":"review","status":'
+
+  # An issue has no HEAD, so there is no verdict bound to one. R17: the
+  # NOT_APPLICABLE fact names the work unit it was read from and is invalidated
+  # by it.
+  if [ "$kind" = "issue" ]; then
+    FACTS_EMITTED=$(( FACTS_EMITTED + 1 ))
+    FACTS_JSON="$head"'"NOT_APPLICABLE","source":{"type":"github-api","identity":"'"$(json_escape "$wu")"'","version":"'"$(json_escape "$self_version")"'"},"observed_at":"'"$observed"'","invalidators":["'"$(json_escape "$inv")"'"],"versions":{"'"$(json_escape "$inv")"'":"'"$(json_escape "$self_version")"'"},"provenance":"'"$(json_escape "https://$locator/issues/$number")"'"}'
+    return 0
+  fi
+
+  h_head="$(printf '%s\n' "$FACTS_NODE" | awk -F'\t' '$1 == "head" { print $2; exit }')"
+  # ENVELOPE-CRITICAL. Every status this class emits for a pull request carries
+  # the `head:` token, because the verdict is only ever about one commit. A head
+  # that is not a commit leaves the fact unable to say which commit it is about,
+  # which is worse than no fact.
+  if ! facts_canonical "$FACTS_RE_COMMIT" "" "$h_head"; then
+    FACTS_REFUSED="the head is not a commit, so no verdict could be bound to it"; return 3
+  fi
+  head_inv="head:$h_head"
+
+  # The pull request is listed too (R17): its comments are where the verdicts
+  # live, so a record posted after this read must fire a token the fact already
+  # carries.
+  invs='"'"$(json_escape "$head_inv")"'","'"$(json_escape "$inv")"'"'
+  vers='"'"$(json_escape "$head_inv")"'":"'"$(json_escape "$h_head")"'","'"$(json_escape "$inv")"'":"'"$(json_escape "$self_version")"'"'
+  tail=',"source":{"type":"github-api","identity":"'"$(json_escape "$wu")"'","version":"'"$(json_escape "$self_version")"'"}'
+  tail="$tail"',"observed_at":"'"$observed"'","invalidators":['"$invs"'],"versions":{'"$vers"'}'
+  tail="$tail"',"provenance":"'"$(json_escape "https://$locator/pull/$number")"'"}'
+
+  # A window that did not reach the beginning of the conversation cannot say
+  # that no verdict names this head, and an older record could contradict the
+  # one seen. Bounded is an unknown, never an absence.
+  if printf '%s\n' "$FACTS_NODE" \
+     | awk -F'\t' '$1 == "truncated" && $2 == "comments" { found = 1 } END { exit !found }'; then
+    FACTS_EMITTED=$(( FACTS_EMITTED + 1 ))
+    FACTS_UNKNOWN=$(( FACTS_UNKNOWN + 1 ))
+    FACTS_JSON="$head"'"UNKNOWN","detail":{"reason":"bounded","candidates":[]}'"$tail"
+    return 0
+  fi
+
+  rows="$(printf '%s\n' "$FACTS_NODE" | awk -F'\t' -v h="$h_head" '$1 == "verdict" && $5 == h { print }')"
+  n=0
+  [ -z "$rows" ] || n="$(printf '%s\n' "$rows" | wc -l)"
+
+  if [ "$n" -eq 0 ]; then
+    FACTS_EMITTED=$(( FACTS_EMITTED + 1 ))
+    FACTS_UNKNOWN=$(( FACTS_UNKNOWN + 1 ))
+    FACTS_JSON="$head"'"UNKNOWN","detail":{"reason":"no independent verdict names this head","candidates":[]}'"$tail"
+    return 0
+  fi
+
+  # More than one record naming one head is a CONFLICT even when the verdicts
+  # agree. The value must name ONE record, and choosing among them by position
+  # is the first-write rule R8 forbids; two records for one head also means the
+  # lane guarantee of one review per head did not hold, which a reader must see
+  # rather than have resolved for them. Every named comment becomes both a
+  # candidate and an invalidator, so an edit to any of them stales the fact.
+  if [ "$n" -gt 1 ]; then
+    cands=""
+    while IFS= read -r r; do
+      [ -n "$r" ] || continue
+      rec_id="$(printf '%s' "$r" | cut -f2)"
+      record="$locator#$number/comment/$rec_id"
+      rec_at="$(printf '%s' "$r" | cut -f3)"
+      if ! facts_canonical "$FACTS_RE_COMMENT" "" "$record" \
+         || ! facts_canonical "$FACTS_RE_TIMESTAMP" "" "$rec_at"; then
+        FACTS_EMITTED=$(( FACTS_EMITTED + 1 ))
+        FACTS_UNKNOWN=$(( FACTS_UNKNOWN + 1 ))
+        FACTS_JSON="$head"'"UNKNOWN","detail":{"reason":"a record naming this head could not be named or versioned","candidates":[]}'"$tail"
+        return 0
+      fi
+      cands="${cands:+$cands,}\"$(json_escape "$record")\""
+      invs="$invs,\"$(json_escape "comment:$record")\""
+      vers="$vers,\"$(json_escape "comment:$record")\":\"$(json_escape "$rec_at")\""
+    done <<EOF
+$rows
+EOF
+    tail=',"source":{"type":"github-api","identity":"'"$(json_escape "$wu")"'","version":"'"$(json_escape "$self_version")"'"}'
+    tail="$tail"',"observed_at":"'"$observed"'","invalidators":['"$invs"'],"versions":{'"$vers"'}'
+    tail="$tail"',"provenance":"'"$(json_escape "https://$locator/pull/$number")"'"}'
+    FACTS_EMITTED=$(( FACTS_EMITTED + 1 ))
+    FACTS_JSON="$head"'"CONFLICT","detail":{"reason":"more than one record names this head","candidates":['"$cands"']}'"$tail"
+    return 0
+  fi
+
+  rec_id="$(printf '%s' "$rows" | cut -f2)"
+  rec_at="$(printf '%s' "$rows" | cut -f3)"
+  rec_login="$(printf '%s' "$rows" | cut -f4)"
+  rec_verdict="$(printf '%s' "$rows" | cut -f6)"
+  record="$locator#$number/comment/$rec_id"
+  rec_inv="comment:$record"
+  login="login:${rec_login,,}"
+
+  # Value-only fields, so a malformed one is an UNKNOWN rather than a refusal:
+  # the envelope above is already complete and can say what it depends on. A
+  # comment by a deleted account has no login and so no reviewer to name.
+  if ! facts_canonical "$FACTS_RE_COMMENT" "" "$record" \
+     || ! facts_canonical "$FACTS_RE_TIMESTAMP" "" "$rec_at" \
+     || ! facts_canonical "$FACTS_RE_VERDICT" "" "$rec_verdict" \
+     || [ -z "$rec_login" ] || ! facts_canonical "$FACTS_RE_LOGIN" "" "$login"; then
+    FACTS_EMITTED=$(( FACTS_EMITTED + 1 ))
+    FACTS_UNKNOWN=$(( FACTS_UNKNOWN + 1 ))
+    FACTS_JSON="$head"'"UNKNOWN","detail":{"reason":"the record naming this head could not be read as a verdict","candidates":[]}'"$tail"
+    return 0
+  fi
+
+  # R17: an ESTABLISHED review names its RECORD as the source and lists it as a
+  # comment: invalidator; R20 versions that token by the comment updated_at, so
+  # an edited verdict goes stale rather than standing.
+  invs="$invs,\"$(json_escape "$rec_inv")\""
+  vers="$vers,\"$(json_escape "$rec_inv")\":\"$(json_escape "$rec_at")\""
+  tail=',"source":{"type":"github-api","identity":"'"$(json_escape "$record")"'","version":"'"$(json_escape "$rec_at")"'"}'
+  tail="$tail"',"observed_at":"'"$observed"'","invalidators":['"$invs"'],"versions":{'"$vers"'}'
+  tail="$tail"',"provenance":"'"$(json_escape "https://$locator/pull/$number")"'"}'
+
+  FACTS_EMITTED=$(( FACTS_EMITTED + 1 ))
+  FACTS_JSON="$head"'"ESTABLISHED","value":{"verdict":"'"$(json_escape "$rec_verdict")"'","head":"'"$(json_escape "$h_head")"'","reviewer":"'"$(json_escape "$login")"'","record":"'"$(json_escape "$record")"'"}'"$tail"
+  return 0
+}
+
 # facts_checks_fact <locator> <number> <observed_at> — the checks.required fact.
 #
 # The class answers one question: on THIS exact HEAD, what does the base branch
@@ -1889,6 +2106,12 @@ cmd_facts() {
       facts="${facts:+$facts,}$FACTS_JSON"
     else
       why="${why:+$why; }head: $FACTS_REFUSED"
+    fi
+
+    if facts_review_fact "$locator" "$issue" "$observed"; then
+      facts="${facts:+$facts,}$FACTS_JSON"
+    else
+      why="${why:+$why; }review: $FACTS_REFUSED"
     fi
 
     if facts_checks_fact "$locator" "$issue" "$observed"; then

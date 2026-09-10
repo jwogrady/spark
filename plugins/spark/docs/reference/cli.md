@@ -2248,12 +2248,13 @@ snapshot is not yet possible, which is why one is never claimed.
 | `graph` | `graph.native` | An issue's native parent, children and blockers, each with its current state |
 | `placement` | `placement.current` | Where the work unit sits in the release, milestone and gate structure |
 | `head` | `head.exact` | A pull request's exact HEAD, the branch it targets, that branch's current commit, and whether the change still sits on it |
+| `review` | `review.independent` | The independent verdict bound to that exact HEAD, and the record it is written in |
 | `checks` | `checks.required` | What the base branch requires on that exact HEAD, and the state of each required check |
 
-`work_unit`, `graph`, `placement`, `head` and `checks` all need a work unit, so
-they are compiled when `--issue <number>` names one. Without the flag, only
-`repository` is compiled. All five are read from **one** observation of the
-work-unit node, so they can never describe it in five different states.
+`work_unit`, `graph`, `placement`, `head`, `review` and `checks` all need a work
+unit, so they are compiled when `--issue <number>` names one. Without the flag,
+only `repository` is compiled. All six are read from **one** observation of the
+work-unit node, so they can never describe it in six different states.
 
 **Required is not the same question as present.** `checks.required` reads what
 the base branch *requires* from the branch rules, and reports one result per
@@ -2284,14 +2285,27 @@ rule resolves, and picking the first row observed is precisely such a rule.
 Runs that agree are not a disagreement and answer normally, and a contradiction
 on a check nobody requires says nothing about this fact.
 
+**A review is a record, not a reputation.** `review.independent` reports the
+verdict marker found on the pull request whose head it names, and names the
+record it is written in and the login that wrote it. It does **not** judge
+whether that login holds review authority — that is `authority.standing`, and a
+consumer deciding a merge needs both facts rather than this one alone. What the
+class does enforce is that the marker opens the comment and names that pull
+request, so a verdict quoted inside another comment stays a quotation; and that
+two records naming one head are a `CONFLICT` with both named, even when they
+agree, because the value must name one record and choosing by position is the
+first-write rule R8 forbids. A head nobody has reviewed is `UNKNOWN`, never a
+`PASS`, and a comment window that never reached the start of the conversation
+is `UNKNOWN` too — it cannot say that no verdict exists.
+
 **`base` is the branch's commit, not the change's.** `head.exact` reports what
 the base branch points at *now*, and `current` says whether the pull request is
 still sitting on it. Those are different commits the moment anything else lands
 — GitHub reports both — and reading the second as the first would make a stale
 change look current until someone checked by hand.
 
-An issue has no change and therefore no HEAD, so `head.exact` is
-`NOT_APPLICABLE` for one: an answer, not a gap. Such a fact carries no value and
+An issue has no change and therefore no HEAD, so `head.exact` and
+`review.independent` are both `NOT_APPLICABLE` for one: an answer, not a gap. Such a fact carries no value and
 no detail, and lists no base to be stale against.
 
 **Placement is `UNKNOWN` until a release declares the work unit.** `release`
