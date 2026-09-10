@@ -124,7 +124,7 @@ facts_graph_entry	plugins/spark/lib/facts.sh	top-level	-	canonicalization	8	1	1	
 facts_graph_fact	plugins/spark/lib/facts.sh	top-level	-	evidence-authority	193	6	1	cmd_facts	cmd_facts
 facts_load_grammars	plugins/spark/lib/facts.sh	top-level	-	source-collection	20	2	5	cmd_facts;facts_graph_fact;facts_placement_fact;facts_repository_fact;facts_work_unit_fact	cmd_facts
 facts_now	plugins/spark/lib/facts.sh	top-level	-	source-collection	1	0	1	cmd_facts	cmd_facts
-facts_placement_fact	plugins/spark/lib/facts.sh	top-level	-	evidence-authority	73	8	1	cmd_facts	cmd_facts
+facts_placement_fact	plugins/spark/lib/facts.sh	top-level	-	evidence-authority	83	8	1	cmd_facts	cmd_facts
 facts_record_telemetry	plugins/spark/lib/facts.sh	top-level	-	formatting-reporting	10	0	1	cmd_facts	cmd_facts
 facts_repo_node	plugins/spark/lib/facts.sh	top-level	-	source-collection	13	1	1	facts_repository_fact	-
 facts_repository_fact	plugins/spark/lib/facts.sh	top-level	-	evidence-authority	71	4	1	cmd_facts	cmd_facts

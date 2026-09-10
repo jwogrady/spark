@@ -1044,6 +1044,21 @@ EOF
 # answer rather than a gap in it, and the compiler does not supply the missing
 # declaration: #733 forbids inventing authority semantics in the compiler.
 #
+# What this fact does NOT carry is a freshness token for a declaration that
+# does not exist yet, and an independent review stopped on exactly that:
+# introduce a declaration source later and a held UNKNOWN would not go stale,
+# because no invalidator names the thing that changed. Ruled shippable as
+# current-truth-only (#777) on measurable grounds — the only memo is
+# `facts_unit_read`'s pair of shell variables, scoped to one invocation, and
+# nothing consumes this compiler yet, so every run recompiles from a fresh
+# read and the first run after a declaration exists would see it.
+#
+# That makes it an ordering constraint rather than a defect, and the
+# constraint is recorded against #734, where a durable snapshot first becomes
+# possible: no durable snapshot or reuse of placement.current until its
+# release-declaration dependency has a real invalidator. A snapshot must
+# otherwise omit this fact or recompute it on every read.
+#
 #   UNKNOWN   the node was read and its version observed, and no authoritative
 #             declaration places it in a release. The milestone that WAS
 #             observed is carried as an invalidator, so the answer re-derives
@@ -1118,6 +1133,16 @@ facts_placement_fact() {
   tail="$tail"'}'
   tail="$tail"',"provenance":"'"$(json_escape "https://$locator/issues/$number")"'"}'
 
+  # APPROVED SEMANTICS — current-truth-only (#777). Read this before caching.
+  #   * this UNKNOWN is intentional, and intentionally recomputed every run;
+  #   * there is no durable fact cache today — the only memo is
+  #     facts_unit_read's shell variables, scoped to one invocation;
+  #   * it must NOT become durably cached or reused until an authoritative
+  #     release-declaration source exists WITH an invalidator, or a held
+  #     UNKNOWN will survive the declaration that should have staled it;
+  #   * #734 owns that prerequisite: no durable snapshot or reuse ships first;
+  #   * and the missing source is not to be invented here — release-placement
+  #     authority is outside #733.
   FACTS_EMITTED=$(( FACTS_EMITTED + 1 ))
   FACTS_UNKNOWN=$(( FACTS_UNKNOWN + 1 ))
   FACTS_JSON="$head"'"UNKNOWN","detail":{"reason":"no authoritative declaration places this work unit in an exact release","candidates":[]}'"$tail"
