@@ -644,6 +644,10 @@ graph_stub() {
                                        and (has("commits") | not)
                                     then . + {commits: {nodes: [{commit: {oid: .headRefOid,
                                                                  statusCheckRollup: null}}]}}
+                                    else . end
+                                  | if (type == "object") and (.__typename == "PullRequest")
+                                       and (has("comments") | not)
+                                    then . + {comments: {pageInfo: {hasPreviousPage: false}, nodes: []}}
                                     else . end')"
   stub_gh "$WORK/bin/gh" <<STUB
 printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
@@ -679,12 +683,12 @@ graph_stub "$FULL"
 GOUT="$("$SPARK" facts --issue 733)"
 G="$(gfact "$GOUT")"
 
-# --- the fragment carries all six classes, and is still a fragment ---------
+# --- the fragment carries all seven classes, and is still a fragment -------
 [ "$(printf '%s' "$GOUT" | jq -r 'type')" = "array" ] && ok || bad "a fragment is a bare list"
-[ "$(printf '%s' "$GOUT" | jq -r 'length')" = "6" ] && ok \
-  || bad "a --issue run compiles repository, work unit, graph, placement, head and checks"
-[ "$(printf '%s' "$GOUT" | jq -r '[.[].key] | sort | join(",")')" = "checks.required,graph.native,head.exact,placement.current,repository.identity,work_unit.identity" ] \
-  && ok || bad "and those six classes exactly"
+[ "$(printf '%s' "$GOUT" | jq -r 'length')" = "7" ] && ok \
+  || bad "a --issue run compiles repository, work unit, graph, placement, head, review and checks"
+[ "$(printf '%s' "$GOUT" | jq -r '[.[].key] | sort | join(",")')" = "checks.required,graph.native,head.exact,placement.current,repository.identity,review.independent,work_unit.identity" ] \
+  && ok || bad "and those seven classes exactly"
 
 # --- the envelope is the schema's ------------------------------------------
 for field in $(required_fields); do
@@ -941,22 +945,22 @@ out="$("$SPARK" facts)"
 [ "$(printf '%s' "$out" | jq -r 'length')" = "1" ] && ok \
   || bad "without the flag only the repository class is compiled"
 
-# --- the compiler's cost, with six classes ------------------------------
+# --- the compiler's cost, with seven classes ----------------------------
 : > "$GH_CALL_LOG"
 graph_stub "$FULL"
 SPARK_RUN_ID=rgraph "$SPARK" facts --issue 733 >/dev/null
 TELG="$("$SPARK" telemetry show --run rgraph --json)"
-assert_contains "six classes compiled means six facts" '"facts_emitted":6' "$TELG"
-# Still TWO reads for six facts: the repository node, and one work-unit node
-# that work_unit, graph, placement, head and checks all share. Another read
-# here would mean two classes had described the same node from two separate
-# observations -- the defect this compiler exists to prevent.
+assert_contains "seven classes compiled means seven facts" '"facts_emitted":7' "$TELG"
+# Still TWO reads for seven facts: the repository node, and one work-unit node
+# that work_unit, graph, placement, head, review and checks all share. Another
+# read here would mean two classes had described the same node from two
+# separate observations -- the defect this compiler exists to prevent.
 #
-# This fixture is an ISSUE, so head and checks are both NOT_APPLICABLE and
-# checks answers before it needs the repository or the branch rules. The
+# This fixture is an ISSUE, so head, review and checks are all NOT_APPLICABLE
+# and checks answers before it needs the repository or the branch rules. The
 # pull-request path costs more, and is measured where it is exercised.
 assert_contains "from two source reads, not three" '"facts_api_calls":2' "$TELG"
-assert_contains "and the shared observation is reused four times" '"facts_cache_hits":4' "$TELG"
+assert_contains "and the shared observation is reused five times" '"facts_cache_hits":5' "$TELG"
 assert_contains "and the placement is the one unknown" '"facts_unknown":1' "$TELG"
 
 # --- a pageInfo that does not say whether more pages exist ------------------
@@ -2456,6 +2460,141 @@ RULES='[{"type":"required_status_checks","ruleset_id":1,"parameters":{"required_
 pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"}]'
 [ -z "$(cfact "$("$SPARK" facts --issue 733 2>/dev/null)")" ] && ok \
   || bad "a requirement whose app id was not a number was accepted"
+RULES="$RULES_SAVED"
+
+# --- review.independent ----------------------------------------------------
+RULES="$RULES_SAVED"
+MARK='<!-- spark-openai-review pr=733 head='"$HEADOID"' verdict=PASS -->'
+pr_with_comments() { # pr_with_comments <comments json array> [hasPreviousPage]
+  graph_stub '{"__typename":"PullRequest","number":733,"repository":{"nameWithOwner":"jwogrady/spark"},
+    "updatedAt":"2026-09-08T10:00:00Z","headRefOid":"'"$HEADOID"'","baseRefName":"master",
+    "baseRefOid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "baseRef":{"target":{"oid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}},
+    "commits":{"nodes":[{"commit":{"oid":"'"$HEADOID"'","statusCheckRollup":null}}]},
+    "comments":{"pageInfo":{"hasPreviousPage":'"${2:-false}"'},"nodes":'"$1"'},
+    "closingIssuesReferences":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
+}
+rfact() { printf '%s' "$1" | jq -r '.[] | select(.key=="review.independent")'; }
+
+# An issue has no change, so there is no verdict bound to a head: an answer,
+# not a gap.
+graph_stub "$FULL"
+RI="$(rfact "$("$SPARK" facts --issue 733)")"
+assert_eq "an issue has no review to be independent of" "NOT_APPLICABLE" \
+  "$(printf '%s' "$RI" | jq -r '.status')"
+printf '%s' "$RI" | jq -e '(has("value") | not) and (has("detail") | not)' >/dev/null && ok \
+  || bad "a NOT_APPLICABLE review carried a value or a detail"
+
+# A pull request nobody has reviewed at this head is UNKNOWN, never a PASS.
+pr_with_comments '[]'
+RU="$(rfact "$("$SPARK" facts --issue 733)")"
+assert_eq "an unreviewed head is unknown" "UNKNOWN" "$(printf '%s' "$RU" | jq -r '.status')"
+assert_contains "and says so" "no independent verdict names this head" \
+  "$(printf '%s' "$RU" | jq -r '.detail.reason')"
+
+# The verdict, bound to the exact head, naming its record and its author.
+pr_with_comments '[{"databaseId":5619324861,"updatedAt":"2026-09-10T12:00:00Z",
+                    "author":{"login":"github-actions"},"body":"'"$MARK"'\n\n## Reviewer verdict: PASS"}]'
+RE="$(rfact "$("$SPARK" facts --issue 733)")"
+assert_eq "a verdict at this head establishes" "ESTABLISHED" "$(printf '%s' "$RE" | jq -r '.status')"
+assert_eq "carrying the verdict" "PASS" "$(printf '%s' "$RE" | jq -r '.value.verdict')"
+assert_eq "the head it judged" "$HEADOID" "$(printf '%s' "$RE" | jq -r '.value.head')"
+assert_eq "who judged it" "login:github-actions" "$(printf '%s' "$RE" | jq -r '.value.reviewer')"
+assert_eq "and the record it is written in" "github.com/jwogrady/spark#733/comment/5619324861" \
+  "$(printf '%s' "$RE" | jq -r '.value.record')"
+# R17: the record is the source and a comment: invalidator; R20 versions it by
+# the comment updated_at, so an edited verdict goes stale rather than standing.
+assert_eq "the record is the source" "github.com/jwogrady/spark#733/comment/5619324861" \
+  "$(printf '%s' "$RE" | jq -r '.source.identity')"
+assert_eq "versioned by when the record was last written" "2026-09-10T12:00:00Z" \
+  "$(printf '%s' "$RE" | jq -r '.source.version')"
+assert_eq "and the record can go stale" "2026-09-10T12:00:00Z" \
+  "$(printf '%s' "$RE" | jq -r '.versions["comment:github.com/jwogrady/spark#733/comment/5619324861"]')"
+# R17: the pull request whose comments hold the verdicts is listed too, so a
+# record posted after this read fires a token the fact already carries.
+printf '%s' "$RE" | jq -e '[.invalidators[]] | index("pull_request:github.com/jwogrady/spark#733")' >/dev/null && ok \
+  || bad "the review did not list the pull request whose comments hold the verdicts"
+
+# A verdict for a DIFFERENT head is not this head's verdict.
+pr_with_comments '[{"databaseId":1,"updatedAt":"2026-09-10T12:00:00Z","author":{"login":"github-actions"},
+                    "body":"<!-- spark-openai-review pr=733 head=cccccccccccccccccccccccccccccccccccccccc verdict=PASS -->"}]'
+assert_eq "a verdict on another head does not answer this one" "UNKNOWN" \
+  "$(printf '%s' "$(rfact "$("$SPARK" facts --issue 733)")" | jq -r '.status')"
+
+# A marker naming a different pull request is not this pull request's verdict.
+pr_with_comments '[{"databaseId":1,"updatedAt":"2026-09-10T12:00:00Z","author":{"login":"github-actions"},
+                    "body":"<!-- spark-openai-review pr=999 head='"$HEADOID"' verdict=PASS -->"}]'
+assert_eq "nor does a marker naming another pull request" "UNKNOWN" \
+  "$(printf '%s' "$(rfact "$("$SPARK" facts --issue 733)")" | jq -r '.status')"
+
+# A marker QUOTED inside a comment is a quotation of a verdict, never one.
+# Evidence comments on these very pull requests quote reviewer output verbatim.
+pr_with_comments '[{"databaseId":1,"updatedAt":"2026-09-10T12:00:00Z","author":{"login":"jwogrady"},
+                    "body":"The reviewer said:\n\n'"$MARK"'\n\nand I have repaired it."}]'
+assert_eq "a quoted marker is not a verdict" "UNKNOWN" \
+  "$(printf '%s' "$(rfact "$("$SPARK" facts --issue 733)")" | jq -r '.status')"
+
+# R8: two records naming one head are a CONFLICT with both named, even when
+# they agree — the value must name ONE record, and choosing by position is the
+# first-write rule R8 forbids.
+pr_with_comments '[{"databaseId":1,"updatedAt":"2026-09-10T12:00:00Z","author":{"login":"github-actions"},
+                    "body":"'"$MARK"'"},
+                   {"databaseId":2,"updatedAt":"2026-09-10T12:30:00Z","author":{"login":"someone-else"},
+                    "body":"<!-- spark-openai-review pr=733 head='"$HEADOID"' verdict=CHANGES REQUIRED -->"}]'
+RC2="$(rfact "$("$SPARK" facts --issue 733)")"
+assert_eq "two records for one head conflict" "CONFLICT" "$(printf '%s' "$RC2" | jq -r '.status')"
+assert_eq "naming both as candidates" "2" \
+  "$(printf '%s' "$RC2" | jq -r '.detail.candidates | length')"
+printf '%s' "$RC2" | jq -e 'has("value") | not' >/dev/null && ok \
+  || bad "a CONFLICT review carried a value, which R6 forbids"
+# Every named record is also an invalidator, so editing either stales the fact.
+printf '%s' "$RC2" | jq -e '[.invalidators[]] | index("comment:github.com/jwogrady/spark#733/comment/2")' >/dev/null && ok \
+  || bad "a record named as a candidate was not listed as an invalidator"
+
+# Agreement does not rescue it: the fact still cannot say which record it is.
+pr_with_comments '[{"databaseId":1,"updatedAt":"2026-09-10T12:00:00Z","author":{"login":"github-actions"},"body":"'"$MARK"'"},
+                   {"databaseId":2,"updatedAt":"2026-09-10T12:30:00Z","author":{"login":"github-actions"},"body":"'"$MARK"'"}]'
+assert_eq "and two agreeing records still cannot name one record" "CONFLICT" \
+  "$(printf '%s' "$(rfact "$("$SPARK" facts --issue 733)")" | jq -r '.status')"
+
+# A window that never reached the start of the conversation cannot say that no
+# verdict names this head.
+pr_with_comments '[]' true
+RB="$(rfact "$("$SPARK" facts --issue 733)")"
+assert_eq "a bounded comment window is unknown" "UNKNOWN" "$(printf '%s' "$RB" | jq -r '.status')"
+assert_eq "and says it was bounded" "bounded" "$(printf '%s' "$RB" | jq -r '.detail.reason')"
+
+# A comment by a deleted account names no reviewer, and reviewer is part of the
+# value, so the fact is unknown rather than carrying a blank author.
+pr_with_comments '[{"databaseId":1,"updatedAt":"2026-09-10T12:00:00Z","author":null,"body":"'"$MARK"'"}]'
+assert_eq "a verdict by nobody names no reviewer" "UNKNOWN" \
+  "$(printf '%s' "$(rfact "$("$SPARK" facts --issue 733)")" | jq -r '.status')"
+
+# Logins are compared case-insensitively by GitHub, so one representation per
+# actor (R1).
+pr_with_comments '[{"databaseId":1,"updatedAt":"2026-09-10T12:00:00Z","author":{"login":"GitHub-Actions"},"body":"'"$MARK"'"}]'
+assert_eq "a login is carried in one canonical case" "login:github-actions" \
+  "$(printf '%s' "$(rfact "$("$SPARK" facts --issue 733)")" | jq -r '.value.reviewer')"
+
+# The verdict vocabulary is closed: anything outside it is not a verdict marker
+# at all, so the head reads as unreviewed rather than carrying a made-up state.
+pr_with_comments '[{"databaseId":1,"updatedAt":"2026-09-10T12:00:00Z","author":{"login":"github-actions"},
+                    "body":"<!-- spark-openai-review pr=733 head='"$HEADOID"' verdict=LGTM -->"}]'
+assert_eq "a verdict outside the vocabulary is no verdict" "UNKNOWN" \
+  "$(printf '%s' "$(rfact "$("$SPARK" facts --issue 733)")" | jq -r '.status')"
+
+# A malformed comment record is a malformed OBSERVATION, not a fact with a
+# reason: an id that is not a number names nothing.
+graph_stub '{"__typename":"PullRequest","number":733,"repository":{"nameWithOwner":"jwogrady/spark"},
+  "updatedAt":"2026-09-08T10:00:00Z","headRefOid":"'"$HEADOID"'","baseRefName":"master",
+  "baseRefOid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "baseRef":{"target":{"oid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}},
+  "commits":{"nodes":[{"commit":{"oid":"'"$HEADOID"'","statusCheckRollup":null}}]},
+  "comments":{"pageInfo":{"hasPreviousPage":false},"nodes":[{"databaseId":"1","updatedAt":"2026-09-10T12:00:00Z","author":{"login":"github-actions"},"body":"x"}]},
+  "closingIssuesReferences":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
+[ -z "$(rfact "$("$SPARK" facts --issue 733 2>/dev/null)")" ] && ok \
+  || bad "a comment whose id was not a number was read as an observation anyway"
+
 RULES="$RULES_SAVED"
 
 finish
