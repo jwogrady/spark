@@ -27,8 +27,19 @@ for which in after before; do
   assert_eq "$which: every row has ten fields" "" "$($src | awk -F'\t' 'NF != 10 {print $1}' | tr '\n' ' ')"
   assert_eq "$which: every scope is top-level or nested" "" \
     "$($src | cut -f3 | grep -vxE 'top-level|nested' | sort -u | tr '\n' ' ')"
+  # The names are read ONCE into a variable and matched in the shell, with no
+  # pipeline for the match to break. `grep -q` exits on its first match and
+  # closes the read end; whatever was still feeding it then takes SIGPIPE, and
+  # under `set -o pipefail` the pipeline reports 141 — a failure for a name
+  # that IS present. Locally the producer usually finishes first and the race
+  # is invisible; on a slower runner it is not, which is how this suite failed
+  # in CI while passing here.
+  known="$($src | cut -f1)"
   assert_eq "$which: every nested function names an owner that the map knows" "" \
-    "$($src | awk -F'\t' '$3 == "nested" {print $4}' | sort -u | while IFS= read -r o; do [ -z "$o" ] && continue; $src | cut -f1 | grep -qx "$o" || printf '%s ' "$o"; done)"
+    "$($src | awk -F'\t' '$3 == "nested" {print $4}' | sort -u | while IFS= read -r o; do
+         [ -n "$o" ] || continue
+         case $'\n'"$known"$'\n' in *$'\n'"$o"$'\n'*) ;; *) printf '%s ' "$o" ;; esac
+       done)"
   assert_eq "$which: no function is classified twice" "" "$($src | cut -f1 | sort | uniq -d | tr '\n' ' ')"
   assert_eq "$which: every file named is a runtime file" "" \
     "$($src | cut -f2 | sort -u | grep -vE '^plugins/spark/(bin/spark|lib/(execution|planning|repository|facts)\.sh)$' | tr '\n' ' ')"
