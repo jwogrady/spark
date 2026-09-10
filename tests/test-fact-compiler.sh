@@ -659,6 +659,12 @@ graph_stub() {
                                   | if (type == "object") and (.__typename == "PullRequest")
                                        and (has("comments") | not)
                                     then . + {comments: {pageInfo: {hasPreviousPage: false}, nodes: []}}
+                                    else . end
+                                  | if (type == "object") and (.__typename == "PullRequest")
+                                       and (has("closingIssuesReferences"))
+                                    then .closingIssuesReferences.nodes |= map(
+                                           (if has("updatedAt") then . else . + {updatedAt: "2026-09-07T07:00:00Z"} end)
+                                           | (if has("body") then . else . + {body: "## Acceptance\n\n- [ ] the one criterion\n"} end))
                                     else . end')"
   stub_gh "$WORK/bin/gh" <<STUB
 printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
@@ -694,12 +700,12 @@ graph_stub "$FULL"
 GOUT="$("$SPARK" facts --issue 733)"
 G="$(gfact "$GOUT")"
 
-# --- the fragment carries all seven classes, and is still a fragment -------
+# --- the fragment carries all eight classes, and is still a fragment -------
 [ "$(printf '%s' "$GOUT" | jq -r 'type')" = "array" ] && ok || bad "a fragment is a bare list"
-[ "$(printf '%s' "$GOUT" | jq -r 'length')" = "7" ] && ok \
-  || bad "a --issue run compiles repository, work unit, graph, placement, head, review and checks"
-[ "$(printf '%s' "$GOUT" | jq -r '[.[].key] | sort | join(",")')" = "checks.required,graph.native,head.exact,placement.current,repository.identity,review.independent,work_unit.identity" ] \
-  && ok || bad "and those seven classes exactly"
+[ "$(printf '%s' "$GOUT" | jq -r 'length')" = "8" ] && ok \
+  || bad "a --issue run compiles repository, work unit, graph, placement, acceptance, head, review and checks"
+[ "$(printf '%s' "$GOUT" | jq -r '[.[].key] | sort | join(",")')" = "acceptance.contract,checks.required,graph.native,head.exact,placement.current,repository.identity,review.independent,work_unit.identity" ] \
+  && ok || bad "and those eight classes exactly"
 
 # --- the envelope is the schema's ------------------------------------------
 for field in $(required_fields); do
@@ -956,14 +962,14 @@ out="$("$SPARK" facts)"
 [ "$(printf '%s' "$out" | jq -r 'length')" = "1" ] && ok \
   || bad "without the flag only the repository class is compiled"
 
-# --- the compiler's cost, with seven classes ----------------------------
+# --- the compiler's cost, with eight classes ----------------------------
 : > "$GH_CALL_LOG"
 graph_stub "$FULL"
 SPARK_RUN_ID=rgraph "$SPARK" facts --issue 733 >/dev/null
 TELG="$("$SPARK" telemetry show --run rgraph --json)"
-assert_contains "seven classes compiled means seven facts" '"facts_emitted":7' "$TELG"
-# Still TWO reads for seven facts: the repository node, and one work-unit node
-# that work_unit, graph, placement, head, review and checks all share. Another
+assert_contains "eight classes compiled means eight facts" '"facts_emitted":8' "$TELG"
+# Still TWO reads for eight facts: the repository node, and one work-unit node
+# that work_unit, graph, placement, acceptance, head, review and checks share. Another
 # read here would mean two classes had described the same node from two
 # separate observations -- the defect this compiler exists to prevent.
 #
@@ -971,7 +977,7 @@ assert_contains "seven classes compiled means seven facts" '"facts_emitted":7' "
 # and checks answers before it needs the repository or the branch rules. The
 # pull-request path costs more, and is measured where it is exercised.
 assert_contains "from two source reads, not three" '"facts_api_calls":2' "$TELG"
-assert_contains "and the shared observation is reused five times" '"facts_cache_hits":5' "$TELG"
+assert_contains "and the shared observation is reused six times" '"facts_cache_hits":6' "$TELG"
 assert_contains "and the placement is the one unknown" '"facts_unknown":1' "$TELG"
 
 # --- a pageInfo that does not say whether more pages exist ------------------
@@ -2711,5 +2717,113 @@ graph_stub '{"__typename":"PullRequest","number":733,"repository":{"nameWithOwne
   || bad "a comment whose id was not a number was read as an observation anyway"
 
 RULES="$RULES_SAVED"
+
+# --- acceptance.contract ---------------------------------------------------
+afact() { printf '%s' "$1" | jq -r '.[] | select(.key=="acceptance.contract")'; }
+ACC_BODY='Parent: #728\n\n## Purpose\nprose.\n\n## Boundedness\n- a bullet that is not a checkbox\n\n## Acceptance\n\n- [ ] the first criterion\n- [x] the second, ticked\n- [ ] the third\n\n## Non-goals\n\n- [ ] this is not an acceptance item\n'
+pr_with_contract() { # pr_with_contract <closing nodes json> [hasNextPage]
+  graph_stub '{"__typename":"PullRequest","number":733,"repository":{"nameWithOwner":"jwogrady/spark"},
+    "updatedAt":"2026-09-08T10:00:00Z","headRefOid":"'"$HEADOID"'","baseRefName":"master",
+    "baseRefOid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "baseRef":{"target":{"oid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}},
+    "commits":{"nodes":[{"commit":{"oid":"'"$HEADOID"'","statusCheckRollup":null}}]},
+    "closingIssuesReferences":{"pageInfo":{"hasNextPage":'"${2:-false}"'},"nodes":'"$1"'}}'
+}
+
+# An issue has no change in front of it, so its contract has nothing to be
+# satisfied ON.
+graph_stub "$FULL"
+AI="$(afact "$("$SPARK" facts --issue 733)")"
+assert_eq "a contract with no change is not applicable" "NOT_APPLICABLE" \
+  "$(printf '%s' "$AI" | jq -r '.status')"
+
+# The ordinary case: one declared contract, its items read in order.
+pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07:00:00Z",
+                    "repository":{"nameWithOwner":"jwogrady/spark"},"body":"'"$ACC_BODY"'"}]'
+AE="$(afact "$("$SPARK" facts --issue 733)")"
+assert_eq "one declared contract establishes" "ESTABLISHED" "$(printf '%s' "$AE" | jq -r '.status')"
+assert_eq "naming the contract" "github.com/jwogrady/spark#734" \
+  "$(printf '%s' "$AE" | jq -r '.value.contract')"
+assert_eq "judged on this head" "$HEADOID" "$(printf '%s' "$AE" | jq -r '.value.head')"
+assert_eq "with one item per criterion, in order" "1=NOT_MET,2=MET,3=NOT_MET" \
+  "$(printf '%s' "$AE" | jq -r '[.value.items[] | "\(.id)=\(.state)"] | join(",")')"
+# A checkbox under another heading is not an acceptance criterion, and a plain
+# bullet is not a checkbox.
+assert_eq "and nothing from outside the acceptance section" "3" \
+  "$(printf '%s' "$AE" | jq -r '.value.items | length')"
+# R17: the contract is the source and is listed once as an invalidator; R20
+# versions it by its updated_at, so an edited contract stales the judgement.
+assert_eq "the contract is the source" "github.com/jwogrady/spark#734" \
+  "$(printf '%s' "$AE" | jq -r '.source.identity')"
+assert_eq "versioned by the contract, not the change" "2026-09-07T07:00:00Z" \
+  "$(printf '%s' "$AE" | jq -r '.versions["issue:github.com/jwogrady/spark#734"]')"
+assert_eq "and listed once" "1" \
+  "$(printf '%s' "$AE" | jq -r '[.invalidators[] | select(. == "issue:github.com/jwogrady/spark#734")] | length')"
+# Item ids are unique within the fact, which is what lets one item never be
+# both MET and NOT_MET.
+assert_eq "item ids are unique within the fact" "3" \
+  "$(printf '%s' "$AE" | jq -r '[.value.items[].id] | unique | length')"
+
+# Two declared contracts is a question about the work, not a tie to break.
+pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07:00:00Z",
+                    "repository":{"nameWithOwner":"jwogrady/spark"},"body":"'"$ACC_BODY"'"},
+                   {"__typename":"Issue","number":735,"updatedAt":"2026-09-07T08:00:00Z",
+                    "repository":{"nameWithOwner":"jwogrady/spark"},"body":"'"$ACC_BODY"'"}]'
+AC="$(afact "$("$SPARK" facts --issue 733)")"
+assert_eq "two declared contracts conflict" "CONFLICT" "$(printf '%s' "$AC" | jq -r '.status')"
+assert_eq "naming both" "github.com/jwogrady/spark#734,github.com/jwogrady/spark#735" \
+  "$(printf '%s' "$AC" | jq -r '.detail.candidates | join(",")')"
+printf '%s' "$AC" | jq -e 'has("value") | not' >/dev/null && ok \
+  || bad "a CONFLICT acceptance carried a value, which R6 forbids"
+
+# A change declaring no contract has nothing to be judged against.
+pr_with_contract '[]'
+assert_eq "no declared contract is unknown" "UNKNOWN" \
+  "$(printf '%s' "$(afact "$("$SPARK" facts --issue 733)")" | jq -r '.status')"
+
+# A contract that declares no criteria has not said what would satisfy it. An
+# empty item list would read as every item met — the same fail-open as an
+# empty required set.
+pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07:00:00Z",
+                    "repository":{"nameWithOwner":"jwogrady/spark"},"body":"## Purpose\nno criteria here\n"}]'
+AN="$(afact "$("$SPARK" facts --issue 733)")"
+assert_eq "a contract with no acceptance section is unknown" "UNKNOWN" \
+  "$(printf '%s' "$AN" | jq -r '.status')"
+assert_contains "and says so" "declares no acceptance criteria" \
+  "$(printf '%s' "$AN" | jq -r '.detail.reason')"
+# It still names the contract it could not read criteria from, so the answer
+# goes stale when that contract is edited to add them.
+assert_eq "while still naming the contract it read" "2026-09-07T07:00:00Z" \
+  "$(printf '%s' "$AN" | jq -r '.versions["issue:github.com/jwogrady/spark#734"]')"
+
+# A heading with nothing under it is the same emptiness by another route.
+pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07:00:00Z",
+                    "repository":{"nameWithOwner":"jwogrady/spark"},"body":"## Acceptance\n\n## Non-goals\n- [ ] not one\n"}]'
+assert_eq "an acceptance heading with no criteria under it is unknown" "UNKNOWN" \
+  "$(printf '%s' "$(afact "$("$SPARK" facts --issue 733)")" | jq -r '.status')"
+
+# R17 keeps one set inside one repository. The relationship is real and the
+# graph fact reports it; it is not a contract this set can name as its own.
+pr_with_contract '[{"__typename":"Issue","number":9,"updatedAt":"2026-09-07T07:00:00Z",
+                    "repository":{"nameWithOwner":"OTHER/Repo"},"body":"'"$ACC_BODY"'"}]'
+AX="$(afact "$("$SPARK" facts --issue 733)")"
+assert_eq "a contract in another repository is unknown here" "UNKNOWN" \
+  "$(printf '%s' "$AX" | jq -r '.status')"
+assert_eq "named as the candidate it is" "github.com/other/repo#9" \
+  "$(printf '%s' "$AX" | jq -r '.detail.candidates[0]')"
+
+# A reference list that did not fit cannot say the change declares only one.
+pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07:00:00Z",
+                    "repository":{"nameWithOwner":"jwogrady/spark"},"body":"'"$ACC_BODY"'"}]' true
+AB="$(afact "$("$SPARK" facts --issue 733)")"
+assert_eq "a bounded reference list is unknown" "UNKNOWN" "$(printf '%s' "$AB" | jq -r '.status')"
+assert_eq "and says it was bounded" "bounded" "$(printf '%s' "$AB" | jq -r '.detail.reason')"
+
+# A contract carrying no usable version could not be invalidated, so its
+# judgement could never go stale.
+pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"whenever",
+                    "repository":{"nameWithOwner":"jwogrady/spark"},"body":"'"$ACC_BODY"'"}]'
+[ -z "$(afact "$("$SPARK" facts --issue 733 2>/dev/null)")" ] && ok \
+  || bad "a contract whose version was not a timestamp was read as an observation anyway"
 
 finish
