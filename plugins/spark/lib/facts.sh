@@ -193,8 +193,22 @@ facts_unreadable_reason() {
 # read would pay for a scratch directory and save nothing. Reuse arrives with
 # the second call site that needs the same observation, measured then; a cache
 # with one caller is an optimization that cannot be shown to work.
+# The repository node is read ONCE and shared, for the same reason the
+# work-unit node is: `repository` and `checks` are two facts about the same
+# node, and reading it twice would let them describe it in two different
+# states. Before this the counters could not even show the duplication,
+# because nothing asked twice.
+FACTS_REPO_KEY=""
+FACTS_REPO_ROWS=""
+FACTS_REPO_RC=0
 facts_repo_node() {
   local locator="$1" host="${1%%/*}" nwo="${1#*/}" out rc=0
+  if [ -n "$FACTS_REPO_KEY" ] && [ "$FACTS_REPO_KEY" = "$locator" ]; then
+    FACTS_CACHE_HITS=$(( FACTS_CACHE_HITS + 1 ))
+    FACTS_NODE="$FACTS_REPO_ROWS"
+    return "$FACTS_REPO_RC"
+  fi
+  FACTS_CACHE_MISSES=$(( FACTS_CACHE_MISSES + 1 ))
   FACTS_API_CALLS=$(( FACTS_API_CALLS + 1 ))
   # The projection is TOTAL: any valid JSON produces three fields, and anything
   # that is not a string — an object, an array, a number, a null, or a body that
@@ -204,6 +218,9 @@ facts_repo_node() {
   out="$(gh api --hostname "$host" "repos/$nwo" \
     --jq '[.full_name?, .default_branch?, .updated_at?] | map(if type == "string" then . else "" end) | @tsv' 2>&1)" || rc=$?
   FACTS_NODE="$out"
+  FACTS_REPO_KEY="$locator"
+  FACTS_REPO_ROWS="$out"
+  FACTS_REPO_RC="$rc"
   return "$rc"
 }
 
@@ -699,6 +716,13 @@ facts_unit_node() {
             milestone{ number updatedAt }
             headRefOid baseRefName baseRefOid
             baseRef{ target{ oid } }
+            commits(last:1){ nodes{ commit{ oid statusCheckRollup{
+              contexts(first:100){ pageInfo{ hasNextPage } nodes{
+                __typename
+                ... on CheckRun { name conclusion status }
+                ... on StatusContext { context state }
+              } }
+            } } } }
             closingIssuesReferences(first:100){
               pageInfo{ hasNextPage }
               nodes{ __typename number repository{ nameWithOwner } }
@@ -760,6 +784,34 @@ facts_unit_node() {
       and ((.baseRef == null)
            or ((.baseRef | obj) and (.baseRef.target | obj)
                and (.baseRef.target.oid | type) == "string"));
+    # The check half, read off the SAME pull request rather than by asking for
+    # the commit again. `statusCheckRollup` is null when nothing has reported,
+    # which is a real answer (no run observed) and not a malformed reply, so it
+    # must be present and either null or whole.
+    #
+    # A context is one of two shapes and each must carry its own fields: a
+    # CheckRun has a name, a status and a conclusion that is null until it
+    # completes; a StatusContext has a context and a state.
+    def ctx_ok:
+      obj
+      and (if .__typename == "CheckRun"
+           then (.name | type) == "string" and (.status | type) == "string"
+                and (has("conclusion"))
+           elif .__typename == "StatusContext"
+           then (.context | type) == "string" and (.state | type) == "string"
+           else false end);
+    def rollup_ok:
+      obj and (.contexts | obj)
+      and (.contexts.pageInfo | obj)
+      and (.contexts.pageInfo.hasNextPage | type) == "boolean"
+      and (.contexts.nodes | type) == "array"
+      and ([.contexts.nodes[] | ctx_ok] | all);
+    def commits_ok:
+      obj and (.nodes | type) == "array" and ((.nodes | length) <= 1)
+      and ([.nodes[] | obj and (.commit | obj) and (.commit.oid | type) == "string"
+            and has("commit") and (.commit | has("statusCheckRollup"))
+            and ((.commit.statusCheckRollup == null)
+                 or (.commit.statusCheckRollup | rollup_ok))] | all);
     def closing_ok:
       obj and (.nodes | type) == "array"
       and (.pageInfo | obj) and (.pageInfo.hasNextPage | type) == "boolean"
@@ -788,7 +840,8 @@ facts_unit_node() {
       whole
       and has("milestone") and ((.milestone == null) or (.milestone | ms_ok))
       and (if .__typename == "PullRequest"
-           then head_ok and has("closingIssuesReferences") and (.closingIssuesReferences | closing_ok)
+           then head_ok and (.commits | commits_ok)
+                and has("closingIssuesReferences") and (.closingIssuesReferences | closing_ok)
            elif .__typename == "Issue"
            then has("parent") and ((.parent == null) or (.parent | relation_ok))
                 and (.subIssues | list_ok) and (.blockedBy | list_ok)
@@ -812,6 +865,16 @@ facts_unit_node() {
         (if $u.__typename == "PullRequest" then
            (["head", $u.headRefOid, $u.baseRefName, $u.baseRefOid,
              (if $u.baseRef == null then "" else $u.baseRef.target.oid end)] | @tsv),
+           ($u.commits.nodes[] | ["rollup_commit", .commit.oid,
+             (if .commit.statusCheckRollup == null then "none" else "some" end)] | @tsv),
+           (if (($u.commits.nodes | length) > 0)
+                and ($u.commits.nodes[0].commit.statusCheckRollup != null)
+                and $u.commits.nodes[0].commit.statusCheckRollup.contexts.pageInfo.hasNextPage
+            then ["truncated", "checks"] | @tsv else empty end),
+           ($u.commits.nodes[]? | .commit.statusCheckRollup?.contexts.nodes[]?
+             | if .__typename == "CheckRun"
+               then ["check", .name, (.conclusion // ""), .status]
+               else ["check", .context, .state, "COMPLETED"] end | @tsv),
            (if $u.closingIssuesReferences.pageInfo.hasNextPage
             then ["truncated", "implements"] | @tsv else empty end),
            ($u.closingIssuesReferences.nodes[]
@@ -1299,6 +1362,234 @@ facts_head_fact() {
   return 0
 }
 
+# facts_rules_read <locator> <branch> — the checks a branch actually requires,
+# in ONE request, with the digest that versions them.
+#
+# `repos/<nwo>/rules/branches/<branch>` answers with the rules in EFFECT on that
+# branch — the union of every ruleset that applies — rather than making the
+# caller enumerate rulesets and work out which ones match. Measured on this
+# repository it returns `doctor` and `tests`, which is fewer than the checks
+# that actually run: required and present are different questions, and this
+# class answers the first.
+#
+# R20 versions a `ruleset:` token with the collection digest, so the digest is
+# computed over the canonical serialization of what was read — every requiring
+# ruleset id paired with every context it requires, sorted, one per line. Any
+# change to the required set, or to which ruleset requires it, changes the
+# digest and stales the fact. The digest is a sha1, which the source-version
+# grammar already admits as a 40-hex.
+FACTS_RULES_KEY=""
+FACTS_RULES_ROWS=""
+FACTS_RULES_RC=0
+facts_rules_read() {
+  local locator="$1" branch="$2" host="${1%%/*}" nwo="${1#*/}" key="$1@$2" out rc=0 digest
+  if [ -n "$FACTS_RULES_KEY" ] && [ "$FACTS_RULES_KEY" = "$key" ]; then
+    FACTS_CACHE_HITS=$(( FACTS_CACHE_HITS + 1 ))
+    FACTS_RULES="$FACTS_RULES_ROWS"
+    return "$FACTS_RULES_RC"
+  fi
+  FACTS_CACHE_MISSES=$(( FACTS_CACHE_MISSES + 1 ))
+  FACTS_API_CALLS=$(( FACTS_API_CALLS + 1 ))
+  # The projection is total: anything that is not the expected shape yields no
+  # rows, and no rows is then decided by the caller rather than erroring here.
+  out="$(gh api --hostname "$host" "repos/$nwo/rules/branches/$branch" \
+    --jq 'if type == "array" then
+            [ .[]
+              | select((type == "object")
+                       and (.type? == "required_status_checks")
+                       and (.parameters?.required_status_checks? | type) == "array")
+              | (.ruleset_id? // 0) as $r
+              | .parameters.required_status_checks[]
+              | select((type == "object") and ((.context? | type) == "string"))
+              | "\($r)|\(.context)" ]
+            | sort | unique | .[]
+          else empty end' 2>/dev/null)" || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    FACTS_RULES=""
+    FACTS_RULES_KEY="$key"; FACTS_RULES_ROWS=""; FACTS_RULES_RC="$rc"
+    return "$rc"
+  fi
+  # The digest covers the serialization exactly as read, including the empty
+  # case: a branch that requires nothing has a stable digest of its own, so
+  # "nothing required" is a versioned answer rather than an absent one.
+  digest="$(printf '%s\n' "$out" | sha1sum 2>/dev/null | cut -d" " -f1)"
+  if [ -z "$digest" ]; then
+    digest="$(printf '%s\n' "$out" | shasum 2>/dev/null | cut -d" " -f1)"
+  fi
+  FACTS_RULES="$(printf 'digest\t%s\n' "$digest"; printf '%s\n' "$out" \
+    | while IFS= read -r row; do [ -n "$row" ] || continue; printf 'required\t%s\n' "${row#*|}"; done)"
+  FACTS_RULES_KEY="$key"
+  FACTS_RULES_ROWS="$FACTS_RULES"
+  FACTS_RULES_RC=0
+  return 0
+}
+
+# facts_check_state <status> <conclusion> — GitHub answer to the closed
+# check-state vocabulary: success | failure | pending | missing.
+#
+# A run that has not completed is pending whatever it currently reports. A
+# completed run is success only when it concluded SUCCESS.
+#
+# SKIPPED and NEUTRAL land in failure DELIBERATELY. The vocabulary admits no
+# fifth state, and R15 lets a merge proceed only when every required check is
+# success — so mapping a required check that never ran its assertions to
+# success would open exactly the hole this class exists to close. Reporting it
+# as failure is the fail-closed direction: the cost is a merge that waits, and
+# the cost of the other choice is a merge that should not have happened.
+facts_check_state() {
+  case "$1" in
+    COMPLETED|completed) ;;
+    *) printf 'pending'; return 0 ;;
+  esac
+  case "$2" in
+    SUCCESS|success) printf 'success' ;;
+    *)               printf 'failure' ;;
+  esac
+}
+
+# facts_checks_fact <locator> <number> <observed_at> — the checks.required fact.
+#
+# The class answers one question: on THIS exact HEAD, what does the base branch
+# require, and what is the state of each required check. Required and present
+# are different questions — this repository runs five checks and requires two —
+# so the value is keyed by the required set, and a required name with no run
+# observed is `missing` rather than absent from the answer.
+#
+# R17 gives this class a source the others do not have: checks name the
+# REPOSITORY, not the work unit, and list ruleset:<repository>. It is also
+# HEAD-bound, so it lists head:<commit> and is NOT_APPLICABLE for an issue.
+#
+#   ESTABLISHED     the HEAD, the required set and every required state were
+#                   read, and the envelope tokens can all be versioned;
+#   UNKNOWN         the rollup was bounded, or the reply named a different
+#                   commit than the HEAD it was read for;
+#   NOT_APPLICABLE  an issue: no HEAD, so no required check to be in a state;
+#   refused         the read failed, the node is absent or cannot be named, the
+#                   required set could not be read, or a token could not be
+#                   versioned.
+facts_checks_fact() {
+  local locator="$1" number="$2" observed="$3" host="${1%%/*}"
+  local wu head tail inv kind self_num self_nwo self_version self_type
+  local h_head h_baseref r_oid r_has digest repo_version rs_inv head_inv
+  local required results n state row name unit_rows
+  FACTS_JSON=""
+  FACTS_REFUSED=""
+  facts_load_grammars
+
+  wu="$(facts_unit_locator "$host" "${locator#*/}" "$number")" || {
+    FACTS_REFUSED="the work unit cannot be named canonically"; return 3; }
+
+  facts_unit_read "$locator" "$number" || {
+    FACTS_REFUSED="$(facts_unreadable_reason "$FACTS_NODE")"; return 3; }
+  case "$FACTS_NODE" in
+    absent*)  FACTS_REFUSED="no work unit by that number"; return 3 ;;
+    partial*|errored*) FACTS_REFUSED="malformed"; return 3 ;;
+  esac
+
+  # The work-unit rows are taken NOW, because FACTS_NODE is one shared slot and
+  # reading the repository node below overwrites it. Keeping a local copy is
+  # what lets this fact consult both observations without either erasing the
+  # other.
+  unit_rows="$FACTS_NODE"
+
+  self_num="$(printf '%s\n' "$unit_rows" | awk -F'\t' '$1 == "self" { print $2; exit }')"
+  self_nwo="$(printf '%s\n' "$unit_rows" | awk -F'\t' '$1 == "self" { print $3; exit }')"
+  self_version="$(printf '%s\n' "$unit_rows" | awk -F'\t' '$1 == "self" { print $4; exit }')"
+  self_type="$(printf '%s\n' "$unit_rows" | awk -F'\t' '$1 == "self" { print $5; exit }')"
+  if [ "$self_num" != "$number" ] \
+     || [ "$(printf '%s' "$host/${self_nwo,,}#$number")" != "$wu" ]; then
+    FACTS_REFUSED="malformed"; return 3
+  fi
+  if [ -z "$self_version" ] || ! facts_canonical "$FACTS_RE_TIMESTAMP" "" "$self_version"; then
+    FACTS_REFUSED="malformed"; return 3
+  fi
+  kind="$(facts_unit_kind "$self_type")" || { FACTS_REFUSED="malformed"; return 3; }
+
+  head='{"schema_version":'"$FACTS_SCHEMA_VERSION"',"key":"checks.required","class":"checks","status":'
+
+  # An issue has no HEAD, so there is no required check to be in a state. R17
+  # is explicit that a NOT_APPLICABLE HEAD-bound fact names the WORK UNIT it
+  # was read from rather than the repository, and lists only that.
+  if [ "$kind" = "issue" ]; then
+    inv="$kind:$wu"
+    FACTS_EMITTED=$(( FACTS_EMITTED + 1 ))
+    FACTS_JSON="$head"'"NOT_APPLICABLE","source":{"type":"github-api","identity":"'"$(json_escape "$wu")"'","version":"'"$(json_escape "$self_version")"'"},"observed_at":"'"$observed"'","invalidators":["'"$(json_escape "$inv")"'"],"versions":{"'"$(json_escape "$inv")"'":"'"$(json_escape "$self_version")"'"},"provenance":"'"$(json_escape "https://$locator/issues/$number")"'"}'
+    return 0
+  fi
+
+  h_head="$(printf '%s\n' "$unit_rows" | awk -F'\t' '$1 == "head" { print $2; exit }')"
+  h_baseref="$(printf '%s\n' "$unit_rows" | awk -F'\t' '$1 == "head" { print $3; exit }')"
+  r_oid="$(printf '%s\n' "$unit_rows" | awk -F'\t' '$1 == "rollup_commit" { print $2; exit }')"
+
+  # The repository is this fact's source, and it is read from the SAME shared
+  # observation the repository class uses rather than asked again.
+  facts_repo_node "$locator" || {
+    FACTS_REFUSED="$(facts_unreadable_reason "$FACTS_NODE")"; return 3; }
+  repo_version="$(printf '%s' "$FACTS_NODE" | awk -F'\t' 'NR == 1 { print $3 }')"
+  if [ -z "$repo_version" ] || ! facts_canonical "$FACTS_RE_TIMESTAMP" "" "$repo_version"; then
+    FACTS_REFUSED="malformed"; return 3
+  fi
+
+  # ENVELOPE-CRITICAL before the envelope, which is the lesson of the head
+  # class: a token that cannot be versioned must be refused, never reported
+  # inside a conforming-looking fact.
+  if ! facts_canonical "$FACTS_RE_COMMIT" "" "$h_head"; then
+    FACTS_REFUSED="the head is not a commit, so no check state could be bound to it"; return 3
+  fi
+  if ! facts_rules_read "$locator" "$h_baseref"; then
+    FACTS_REFUSED="the required checks of the base branch could not be read"; return 3
+  fi
+  digest="$(printf '%s\n' "$FACTS_RULES" | awk -F'\t' '$1 == "digest" { print $2; exit }')"
+  if [ -z "$digest" ] || ! facts_canonical "$FACTS_RE_COMMIT" "" "$digest"; then
+    FACTS_REFUSED="the required checks could not be versioned"; return 3
+  fi
+
+  head_inv="head:$h_head"
+  rs_inv="ruleset:$locator"
+  tail=',"source":{"type":"github-api","identity":"'"$(json_escape "$locator")"'","version":"'"$(json_escape "$repo_version")"'"}'
+  tail="$tail"',"observed_at":"'"$observed"'","invalidators":["'"$(json_escape "$head_inv")"'","'"$(json_escape "$rs_inv")"'"]'
+  tail="$tail"',"versions":{"'"$(json_escape "$head_inv")"'":"'"$(json_escape "$h_head")"'","'"$(json_escape "$rs_inv")"'":"'"$(json_escape "$digest")"'"}'
+  tail="$tail"',"provenance":"'"$(json_escape "https://$locator/pull/$number")"'"}'
+
+  # A reply whose rollup belongs to a different commit is not a state of THIS
+  # head. Reconciling them would be inventing which one to believe.
+  if [ -n "$r_oid" ] && [ "$r_oid" != "$h_head" ]; then
+    FACTS_EMITTED=$(( FACTS_EMITTED + 1 ))
+    FACTS_UNKNOWN=$(( FACTS_UNKNOWN + 1 ))
+    FACTS_JSON="$head"'"UNKNOWN","detail":{"reason":"the rollup names a different commit than the head","candidates":[]}'"$tail"
+    return 0
+  fi
+  if printf '%s\n' "$unit_rows" \
+     | awk -F'\t' '$1 == "truncated" && $2 == "checks" { found = 1 } END { exit !found }'; then
+    FACTS_EMITTED=$(( FACTS_EMITTED + 1 ))
+    FACTS_UNKNOWN=$(( FACTS_UNKNOWN + 1 ))
+    FACTS_JSON="$head"'"UNKNOWN","detail":{"reason":"bounded","candidates":[]}'"$tail"
+    return 0
+  fi
+
+  # One result per REQUIRED name, in the required order, whatever else ran. A
+  # name with no run observed is `missing`: required and not answered is a
+  # state, not an absence.
+  required=""; results=""
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    required="${required:+$required,}\"$(json_escape "$name")\""
+    row="$(printf '%s\n' "$unit_rows" | awk -F'\t' -v n="$name" '$1 == "check" && $2 == n { print; exit }')"
+    if [ -z "$row" ]; then
+      state=missing
+    else
+      state="$(facts_check_state "$(printf '%s' "$row" | cut -f4)" "$(printf '%s' "$row" | cut -f3)")"
+    fi
+    results="${results:+$results,}{\"name\":\"$(json_escape "$name")\",\"state\":\"$state\"}"
+  done <<EOF
+$(printf '%s\n' "$FACTS_RULES" | awk -F'\t' '$1 == "required" { print $2 }')
+EOF
+
+  FACTS_EMITTED=$(( FACTS_EMITTED + 1 ))
+  FACTS_JSON="$head"'"ESTABLISHED","value":{"head":"'"$(json_escape "$h_head")"'","required":['"$required"'],"results":['"$results"']}'"$tail"
+  return 0
+}
+
 facts_record_telemetry() {
   [ -n "${SPARK_RUN_ID:-}" ] || return 0
   SPARK_RECORDING=1 "$SPARK_ROOT/bin/spark" telemetry record --run "$SPARK_RUN_ID" \
@@ -1405,6 +1696,12 @@ cmd_facts() {
       facts="${facts:+$facts,}$FACTS_JSON"
     else
       why="${why:+$why; }head: $FACTS_REFUSED"
+    fi
+
+    if facts_checks_fact "$locator" "$issue" "$observed"; then
+      facts="${facts:+$facts,}$FACTS_JSON"
+    else
+      why="${why:+$why; }checks: $FACTS_REFUSED"
     fi
   fi
 

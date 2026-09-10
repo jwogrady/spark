@@ -10,6 +10,7 @@ MODULE_RESP = {
 "argument-parsing": [],
 "routing-dispatch": ["route_policy_file", "route_rows", "route_class_rank", "route_model", "route_effort"],
 "source-collection": [
+    "facts_rules_read",
     "tm_dir", "tm_file", "tm_exec_count", "tm_footprint_bytes", "tm_footprint_modules", "tm_get", "tm_load",
     "tm_live_head", "bg_file", "bg_load", "ev_dir", "ev_file", "ev_payload", "ev_get", "ev_load",
     "rt_dir", "rt_run", "rt_ledger", "rt_get", "ci_file", "ci_load", "ci_live", "ci_failing_set",
@@ -21,7 +22,7 @@ MODULE_RESP = {
 "canonicalization": [
     "tm_is_key", "tm_is_int_key", "tm_valid_run", "tm_cache_ratio", "tm_delta", "bg_is_key", "bg_is_int_key",
     "bg_stage", "ev_tokens", "plan_label_scope", "artifact_labels", "label_set_equal", "plan_body_matches",
-    "repo_locator_normalize", "repo_identity", "facts_unreadable_reason", "facts_canonical", "facts_state_canonical", "facts_graph_entry",
+    "repo_locator_normalize", "repo_identity", "facts_unreadable_reason", "facts_canonical", "facts_state_canonical", "facts_check_state", "facts_graph_entry",
     "facts_unit_kind", "facts_unit_locator", "facts_error_absent"],
 "domain-semantics": [
     "tm_hot_cycle", "cmd_telemetry", "bg_apply_staged", "bg_ambiguous", "bg_write", "bg_over", "bg_over_cost",
@@ -31,7 +32,7 @@ MODULE_RESP = {
 "evidence-authority": [
     "tm_no_progress", "tm_binding_status", "bg_reject_framing", "ci_sentinel_state", "ci_verdict",
     "tm_secret_shaped", "facts_repository_fact", "facts_graph_fact", "facts_work_unit_fact",
-    "facts_placement_fact", "facts_head_fact"],
+    "facts_placement_fact", "facts_head_fact", "facts_checks_fact"],
 "formatting-reporting": [
     "facts_envelope_tail", "facts_record_telemetry","label_set_show", "ci_sentinel_report", "json_escape_out", "bg_json_escape",
     # nested helpers: row printers inside the verb that prints them

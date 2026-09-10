@@ -639,11 +639,17 @@ graph_stub() {
                                                  + (if has("baseRef") then {}
                                                     else {baseRef: {target: {oid: (.baseRefOid // "b1c2d3e4f5061728394a5b6c7d8e9f0123456789")}}} end)
                                             end)
+                                    else . end
+                                  | if (type == "object") and (.__typename == "PullRequest")
+                                       and (has("commits") | not)
+                                    then . + {commits: {nodes: [{commit: {oid: .headRefOid,
+                                                                 statusCheckRollup: null}}]}}
                                     else . end')"
   stub_gh "$WORK/bin/gh" <<STUB
 printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
 case "\$*" in
   *graphql*) answer_json '{"data":{"repository":{"issueOrPullRequest":$node}}}' ;;
+  *"repos/jwogrady/spark/rules/branches/"*) answer_json '$RULES' ;;
   *"--hostname github.com repos/jwogrady/spark"*) answer_json '$NODE' ;;
   *) exit 1 ;;
 esac
@@ -652,6 +658,11 @@ STUB
 
 # gfact — the graph fact out of a --issue run.
 gfact() { printf '%s' "$1" | jq -r '.[] | select(.key=="graph.native")'; }
+
+# The branch rules answer: what the base branch REQUIRES, which is not what
+# runs. Two required here, as this repository actually has, so a fixture can
+# show a check that runs and is not required.
+RULES='[{"type":"required_status_checks","ruleset_id":1,"parameters":{"required_status_checks":[{"context":"doctor"},{"context":"tests"}]}}]'
 
 REL='{"__typename":"Issue","number":%d,"state":"%s","updatedAt":"%s","repository":{"nameWithOwner":"jwogrady/spark"}}'
 
@@ -668,12 +679,12 @@ graph_stub "$FULL"
 GOUT="$("$SPARK" facts --issue 733)"
 G="$(gfact "$GOUT")"
 
-# --- the fragment carries all five classes, and is still a fragment --------
+# --- the fragment carries all six classes, and is still a fragment ---------
 [ "$(printf '%s' "$GOUT" | jq -r 'type')" = "array" ] && ok || bad "a fragment is a bare list"
-[ "$(printf '%s' "$GOUT" | jq -r 'length')" = "5" ] && ok \
-  || bad "a --issue run compiles the repository, work unit, graph, placement and head"
-[ "$(printf '%s' "$GOUT" | jq -r '[.[].key] | sort | join(",")')" = "graph.native,head.exact,placement.current,repository.identity,work_unit.identity" ] \
-  && ok || bad "and those five classes exactly"
+[ "$(printf '%s' "$GOUT" | jq -r 'length')" = "6" ] && ok \
+  || bad "a --issue run compiles repository, work unit, graph, placement, head and checks"
+[ "$(printf '%s' "$GOUT" | jq -r '[.[].key] | sort | join(",")')" = "checks.required,graph.native,head.exact,placement.current,repository.identity,work_unit.identity" ] \
+  && ok || bad "and those six classes exactly"
 
 # --- the envelope is the schema's ------------------------------------------
 for field in $(required_fields); do
@@ -930,17 +941,22 @@ out="$("$SPARK" facts)"
 [ "$(printf '%s' "$out" | jq -r 'length')" = "1" ] && ok \
   || bad "without the flag only the repository class is compiled"
 
-# --- the compiler's cost, with three classes ----------------------------
+# --- the compiler's cost, with six classes ------------------------------
 : > "$GH_CALL_LOG"
 graph_stub "$FULL"
 SPARK_RUN_ID=rgraph "$SPARK" facts --issue 733 >/dev/null
 TELG="$("$SPARK" telemetry show --run rgraph --json)"
-assert_contains "five classes compiled means five facts" '"facts_emitted":5' "$TELG"
-# Still TWO reads for three facts: the repository node, and one work-unit node
-# that work_unit and graph share. A third read here would mean the two classes
-# had described the same node from two separate observations.
+assert_contains "six classes compiled means six facts" '"facts_emitted":6' "$TELG"
+# Still TWO reads for six facts: the repository node, and one work-unit node
+# that work_unit, graph, placement, head and checks all share. Another read
+# here would mean two classes had described the same node from two separate
+# observations -- the defect this compiler exists to prevent.
+#
+# This fixture is an ISSUE, so head and checks are both NOT_APPLICABLE and
+# checks answers before it needs the repository or the branch rules. The
+# pull-request path costs more, and is measured where it is exercised.
 assert_contains "from two source reads, not three" '"facts_api_calls":2' "$TELG"
-assert_contains "and the shared observation is reused twice more" '"facts_cache_hits":3' "$TELG"
+assert_contains "and the shared observation is reused four times" '"facts_cache_hits":4' "$TELG"
 assert_contains "and the placement is the one unknown" '"facts_unknown":1' "$TELG"
 
 # --- a pageInfo that does not say whether more pages exist ------------------
@@ -2065,5 +2081,118 @@ assert_contains "and its envelope still names the base ref" "ref:github.com/jwog
 assert_eq "and still versions it canonically" "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" \
   "$(printf '%s' "$HV" | jq -r '.versions["ref:github.com/jwogrady/spark/master"]')"
 assert_versions_canonical "$HV" "head unknown"
+
+# --- checks.required: required is not the same question as present ----------
+# This repository runs five checks and requires two. The value is therefore
+# keyed by the REQUIRED set read from the branch rules, and a required name
+# with no run observed is `missing` — required and unanswered is a state, not
+# an absence. R17 also gives this class a source the others do not have: it
+# names the REPOSITORY and lists ruleset:<repository>.
+
+cfact() { printf '%s' "$1" | jq -r '.[] | select(.key=="checks.required")'; }
+
+HEADOID="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+pr_with_checks() { # pr_with_checks <contexts json array>
+  graph_stub '{"__typename":"PullRequest","number":733,"repository":{"nameWithOwner":"jwogrady/spark"},
+    "updatedAt":"2026-09-08T10:00:00Z","headRefOid":"'"$HEADOID"'","baseRefName":"master",
+    "baseRefOid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "baseRef":{"target":{"oid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}},
+    "commits":{"nodes":[{"commit":{"oid":"'"$HEADOID"'","statusCheckRollup":{"contexts":{"pageInfo":{"hasNextPage":false},"nodes":'"$1"'}}}}]},
+    "closingIssuesReferences":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
+}
+
+# Both required checks green, plus one that ran and is NOT required.
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"},
+                 {"__typename":"CheckRun","name":"tests","conclusion":"SUCCESS","status":"COMPLETED"},
+                 {"__typename":"CheckRun","name":"gate","conclusion":"FAILURE","status":"COMPLETED"}]'
+C="$(cfact "$("$SPARK" facts --issue 733)")"
+assert_contains "a pull request establishes its required checks" "ESTABLISHED" \
+  "$(printf '%s' "$C" | jq -r '.status')"
+assert_eq "the required set is the branch rules, not what ran" "doctor,tests" \
+  "$(printf '%s' "$C" | jq -r '.value.required | join(",")')"
+assert_eq "one result per required name, and only those" "doctor=success,tests=success" \
+  "$(printf '%s' "$C" | jq -r '[.value.results[] | "\(.name)=\(.state)"] | join(",")')"
+assert_eq "the value is bound to the exact head" "$HEADOID" \
+  "$(printf '%s' "$C" | jq -r '.value.head')"
+for field in $(required_fields); do
+  if [ "$(printf '%s' "$C" | jq -r "has(\"$field\")")" = "true" ]; then ok
+  else bad "the checks envelope is missing the required field '$field'"; fi
+done
+
+# R17: this class names the REPOSITORY, not the work unit. Every sibling names
+# the work unit, so an implementation copying one of them passes everything
+# above and fails here.
+assert_eq "the source is the repository, per R17" "github.com/jwogrady/spark" \
+  "$(printf '%s' "$C" | jq -r '.source.identity')"
+assert_contains "the exact head is an invalidator" "head:$HEADOID" \
+  "$(printf '%s' "$C" | jq -r '.invalidators | join(",")')"
+assert_contains "and the rulesets that require them" "ruleset:github.com/jwogrady/spark" \
+  "$(printf '%s' "$C" | jq -r '.invalidators | join(",")')"
+assert_eq "the head token is versioned by the commit itself, per R20" "$HEADOID" \
+  "$(printf '%s' "$C" | jq -r '.versions["head:'"$HEADOID"'"]')"
+printf '%s' "$(printf '%s' "$C" | jq -r '.versions["ruleset:github.com/jwogrady/spark"]')" \
+  | grep -Eq '^[0-9a-f]{40}$' && ok \
+  || bad "the ruleset token is not versioned by a collection digest"
+assert_versions_canonical "$C" "checks"
+
+# A required check that never ran is `missing`, not absent from the answer.
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"}]'
+CM="$(cfact "$("$SPARK" facts --issue 733)")"
+assert_eq "a required check with no run observed is missing" "doctor=success,tests=missing" \
+  "$(printf '%s' "$CM" | jq -r '[.value.results[] | "\(.name)=\(.state)"] | join(",")')"
+
+# A run that has not completed is pending, whatever it currently reports.
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":null,"status":"IN_PROGRESS"},
+                 {"__typename":"CheckRun","name":"tests","conclusion":"FAILURE","status":"COMPLETED"}]'
+CP="$(cfact "$("$SPARK" facts --issue 733)")"
+assert_eq "an incomplete run is pending, and a completed failure is failure" "doctor=pending,tests=failure" \
+  "$(printf '%s' "$CP" | jq -r '[.value.results[] | "\(.name)=\(.state)"] | join(",")')"
+
+# SKIPPED is deliberately NOT success. The vocabulary has no fifth state, and
+# R15 merges only when every required check is success, so a required check
+# that never ran its assertions must not read as one that passed.
+pr_with_checks '[{"__typename":"CheckRun","name":"doctor","conclusion":"SKIPPED","status":"COMPLETED"},
+                 {"__typename":"CheckRun","name":"tests","conclusion":"NEUTRAL","status":"COMPLETED"}]'
+CS="$(cfact "$("$SPARK" facts --issue 733)")"
+assert_eq "a skipped or neutral required check is not a passing one" "doctor=failure,tests=failure" \
+  "$(printf '%s' "$CS" | jq -r '[.value.results[] | "\(.name)=\(.state)"] | join(",")')"
+
+# A rollup belonging to another commit is not the state of THIS head.
+graph_stub '{"__typename":"PullRequest","number":733,"repository":{"nameWithOwner":"jwogrady/spark"},
+  "updatedAt":"2026-09-08T10:00:00Z","headRefOid":"'"$HEADOID"'","baseRefName":"master",
+  "baseRefOid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "baseRef":{"target":{"oid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}},
+  "commits":{"nodes":[{"commit":{"oid":"dddddddddddddddddddddddddddddddddddddddd","statusCheckRollup":{"contexts":{"pageInfo":{"hasNextPage":false},"nodes":[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"},{"__typename":"CheckRun","name":"tests","conclusion":"SUCCESS","status":"COMPLETED"}]}}}}]},
+  "closingIssuesReferences":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
+CW="$(cfact "$("$SPARK" facts --issue 733)")"
+assert_contains "a rollup for another commit is not this head's state" "UNKNOWN" \
+  "$(printf '%s' "$CW" | jq -r '.status')"
+[ "$(printf '%s' "$CW" | jq -r 'has("value")')" = "false" ] && ok \
+  || bad "a mismatched rollup still produced a value"
+
+# A bounded rollup has not told us every state, so it is an unknown rather than
+# a shorter answer.
+graph_stub '{"__typename":"PullRequest","number":733,"repository":{"nameWithOwner":"jwogrady/spark"},
+  "updatedAt":"2026-09-08T10:00:00Z","headRefOid":"'"$HEADOID"'","baseRefName":"master",
+  "baseRefOid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "baseRef":{"target":{"oid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}},
+  "commits":{"nodes":[{"commit":{"oid":"'"$HEADOID"'","statusCheckRollup":{"contexts":{"pageInfo":{"hasNextPage":true},"nodes":[{"__typename":"CheckRun","name":"doctor","conclusion":"SUCCESS","status":"COMPLETED"}]}}}}]},
+  "closingIssuesReferences":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
+CB="$(cfact "$("$SPARK" facts --issue 733)")"
+assert_contains "a bounded rollup is an unknown, not a shorter answer" "bounded" \
+  "$(printf '%s' "$CB" | jq -r '.detail.reason')"
+
+# An issue has no head, so no required check can be in a state against it. R17
+# says such a fact names the WORK UNIT rather than the repository.
+graph_stub '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"state":"OPEN","updatedAt":"2026-09-08T10:00:00Z","parent":null,"subIssues":{"pageInfo":{"hasNextPage":false},"nodes":[]},"blockedBy":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
+CI="$(cfact "$("$SPARK" facts --issue 733)")"
+assert_contains "an issue has no required checks to be in a state" "NOT_APPLICABLE" \
+  "$(printf '%s' "$CI" | jq -r '.status')"
+assert_eq "and names the work unit rather than the repository" "github.com/jwogrady/spark#733" \
+  "$(printf '%s' "$CI" | jq -r '.source.identity')"
+[ "$(printf '%s' "$CI" | jq -r '[.invalidators[] | select(startswith("ruleset:"))] | length')" = "0" ] \
+  && ok || bad "a not-applicable checks fact lists a ruleset it never consulted"
+[ "$(printf '%s' "$CI" | jq -r 'has("detail")')" = "false" ] && ok \
+  || bad "a not-applicable checks fact carries a detail"
 
 finish

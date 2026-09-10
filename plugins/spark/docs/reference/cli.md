@@ -2248,11 +2248,20 @@ snapshot is not yet possible, which is why one is never claimed.
 | `graph` | `graph.native` | An issue's native parent, children and blockers, each with its current state |
 | `placement` | `placement.current` | Where the work unit sits in the release, milestone and gate structure |
 | `head` | `head.exact` | A pull request's exact HEAD, the branch it targets, that branch's current commit, and whether the change still sits on it |
+| `checks` | `checks.required` | What the base branch requires on that exact HEAD, and the state of each required check |
 
-`work_unit`, `graph`, `placement` and `head` all need a work unit, so they are
-compiled when `--issue <number>` names one. Without the flag, only `repository`
-is compiled. The four are read from **one** request and share that single
-observation, so they can never describe the same node in four different states.
+`work_unit`, `graph`, `placement`, `head` and `checks` all need a work unit, so
+they are compiled when `--issue <number>` names one. Without the flag, only
+`repository` is compiled. All five are read from **one** observation of the
+work-unit node, so they can never describe it in five different states.
+
+**Required is not the same question as present.** `checks.required` reads what
+the base branch *requires* from the branch rules, and reports one result per
+required name — so a check that runs without being required is not in the
+answer, and a required check with no run observed is `missing` rather than
+absent. A skipped or neutral required check is reported as `failure`: the
+vocabulary is `success | failure | pending | missing`, and a check that never
+ran its assertions is not one that passed.
 
 **`base` is the branch's commit, not the change's.** `head.exact` reports what
 the base branch points at *now*, and `current` says whether the pull request is
