@@ -49,4 +49,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: timeout 120s bash .github/scripts/release-notes-runner.sh
+        run: timeout --kill-after=10s 120s bash .github/scripts/release-notes-runner.sh
