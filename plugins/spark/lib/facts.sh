@@ -902,20 +902,46 @@ facts_unit_node() {
     # what follows the bracket is what keeps `- [x]not an item` out; admitting
     # the other markers is what keeps a real contract from reading as empty.
     def task_item:
-      (capture("^(?<ind> *)(?:[-*+]|[0-9]{1,9}[.)])[ \t]+\\[(?<mark>[ xX])\\](?=[ \t]|$)") // null);
+      (capture("^(?<ind> *)(?<marker>[-*+]|[0-9]{1,9}[.)])(?<ws>[ \t]+)\\[(?<mark>[ xX])\\](?=[ \t]|$)") // null);
     def list_item:
-      test("^ *(?:[-*+]|[0-9]{1,9}[.)])[ \t]");
+      (capture("^(?<ind> *)(?<marker>[-*+]|[0-9]{1,9}[.)])(?<ws>[ \t]+)") // null);
+    def item_content_indent($x):
+      (($x.ind | length) + ($x.marker | length) + ($x.ws | length));
     def acc_lines:
       (. / "\n") as $L
+      # Lines hidden by fenced code or HTML comments are not rendered
+      # acceptance structure. Track both states before heading/item parsing.
       | (reduce range(0; $L | length) as $i
-          ({open: null, inside: []};
-            ($L[$i] | fence_run) as $f
-            | if $f == null then .inside += [(.open != null)]
-              elif .open == null then (.inside += [false] | .open = $f)
-              elif ($f.ch == .open.ch) and ($f.len >= .open.len)
-                   and ($f.rest | test("^[ \t]*$"))
-                then (.inside += [false] | .open = null)
-              else .inside += [true]
+          ({open: null, comment: false, inside: []};
+            ($L[$i]) as $ln
+            | if .open != null then
+                ($ln | fence_run) as $f
+                | if ($f != null)
+                     and ($f.ch == .open.ch) and ($f.len >= .open.len)
+                     and ($f.rest | test("^[ \t]*$"))
+                  then (.inside += [false] | .open = null)
+                  else .inside += [true]
+                  end
+              elif .comment then
+                (.inside += [true]
+                 | if ($ln | contains("-->")) then .comment = false else . end)
+              else
+                ($ln | index("<!--")) as $cs
+                | if $cs != null then
+                    # If visible content precedes an inline comment, keep that
+                    # visible prefix eligible; a comment-only line is hidden.
+                    ($ln[0:$cs]) as $prefix
+                    | .inside += [($prefix | test("^[ \t]*$"))]
+                    | if ($ln[$cs + 4:] | contains("-->"))
+                      then .
+                      else .comment = true
+                      end
+                  else
+                    ($ln | fence_run) as $f
+                    | if $f == null then .inside += [false]
+                      else (.inside += [false] | .open = $f)
+                      end
+                  end
               end)
          | .inside) as $F
       | [ range(0; $L | length)
@@ -929,21 +955,28 @@ facts_unit_node() {
           | ([ $H[] | select(. > $a)
                | select(($L[.] | capture("^ {0,3}(?<h>#{1,6})") | .h | length) <= $lvl) ]) as $ends
           | (if ($ends | length) == 0 then ($L | length) else $ends[0] end) as $e
-          # Four or more spaces is an indented CODE block unless a list is
-          # open: a nested item continues its parent, while an indented sample
-          # after a paragraph does not. Only the tick is carried out.
+          # Indented code inside a list is not a nested task item. Track the
+          # current list item's content column: a child marker may be indented
+          # beneath that content, but four further spaces are code again.
           | (reduce range($a + 1; $e) as $i
-              ({open_list: false, items: []};
+              ({list_content: null, items: []};
                 ($L[$i]) as $ln
                 | if $F[$i] then .
                   elif ($ln | test("^[ \t]*$")) then .
                   else ($ln | task_item) as $t
-                    | if $t == null
-                      then .open_list = ($ln | list_item)
+                    | if $t == null then
+                        ($ln | list_item) as $li
+                        | if $li == null then .list_content = null
+                          else .list_content = item_content_indent($li)
+                          end
                       else
-                        if (($t.ind | length) >= 4) and (.open_list | not) then .
-                        else .items += [$t.mark] end
-                        | .open_list = true
+                        ($t.ind | length) as $ind
+                        | if (($ind >= 4) and (.list_content == null))
+                             or ((.list_content != null) and ($ind >= (.list_content + 4)))
+                          then .
+                          else (.items += [$t.mark]
+                                | .list_content = item_content_indent($t))
+                          end
                       end
                   end)
              | .items)
