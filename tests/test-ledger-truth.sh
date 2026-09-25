@@ -454,9 +454,23 @@ rm -f "$ri/tests/test-four-added-later.sh"
 
 # ============ the REAL documents ==========================================
 # Last, and separately: the fixtures prove the check works, this proves the
-# repository is consistent right now.
-RC=0; OUT="$(bash "$CHECK" 2>&1)" || RC=$?
+# repository is consistent right now. #768 removed historical defaults from
+# the checker, so current callers must name the evidence pair they intend to
+# verify rather than silently inheriting v0.21.
+REAL_LEDGER="$repo_root/docs/ops/v0.21-dogfood-evaluation.md"
+REAL_RECORD="$repo_root/docs/releases/v0.21.md"
+RC=0
+OUT="$(bash "$CHECK" --ledger "$REAL_LEDGER" --record "$REAL_RECORD" 2>&1)" || RC=$?
 assert_eq "this repository's own ledger and record agree" 0 "$RC"
 assert_contains "and the check says so with a count" "repair cycle(s)" "$OUT"
+
+# The new contract is intentionally fail-closed: omitting either input must not
+# resurrect the historical v0.21 fallback that #768 removes.
+RC=0; OUT="$(bash "$CHECK" --record "$REAL_RECORD" 2>&1)" || RC=$?
+assert_eq "omitting the ledger is rejected" 2 "$RC"
+assert_contains "and names the missing input" "--ledger is required" "$OUT"
+RC=0; OUT="$(bash "$CHECK" --ledger "$REAL_LEDGER" 2>&1)" || RC=$?
+assert_eq "omitting the record is rejected" 2 "$RC"
+assert_contains "and names the missing input" "--record is required" "$OUT"
 
 finish
