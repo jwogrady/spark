@@ -2363,156 +2363,7 @@ facts_authority_fact() {
     return 3
   fi
 
-  payload_count="$(printf '%s\n' "$body" | grep -Ec '^spark-authority-v1
-  [ -n "${SPARK_RUN_ID:-}" ] || return 0
-  SPARK_RECORDING=1 "$SPARK_ROOT/bin/spark" telemetry record --run "$SPARK_RUN_ID" \
-    facts_emitted="$FACTS_EMITTED" \
-    facts_unknown="$FACTS_UNKNOWN" \
-    facts_api_calls="$FACTS_API_CALLS" \
-    facts_cache_hits="$FACTS_CACHE_HITS" \
-    facts_cache_misses="$FACTS_CACHE_MISSES" >/dev/null 2>&1 || true
-  return 0
-}
-
-cmd_facts() {
-  local usage_line="usage: spark facts [--issue <number>] [--help]"
-  local issue="" issue_given=""
-  while [ "$#" -gt 0 ]; do
-    case "$1" in
-      --issue)   issue_given=1; shift; issue="${1:-}" ;;
-      --issue=*) issue_given=1; issue="${1#--issue=}" ;;
-      -h|--help) echo "$usage_line"; return 0 ;;
-      *) red "unknown option: $1"; echo "$usage_line"; return 1 ;;
-    esac
-    if [ "$#" -gt 0 ]; then shift; fi
-  done
-  # Whether the flag was SUPPLIED is tracked separately from its value. `--issue`
-  # with nothing after it, and `--issue=`, are caller errors: treating them as
-  # the flag's absence would quietly compile a different set of facts than the
-  # caller asked for, which is worse than refusing.
-  #
-  # The value is then validated before it reaches a query and refused rather than
-  # coerced: a work unit is a positive integer, and anything else names no node.
-  if [ -n "$issue_given" ]; then
-    case "$issue" in
-      ''|0|0*|*[!0-9]*)
-        red "--issue takes an issue number"; echo "$usage_line"; return 1 ;;
-    esac
-  fi
-
-  local top; top="$(git_root)"
-  if [ -z "$top" ]; then
-    red "spark facts needs a git repo — run it from inside the project."
-    return 1
-  fi
-
-  facts_load_grammars
-
-  # Every envelope carries the instant its source was read, whatever the status,
-  # so one instant is taken and validated before anything is built. An envelope
-  # cannot report the absence of its own observation instant — an UNKNOWN needs
-  # one as much as an ESTABLISHED does — so an unusable clock is not a fact with
-  # a reason, it is a reason there is no fact.
-  local observed; observed="$(facts_now)"
-  if ! facts_canonical "$FACTS_RE_TIMESTAMP" "" "$observed"; then
-    yellow "NOT ASSESSED — the clock gave no usable observation instant" >&2
-    facts_record_telemetry
-    return 3
-  fi
-
-  local locator
-  locator="$(repo_locator_normalize "$(git -C "$top" remote get-url origin 2>/dev/null || true)")"
-  # Without a locator, or with one that does not normalize to a canonical
-  # repository, the compiler cannot NAME the node it would read, so there is no
-  # subject to be unknown about. An UNKNOWN still identifies its node, so this
-  # is not one: nothing is emitted, because an identity invented to fill that
-  # field would be worse than reporting that none could be read. The remote is
-  # arbitrary text, which is why the grammar decides and not emptiness alone.
-  if [ -z "$locator" ] \
-     || ! facts_canonical "$FACTS_RE_REPOSITORY" "$FACTS_CON_REPOSITORY" "$locator"; then
-    yellow "NOT ASSESSED — no origin remote names a canonical repository here" >&2
-    facts_record_telemetry
-    return 3
-  fi
-
-  # Each class is compiled independently and the fragment carries the ones that
-  # could be built. A class that could not be established is absent rather than
-  # present-and-empty, and the reasons are reported, so a caller can never read
-  # silence as an answer.
-  local facts="" why=""
-  if facts_repository_fact "$locator" "$observed"; then
-    facts="$FACTS_JSON"
-  else
-    why="repository: $FACTS_REFUSED"
-  fi
-
-  if facts_authority_fact "$locator" "$observed"; then
-    if [ -n "$facts" ]; then facts="$facts,$FACTS_JSON"; else facts="$FACTS_JSON"; fi
-  else
-    if [ -n "$why" ]; then why="$why; authority: $FACTS_REFUSED"; else why="authority: $FACTS_REFUSED"; fi
-  fi
-
-  if [ -n "$issue" ]; then
-    if facts_work_unit_fact "$locator" "$issue" "$observed"; then
-      facts="${facts:+$facts,}$FACTS_JSON"
-    else
-      why="${why:+$why; }work_unit: $FACTS_REFUSED"
-    fi
-
-    if facts_graph_fact "$locator" "$issue" "$observed"; then
-      facts="${facts:+$facts,}$FACTS_JSON"
-    else
-      why="${why:+$why; }graph: $FACTS_REFUSED"
-    fi
-
-    if facts_placement_fact "$locator" "$issue" "$observed"; then
-      facts="${facts:+$facts,}$FACTS_JSON"
-    else
-      why="${why:+$why; }placement: $FACTS_REFUSED"
-    fi
-
-    if facts_acceptance_fact "$locator" "$issue" "$observed"; then
-      facts="${facts:+$facts,}$FACTS_JSON"
-    else
-      why="${why:+$why; }acceptance: $FACTS_REFUSED"
-    fi
-
-    if facts_head_fact "$locator" "$issue" "$observed"; then
-      facts="${facts:+$facts,}$FACTS_JSON"
-    else
-      why="${why:+$why; }head: $FACTS_REFUSED"
-    fi
-
-    if facts_review_fact "$locator" "$issue" "$observed"; then
-      facts="${facts:+$facts,}$FACTS_JSON"
-    else
-      why="${why:+$why; }review: $FACTS_REFUSED"
-    fi
-
-    if facts_checks_fact "$locator" "$issue" "$observed"; then
-      facts="${facts:+$facts,}$FACTS_JSON"
-    else
-      why="${why:+$why; }checks: $FACTS_REFUSED"
-    fi
-  fi
-
-  # Every diagnostic goes to stderr. This verb's stdout is a machine surface, and
-  # a fragment followed by a human note is not parseable JSON — which is exactly
-  # what a caller piping it would discover at the worst moment.
-  if [ -z "$facts" ]; then
-    yellow "NOT ASSESSED — nothing could be established: $why" >&2
-    facts_record_telemetry
-    return 3
-  fi
-  # The fragment shape: a bare list, never an object, so it can never be read as
-  # the {observer, facts} snapshot a consumer is allowed to act on (R22). Two
-  # classes are not the required set either, so this stays a fragment however
-  # many facts it carries.
-  printf '[%s]\n' "$facts"
-  [ -z "$why" ] || yellow "not established — $why" >&2
-  facts_record_telemetry
-}
- || true)"
+  payload_count="$(printf '%s\n' "$body" | grep -Ec '^spark-authority-v1$' || true)"
   if [ "$payload_count" != "1" ]; then
     FACTS_REFUSED="the authority decision record has no unique v1 payload"
     return 3
@@ -2677,6 +2528,12 @@ cmd_facts() {
     facts="$FACTS_JSON"
   else
     why="repository: $FACTS_REFUSED"
+  fi
+
+  if facts_authority_fact "$locator" "$observed"; then
+    if [ -n "$facts" ]; then facts="$facts,$FACTS_JSON"; else facts="$FACTS_JSON"; fi
+  else
+    if [ -n "$why" ]; then why="$why; authority: $FACTS_REFUSED"; else why="authority: $FACTS_REFUSED"; fi
   fi
 
   if [ -n "$issue" ]; then
