@@ -5097,24 +5097,29 @@ $(git -C "$root" branch --merged "$trunk" --format='%(refname:short)' 2>/dev/nul
 EOF
   fi
 
-  # --- release record residue ----------------------------------------------
-  # Reconcile CURRENT release truth, never every historical release record.
-  # The running milestone is live GitHub state; its vX.Y title selects the one
-  # current release projection. A published tag that contradicts that projection
-  # remains detectable, while older release records stay historical evidence.
-  # If live milestone state cannot be read, that is an unread finding — never
-  # the silent claim that no release contradiction exists.
-  local rf rbase rver rtag rdisp rtitle rinv
-  if ! command -v gh >/dev/null 2>&1 || ! gh auth status >/dev/null 2>&1; then
+  # --- release/milestone residue --------------------------------------------
+  # Read GitHub's open milestones ONCE and reuse the same observation for:
+  #   1. the active release projection, and
+  #   2. milestones whose work is complete and may be closed.
+  #
+  # open_issues includes an open release gate, so the earliest version milestone
+  # with open_issues > 0 remains the running release until its boundary closes.
+  # This keeps reconcile off historical release records without adding a second
+  # hierarchy/API read to the hot path.
+  local rf rbase rver rtag rdisp rtitle
+  local mrows="" mread=0 mnum mtitle mopen
+  if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+    if mrows="$(gh api 'repos/{owner}/{repo}/milestones?state=open' --jq '.[] | [.number, .title, .open_issues] | @tsv' 2>/dev/null)"; then
+      mread=1
+    fi
+  fi
+
+  if [ "$mread" -ne 1 ]; then
     rec_row release unread - current \
-      "active release cannot be derived because authenticated GitHub milestone state is unavailable" \
-      "none — evidence is unreadable" none "spark course" human
-  elif ! rinv="$(milestone_inventory 2>/dev/null)"; then
-    rec_row release unread - current \
-      "active release cannot be derived because milestone inventory could not be read" \
-      "none — evidence is unreadable" none "spark course" human
+      "active release cannot be derived because open milestone state is unreadable" \
+      "none — evidence is unreadable" none "gh auth status" human
   else
-    rtitle="$(current_milestone "$rinv")"
+    rtitle="$(printf '%s\n' "$mrows" | awk -F'\t' '$3 + 0 > 0 { print $2 }' | LC_ALL=C sort -V | head -n1)"
     rver="$(printf '%s\n' "$rtitle" | awk '{print $1}')"
     case "$rver" in
       v[0-9]*.[0-9]*) ;;
@@ -5143,13 +5148,7 @@ EOF
         fi
       fi
     fi
-  fi
 
-  # --- release residue ------------------------------------------------------
-  # A milestone with no open issues has done its job. Closing it is a remote
-  # act and stays the human's.
-  if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
-    local mline mnum mtitle mopen
     while IFS=$'\t' read -r mnum mtitle mopen; do
       [ -n "$mnum" ] || continue
       [ "$mopen" = "0" ] || continue
@@ -5158,13 +5157,10 @@ EOF
         "close it on GitHub" "a remote mutation" \
         "gh api repos/{owner}/{repo}/milestones" human
     done <<EOF
-$(gh api 'repos/{owner}/{repo}/milestones?state=open' --jq '.[] | [.number, .title, .open_issues] | @tsv' 2>/dev/null)
+$mrows
 EOF
-  else
-    rec_row milestone unread - all \
-      "milestone state needs an authenticated gh, which is unavailable" \
-      "none — evidence is unreadable" none "gh auth status" human
   fi
+
 }
 
 # rec_kind <area> <disposition> — how a finding would be carried out.
