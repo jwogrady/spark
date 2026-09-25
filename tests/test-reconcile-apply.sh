@@ -44,9 +44,10 @@ GHEOF
 chmod +x "$rgh/gh"
 R() { ( cd "$1" && env PATH="$rgh" ACTIVE_RELEASE="${ACTIVE_RELEASE:-0.1}" "$SPARK" reconcile "${@:2}" 2>&1 ); }
 
-# A repository with THREE stale release records: each states a disposition its
-# published tag contradicts. Three separate findings, so three groups, so the
-# middle one can be reverted.
+# A repository with three historical release records whose dispositions each
+# contradict a published tag. The live-milestone fixture exposes exactly one
+# release at a time, so the same mutation-safety contract is exercised across
+# three independent active-release states without scanning history.
 r="$WORK/repo"
 mkdir -p "$r/docs/releases" "$r/.spark" "$r/.github/ISSUE_TEMPLATE"
 git -C "$r" init -q
