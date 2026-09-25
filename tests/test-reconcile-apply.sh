@@ -35,7 +35,18 @@ case "${1:-}" in auth) exit 0 ;; esac
 case "$*" in
   *"repos/{owner}/{repo}/milestones?state=open"*)
     title="v${ACTIVE_RELEASE:-0.1} — Test"
-    printf '1\t%s\t1\n' "$title"
+    case "${MILESTONE_MODE:-release}" in
+      mixed)
+        printf '9\tAlpha work\t1\n'
+        printf '1\t%s\t1\n' "$title"
+        ;;
+      no-release)
+        printf '9\tAlpha work\t1\n'
+        ;;
+      *)
+        printf '1\t%s\t1\n' "$title"
+        ;;
+    esac
     exit 0
     ;;
 esac
@@ -77,6 +88,20 @@ done
 rows="$(cd "$r" && env PATH="$rgh" ACTIVE_RELEASE=0.2 bash -c '. '"$SPARK"'; rec_rows "'"$r"'"')"
 assert_contains "the active release finding cites its published tag" "tag v0.2.0 is published" \
   "$(printf '%s\n' "$rows" | awk -F'\t' '$4 == "v0.2.md" { print $5 }')"
+
+# A non-release milestone that sorts before the version milestone must not
+# suppress current release truth.
+rows="$(cd "$r" && env PATH="$rgh" ACTIVE_RELEASE=0.2 MILESTONE_MODE=mixed bash -c '. '"$SPARK"'; rec_rows "'"$r"'"')"
+assert_eq "mixed milestones still select the active version milestone" "v0.2.md" \
+  "$(printf '%s\n' "$rows" | awk -F'\t' '$1 == "release" && $2 == "known" { print $4; exit }')"
+
+# Readable milestone state with no version milestone is evidence, not absence.
+# Fail closed rather than silently skipping the release projection.
+rows="$(cd "$r" && env PATH="$rgh" MILESTONE_MODE=no-release bash -c '. '"$SPARK"'; rec_rows "'"$r"'"')"
+assert_eq "readable state with no active version milestone is unread release truth" "unread" \
+  "$(printf '%s\n' "$rows" | awk -F'\t' '$1 == "release" { print $2; exit }')"
+assert_contains "and explains why no release was derived" "no active version milestone" \
+  "$(printf '%s\n' "$rows" | awk -F'\t' '$1 == "release" { print $5; exit }')"
 
 # ============ 2. nothing applies without --yes ============================
 before="$(git -C "$r" rev-parse HEAD)"
