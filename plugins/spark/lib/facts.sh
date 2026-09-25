@@ -2060,27 +2060,35 @@ EOF
   rec_inv="comment:$record"
   login="login:${rec_login,,}"
 
-  # Value-only fields, so a malformed one is an UNKNOWN rather than a refusal:
-  # the envelope above is already complete and can say what it depends on. A
-  # comment by a deleted account has no login and so no reviewer to name.
+  # The record identity and timestamp are envelope-critical even when the
+  # value is UNKNOWN. R17 says review names the verdict record it depends on
+  # for every status, and R20 versions that comment so an edit makes a prior
+  # fact stale. If the record itself cannot be named/versioned, there is no
+  # provenance token we can truthfully fabricate.
   if ! facts_canonical "$FACTS_RE_COMMENT" "" "$record" \
-     || ! facts_canonical "$FACTS_RE_TIMESTAMP" "" "$rec_at" \
-     || ! facts_canonical "$FACTS_RE_VERDICT" "" "$rec_verdict" \
+     || ! facts_canonical "$FACTS_RE_TIMESTAMP" "" "$rec_at"; then
+    FACTS_EMITTED=$(( FACTS_EMITTED + 1 ))
+    FACTS_UNKNOWN=$(( FACTS_UNKNOWN + 1 ))
+    FACTS_JSON="$head"'"UNKNOWN","detail":{"reason":"the record naming this head could not be named or versioned","candidates":[]}'"$tail"
+    return 0
+  fi
+
+  invs="$invs,\"$(json_escape "$rec_inv")\""
+  vers="$vers,\"$(json_escape "$rec_inv")\":\"$(json_escape "$rec_at")\""
+  tail=',"source":{"type":"github-api","identity":"'"$(json_escape "$record")"'","version":"'"$(json_escape "$rec_at")"'"}'
+  tail="$tail"',"observed_at":"'"$observed"'","invalidators":['"$invs"'],"versions":{'"$vers"'}'
+  tail="$tail"',"provenance":"'"$(json_escape "https://$locator/pull/$number")"'"}'
+
+  # Reviewer/verdict are value-only fields. A deleted account therefore keeps
+  # the fact UNKNOWN with no value, but the already-identified verdict record
+  # remains the source and invalidator of that UNKNOWN.
+  if ! facts_canonical "$FACTS_RE_VERDICT" "" "$rec_verdict" \
      || [ -z "$rec_login" ] || ! facts_canonical "$FACTS_RE_LOGIN" "" "$login"; then
     FACTS_EMITTED=$(( FACTS_EMITTED + 1 ))
     FACTS_UNKNOWN=$(( FACTS_UNKNOWN + 1 ))
     FACTS_JSON="$head"'"UNKNOWN","detail":{"reason":"the record naming this head could not be read as a verdict","candidates":[]}'"$tail"
     return 0
   fi
-
-  # R17: an ESTABLISHED review names its RECORD as the source and lists it as a
-  # comment: invalidator; R20 versions that token by the comment updated_at, so
-  # an edited verdict goes stale rather than standing.
-  invs="$invs,\"$(json_escape "$rec_inv")\""
-  vers="$vers,\"$(json_escape "$rec_inv")\":\"$(json_escape "$rec_at")\""
-  tail=',"source":{"type":"github-api","identity":"'"$(json_escape "$record")"'","version":"'"$(json_escape "$rec_at")"'"}'
-  tail="$tail"',"observed_at":"'"$observed"'","invalidators":['"$invs"'],"versions":{'"$vers"'}'
-  tail="$tail"',"provenance":"'"$(json_escape "https://$locator/pull/$number")"'"}'
 
   FACTS_EMITTED=$(( FACTS_EMITTED + 1 ))
   FACTS_JSON="$head"'"ESTABLISHED","value":{"verdict":"'"$(json_escape "$rec_verdict")"'","head":"'"$(json_escape "$h_head")"'","reviewer":"'"$(json_escape "$login")"'","record":"'"$(json_escape "$record")"'"}'"$tail"
