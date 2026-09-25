@@ -85,6 +85,9 @@ FACTS_RE_ISSUE_STATE=""
 FACTS_RE_VERDICT=""
 FACTS_RE_LOGIN=""
 FACTS_RE_COMMENT=""
+FACTS_RE_DECISION_RECORD=""
+FACTS_RE_SCOPE=""
+FACTS_RE_BOUNDARY=""
 FACTS_CON_REPOSITORY=""
 FACTS_CON_REF=""
 FACTS_CON_WORK_UNIT=""
@@ -103,6 +106,9 @@ facts_load_grammars() {
       identifier/verdict)    FACTS_RE_VERDICT="$rest" ;;
       identifier/login)      FACTS_RE_LOGIN="$rest" ;;
       identifier/comment)    FACTS_RE_COMMENT="$rest" ;;
+      identifier/decision-record) FACTS_RE_DECISION_RECORD="$rest" ;;
+      identifier/scope)      FACTS_RE_SCOPE="$rest" ;;
+      identifier/boundary)   FACTS_RE_BOUNDARY="$rest" ;;
       constraint/work-unit)  FACTS_CON_WORK_UNIT="$FACTS_CON_WORK_UNIT$rest"$'\n' ;;
       identifier/ref)        FACTS_RE_REF="$rest" ;;
       identifier/timestamp)  FACTS_RE_TIMESTAMP="$rest" ;;
@@ -110,7 +116,7 @@ facts_load_grammars() {
       constraint/ref)        FACTS_CON_REF="$FACTS_CON_REF$rest"$'\n' ;;
     esac
   done < <(awk -F'\t' '
-    $1 == "identifier" && ($2 == "repository" || $2 == "ref" || $2 == "timestamp" || $2 == "work-unit" || $2 == "issue-state" || $2 == "milestone" || $2 == "commit" || $2 == "verdict" || $2 == "login" || $2 == "comment") { print $1 "\t" $2 "\t" $3 }
+    $1 == "identifier" && ($2 == "repository" || $2 == "ref" || $2 == "timestamp" || $2 == "work-unit" || $2 == "issue-state" || $2 == "milestone" || $2 == "commit" || $2 == "verdict" || $2 == "login" || $2 == "comment" || $2 == "decision-record" || $2 == "scope" || $2 == "boundary") { print $1 "\t" $2 "\t" $3 }
     $1 == "constraint" && ($2 == "repository" || $2 == "ref" || $2 == "work-unit") { print $1 "\t" $2 "\t" $3 }' "$FACTS_MODEL")
   FACTS_GRAMMARS_LOADED=1
 }
