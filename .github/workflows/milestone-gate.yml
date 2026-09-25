@@ -46,8 +46,7 @@ jobs:
         # deliberately not part of the mandatory milestone readiness verdict:
         # an API outage must not turn advisory evidence into a release gate.
         continue-on-error: true
-        timeout-minutes: 2
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: bash .github/scripts/release-notes-runner.sh
+        run: timeout 120s bash .github/scripts/release-notes-runner.sh
