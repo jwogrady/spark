@@ -5119,7 +5119,7 @@ EOF
       "active release cannot be derived because open milestone state is unreadable" \
       "none — evidence is unreadable" none "gh auth status" human
   else
-    # Select only a live release milestone. Non-release milestones are
+    # Select only a live version milestone. Non-release milestones are
     # independent work containers and must never suppress release truth merely
     # because their title sorts first.
     rtitle="$(printf '%s\n' "$mrows" | awk -F'\t' '$3 + 0 > 0 && $2 ~ /^v[0-9]+\.[0-9]+([[:space:]]|$)/ { print $2 }' | LC_ALL=C sort -V | head -n1)"
