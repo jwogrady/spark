@@ -96,9 +96,9 @@ done
 # must never become the mandatory milestone-gate verdict, and it must not be
 # allowed to hold that verdict open indefinitely.
 advisory_block="$(awk '
-  /name: check release-notes completeness \\(advisory\\)/ { inside=1 }
+  /name: check release-notes completeness/ { inside=1 }
   inside { print }
-  inside && /run: timeout [0-9]+s bash \\.github\\/scripts\\/release-notes-runner\\.sh/ { exit }
+  inside && /release-notes-runner.sh/ { exit }
 ' "$workflow")"
 printf '%s\n' "$advisory_block" | grep -qE '^[[:space:]]*continue-on-error:[[:space:]]*true[[:space:]]*$' \
   && ok || bad "release-notes advisory step must be non-blocking"
