@@ -2248,13 +2248,15 @@ snapshot is not yet possible, which is why one is never claimed.
 | `graph` | `graph.native` | An issue's native parent, children and blockers, each with its current state |
 | `placement` | `placement.current` | Where the work unit sits in the release, milestone and gate structure |
 | `head` | `head.exact` | A pull request's exact HEAD, the branch it targets, that branch's current commit, and whether the change still sits on it |
+| `acceptance` | `acceptance.contract` | Which contract the change is judged against, and how its items stand on that exact HEAD |
 | `review` | `review.independent` | The independent verdict bound to that exact HEAD, and the record it is written in |
 | `checks` | `checks.required` | What the base branch requires on that exact HEAD, and the state of each required check |
 
-`work_unit`, `graph`, `placement`, `head`, `review` and `checks` all need a work
-unit, so they are compiled when `--issue <number>` names one. Without the flag,
-only `repository` is compiled. All six are read from **one** observation of the
-work-unit node, so they can never describe it in six different states.
+`work_unit`, `graph`, `placement`, `acceptance`, `head`, `review` and `checks`
+all need a work unit, so they are compiled when `--issue <number>` names one.
+Without the flag, only `repository` is compiled. All seven are read from
+**one** observation of the work-unit node, so they can never describe it in
+seven different states.
 
 **Required is not the same question as present.** `checks.required` reads what
 the base branch *requires* from the branch rules, and reports one result per
@@ -2285,6 +2287,23 @@ rule resolves, and picking the first row observed is precisely such a rule.
 Runs that agree are not a disagreement and answer normally, and a contradiction
 on a check nobody requires says nothing about this fact.
 
+**An acceptance item id is a position, and a tick is a record.**
+`acceptance.contract` reads the checkbox list under the *Acceptance* heading in
+the contract the change declares. An item id is that item's position in the
+list, because the schema wants a scalar token and a criterion is prose — the
+wording lives behind provenance. Position is not stable across an edit that
+reorders the list, but the contract node's `updated_at` invalidates the fact on
+any edit to that body, so the answer is restated rather than silently
+renumbered. A tick is what the contract *records*; whether it is deserved is
+not a question this compiler is entitled to answer.
+
+A change declaring two contracts is a `CONFLICT` naming both — which criteria a
+change is judged against is a question about the work, not a tie to break. A
+contract declaring no criteria is `UNKNOWN`, because an empty item list would
+read as every item met, the same fail-open as an empty required set. A contract
+in another repository is `UNKNOWN` here: R17 keeps one set inside one
+repository, and the relationship is still reported by `graph.native`.
+
 **A review is a record, not a reputation.** `review.independent` reports the
 verdict marker found on the pull request whose head it names, and names the
 record it is written in and the login that wrote it. It does **not** judge
@@ -2304,8 +2323,9 @@ still sitting on it. Those are different commits the moment anything else lands
 — GitHub reports both — and reading the second as the first would make a stale
 change look current until someone checked by hand.
 
-An issue has no change and therefore no HEAD, so `head.exact` and
-`review.independent` are both `NOT_APPLICABLE` for one: an answer, not a gap. Such a fact carries no value and
+An issue has no change and therefore no HEAD, so `head.exact`,
+`review.independent` and `acceptance.contract` are all `NOT_APPLICABLE` for
+one: an answer, not a gap. Such a fact carries no value and
 no detail, and lists no base to be stale against.
 
 **Placement is `UNKNOWN` until a release declares the work unit.** `release`
