@@ -5098,26 +5098,40 @@ EOF
   fi
 
   # --- release record residue ----------------------------------------------
-  # A record whose stated disposition contradicts a published tag. The tag is
-  # the fact and the record is the claim, so this is deterministic: no judgment
-  # is needed to see that a line saying Blocked sits beside a published release.
-  # Only the CURRENT-STATE claim is touched; the record's history stays, which
-  # is the difference between correcting a presentation and erasing provenance.
-  local rf rbase rver rtag rdisp
-  for rf in "$root"/docs/releases/v*.md; do
-    [ -e "$rf" ] || continue
-    rbase="${rf##*/}"; rver="${rbase%.md}"
-    rtag="$(git -C "$root" tag --list "${rver}.*" 2>/dev/null | sort -V | tail -1)"
-    [ -n "$rtag" ] || continue
-    rdisp="$(sed -n 's/.*Disposition: `\([A-Za-z][A-Za-z]*\)`.*/\1/p' "$rf" 2>/dev/null | head -1)"
-    [ -n "$rdisp" ] || continue
-    [ "$rdisp" = "Shipped" ] && continue
-    rec_row release known REWRITE-COLLAPSE "$rbase" \
-      "states disposition $rdisp while tag $rtag is published" \
-      "set the current-state disposition to Shipped, keeping the record's history" \
-      "rewrites one current-state line; history is untouched" \
-      "spark reconcile --tsv" deterministic
-  done
+  # Reconcile CURRENT release truth, never every historical release record.
+  # The running milestone is live GitHub state; its vX.Y title selects the one
+  # current release projection. A published tag that contradicts that projection
+  # remains detectable, while older release records stay historical evidence.
+  local rf rbase rver rtag rdisp rtitle
+  rtitle="$(current_milestone 2>/dev/null || true)"
+  rver="$(printf '%s\n' "$rtitle" | awk '{print $1}')"
+  case "$rver" in
+    v[0-9]*.[0-9]*) ;;
+    '') ;;
+    *) rver="" ;;
+  esac
+  if [ -n "$rver" ]; then
+    rf="$root/docs/releases/$rver.md"
+    if [ ! -e "$rf" ]; then
+      rec_row release unread - "$rver" \
+        "the active milestone names $rver but its current release projection is missing" \
+        "restore the current release projection" none \
+        "spark reconcile --tsv" human
+    else
+      rbase="$(basename "$rf")"
+      rtag="$(git -C "$root" tag --list "$rver.*" 2>/dev/null | sort -V | tail -1)"
+      if [ -n "$rtag" ]; then
+        rdisp="$(sed -n 's/.*Disposition: \x60\([A-Za-z][A-Za-z]*\)\x60.*/\1/p' "$rf" 2>/dev/null | head -1)"
+        if [ -n "$rdisp" ] && [ "$rdisp" != "Shipped" ]; then
+          rec_row release known REWRITE-COLLAPSE "$rbase" \
+            "states disposition $rdisp while tag $rtag is published" \
+            "set the current-state disposition to Shipped" \
+            "rewrites only the active release projection; historical records are not inputs" \
+            "spark reconcile --tsv" deterministic
+        fi
+      fi
+    fi
+  fi
 
   # --- release residue ------------------------------------------------------
   # A milestone with no open issues has done its job. Closing it is a remote
