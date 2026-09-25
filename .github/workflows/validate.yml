@@ -27,15 +27,4 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Emit regenerated #743 evidence for reviewer repair
-        run: |
-          rm -rf /tmp/spark-743
-          pin="$(grep '^# observed at ' docs/research/v0.23-cleanup/743-responsibilities-before.tsv | awk '{print $4; exit}')"
-          python3 docs/research/v0.23-cleanup/tools/build-responsibilities.py "$PWD" "$pin" --out=/tmp/spark-743 >/dev/null
-          echo '===BEGIN_743_MAP==='
-          cat /tmp/spark-743/docs/research/v0.23-cleanup/743-responsibilities.tsv
-          echo '===END_743_MAP==='
-          echo '===BEGIN_743_MANIFEST==='
-          cat /tmp/spark-743/docs/research/v0.23-cleanup/743-runtime-surface.md
-          echo '===END_743_MANIFEST==='
       - run: bash tests/run.sh
