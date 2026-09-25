@@ -27,14 +27,4 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Emit exact-HEAD generated evidence for #733 repair
-        run: |
-          echo '===BEGIN_DEFAULT_READS==='
-          bash docs/research/v0.23-cleanup/tools/evidence-reads.sh HEAD
-          echo '===END_DEFAULT_READS==='
-          rm -rf /tmp/spark-responsibilities
-          python3 docs/research/v0.23-cleanup/tools/build-responsibilities.py "$PWD" "$(sed -nE 's/^# observed at ([0-9a-f]{40})$/\\1/p' docs/research/v0.23-cleanup/743-responsibilities-before.tsv | head -1)" --map-only --out=/tmp/spark-responsibilities >/dev/null
-          echo '===BEGIN_RESPONSIBILITY_MAP==='
-          cat /tmp/spark-responsibilities/docs/research/v0.23-cleanup/743-responsibilities.tsv
-          echo '===END_RESPONSIBILITY_MAP==='
       - run: bash tests/run.sh
