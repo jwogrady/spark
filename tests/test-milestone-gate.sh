@@ -102,9 +102,7 @@ advisory_block="$(awk '
 ' "$workflow")"
 printf '%s\n' "$advisory_block" | grep -qE '^[[:space:]]*continue-on-error:[[:space:]]*true[[:space:]]*$' \
   && ok || bad "release-notes advisory step must be non-blocking"
-printf '%s\n' "$advisory_block" | grep -qE '^[[:space:]]*run:[[:space:]]+timeout[[:space:]]+--kill-after=[1-9][0-9]*s[[:space:]]+[1-9][0-9]*s[[:space:]]+bash[[:space:]]+\.github/scripts/release-notes-runner\.sh[[:space:]]*
-finish
- \
+printf '%s\n' "$advisory_block" | grep -qF 'run: timeout --kill-after=10s 120s bash .github/scripts/release-notes-runner.sh' \
   && ok || bad "release-notes advisory runner must have a hard shell timeout"
 
 finish
