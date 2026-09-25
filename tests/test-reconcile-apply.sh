@@ -33,9 +33,9 @@ cat > "$rgh/gh" <<'GHEOF'
 #!/usr/bin/env bash
 case "${1:-}" in auth) exit 0 ;; esac
 case "$*" in
-  *"api graphql"*)
+  *"repos/{owner}/{repo}/milestones?state=open"*)
     title="v${ACTIVE_RELEASE:-0.1} — Test"
-    printf 'milestone\t%s\nms\t%s\t1\nleaf\t%s\t999\n' "$title" "$title" "$title"
+    printf '1\t%s\t1\n' "$title"
     exit 0
     ;;
 esac
