@@ -2952,4 +2952,98 @@ pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07
 assert_eq "a contract written entirely with one marker still establishes" "ESTABLISHED" \
   "$(printf '%s' "$(afact "$("$SPARK" facts --issue 733)")" | jq -r '.status')"
 
+
+# --- authority.standing: one configured human decision, never inferred -----
+mkdir -p .spark
+cat > .spark/preferences.json <<'JSON'
+{
+  "authority.decision_record": "github.com/jwogrady/spark#677/comment/5622552139"
+}
+JSON
+
+AUTH_BODY='spark-authority-v1
+target github.com/jwogrady/spark
+grant merge:routine
+grant close:issue
+grant evidence:publish
+grant branch:push
+boundary release:approve
+boundary authority:grant
+boundary settings:repository
+boundary action:destructive
+boundary placement:release
+boundary semantics:product'
+AUTH_COMMENT="$(jq -nc --arg body "$AUTH_BODY" '{id:5622552139,updated_at:"2026-09-10T20:00:00Z",issue_url:"https://api.github.com/repos/jwogrady/spark/issues/677",body:$body}')"
+AUTH_ISSUE='{"number":677,"updated_at":"2026-09-10T20:05:00Z"}'
+
+authority_stub() {
+  local comment="$1" issue_json="$2"
+  stub_gh "$WORK/bin/gh" <<STUB
+printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
+case "\$*" in
+  *"--hostname github.com repos/jwogrady/spark/issues/comments/5622552139"*) answer_json '$comment' ;;
+  *"--hostname github.com repos/jwogrady/spark/issues/677"*) answer_json '$issue_json' ;;
+  *"--hostname github.com repos/jwogrady/spark"*) answer_json '$NODE' ;;
+  *) exit 1 ;;
+esac
+STUB
+}
+
+authority_stub "$AUTH_COMMENT" "$AUTH_ISSUE"
+AUTH_OUT="$("$SPARK" facts)"
+AUTH="$(printf '%s' "$AUTH_OUT" | jq -c '.[] | select(.key=="authority.standing")')"
+assert_eq "the configured decision establishes standing authority" "ESTABLISHED" \
+  "$(printf '%s' "$AUTH" | jq -r '.status')"
+assert_eq "authority is sourced from the human decision itself" "human-decision" \
+  "$(printf '%s' "$AUTH" | jq -r '.source.type')"
+assert_eq "and names the exact configured decision record" \
+  "github.com/jwogrady/spark#677/comment/5622552139" \
+  "$(printf '%s' "$AUTH" | jq -r '.source.identity')"
+assert_eq "the four granted scopes are carried without prose inference" \
+  "branch:push,close:issue,evidence:publish,merge:routine" \
+  "$(printf '%s' "$AUTH" | jq -r '.value.grants[0].scopes | sort | join(",")')"
+assert_eq "the six reserved boundaries are carried from the same record" "6" \
+  "$(printf '%s' "$AUTH" | jq -r '.value.human_boundaries | length')"
+assert_eq "the decision comment versions the authority source" "2026-09-10T20:00:00Z" \
+  "$(printf '%s' "$AUTH" | jq -r '.source.version')"
+assert_eq "and editing the decision issue can stale the authority read" "2026-09-10T20:05:00Z" \
+  "$(printf '%s' "$AUTH" | jq -r '.versions["issue:github.com/jwogrady/spark#677"]')"
+printf '%s' "$AUTH" | jq -e '[.invalidators[]] | index("comment:github.com/jwogrady/spark#677/comment/5622552139")' >/dev/null && ok \
+  || bad "authority did not carry the decision comment invalidator"
+
+# A changed decision comment re-versions the fact; the id alone is never enough.
+AUTH_EDIT="$(printf '%s' "$AUTH_COMMENT" | jq -c '.updated_at="2026-09-10T20:30:00Z"')"
+authority_stub "$AUTH_EDIT" "$AUTH_ISSUE"
+AUTH2="$(printf '%s' "$("$SPARK" facts)" | jq -c '.[] | select(.key=="authority.standing")')"
+assert_eq "editing the decision re-versions standing authority" "2026-09-10T20:30:00Z" \
+  "$(printf '%s' "$AUTH2" | jq -r '.source.version')"
+
+# A record targeting another repository cannot grant this repository authority.
+WRONG_BODY="$(printf '%s\n' "$AUTH_BODY" | sed 's|target github.com/jwogrady/spark|target github.com/other/repo|')"
+WRONG_COMMENT="$(jq -nc --arg body "$WRONG_BODY" '{id:5622552139,updated_at:"2026-09-10T20:00:00Z",issue_url:"https://api.github.com/repos/jwogrady/spark/issues/677",body:$body}')"
+authority_stub "$WRONG_COMMENT" "$AUTH_ISSUE"
+[ "$(printf '%s' "$("$SPARK" facts 2>/dev/null)" | jq '[.[] | select(.key=="authority.standing")] | length')" = "0" ] && ok \
+  || bad "authority from a decision targeting another repository was accepted"
+
+# Closed vocabularies fail closed rather than expanding authority.
+BAD_BODY="$AUTH_BODY
+grant merge:anything"
+BAD_COMMENT="$(jq -nc --arg body "$BAD_BODY" '{id:5622552139,updated_at:"2026-09-10T20:00:00Z",issue_url:"https://api.github.com/repos/jwogrady/spark/issues/677",body:$body}')"
+authority_stub "$BAD_COMMENT" "$AUTH_ISSUE"
+[ "$(printf '%s' "$("$SPARK" facts 2>/dev/null)" | jq '[.[] | select(.key=="authority.standing")] | length')" = "0" ] && ok \
+  || bad "an unknown authority scope expanded the closed vocabulary"
+
+# An unreadable decision source never falls back to repository capability.
+stub_gh "$WORK/bin/gh" <<STUB
+printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
+case "\$*" in
+  *"--hostname github.com repos/jwogrady/spark/issues/comments/5622552139"*) echo "HTTP 403" >&2; exit 1 ;;
+  *"--hostname github.com repos/jwogrady/spark"*) answer_json '$NODE' ;;
+  *) exit 1 ;;
+esac
+STUB
+[ "$(printf '%s' "$("$SPARK" facts 2>/dev/null)" | jq '[.[] | select(.key=="authority.standing")] | length')" = "0" ] && ok \
+  || bad "an unreadable authority record was replaced by inferred authority"
+
+
 finish
