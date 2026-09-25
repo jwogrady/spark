@@ -73,7 +73,7 @@ for v in 0.1 0.2 0.3; do
   assert_eq "and it is the active release record" "v$v.md" \
     "$(printf '%s\n' "$rows" | awk -F'\t' '$1 == "release" { print $4; exit }')"
 done
-ACTIVE_RELEASE=0.2 rows="$(cd "$r" && env PATH="$rgh" ACTIVE_RELEASE=0.2 bash -c '. '"$SPARK"'; rec_rows "'"$r"'"')"
+rows="$(cd "$r" && env PATH="$rgh" ACTIVE_RELEASE=0.2 bash -c '. '"$SPARK"'; rec_rows "'"$r"'"')"
 assert_contains "the active release finding cites its published tag" "tag v0.2.0 is published" \
   "$(printf '%s\n' "$rows" | awk -F'\t' '$4 == "v0.2.md" { print $5 }')"
 
