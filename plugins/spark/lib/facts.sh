@@ -956,7 +956,7 @@ facts_unit_node() {
                | select(($L[.] | capture("^ {0,3}(?<h>#{1,6})") | .h | length) <= $lvl) ]) as $ends
           | (if ($ends | length) == 0 then ($L | length) else $ends[0] end) as $e
           # Indented code inside a list is not a nested task item. Track the
-          # current list item's content column: a child marker may be indented
+          # current list item content column: a child marker may be indented
           # beneath that content, but four further spaces are code again.
           | (reduce range($a + 1; $e) as $i
               ({list_content: null, items: []};
