@@ -5102,32 +5102,44 @@ EOF
   # The running milestone is live GitHub state; its vX.Y title selects the one
   # current release projection. A published tag that contradicts that projection
   # remains detectable, while older release records stay historical evidence.
-  local rf rbase rver rtag rdisp rtitle
-  rtitle="$(current_milestone 2>/dev/null || true)"
-  rver="$(printf '%s\n' "$rtitle" | awk '{print $1}')"
-  case "$rver" in
-    v[0-9]*.[0-9]*) ;;
-    '') ;;
-    *) rver="" ;;
-  esac
-  if [ -n "$rver" ]; then
-    rf="$root/docs/releases/$rver.md"
-    if [ ! -e "$rf" ]; then
-      rec_row release unread - "$rver" \
-        "the active milestone names $rver but its current release projection is missing" \
-        "restore the current release projection" none \
-        "spark reconcile --tsv" human
-    else
-      rbase="$(basename "$rf")"
-      rtag="$(git -C "$root" tag --list "$rver.*" 2>/dev/null | sort -V | tail -1)"
-      if [ -n "$rtag" ]; then
-        rdisp="$(sed -n 's/.*Disposition: \x60\([A-Za-z][A-Za-z]*\)\x60.*/\1/p' "$rf" 2>/dev/null | head -1)"
-        if [ -n "$rdisp" ] && [ "$rdisp" != "Shipped" ]; then
-          rec_row release known REWRITE-COLLAPSE "$rbase" \
-            "states disposition $rdisp while tag $rtag is published" \
-            "set the current-state disposition to Shipped" \
-            "rewrites only the active release projection; historical records are not inputs" \
-            "spark reconcile --tsv" deterministic
+  # If live milestone state cannot be read, that is an unread finding — never
+  # the silent claim that no release contradiction exists.
+  local rf rbase rver rtag rdisp rtitle rinv
+  if ! command -v gh >/dev/null 2>&1 || ! gh auth status >/dev/null 2>&1; then
+    rec_row release unread - current \
+      "active release cannot be derived because authenticated GitHub milestone state is unavailable" \
+      "none — evidence is unreadable" none "spark course" human
+  elif ! rinv="$(milestone_inventory 2>/dev/null)"; then
+    rec_row release unread - current \
+      "active release cannot be derived because milestone inventory could not be read" \
+      "none — evidence is unreadable" none "spark course" human
+  else
+    rtitle="$(current_milestone "$rinv")"
+    rver="$(printf '%s\n' "$rtitle" | awk '{print $1}')"
+    case "$rver" in
+      v[0-9]*.[0-9]*) ;;
+      '') ;;
+      *) rver="" ;;
+    esac
+    if [ -n "$rver" ]; then
+      rf="$root/docs/releases/$rver.md"
+      if [ ! -e "$rf" ]; then
+        rec_row release unread - "$rver" \
+          "the active milestone names $rver but its current release projection is missing" \
+          "restore the current release projection" none \
+          "spark reconcile --tsv" human
+      else
+        rbase="$(basename "$rf")"
+        rtag="$(git -C "$root" tag --list "$rver.*" 2>/dev/null | sort -V | tail -1)"
+        if [ -n "$rtag" ]; then
+          rdisp="$(sed -n 's/.*Disposition: \x60\([A-Za-z][A-Za-z]*\)\x60.*/\1/p' "$rf" 2>/dev/null | head -1)"
+          if [ -n "$rdisp" ] && [ "$rdisp" != "Shipped" ]; then
+            rec_row release known REWRITE-COLLAPSE "$rbase" \
+              "states disposition $rdisp while tag $rtag is published" \
+              "set the current-state disposition to Shipped" \
+              "rewrites only the active release projection; historical records are not inputs" \
+              "spark reconcile --tsv" deterministic
+          fi
         fi
       fi
     fi
