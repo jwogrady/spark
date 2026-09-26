@@ -934,7 +934,7 @@ facts_unit_node() {
             ($line | capture("^(?<ind> *)").ind | length) as $ind
             | if ($current != null) and ($ind >= $current)
               then $current
-              else null
+              elif ($current != null) and ($ind >= 4) then $ind else null
               end
           else
             ($li.ind | length) as $ind
