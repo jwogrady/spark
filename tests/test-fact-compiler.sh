@@ -3005,6 +3005,14 @@ pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07
 assert_eq "wide ordered-list continuation preserves nested task context" "1=NOT_MET" \
   "$(printf '%s' "$(afact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.items[] | "\(.id)=\(.state)"] | join(",")')"
 
+# Dedenting from a nested child back to an ancestor's content column must
+# restore that ancestor context rather than dropping the list entirely.
+ANCESTOR_CONTINUATION='## Acceptance\\n\\n10. parent\\n    - child\\n    ancestor continuation\\n    - [ ] visible criterion\\n'
+pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07:00:00Z",
+                    "repository":{"nameWithOwner":"jwogrady/spark"},"body":"'"$ANCESTOR_CONTINUATION"'"}]'
+assert_eq "dedent from child restores ancestor list context" "1=NOT_MET" \
+  "$(printf '%s' "$(afact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.items[] | "\(.id)=\(.state)"] | join(",")')"
+
 # A fenced block may begin at the content column of a wide ordered-list
 # marker. Task syntax inside that nested fence remains code, not acceptance.
 WIDE_FENCE='## Acceptance\n\n10. parent\n    ```\n    - [x] hidden fenced task\n    ```\n- [ ] visible\n'
