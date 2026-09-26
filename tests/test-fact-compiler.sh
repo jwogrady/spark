@@ -2947,6 +2947,22 @@ pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07
 assert_eq "list-relative indented code is not a criterion" "1=NOT_MET" \
   "$(printf '%s' "$(afact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.items[] | "\(.id)=\(.state)"] | join(",")')"
 
+# A list-looking line that is itself indented code must not manufacture
+# list context for a deeper task-looking line.
+INDENTED_LISTCODE='## Acceptance\n\n    - sample\n        - [x] hidden code\n\n- [ ] the only real criterion\n'
+pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07:00:00Z",
+                    "repository":{"nameWithOwner":"jwogrady/spark"},"body":"'"$INDENTED_LISTCODE"'"}]'
+assert_eq "indented list-looking code does not open list context" "1=NOT_MET" \
+  "$(printf '%s' "$(afact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.items[] | "\(.id)=\(.state)"] | join(",")')"
+
+# Fence syntax wins over comment-looking text in the fence info string. The
+# task inside remains code, not rendered acceptance structure.
+FENCECOMMENT='## Acceptance\n\n``` <!-- -->\n- [x] hidden fenced task\n```\n- [ ] the only real criterion\n'
+pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07:00:00Z",
+                    "repository":{"nameWithOwner":"jwogrady/spark"},"body":"'"$FENCECOMMENT"'"}]'
+assert_eq "comment syntax in a fence opener does not hide the fence" "1=NOT_MET" \
+  "$(printf '%s' "$(afact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.items[] | "\(.id)=\(.state)"] | join(",")')"
+
 # The checkbox must be followed by whitespace or the end of the line.
 NOSPACE='## Acceptance\n\n- [x]not a task item\n- [ ] the only real criterion\n'
 pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07:00:00Z",
