@@ -42,7 +42,7 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: bash .github/scripts/gate-runner.sh
       - name: check release-notes completeness (advisory)
-        if: github.event_name != 'pull_request' || github.head_ref == 'release-please--branches--master'
+        if: github.event_name != 'pull_request' || (github.head_ref == 'release-please--branches--master' && github.event.pull_request.head.repo.full_name == github.repository)
         # This runner publishes its own release-notes status/comment. It is
         # deliberately not part of the mandatory milestone readiness verdict:
         # an API outage must not turn advisory evidence into a release gate.
