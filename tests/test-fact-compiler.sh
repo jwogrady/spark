@@ -2972,6 +2972,30 @@ pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07
 assert_eq "comment syntax in a fence opener does not hide the fence" "1=NOT_MET" \
   "$(printf '%s' "$(afact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.items[] | "\(.id)=\(.state)"] | join(",")')"
 
+# CommonMark allows at most four columns of marker-to-content padding for
+# list content. Five spaces make the checkbox-looking text code, not a task.
+MARKER_PADDING='## Acceptance\n\n-     [x] code sample\n- [ ] visible\n'
+pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07:00:00Z",
+                    "repository":{"nameWithOwner":"jwogrady/spark"},"body":"'"$MARKER_PADDING"'"}]'
+assert_eq "list-marker padding distinguishes tasks from indented code" "1=NOT_MET" \
+  "$(printf '%s' "$(afact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.items[] | "\(.id)=\(.state)"] | join(",")')"
+
+# Comment-looking bytes inside inline code or behind an escape are literal and
+# must not open HTML-comment state that hides later visible criteria.
+COMMENT_LITERALS='## Acceptance\n\n`<!--` is literal\n\\<!-- is escaped\n- [ ] visible\n'
+pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07:00:00Z",
+                    "repository":{"nameWithOwner":"jwogrady/spark"},"body":"'"$COMMENT_LITERALS"'"}]'
+assert_eq "literal comment syntax does not hide later acceptance" "1=NOT_MET" \
+  "$(printf '%s' "$(afact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.items[] | "\(.id)=\(.state)"] | join(",")')"
+
+# Continuation prose at the content column of a wide ordered marker stays in
+# that list item. A child task at the same content column remains visible.
+WIDE_CONTINUATION='## Acceptance\n\n10. parent\n    explanation\n    - [ ] visible criterion\n'
+pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07:00:00Z",
+                    "repository":{"nameWithOwner":"jwogrady/spark"},"body":"'"$WIDE_CONTINUATION"'"}]'
+assert_eq "wide ordered-list continuation preserves nested task context" "1=NOT_MET" \
+  "$(printf '%s' "$(afact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.items[] | "\(.id)=\(.state)"] | join(",")')"
+
 # The checkbox must be followed by whitespace or the end of the line.
 NOSPACE='## Acceptance\n\n- [x]not a task item\n- [ ] the only real criterion\n'
 pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07:00:00Z",
