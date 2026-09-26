@@ -958,6 +958,11 @@ facts_unit_node() {
                  end
         else null
         end;
+    def inline_block_break($line; $base):
+      ($line | test("^[ \\t]*$"))
+      or ($line | test("^ {0,3}#{1,6}[ \\t]+\\S"))
+      or (($line | list_item) != null)
+      or (fence_run_at($line; $base) != null);
     def backtick_run($line; $pos):
       ((try ($line[$pos:] | capture("^(?<run>`+)")) catch null) // null) as $m
       | if $m == null then 0 else ($m.run | length) end;
@@ -1006,6 +1011,11 @@ facts_unit_node() {
       | (reduce range(0; $L | length) as $i
           ({open: null, comment: false, code: 0, list_content: null, inside: []};
             ($L[$i]) as $ln
+            # An unmatched inline-code opener is literal once block parsing
+            # starts a new paragraph/list/fence/heading. Do not carry it across
+            # a boundary and suppress visible acceptance structure.
+            | if (.code > 0) and inline_block_break($ln; .list_content)
+              then .code = 0 else . end
             | if .open != null then
                 fence_run_at($ln; .open.base) as $f
                 | if ($f != null)
