@@ -973,7 +973,7 @@ facts_unit_node() {
         if $line[$pos:($pos + 3)] == "-->" then
           markup_walk($line; $pos + 3; false; $code; $visible; $hidden)
         else
-          markup_walk($line; $pos + 1; true; $code; $visible; true)
+          markup_walk($line; $pos + 1; true; $code; $visible; $hidden)
         end
       elif $code > 0 then
         backtick_run($line; $pos) as $run
