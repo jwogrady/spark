@@ -945,6 +945,19 @@ facts_unit_node() {
               end
           end
       end;
+    def fence_run_at($line; $base):
+      # A fence may be top-level or up to three spaces relative to the content
+      # column of the list item that contains it.
+      ($line | fence_run) as $global
+      | if $global != null then ($global + {base:0})
+        elif ($base != null)
+             and (($line | capture("^(?<ind> *)").ind | length) >= $base)
+          then ($line[$base:] | fence_run) as $relative
+               | if $relative == null then null
+                 else ($relative + {base:$base})
+                 end
+        else null
+        end;
     def backtick_run($line; $pos):
       ((try ($line[$pos:] | capture("^(?<run>`+)")) catch null) // null) as $m
       | if $m == null then 0 else ($m.run | length) end;
@@ -991,10 +1004,10 @@ facts_unit_node() {
       # Lines hidden by fenced code or HTML comments are not rendered
       # acceptance structure. Track both states before heading/item parsing.
       | (reduce range(0; $L | length) as $i
-          ({open: null, comment: false, code: 0, inside: []};
+          ({open: null, comment: false, code: 0, list_content: null, inside: []};
             ($L[$i]) as $ln
             | if .open != null then
-                ($ln | fence_run) as $f
+                fence_run_at($ln; .open.base) as $f
                 | if ($f != null)
                      and ($f.ch == .open.ch) and ($f.len >= .open.len)
                      and ($f.rest | test("^[ \\t]*$"))
@@ -1008,7 +1021,9 @@ facts_unit_node() {
                 | .code = $ms.code
               else
                 # A block fence owns the line before inline markup is scanned.
-                ($ln | fence_run) as $f
+                # The active list content column makes a nested fence visible
+                # at the same indentation Markdown uses to render it.
+                fence_run_at($ln; .list_content) as $f
                 | if $f != null then
                     (.inside += [false] | .open = $f)
                   else
@@ -1016,6 +1031,9 @@ facts_unit_node() {
                     | .inside += [$ms.inside]
                     | .comment = $ms.comment
                     | .code = $ms.code
+                    | if $ms.inside then .
+                      else .list_content = list_context($ln; .list_content)
+                      end
                   end
               end)
          | .inside) as $F
