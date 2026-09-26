@@ -907,26 +907,149 @@ facts_unit_node() {
     # 1)), then a checkbox, then whitespace or the end of the line. Requiring
     # what follows the bracket is what keeps `- [x]not an item` out; admitting
     # the other markers is what keeps a real contract from reading as empty.
+    def marker_padding($x):
+      (($x.ind | length) + ($x.marker | length)) as $start
+      | (reduce ($x.ws | explode[]) as $ch
+          ($start;
+           if $ch == 9 then . + (4 - (. % 4))
+           else . + 1
+           end)) - $start;
     def task_item:
-      (capture("^(?<ind> *)(?:[-*+]|[0-9]{1,9}[.)])[ \t]+\\[(?<mark>[ xX])\\](?=[ \t]|$)") // null);
+      (capture("^(?<ind> *)(?<marker>[-*+]|[0-9]{1,9}[.)])(?<ws>[ \\t]+)\\[(?<mark>[ xX])\\](?=[ \\t]|$)") // null)
+      | if . == null then null
+        else marker_padding(.) as $pad
+          | if ($pad >= 1 and $pad <= 4) then . else null end
+        end;
     def list_item:
-      test("^ *(?:[-*+]|[0-9]{1,9}[.)])[ \t]");
+      (capture("^(?<ind> *)(?<marker>[-*+]|[0-9]{1,9}[.)])(?<ws>[ \\t]+)") // null);
+    def item_content_indent($x):
+      marker_padding($x) as $pad
+      | (($x.ind | length) + ($x.marker | length)
+         + (if $pad <= 4 then $pad else 1 end));
+    def list_context($line; $current):
+      if ($line | test("^[ \\t]*$")) then $current
+      else
+        ($line | list_item) as $li
+        | if $li == null then
+            ($line | capture("^(?<ind> *)").ind | length) as $ind
+            | if ($current != null) and ($ind >= $current)
+              then $current
+              else null
+              end
+          else
+            ($li.ind | length) as $ind
+            | if (($ind >= 4) and ($current == null))
+                 or (($current != null) and ($ind >= ($current + 4)))
+              then $current
+              else item_content_indent($li)
+              end
+          end
+      end;
+    def fence_run_at($line; $base):
+      # A fence may be top-level or up to three spaces relative to the content
+      # column of the list item that contains it.
+      ($line | fence_run) as $global
+      | if $global != null then ($global + {base:0})
+        elif ($base != null)
+             and (($line | capture("^(?<ind> *)").ind | length) >= $base)
+          then ($line[$base:] | fence_run) as $relative
+               | if $relative == null then null
+                 else ($relative + {base:$base})
+                 end
+        else null
+        end;
+    def inline_block_break($line; $base):
+      ($line | test("^[ \\t]*$"))
+      or ($line | test("^ {0,3}#{1,6}[ \\t]+\\S"))
+      or (($line | list_item) != null)
+      or (fence_run_at($line; $base) != null);
+    def backtick_run($line; $pos):
+      ((try ($line[$pos:] | capture("^(?<run>`+)")) catch null) // null) as $m
+      | if $m == null then 0 else ($m.run | length) end;
+    def markup_walk($line; $pos; $comment; $code; $visible; $hidden):
+      if $pos >= ($line | length) then
+        {inside:$hidden, comment:$comment, code:$code}
+      elif $comment then
+        if $line[$pos:($pos + 3)] == "-->" then
+          markup_walk($line; $pos + 3; false; $code; $visible; $hidden)
+        else
+          markup_walk($line; $pos + 1; true; $code; $visible; $hidden)
+        end
+      elif $code > 0 then
+        backtick_run($line; $pos) as $run
+        | if $run == $code then
+            markup_walk($line; $pos + $run; false; 0; true; $hidden)
+          elif $run > 0 then
+            markup_walk($line; $pos + $run; false; $code; $visible; $hidden)
+          else
+            markup_walk($line; $pos + 1; false; $code; $visible; $hidden)
+          end
+      elif $line[$pos:($pos + 1)] == "\\" then
+        markup_walk($line;
+                    (if ($pos + 1) < ($line | length) then $pos + 2 else $pos + 1 end);
+                    false; 0; true; $hidden)
+      else
+        backtick_run($line; $pos) as $run
+        | if $run > 0 then
+            markup_walk($line; $pos + $run; false; $run; true; $hidden)
+          elif $line[$pos:($pos + 4)] == "<!--" then
+            markup_walk($line; $pos + 4; true; 0; $visible;
+                        ($hidden or ($visible | not)))
+          else
+            ($line[$pos:($pos + 1)] | test("[^ \\t]")) as $nonspace
+            | markup_walk($line; $pos + 1; false; 0;
+                          ($visible or $nonspace); $hidden)
+          end
+      end;
+    def markup_line($line; $was_comment; $was_code):
+      markup_walk($line; 0; $was_comment; $was_code; false;
+                  ($was_comment or ($was_code > 0)));
     def acc_lines:
       (. / "\n") as $L
+      # Lines hidden by fenced code or HTML comments are not rendered
+      # acceptance structure. Track both states before heading/item parsing.
       | (reduce range(0; $L | length) as $i
-          ({open: null, inside: []};
-            ($L[$i] | fence_run) as $f
-            | if $f == null then .inside += [(.open != null)]
-              elif .open == null then (.inside += [false] | .open = $f)
-              elif ($f.ch == .open.ch) and ($f.len >= .open.len)
-                   and ($f.rest | test("^[ \t]*$"))
-                then (.inside += [false] | .open = null)
-              else .inside += [true]
+          ({open: null, comment: false, code: 0, list_content: null, inside: []};
+            ($L[$i]) as $ln
+            # An unmatched inline-code opener is literal once block parsing
+            # starts a new paragraph/list/fence/heading. Do not carry it across
+            # a boundary and suppress visible acceptance structure.
+            | if (.code > 0) and inline_block_break($ln; .list_content)
+              then .code = 0 else . end
+            | if .open != null then
+                fence_run_at($ln; .open.base) as $f
+                | if ($f != null)
+                     and ($f.ch == .open.ch) and ($f.len >= .open.len)
+                     and ($f.rest | test("^[ \\t]*$"))
+                  then (.inside += [false] | .open = null)
+                  else .inside += [true]
+                  end
+              elif .comment or (.code > 0) then
+                markup_line($ln; .comment; .code) as $ms
+                | .inside += [$ms.inside]
+                | .comment = $ms.comment
+                | .code = $ms.code
+              else
+                # A block fence owns the line before inline markup is scanned.
+                # The active list content column makes a nested fence visible
+                # at the same indentation Markdown uses to render it.
+                fence_run_at($ln; .list_content) as $f
+                | if $f != null then
+                    (.inside += [false] | .open = $f)
+                  else
+                    markup_line($ln; false; 0) as $ms
+                    | .inside += [$ms.inside]
+                    | .comment = $ms.comment
+                    | .code = $ms.code
+                    | if $ms.inside then .
+                      else .list_content = list_context($ln; .list_content)
+                      end
+                  end
               end)
          | .inside) as $F
       | [ range(0; $L | length)
-          | select(($F[.] | not) and ($L[.] | test("^ {0,3}#{1,6}[ \t]+\\S"))) ] as $H
-      | ($H | map(select($L[.] | test("^ {0,3}#{1,6}[ \t]+Acceptance\\b"; "i")))) as $A
+          | select(($F[.] | not) and ($L[.] | test("^ {0,3}#{1,6}[ \\t]+\\S"))) ] as $H
+      | ($H | map(select($L[.] | test("^ {0,3}#{1,6}[ \\t]+Acceptance\\b"; "i")))) as $A
       | if ($A | length) == 0 then null
         else $A[0] as $a
           | ($L[$a] | capture("^ {0,3}(?<h>#{1,6})") | .h | length) as $lvl
@@ -935,21 +1058,25 @@ facts_unit_node() {
           | ([ $H[] | select(. > $a)
                | select(($L[.] | capture("^ {0,3}(?<h>#{1,6})") | .h | length) <= $lvl) ]) as $ends
           | (if ($ends | length) == 0 then ($L | length) else $ends[0] end) as $e
-          # Four or more spaces is an indented CODE block unless a list is
-          # open: a nested item continues its parent, while an indented sample
-          # after a paragraph does not. Only the tick is carried out.
+          # Indented code inside a list is not a nested task item. Track the
+          # current list item content column: a child marker may be indented
+          # beneath that content, but four further spaces are code again.
           | (reduce range($a + 1; $e) as $i
-              ({open_list: false, items: []};
+              ({list_content: null, items: []};
                 ($L[$i]) as $ln
                 | if $F[$i] then .
-                  elif ($ln | test("^[ \t]*$")) then .
+                  elif ($ln | test("^[ \\t]*$")) then .
                   else ($ln | task_item) as $t
-                    | if $t == null
-                      then .open_list = ($ln | list_item)
+                    | if $t == null then
+                        .list_content = list_context($ln; .list_content)
                       else
-                        if (($t.ind | length) >= 4) and (.open_list | not) then .
-                        else .items += [$t.mark] end
-                        | .open_list = true
+                        ($t.ind | length) as $ind
+                        | if (($ind >= 4) and (.list_content == null))
+                             or ((.list_content != null) and ($ind >= (.list_content + 4)))
+                          then .
+                          else (.items += [$t.mark]
+                                | .list_content = item_content_indent($t))
+                          end
                       end
                   end)
              | .items)

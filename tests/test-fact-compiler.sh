@@ -2929,6 +2929,98 @@ pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07
 assert_eq "a nested item is still a criterion" "1=NOT_MET,2=MET" \
   "$(printf '%s' "$(afact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.items[] | "\(.id)=\(.state)"] | join(",")')"
 
+# HTML comments are not rendered structure. Both a single-line hidden task and
+# a task inside a multiline comment must disappear without changing the
+# visible contract.
+COMMENTS='## Acceptance\n\n- [ ] visible\n<!-- - [x] hidden inline comment -->\n<!--\n- [x] hidden multiline\n-->\n- [x] visible met\n'
+pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07:00:00Z",
+                    "repository":{"nameWithOwner":"jwogrady/spark"},"body":"'"$COMMENTS"'"}]'
+assert_eq "commented task syntax is not acceptance structure" "1=NOT_MET,2=MET" \
+  "$(printf '%s' "$(afact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.items[] | "\(.id)=\(.state)"] | join(",")')"
+
+# Trailing HTML comments do not hide structure that rendered before them.
+TRAILING_COMMENTS='## Acceptance <!-- note -->\n\n- [ ] visible criterion <!-- note -->\n'
+pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07:00:00Z",
+                    "repository":{"nameWithOwner":"jwogrady/spark"},"body":"'"$TRAILING_COMMENTS"'"}]'
+assert_eq "a trailing comment does not hide the Acceptance heading" "ESTABLISHED" \
+  "$(printf '%s' "$(afact "$("$SPARK" facts --issue 733)")" | jq -r '.status')"
+assert_eq "a trailing comment does not hide a visible task item" "1=NOT_MET" \
+  "$(printf '%s' "$(afact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.items[] | "\(.id)=\(.state)"] | join(",")')"
+
+# A line may close one HTML comment and open another. The parser must scan
+# every delimiter so the final state, not the first transition, governs the
+# following line.
+CHAINED_COMMENTS='## Acceptance\n\n<!-- closed --> <!--\n- [x] hidden one\n--> <!--\n- [x] hidden two\n-->\n- [ ] visible\n'
+pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07:00:00Z",
+                    "repository":{"nameWithOwner":"jwogrady/spark"},"body":"'"$CHAINED_COMMENTS"'"}]'
+assert_eq "chained HTML comment transitions preserve hidden state" "1=NOT_MET" \
+  "$(printf '%s' "$(afact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.items[] | "\(.id)=\(.state)"] | join(",")')"
+
+# A task-looking line can be indented relative to a list far enough that
+# Markdown renders it as code. An open parent list alone is not permission to
+# count arbitrary indentation as a nested criterion.
+LISTCODE='## Acceptance\n\n- parent\n        - [x] code sample\n- [ ] the only real criterion\n'
+pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07:00:00Z",
+                    "repository":{"nameWithOwner":"jwogrady/spark"},"body":"'"$LISTCODE"'"}]'
+assert_eq "list-relative indented code is not a criterion" "1=NOT_MET" \
+  "$(printf '%s' "$(afact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.items[] | "\(.id)=\(.state)"] | join(",")')"
+
+# A list-looking line that is itself indented code must not manufacture
+# list context for a deeper task-looking line.
+INDENTED_LISTCODE='## Acceptance\n\n    - sample\n        - [x] hidden code\n\n- [ ] the only real criterion\n'
+pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07:00:00Z",
+                    "repository":{"nameWithOwner":"jwogrady/spark"},"body":"'"$INDENTED_LISTCODE"'"}]'
+assert_eq "indented list-looking code does not open list context" "1=NOT_MET" \
+  "$(printf '%s' "$(afact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.items[] | "\(.id)=\(.state)"] | join(",")')"
+
+# Fence syntax wins over comment-looking text in the fence info string. The
+# task inside remains code, not rendered acceptance structure.
+FENCECOMMENT='## Acceptance\n\n``` <!-- -->\n- [x] hidden fenced task\n```\n- [ ] the only real criterion\n'
+pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07:00:00Z",
+                    "repository":{"nameWithOwner":"jwogrady/spark"},"body":"'"$FENCECOMMENT"'"}]'
+assert_eq "comment syntax in a fence opener does not hide the fence" "1=NOT_MET" \
+  "$(printf '%s' "$(afact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.items[] | "\(.id)=\(.state)"] | join(",")')"
+
+# CommonMark allows at most four columns of marker-to-content padding for
+# list content. Five spaces make the checkbox-looking text code, not a task.
+MARKER_PADDING='## Acceptance\n\n-     [x] code sample\n- [ ] visible\n'
+pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07:00:00Z",
+                    "repository":{"nameWithOwner":"jwogrady/spark"},"body":"'"$MARKER_PADDING"'"}]'
+assert_eq "list-marker padding distinguishes tasks from indented code" "1=NOT_MET" \
+  "$(printf '%s' "$(afact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.items[] | "\(.id)=\(.state)"] | join(",")')"
+
+# Comment-looking bytes inside inline code or behind an escape are literal and
+# must not open HTML-comment state that hides later visible criteria.
+COMMENT_LITERALS='## Acceptance\n\n`<!--` is literal\n\\<!-- is escaped\n- [ ] visible\n'
+pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07:00:00Z",
+                    "repository":{"nameWithOwner":"jwogrady/spark"},"body":"'"$COMMENT_LITERALS"'"}]'
+assert_eq "literal comment syntax does not hide later acceptance" "1=NOT_MET" \
+  "$(printf '%s' "$(afact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.items[] | "\(.id)=\(.state)"] | join(",")')"
+
+# Continuation prose at the content column of a wide ordered marker stays in
+# that list item. A child task at the same content column remains visible.
+WIDE_CONTINUATION='## Acceptance\n\n10. parent\n    explanation\n    - [ ] visible criterion\n'
+pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07:00:00Z",
+                    "repository":{"nameWithOwner":"jwogrady/spark"},"body":"'"$WIDE_CONTINUATION"'"}]'
+assert_eq "wide ordered-list continuation preserves nested task context" "1=NOT_MET" \
+  "$(printf '%s' "$(afact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.items[] | "\(.id)=\(.state)"] | join(",")')"
+
+# A fenced block may begin at the content column of a wide ordered-list
+# marker. Task syntax inside that nested fence remains code, not acceptance.
+WIDE_FENCE='## Acceptance\n\n10. parent\n    ```\n    - [x] hidden fenced task\n    ```\n- [ ] visible\n'
+pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07:00:00Z",
+                    "repository":{"nameWithOwner":"jwogrady/spark"},"body":"'"$WIDE_FENCE"'"}]'
+assert_eq "wide-marker list-relative fence hides task syntax" "1=NOT_MET" \
+  "$(printf '%s' "$(afact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.items[] | "\(.id)=\(.state)"] | join(",")')"
+
+# An unmatched inline-code opener is literal text. A blank line starts a new
+# block, so it must not hide a visible acceptance item in the following list.
+UNMATCHED_CODE='## Acceptance\n\n`unclosed code span\n\n- [ ] visible criterion\n'
+pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07:00:00Z",
+                    "repository":{"nameWithOwner":"jwogrady/spark"},"body":"'"$UNMATCHED_CODE"'"}]'
+assert_eq "unmatched inline-code opener does not hide a later block" "1=NOT_MET" \
+  "$(printf '%s' "$(afact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.items[] | "\(.id)=\(.state)"] | join(",")')"
+
 # The checkbox must be followed by whitespace or the end of the line.
 NOSPACE='## Acceptance\n\n- [x]not a task item\n- [ ] the only real criterion\n'
 pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07:00:00Z",
