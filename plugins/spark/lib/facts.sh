@@ -2328,6 +2328,14 @@ facts_authority_fact() {
     return 3
   fi
 
+  # A locator is not a transitive trust grant. Standing authority for a
+  # repository must come from that same repository unless a future contract
+  # defines and verifies an explicit cross-repository authority chain.
+  if [ "$host/$nwo" != "$locator" ]; then
+    FACTS_REFUSED="the authority decision record belongs to another repository"
+    return 3
+  fi
+
   FACTS_CACHE_MISSES=$(( FACTS_CACHE_MISSES + 1 ))
   FACTS_API_CALLS=$(( FACTS_API_CALLS + 1 ))
   out="$(gh api --hostname "$host" "repos/$nwo/issues/comments/$cid" 2>&1)" || rc=$?
