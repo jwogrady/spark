@@ -3037,7 +3037,7 @@ authority_stub "$NO_AUTHOR_COMMENT" "$AUTH_ISSUE"
 
 # A record targeting another repository cannot grant this repository authority.
 WRONG_BODY="$(printf '%s\n' "$AUTH_BODY" | sed 's|target github.com/jwogrady/spark|target github.com/other/repo|')"
-WRONG_COMMENT="$(jq -nc --arg body "$WRONG_BODY" '{id:5622552139,updated_at:"2026-09-10T20:00:00Z",issue_url:"https://api.github.com/repos/jwogrady/spark/issues/677",body:$body}')"
+WRONG_COMMENT="$(printf '%s' "$AUTH_COMMENT" | jq -c --arg body "$WRONG_BODY" '.body=$body')"
 authority_stub "$WRONG_COMMENT" "$AUTH_ISSUE"
 [ "$(printf '%s' "$("$SPARK" facts 2>/dev/null)" | jq '[.[] | select(.key=="authority.standing")] | length')" = "0" ] && ok \
   || bad "authority from a decision targeting another repository was accepted"
@@ -3045,7 +3045,7 @@ authority_stub "$WRONG_COMMENT" "$AUTH_ISSUE"
 # Closed vocabularies fail closed rather than expanding authority.
 BAD_BODY="$AUTH_BODY
 grant merge:anything"
-BAD_COMMENT="$(jq -nc --arg body "$BAD_BODY" '{id:5622552139,updated_at:"2026-09-10T20:00:00Z",issue_url:"https://api.github.com/repos/jwogrady/spark/issues/677",body:$body}')"
+BAD_COMMENT="$(printf '%s' "$AUTH_COMMENT" | jq -c --arg body "$BAD_BODY" '.body=$body')"
 authority_stub "$BAD_COMMENT" "$AUTH_ISSUE"
 [ "$(printf '%s' "$("$SPARK" facts 2>/dev/null)" | jq '[.[] | select(.key=="authority.standing")] | length')" = "0" ] && ok \
   || bad "an unknown authority scope expanded the closed vocabulary"
