@@ -700,12 +700,12 @@ graph_stub "$FULL"
 GOUT="$("$SPARK" facts --issue 733)"
 G="$(gfact "$GOUT")"
 
-# --- the fragment carries all eight classes, and is still a fragment -------
+# --- the fragment carries all source classes plus the derived action -------
 [ "$(printf '%s' "$GOUT" | jq -r 'type')" = "array" ] && ok || bad "a fragment is a bare list"
-[ "$(printf '%s' "$GOUT" | jq -r 'length')" = "8" ] && ok \
-  || bad "a --issue run compiles repository, work unit, graph, placement, acceptance, head, review and checks"
-[ "$(printf '%s' "$GOUT" | jq -r '[.[].key] | sort | join(",")')" = "acceptance.contract,checks.required,graph.native,head.exact,placement.current,repository.identity,review.independent,work_unit.identity" ] \
-  && ok || bad "and those eight classes exactly"
+[ "$(printf '%s' "$GOUT" | jq -r 'length')" = "9" ] && ok \
+  || bad "a --issue run compiles eight source facts plus next_action.governed"
+[ "$(printf '%s' "$GOUT" | jq -r '[.[].key] | sort | join(",")')" = "acceptance.contract,checks.required,graph.native,head.exact,next_action.governed,placement.current,repository.identity,review.independent,work_unit.identity" ] \
+  && ok || bad "and those nine classes exactly"
 
 # --- the envelope is the schema's ------------------------------------------
 for field in $(required_fields); do
@@ -962,13 +962,13 @@ out="$("$SPARK" facts)"
 [ "$(printf '%s' "$out" | jq -r 'length')" = "1" ] && ok \
   || bad "without the flag only the repository class is compiled"
 
-# --- the compiler's cost, with eight classes ----------------------------
+# --- the compiler's cost, with eight source classes plus one derivation ----
 : > "$GH_CALL_LOG"
 graph_stub "$FULL"
 SPARK_RUN_ID=rgraph "$SPARK" facts --issue 733 >/dev/null
 TELG="$("$SPARK" telemetry show --run rgraph --json)"
-assert_contains "eight classes compiled means eight facts" '"facts_emitted":8' "$TELG"
-# Still TWO reads for eight facts: the repository node, and one work-unit node
+assert_contains "eight source classes plus next action means nine facts" '"facts_emitted":9' "$TELG"
+# Still TWO reads for nine facts: the repository node, and one work-unit node
 # that work_unit, graph, placement, acceptance, head, review and checks share. Another
 # read here would mean two classes had described the same node from two
 # separate observations -- the defect this compiler exists to prevent.
@@ -978,7 +978,7 @@ assert_contains "eight classes compiled means eight facts" '"facts_emitted":8' "
 # pull-request path costs more, and is measured where it is exercised.
 assert_contains "from two source reads, not three" '"facts_api_calls":2' "$TELG"
 assert_contains "and the shared observation is reused six times" '"facts_cache_hits":6' "$TELG"
-assert_contains "and the placement is the one unknown" '"facts_unknown":1' "$TELG"
+assert_contains "placement and no-head next action are the two unknowns" '"facts_unknown":2' "$TELG"
 
 # --- a pageInfo that does not say whether more pages exist ------------------
 # Absence of a completeness signal is not a completeness signal. A list whose
@@ -1101,8 +1101,11 @@ esac
 gout="$("$SPARK" facts --issue 733 2>/dev/null)"
 [ "$(printf '%s' "$gout" | jq -r 'type')" = "array" ] && ok \
   || bad "stdout must stay parseable when a class could not be established"
-[ "$(printf '%s' "$gout" | jq -r 'length')" = "1" ] && ok \
-  || bad "and carry only the class that was established"
+[ "$(printf '%s' "$gout" | jq -r 'length')" = "2" ] && ok \
+  || bad "and carry the established repository plus derived UNKNOWN next action"
+assert_eq "the extra fact is the derived next action, not invented source truth" \
+  "next_action.governed,repository.identity" \
+  "$(printf '%s' "$gout" | jq -r '[.[].key] | sort | join(",")')"
 [ -n "$nout" ] && ok || bad "while the reason is reported on stderr, not dropped"
 
 # --- failing to look is not absence ----------------------------------------
@@ -1704,8 +1707,11 @@ assert_eq "an unrecognised kind establishes no graph either" "false" \
   "$(printf '%s' "$DOUT" | jq -r 'any(.[]; .key == "graph.native")')"
 assert_eq "and no work unit" "false" \
   "$(printf '%s' "$DOUT" | jq -r 'any(.[]; .key == "work_unit.identity")')"
-assert_eq "so only the repository class survives" "1" \
+assert_eq "repository plus derived UNKNOWN next action survive" "2" \
   "$(printf '%s' "$DOUT" | jq -r 'length')"
+assert_eq "the unknown derivation does not resurrect a work-unit fact" \
+  "next_action.governed,repository.identity" \
+  "$(printf '%s' "$DOUT" | jq -r '[.[].key] | sort | join(",")')"
 
 # --- absence is decided by the error PATH, not by its message ---------------
 # When the node does not exist GitHub answers with a typed error, and `gh`
