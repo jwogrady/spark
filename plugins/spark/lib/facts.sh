@@ -85,6 +85,9 @@ FACTS_RE_ISSUE_STATE=""
 FACTS_RE_VERDICT=""
 FACTS_RE_LOGIN=""
 FACTS_RE_COMMENT=""
+FACTS_RE_DECISION_RECORD=""
+FACTS_RE_SCOPE=""
+FACTS_RE_BOUNDARY=""
 FACTS_CON_REPOSITORY=""
 FACTS_CON_REF=""
 FACTS_CON_WORK_UNIT=""
@@ -103,6 +106,9 @@ facts_load_grammars() {
       identifier/verdict)    FACTS_RE_VERDICT="$rest" ;;
       identifier/login)      FACTS_RE_LOGIN="$rest" ;;
       identifier/comment)    FACTS_RE_COMMENT="$rest" ;;
+      identifier/decision-record) FACTS_RE_DECISION_RECORD="$rest" ;;
+      identifier/scope)      FACTS_RE_SCOPE="$rest" ;;
+      identifier/boundary)   FACTS_RE_BOUNDARY="$rest" ;;
       constraint/work-unit)  FACTS_CON_WORK_UNIT="$FACTS_CON_WORK_UNIT$rest"$'\n' ;;
       identifier/ref)        FACTS_RE_REF="$rest" ;;
       identifier/timestamp)  FACTS_RE_TIMESTAMP="$rest" ;;
@@ -110,7 +116,7 @@ facts_load_grammars() {
       constraint/ref)        FACTS_CON_REF="$FACTS_CON_REF$rest"$'\n' ;;
     esac
   done < <(awk -F'\t' '
-    $1 == "identifier" && ($2 == "repository" || $2 == "ref" || $2 == "timestamp" || $2 == "work-unit" || $2 == "issue-state" || $2 == "milestone" || $2 == "commit" || $2 == "verdict" || $2 == "login" || $2 == "comment") { print $1 "\t" $2 "\t" $3 }
+    $1 == "identifier" && ($2 == "repository" || $2 == "ref" || $2 == "timestamp" || $2 == "work-unit" || $2 == "issue-state" || $2 == "milestone" || $2 == "commit" || $2 == "verdict" || $2 == "login" || $2 == "comment" || $2 == "decision-record" || $2 == "scope" || $2 == "boundary") { print $1 "\t" $2 "\t" $3 }
     $1 == "constraint" && ($2 == "repository" || $2 == "ref" || $2 == "work-unit") { print $1 "\t" $2 "\t" $3 }' "$FACTS_MODEL")
   FACTS_GRAMMARS_LOADED=1
 }
@@ -2283,6 +2289,179 @@ EOF
   return 0
 }
 
+
+# facts_authority_fact <locator> <observed_at> — authority.standing.
+#
+# The project preference selects one durable decision record; it is configuration,
+# not authority. The decision comment remains the human-decision source. No role,
+# permission, label or prose summary is allowed to manufacture a grant.
+facts_authority_fact() {
+  local locator="$1" observed="$2" record host path nwo issue cid out rc=0
+  local rec_id rec_at rec_login rec_type rec_assoc issue_url body issue_out issue_num issue_at payload first payload_count
+  local target="" scopes="" bounds="" line kind token inv_comment inv_issue provenance
+  FACTS_JSON=""
+  FACTS_REFUSED=""
+  facts_load_grammars
+
+  record="$(pref_get authority.decision_record 2>/dev/null || true)"
+  if [ -z "$record" ]; then
+    FACTS_REFUSED="authority.decision_record is not configured"
+    return 3
+  fi
+  if ! facts_canonical "$FACTS_RE_DECISION_RECORD" "" "$record"; then
+    FACTS_REFUSED="authority.decision_record is not canonical"
+    return 3
+  fi
+
+  case "$record" in
+    *"#"*"/comment/"*) ;;
+    *) FACTS_REFUSED="the configured authority decision record is not a readable comment record"; return 3 ;;
+  esac
+
+  host="$(printf '%s' "$record" | cut -d/ -f1)"
+  path="$(printf '%s' "$record" | cut -d/ -f2-)"
+  nwo="$(printf '%s' "$path" | sed 's/#.*//')"
+  issue="$(printf '%s' "$record" | sed -n 's|^[^/]*/[^#]*#\([1-9][0-9]*\)/comment/[1-9][0-9]*$|\1|p')"
+  cid="$(printf '%s' "$record" | sed -n 's|^.*/comment/\([1-9][0-9]*\)$|\1|p')"
+  if [ -z "$host" ] || [ -z "$nwo" ] || [ -z "$issue" ] || [ -z "$cid" ]; then
+    FACTS_REFUSED="the configured authority decision record is malformed"
+    return 3
+  fi
+
+  # A locator is not a transitive trust grant. Standing authority for a
+  # repository must come from that same repository unless a future contract
+  # defines and verifies an explicit cross-repository authority chain.
+  if [ "$host/$nwo" != "$locator" ]; then
+    FACTS_REFUSED="the authority decision record belongs to another repository"
+    return 3
+  fi
+
+  FACTS_CACHE_MISSES=$(( FACTS_CACHE_MISSES + 1 ))
+  FACTS_API_CALLS=$(( FACTS_API_CALLS + 1 ))
+  out="$(gh api --hostname "$host" "repos/$nwo/issues/comments/$cid" 2>&1)" || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    FACTS_REFUSED="authority decision record $(facts_unreadable_reason "$out")"
+    return 3
+  fi
+  rec_id="$(printf '%s' "$out" | jq -r '.id // empty' 2>/dev/null)"
+  rec_at="$(printf '%s' "$out" | jq -r '.updated_at // empty' 2>/dev/null)"
+  rec_login="$(printf '%s' "$out" | jq -r '.user.login // empty' 2>/dev/null)"
+  rec_type="$(printf '%s' "$out" | jq -r '.user.type // empty' 2>/dev/null)"
+  rec_assoc="$(printf '%s' "$out" | jq -r '.author_association // empty' 2>/dev/null)"
+  issue_url="$(printf '%s' "$out" | jq -r '.issue_url // empty' 2>/dev/null)"
+  body="$(printf '%s' "$out" | jq -r '.body // empty' 2>/dev/null)"
+  if [ "$rec_id" != "$cid" ] || ! facts_canonical "$FACTS_RE_TIMESTAMP" "" "$rec_at"; then
+    FACTS_REFUSED="the authority decision comment reply is malformed"
+    return 3
+  fi
+  if [ -z "$rec_login" ] || [ "$rec_type" != "User" ] || [ "$rec_assoc" != "OWNER" ]; then
+    FACTS_REFUSED="the authority decision comment is not an OWNER-authored human decision"
+    return 3
+  fi
+  case "$issue_url" in
+    *"/repos/$nwo/issues/$issue") ;;
+    *) FACTS_REFUSED="the authority decision comment belongs to another node"; return 3 ;;
+  esac
+
+  FACTS_CACHE_MISSES=$(( FACTS_CACHE_MISSES + 1 ))
+  FACTS_API_CALLS=$(( FACTS_API_CALLS + 1 ))
+  rc=0
+  issue_out="$(gh api --hostname "$host" "repos/$nwo/issues/$issue" 2>&1)" || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    FACTS_REFUSED="authority decision node $(facts_unreadable_reason "$issue_out")"
+    return 3
+  fi
+  issue_num="$(printf '%s' "$issue_out" | jq -r '.number // empty' 2>/dev/null)"
+  issue_at="$(printf '%s' "$issue_out" | jq -r '.updated_at // empty' 2>/dev/null)"
+  if [ "$issue_num" != "$issue" ] || ! facts_canonical "$FACTS_RE_TIMESTAMP" "" "$issue_at"; then
+    FACTS_REFUSED="the authority decision node reply is malformed"
+    return 3
+  fi
+
+  payload_count="$(printf '%s\n' "$body" | grep -Ec '^spark-authority-v1$' || true)"
+  if [ "$payload_count" != "1" ]; then
+    FACTS_REFUSED="the authority decision record has no unique v1 payload"
+    return 3
+  fi
+  payload="$(printf '%s\n' "$body" | awk '
+    $0 == "spark-authority-v1" { inside=1; print; next }
+    inside {
+      fence=sprintf("%c%c%c",96,96,96)
+      if (substr($0,1,3) == fence) exit
+      print
+    }')"
+  first="$(printf '%s\n' "$payload" | sed -n '1p')"
+  if [ "$first" != "spark-authority-v1" ]; then
+    FACTS_REFUSED="the authority decision record has no v1 machine payload"
+    return 3
+  fi
+
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    [ "$line" = "spark-authority-v1" ] && continue
+    kind="$(printf '%s' "$line" | cut -d' ' -f1)"
+    token="$(printf '%s' "$line" | cut -d' ' -f2-)"
+    case "$kind" in
+      target)
+        [ -z "$target" ] || { FACTS_REFUSED="the authority decision record names more than one target"; return 3; }
+        target="$token"
+        ;;
+      grant)
+        facts_canonical "$FACTS_RE_SCOPE" "" "$token" || {
+          FACTS_REFUSED="the authority decision record contains an unknown grant"; return 3; }
+        case " $scopes " in
+          *" $token "*) ;;
+          *) if [ -n "$scopes" ]; then scopes="$scopes $token"; else scopes="$token"; fi ;;
+        esac
+        ;;
+      boundary)
+        facts_canonical "$FACTS_RE_BOUNDARY" "" "$token" || {
+          FACTS_REFUSED="the authority decision record contains an unknown boundary"; return 3; }
+        case " $bounds " in
+          *" $token "*) ;;
+          *) if [ -n "$bounds" ]; then bounds="$bounds $token"; else bounds="$token"; fi ;;
+        esac
+        ;;
+      *) FACTS_REFUSED="the authority decision record contains an unknown v1 directive"; return 3 ;;
+    esac
+  done <<EOF
+$payload
+EOF
+
+  if [ "$target" != "$locator" ]; then
+    FACTS_REFUSED="the authority decision record targets another repository"
+    return 3
+  fi
+
+  inv_comment="comment:$record"
+  inv_issue="issue:$host/$nwo#$issue"
+  provenance="https://$host/$nwo/issues/$issue#issuecomment-$cid"
+  FACTS_JSON="$(jq -nc \
+    --argjson schema "$FACTS_SCHEMA_VERSION" \
+    --arg record "$record" --arg target "$target" --arg scopes "$scopes" --arg bounds "$bounds" \
+    --arg rec_at "$rec_at" --arg observed "$observed" --arg inv_comment "$inv_comment" \
+    --arg inv_issue "$inv_issue" --arg issue_at "$issue_at" --arg provenance "$provenance" '
+      {schema_version:$schema,key:"authority.standing",class:"authority",status:"ESTABLISHED",
+       value:{
+         grants:(if ($scopes|length)>0
+                 then [{decision:$record,target:$target,scopes:($scopes|split(" "))}]
+                 else [] end),
+         human_boundaries:($bounds|split(" ")|map(select(length>0)
+                           | {decision:$record,target:$target,boundary:.}))
+       },
+       source:{type:"human-decision",identity:$record,version:$rec_at},
+       observed_at:$observed,
+       invalidators:[$inv_comment,$inv_issue],
+       versions:{($inv_comment):$rec_at,($inv_issue):$issue_at},
+       provenance:$provenance}')"
+  if [ -z "$FACTS_JSON" ]; then
+    FACTS_REFUSED="the authority fact could not be encoded"
+    return 3
+  fi
+  FACTS_EMITTED=$(( FACTS_EMITTED + 1 ))
+  return 0
+}
+
 facts_record_telemetry() {
   [ -n "${SPARK_RUN_ID:-}" ] || return 0
   SPARK_RECORDING=1 "$SPARK_ROOT/bin/spark" telemetry record --run "$SPARK_RUN_ID" \
@@ -2364,6 +2543,12 @@ cmd_facts() {
     facts="$FACTS_JSON"
   else
     why="repository: $FACTS_REFUSED"
+  fi
+
+  if facts_authority_fact "$locator" "$observed"; then
+    if [ -n "$facts" ]; then facts="$facts,$FACTS_JSON"; else facts="$FACTS_JSON"; fi
+  else
+    if [ -n "$why" ]; then why="$why; authority: $FACTS_REFUSED"; else why="authority: $FACTS_REFUSED"; fi
   fi
 
   if [ -n "$issue" ]; then
