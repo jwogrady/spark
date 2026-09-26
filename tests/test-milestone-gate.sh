@@ -82,6 +82,25 @@ gate 0 "flattened milestone form parses" \
 bash "$script" --manifest "$work/nope.json" --issues "$work/flat.json" >/dev/null 2>&1 && rc=0 || rc=$?
 [ "${rc:-0}" -eq 2 ] && ok || bad "missing manifest should exit 2 (got ${rc:-0})"
 
+# --- Ordinary PRs do not evaluate the release gate ---------------------------
+# A pull request that is not the Release Please branch must return before the
+# runner invokes gh at all. The fake gh records any accidental call and fails it.
+fakebin="$work/fakebin"; mkdir -p "$fakebin"
+called="$work/gh-called"; : > "$called"
+cat > "$fakebin/gh" <<EOF
+#!/usr/bin/env bash
+echo called >> "$called"
+exit 99
+EOF
+chmod +x "$fakebin/gh"
+rc=0
+out="$(env PATH="$fakebin:$PATH" GITHUB_EVENT_NAME=pull_request \
+  GITHUB_HEAD_REF=fix/ordinary GITHUB_REPOSITORY=example/repo \
+  bash "$runner" 2>&1)" || rc=$?
+[ "$rc" -eq 0 ] && ok || bad "ordinary PR gate runner must exit 0 before GitHub API work (rc $rc)"
+assert_contains "ordinary PR gate runner names the no-op" "milestone gate not applicable" "$out"
+[ ! -s "$called" ] && ok || bad "ordinary PR gate runner must not invoke gh"
+
 # --- Safety: the workflow provably cannot merge, tag, or publish -----------
 grep -qE '^[[:space:]]+contents:[[:space:]]*read'  "$workflow" && ok || bad "workflow must grant contents: read"
 grep -qE '^[[:space:]]+contents:[[:space:]]*write' "$workflow" && bad "workflow must NOT grant contents: write" || ok
