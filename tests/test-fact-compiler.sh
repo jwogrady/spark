@@ -3004,6 +3004,14 @@ pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07
 assert_eq "wide-marker list-relative fence hides task syntax" "1=NOT_MET" \
   "$(printf '%s' "$(afact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.items[] | "\(.id)=\(.state)"] | join(",")')"
 
+# An unmatched inline-code opener is literal text. A blank line starts a new
+# block, so it must not hide a visible acceptance item in the following list.
+UNMATCHED_CODE='## Acceptance\n\n`unclosed code span\n\n- [ ] visible criterion\n'
+pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07:00:00Z",
+                    "repository":{"nameWithOwner":"jwogrady/spark"},"body":"'"$UNMATCHED_CODE"'"}]'
+assert_eq "unmatched inline-code opener does not hide a later block" "1=NOT_MET" \
+  "$(printf '%s' "$(afact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.items[] | "\(.id)=\(.state)"] | join(",")')"
+
 # The checkbox must be followed by whitespace or the end of the line.
 NOSPACE='## Acceptance\n\n- [x]not a task item\n- [ ] the only real criterion\n'
 pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07:00:00Z",
