@@ -51,8 +51,8 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-[ -n "$ledger" ] || ledger="$root/docs/ops/v0.21-dogfood-evaluation.md"
-[ -n "$record" ] || record="$root/docs/releases/v0.21.md"
+[ -n "$ledger" ] || { echo "--ledger is required: pass the ledger being verified" >&2; exit 2; }
+[ -n "$record" ] || { echo "--record is required: pass the release record being verified" >&2; exit 2; }
 
 gaps=0
 gap() { echo "GAP: $1"; gaps=$((gaps + 1)); }

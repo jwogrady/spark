@@ -452,11 +452,23 @@ assert_contains "and it is the tree that is named" "the tree holds 4" "$OUT"
 
 rm -f "$ri/tests/test-four-added-later.sh"
 
-# ============ the REAL documents ==========================================
-# Last, and separately: the fixtures prove the check works, this proves the
-# repository is consistent right now.
-RC=0; OUT="$(bash "$CHECK" 2>&1)" || RC=$?
-assert_eq "this repository's own ledger and record agree" 0 "$RC"
-assert_contains "and the check says so with a count" "repair cycle(s)" "$OUT"
+# ============ explicit-input contract ======================================
+# #768 removes the live check's historical v0.21 defaults. Keep the invariant
+# covered by test-owned fixtures rather than making closed release evidence a
+# dependency of the current suite.
+rm -f "$w/tests"/test-*.sh
+mk 14 fourteen 14 14 74 74 74 0 0 0
+run
+assert_eq "an explicitly named consistent fixture pair passes" 0 "$RC"
+assert_contains "and says how many cycles it counted" "14 repair cycle(s)" "$OUT"
+
+# Omitting either input must fail closed and must never resurrect a historical
+# repository default.
+RC=0; OUT="$(cd "$w" && bash "$CHECK" --record "$w/record.md" 2>&1)" || RC=$?
+assert_eq "omitting the ledger is rejected" 2 "$RC"
+assert_contains "and names the missing input" "--ledger is required" "$OUT"
+RC=0; OUT="$(cd "$w" && bash "$CHECK" --ledger "$w/ledger.md" 2>&1)" || RC=$?
+assert_eq "omitting the record is rejected" 2 "$RC"
+assert_contains "and names the missing input" "--record is required" "$OUT"
 
 finish

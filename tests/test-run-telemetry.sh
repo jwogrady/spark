@@ -261,10 +261,10 @@ else ok; fi
 # "Record these metrics before optimization so later claims are comparative
 # rather than anecdotal" — the baseline is a committed provenance record, so its
 # absence is a test failure, not a missing nicety.
-BASELINE="$repo_root/docs/ops/telemetry-baseline.md"
-[ -f "$BASELINE" ] && ok || bad "the pre-optimization baseline record must exist at docs/ops/telemetry-baseline.md"
+BASELINE="$repo_root/tests/fixtures/run-telemetry-baseline.md"
+[ -f "$BASELINE" ] && ok || bad "the telemetry suite fixture must exist at tests/fixtures/run-telemetry-baseline.md"
 if [ -f "$BASELINE" ]; then
-  assert_contains "the baseline names the run it measured" "spark telemetry" "$(cat "$BASELINE")"
+  assert_contains "the fixture names the telemetry command shape it protects" "spark telemetry" "$(cat "$BASELINE")"
 fi
 
 # --- MUTATION CONTROL --------------------------------------------------------

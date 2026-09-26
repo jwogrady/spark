@@ -24,11 +24,41 @@ for t in git awk sed grep find sort printf bash env cat wc tr head tail cut date
   src="$(command -v "$t" 2>/dev/null || true)"
   [ -n "$src" ] && ln -sf "$src" "$nogh/$t" 2>/dev/null || true
 done
-R() { ( cd "$1" && env PATH="$nogh" "$SPARK" reconcile "${@:2}" 2>&1 ); }
+rgh="$WORK/rgh"; mkdir -p "$rgh"
+for t in git awk sed grep find sort printf bash env cat wc tr head tail cut date mktemp rm mkdir ls dirname basename jq python3 xargs cksum comm; do
+  src="$(command -v "$t" 2>/dev/null || true)"
+  [ -n "$src" ] && ln -sf "$src" "$rgh/$t" 2>/dev/null || true
+done
+cat > "$rgh/gh" <<'GHEOF'
+#!/usr/bin/env bash
+case "${1:-}" in auth) exit 0 ;; esac
+case "$*" in
+  *"repos/{owner}/{repo}/milestones?state=open"*)
+    title="v${ACTIVE_RELEASE:-0.1} — Test"
+    case "${MILESTONE_MODE:-release}" in
+      mixed)
+        printf '9\tAlpha work\t1\n'
+        printf '1\t%s\t1\n' "$title"
+        ;;
+      no-release)
+        printf '9\tAlpha work\t1\n'
+        ;;
+      *)
+        printf '1\t%s\t1\n' "$title"
+        ;;
+    esac
+    exit 0
+    ;;
+esac
+exit 1
+GHEOF
+chmod +x "$rgh/gh"
+R() { ( cd "$1" && env PATH="$rgh" ACTIVE_RELEASE="${ACTIVE_RELEASE:-0.1}" "$SPARK" reconcile "${@:2}" 2>&1 ); }
 
-# A repository with THREE stale release records: each states a disposition its
-# published tag contradicts. Three separate findings, so three groups, so the
-# middle one can be reverted.
+# A repository with three historical release records whose dispositions each
+# contradict a published tag. The live-milestone fixture exposes exactly one
+# release at a time, so the same mutation-safety contract is exercised across
+# three independent active-release states without scanning history.
 r="$WORK/repo"
 mkdir -p "$r/docs/releases" "$r/.spark" "$r/.github/ISSUE_TEMPLATE"
 git -C "$r" init -q
@@ -47,12 +77,31 @@ git -C "$r" add -A
 git -C "$r" commit -qm "chore: seed"
 for v in 0.1 0.2 0.3; do git -C "$r" tag "v$v.0"; done
 
-# ============ 1. the slate sees all three =================================
-rows="$(cd "$r" && env PATH="$nogh" bash -c '. '"$SPARK"'; rec_rows "'"$r"'"')"
-n="$(printf '%s\n' "$rows" | awk -F'\t' '$1 == "release" && $3 == "REWRITE-COLLAPSE"' | wc -l | tr -d ' ')"
-assert_eq "three contradicted release records are found" "3" "$n"
-assert_contains "citing the tag that contradicts the claim" "tag v0.2.0 is published" \
+# ============ 1. the slate reads only the active release ====================
+for v in 0.1 0.2 0.3; do
+  rows="$(cd "$r" && env PATH="$rgh" ACTIVE_RELEASE="$v" bash -c '. '"$SPARK"'; rec_rows "'"$r"'"')"
+  n="$(printf '%s\n' "$rows" | awk -F'\t' '$1 == "release" && $3 == "REWRITE-COLLAPSE"' | wc -l | tr -d ' ')"
+  assert_eq "active v$v exposes exactly one contradicted release record" "1" "$n"
+  assert_eq "and it is the active release record" "v$v.md" \
+    "$(printf '%s\n' "$rows" | awk -F'\t' '$1 == "release" { print $4; exit }')"
+done
+rows="$(cd "$r" && env PATH="$rgh" ACTIVE_RELEASE=0.2 bash -c '. '"$SPARK"'; rec_rows "'"$r"'"')"
+assert_contains "the active release finding cites its published tag" "tag v0.2.0 is published" \
   "$(printf '%s\n' "$rows" | awk -F'\t' '$4 == "v0.2.md" { print $5 }')"
+
+# A non-release milestone that sorts before the version milestone must not
+# suppress current release truth.
+rows="$(cd "$r" && env PATH="$rgh" ACTIVE_RELEASE=0.2 MILESTONE_MODE=mixed bash -c '. '"$SPARK"'; rec_rows "'"$r"'"')"
+assert_eq "mixed milestones still select the active version milestone" "v0.2.md" \
+  "$(printf '%s\n' "$rows" | awk -F'\t' '$1 == "release" && $2 == "known" { print $4; exit }')"
+
+# Readable milestone state with no version milestone is evidence, not absence.
+# Fail closed rather than silently skipping the release projection.
+rows="$(cd "$r" && env PATH="$rgh" MILESTONE_MODE=no-release bash -c '. '"$SPARK"'; rec_rows "'"$r"'"')"
+assert_eq "readable state with no active version milestone is unread release truth" "unread" \
+  "$(printf '%s\n' "$rows" | awk -F'\t' '$1 == "release" { print $2; exit }')"
+assert_contains "and explains why no release was derived" "no active version milestone" \
+  "$(printf '%s\n' "$rows" | awk -F'\t' '$1 == "release" { print $5; exit }')"
 
 # ============ 2. nothing applies without --yes ============================
 before="$(git -C "$r" rev-parse HEAD)"
@@ -180,9 +229,9 @@ assert_contains "and its history is kept" "this record was Blocked" "$(cat "$r/d
 # ============ 6. THE MIDDLE GROUP REVERTS CLEANLY =========================
 # Three groups applied in order; revert the middle; the other two stay applied.
 # This is the property that makes an approval mistake recoverable.
-R "$r" --approve release:v0.2.md --yes >/dev/null || true
+ACTIVE_RELEASE=0.2 R "$r" --approve release:v0.2.md --yes >/dev/null || true
 c2="$(git -C "$r" rev-parse HEAD)"
-R "$r" --approve release:v0.3.md --yes >/dev/null || true
+ACTIVE_RELEASE=0.3 R "$r" --approve release:v0.3.md --yes >/dev/null || true
 c3="$(git -C "$r" rev-parse HEAD)"
 assert_eq "the three groups are three distinct commits" "3" \
   "$(git -C "$r" rev-list --count "$h0"..HEAD | tr -d ' ')"
@@ -197,7 +246,7 @@ assert_contains "the first group stays applied" "Disposition: \`Shipped\`" \
 assert_contains "and so does the third" "Disposition: \`Shipped\`" \
   "$(cat "$r/docs/releases/v0.3.md")"
 # And the slate agrees: exactly the reverted one is a finding again.
-rows2="$(cd "$r" && env PATH="$nogh" bash -c '. '"$SPARK"'; rec_rows "'"$r"'"')"
+rows2="$(cd "$r" && env PATH="$rgh" ACTIVE_RELEASE=0.2 bash -c '. '"$SPARK"'; rec_rows "'"$r"'"')"
 assert_eq "the slate reports exactly the reverted finding" "1" \
   "$(printf '%s\n' "$rows2" | awk -F'\t' '$1 == "release" && $3 == "REWRITE-COLLAPSE"' | wc -l | tr -d ' ')"
 assert_eq "and names the right record" "v0.2.md" \
@@ -213,7 +262,7 @@ assert_eq "and names the right record" "v0.2.md" \
 
 # --- the exact duplicate from the report
 h_dup="$(git -C "$r" rev-parse HEAD)"
-out="$(R "$r" --approve release:v0.2.md --approve release:v0.2.md --yes)" || true
+out="$(ACTIVE_RELEASE=0.2 R "$r" --approve release:v0.2.md --approve release:v0.2.md --yes)" || true
 n_commits="$(git -C "$r" rev-list --count "$h_dup"..HEAD | tr -d ' ')"
 assert_eq "a duplicate approval produces one commit" "1" "$n_commits"
 assert_contains "and the refusal covers both shapes" "an earlier group" "$out"
@@ -244,7 +293,7 @@ git -C "$r" add -A; git -C "$r" commit -qm "chore: add v0.4 record"
 git -C "$r" tag v0.4.0
 # Applying v0.4 first; then approve it again under its own id after it has gone.
 h_gen="$(git -C "$r" rev-parse HEAD)"
-out="$(R "$r" --approve release:v0.4.md --approve release:v0.4.md --yes)" || true
+out="$(ACTIVE_RELEASE=0.4 R "$r" --approve release:v0.4.md --approve release:v0.4.md --yes)" || true
 assert_eq "a cleared finding cannot be re-applied" "1" \
   "$(git -C "$r" rev-list --count "$h_gen"..HEAD | tr -d ' ')"
 reported="$(printf '%s\n' "$out" | sed -n 's/^Applied \([0-9][0-9]*\) group(s).*/\1/p' | head -1)"
@@ -254,7 +303,7 @@ assert_eq "and the count still matches the commits" "1" "$reported"
 # an applied group. Simulated by pointing a selector at a record already
 # correct: the slate would not list it, so this asserts the refusal path holds
 # for an id that names nothing rather than silently counting.
-out="$(R "$r" --approve release:v0.4.md --yes)" || true
+out="$(ACTIVE_RELEASE=0.4 R "$r" --approve release:v0.4.md --yes)" || true
 assert_contains "an already-corrected record is refused, not counted" "no such finding" "$out"
 case "$out" in
   *"Applied 1 group(s)"*) bad "a no-op was counted as an applied group" ;;
@@ -264,13 +313,13 @@ esac
 # ============ 7. a dirty tree refuses ====================================
 # "Exactly one commit per group" would be a lie if unrelated work rode along.
 echo "unrelated" > "$r/scratch.txt"
-out="$(R "$r" --approve release:v0.2.md --yes)" || true
+out="$(ACTIVE_RELEASE=0.2 R "$r" --approve release:v0.2.md --yes)" || true
 assert_contains "a dirty tree refuses to apply" "uncommitted change" "$out"
 assert_contains "and says why it matters" "reverts on its own" "$out"
 rm -f "$r/scratch.txt"
 
 # ============ 8. an id that no longer names a finding is refused ==========
-out="$(R "$r" --approve release:v9.9.md --yes)" || true
+out="$(ACTIVE_RELEASE=0.2 R "$r" --approve release:v9.9.md --yes)" || true
 assert_contains "an unknown finding is refused" "no such finding" "$out"
 assert_contains "and explains that the slate is re-derived" "re-derived before every group" "$out"
 
