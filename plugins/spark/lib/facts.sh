@@ -2297,7 +2297,7 @@ EOF
 # permission, label or prose summary is allowed to manufacture a grant.
 facts_authority_fact() {
   local locator="$1" observed="$2" record host path nwo issue cid out rc=0
-  local rec_id rec_at issue_url body issue_out issue_num issue_at payload first payload_count
+  local rec_id rec_at rec_login rec_type rec_assoc issue_url body issue_out issue_num issue_at payload first payload_count
   local target="" scopes="" bounds="" line kind token inv_comment inv_issue provenance
   FACTS_JSON=""
   FACTS_REFUSED=""
@@ -2337,10 +2337,17 @@ facts_authority_fact() {
   fi
   rec_id="$(printf '%s' "$out" | jq -r '.id // empty' 2>/dev/null)"
   rec_at="$(printf '%s' "$out" | jq -r '.updated_at // empty' 2>/dev/null)"
+  rec_login="$(printf '%s' "$out" | jq -r '.user.login // empty' 2>/dev/null)"
+  rec_type="$(printf '%s' "$out" | jq -r '.user.type // empty' 2>/dev/null)"
+  rec_assoc="$(printf '%s' "$out" | jq -r '.author_association // empty' 2>/dev/null)"
   issue_url="$(printf '%s' "$out" | jq -r '.issue_url // empty' 2>/dev/null)"
   body="$(printf '%s' "$out" | jq -r '.body // empty' 2>/dev/null)"
   if [ "$rec_id" != "$cid" ] || ! facts_canonical "$FACTS_RE_TIMESTAMP" "" "$rec_at"; then
     FACTS_REFUSED="the authority decision comment reply is malformed"
+    return 3
+  fi
+  if [ -z "$rec_login" ] || [ "$rec_type" != "User" ] || [ "$rec_assoc" != "OWNER" ]; then
+    FACTS_REFUSED="the authority decision comment is not an OWNER-authored human decision"
     return 3
   fi
   case "$issue_url" in
