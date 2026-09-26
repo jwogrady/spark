@@ -913,6 +913,24 @@ facts_unit_node() {
       (capture("^(?<ind> *)(?<marker>[-*+]|[0-9]{1,9}[.)])(?<ws>[ \\t]+)") // null);
     def item_content_indent($x):
       (($x.ind | length) + ($x.marker | length) + ($x.ws | length));
+    def comment_scan($line; $pos; $state; $hidden):
+      if $pos >= ($line | length) then
+        {comment:$state, inside:$hidden}
+      elif $state then
+        ($line[$pos:] | index("-->")) as $close
+        | if $close == null then {comment:true, inside:true}
+          else comment_scan($line; $pos + $close + 3; false; true)
+          end
+      else
+        ($line[$pos:] | index("<!--")) as $open
+        | if $open == null then {comment:false, inside:$hidden}
+          else
+            ($line[$pos:($pos + $open)] | test("^[ \\t]*$")) as $blank
+            | comment_scan($line; $pos + $open + 4; true; ($hidden or $blank))
+          end
+      end;
+    def comment_line($line; $was_comment):
+      comment_scan($line; 0; $was_comment; $was_comment);
     def acc_lines:
       (. / "\n") as $L
       # Lines hidden by fenced code or HTML comments are not rendered
@@ -929,8 +947,9 @@ facts_unit_node() {
                   else .inside += [true]
                   end
               elif .comment then
-                (.inside += [true]
-                 | if ($ln | contains("-->")) then .comment = false else . end)
+                comment_line($ln; true) as $cs
+                | .inside += [$cs.inside]
+                | .comment = $cs.comment
               else
                 # A real fence opener owns the whole line, including an info
                 # string that happens to contain HTML-comment syntax.
@@ -938,18 +957,12 @@ facts_unit_node() {
                 | if $f != null then
                     (.inside += [false] | .open = $f)
                   else
-                    ($ln | index("<!--")) as $cs
-                    | if $cs != null then
-                        # If visible content precedes an inline comment, keep that
-                        # visible prefix eligible; a comment-only line is hidden.
-                        ($ln[0:$cs]) as $prefix
-                        | .inside += [($prefix | test("^[ \\t]*$"))]
-                        | if ($ln[$cs + 4:] | contains("-->"))
-                          then .
-                          else .comment = true
-                          end
-                      else .inside += [false]
-                      end
+                    # Walk every comment delimiter on the line. A close can be
+                    # followed by a new open on the same line, and the final
+                    # state is what controls the next line.
+                    comment_line($ln; false) as $cs
+                    | .inside += [$cs.inside]
+                    | .comment = $cs.comment
                   end
               end)
          | .inside) as $F
