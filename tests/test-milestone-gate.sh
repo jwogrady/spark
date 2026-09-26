@@ -121,6 +121,8 @@ advisory_block="$(awk '
 ' "$workflow")"
 printf '%s\n' "$advisory_block" | grep -qE '^[[:space:]]*continue-on-error:[[:space:]]*true[[:space:]]*$' \
   && ok || bad "release-notes advisory step must be non-blocking"
+printf '%s\n' "$advisory_block" | grep -qF "if: github.event_name != 'pull_request' || (github.head_ref == 'release-please--branches--master' && github.event.pull_request.head.repo.full_name == github.repository)" \
+  && ok || bad "release-notes advisory must require the canonical Release Please branch in this repository"
 printf '%s\n' "$advisory_block" | grep -qF 'run: timeout --kill-after=10s 120s bash .github/scripts/release-notes-runner.sh' \
   && ok || bad "release-notes advisory runner must have a hard shell timeout"
 
