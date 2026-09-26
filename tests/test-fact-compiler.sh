@@ -2973,7 +2973,7 @@ boundary settings:repository
 boundary action:destructive
 boundary placement:release
 boundary semantics:product'
-AUTH_COMMENT="$(jq -nc --arg body "$AUTH_BODY" '{id:5622552139,updated_at:"2026-09-10T20:00:00Z",issue_url:"https://api.github.com/repos/jwogrady/spark/issues/677",body:$body}')"
+AUTH_COMMENT="$(jq -nc --arg body "$AUTH_BODY" '{id:5622552139,updated_at:"2026-09-10T20:00:00Z",user:{login:"jwogrady",type:"User"},author_association:"OWNER",issue_url:"https://api.github.com/repos/jwogrady/spark/issues/677",body:$body}')"
 AUTH_ISSUE='{"number":677,"updated_at":"2026-09-10T20:05:00Z"}'
 
 authority_stub() {
@@ -3017,6 +3017,23 @@ authority_stub "$AUTH_EDIT" "$AUTH_ISSUE"
 AUTH2="$(printf '%s' "$("$SPARK" facts)" | jq -c '.[] | select(.key=="authority.standing")')"
 assert_eq "editing the decision re-versions standing authority" "2026-09-10T20:30:00Z" \
   "$(printf '%s' "$AUTH2" | jq -r '.source.version')"
+
+# The locator is configuration, not authority: the comment itself must prove
+# that a human repository owner authored the decision.
+NON_OWNER_COMMENT="$(printf '%s' "$AUTH_COMMENT" | jq -c '.author_association="CONTRIBUTOR"')"
+authority_stub "$NON_OWNER_COMMENT" "$AUTH_ISSUE"
+[ "$(printf '%s' "$("$SPARK" facts 2>/dev/null)" | jq '[.[] | select(.key=="authority.standing")] | length')" = "0" ] && ok \
+  || bad "a non-owner comment established standing authority"
+
+BOT_COMMENT="$(printf '%s' "$AUTH_COMMENT" | jq -c '.user={login:"github-actions[bot]",type:"Bot"}')"
+authority_stub "$BOT_COMMENT" "$AUTH_ISSUE"
+[ "$(printf '%s' "$("$SPARK" facts 2>/dev/null)" | jq '[.[] | select(.key=="authority.standing")] | length')" = "0" ] && ok \
+  || bad "a bot-authored comment established standing authority"
+
+NO_AUTHOR_COMMENT="$(printf '%s' "$AUTH_COMMENT" | jq -c 'del(.user,.author_association)')"
+authority_stub "$NO_AUTHOR_COMMENT" "$AUTH_ISSUE"
+[ "$(printf '%s' "$("$SPARK" facts 2>/dev/null)" | jq '[.[] | select(.key=="authority.standing")] | length')" = "0" ] && ok \
+  || bad "a comment with no author identity established standing authority"
 
 # A record targeting another repository cannot grant this repository authority.
 WRONG_BODY="$(printf '%s\n' "$AUTH_BODY" | sed 's|target github.com/jwogrady/spark|target github.com/other/repo|')"
