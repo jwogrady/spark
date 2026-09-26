@@ -20,7 +20,7 @@ stated rather than smoothed over.
 | `source-collection` | 86 | 94 | 1,754 | 2,349 | reads a source of truth (git, gh, the filesystem) and returns it unjudged |
 | `canonicalization` | 45 | 54 | 631 | 745 | normalizes what was read into this repository's vocabulary |
 | `domain-semantics` | 66 | 67 | 6,809 | 6,958 | owns a rule about what the facts mean |
-| `evidence-authority` | 19 | 27 | 505 | 1,535 | decides what the evidence is admissible for |
+| `evidence-authority` | 19 | 27 | 505 | 1,543 | decides what the evidence is admissible for |
 | `formatting-reporting` | 20 | 20 | 223 | 242 | renders |
 | `compatibility-fallback` | 2 | 2 | 7 | 7 | keeps an older shape working |
 | File | Functions before | after |

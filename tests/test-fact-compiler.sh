@@ -2686,10 +2686,34 @@ assert_eq "a bounded comment window is unknown" "UNKNOWN" "$(printf '%s' "$RB" |
 assert_eq "and says it was bounded" "bounded" "$(printf '%s' "$RB" | jq -r '.detail.reason')"
 
 # A comment by a deleted account names no reviewer, and reviewer is part of the
-# value, so the fact is unknown rather than carrying a blank author.
+# value, so the fact is unknown rather than carrying a blank author. The record
+# itself is still known and versioned, so R17/R20 require that UNKNOWN to name
+# the comment it depends on rather than falling back to the pull request source.
 pr_with_comments '[{"databaseId":1,"updatedAt":"2026-09-10T12:00:00Z","author":null,"body":"'"$MARK"'"}]'
+RDEL="$(rfact "$("$SPARK" facts --issue 733)")"
 assert_eq "a verdict by nobody names no reviewer" "UNKNOWN" \
-  "$(printf '%s' "$(rfact "$("$SPARK" facts --issue 733)")" | jq -r '.status')"
+  "$(printf '%s' "$RDEL" | jq -r '.status')"
+printf '%s' "$RDEL" | jq -e 'has("value") | not' >/dev/null && ok \
+  || bad "a deleted-author verdict carried a value"
+assert_eq "the identified deleted-author record remains the source" \
+  "github.com/jwogrady/spark#733/comment/1" \
+  "$(printf '%s' "$RDEL" | jq -r '.source.identity')"
+assert_eq "and its source version is the comment updated_at" "2026-09-10T12:00:00Z" \
+  "$(printf '%s' "$RDEL" | jq -r '.source.version')"
+printf '%s' "$RDEL" | jq -e '[.invalidators[]] | index("comment:github.com/jwogrady/spark#733/comment/1")' >/dev/null && ok \
+  || bad "the deleted-author verdict record was not an invalidator"
+printf '%s' "$RDEL" | jq -e '[.invalidators[]] | index("pull_request:github.com/jwogrady/spark#733")' >/dev/null && ok \
+  || bad "the deleted-author UNKNOWN lost the pull request invalidator"
+assert_eq "and the comment token is versioned" "2026-09-10T12:00:00Z" \
+  "$(printf '%s' "$RDEL" | jq -r '.versions["comment:github.com/jwogrady/spark#733/comment/1"]')"
+
+# Editing the same record must change the token that freshness observes.
+pr_with_comments '[{"databaseId":1,"updatedAt":"2026-09-10T12:15:00Z","author":null,"body":"'"$MARK"'"}]'
+RDEL2="$(rfact "$("$SPARK" facts --issue 733)")"
+assert_eq "editing that record changes the source version" "2026-09-10T12:15:00Z" \
+  "$(printf '%s' "$RDEL2" | jq -r '.source.version')"
+assert_eq "and changes its invalidator version" "2026-09-10T12:15:00Z" \
+  "$(printf '%s' "$RDEL2" | jq -r '.versions["comment:github.com/jwogrady/spark#733/comment/1"]')"
 
 # Logins are compared case-insensitively by GitHub, so one representation per
 # actor (R1).
