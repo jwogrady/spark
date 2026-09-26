@@ -907,36 +907,91 @@ facts_unit_node() {
     # 1)), then a checkbox, then whitespace or the end of the line. Requiring
     # what follows the bracket is what keeps `- [x]not an item` out; admitting
     # the other markers is what keeps a real contract from reading as empty.
+    def marker_padding($x):
+      (($x.ind | length) + ($x.marker | length)) as $start
+      | (reduce ($x.ws | explode[]) as $ch
+          ($start;
+           if $ch == 9 then . + (4 - (. % 4))
+           else . + 1
+           end)) - $start;
     def task_item:
-      (capture("^(?<ind> *)(?<marker>[-*+]|[0-9]{1,9}[.)])(?<ws>[ \\t]+)\\[(?<mark>[ xX])\\](?=[ \\t]|$)") // null);
+      (capture("^(?<ind> *)(?<marker>[-*+]|[0-9]{1,9}[.)])(?<ws>[ \\t]+)\\[(?<mark>[ xX])\\](?=[ \\t]|$)") // null)
+      | if . == null then null
+        else marker_padding(.) as $pad
+          | if ($pad >= 1 and $pad <= 4) then . else null end
+        end;
     def list_item:
       (capture("^(?<ind> *)(?<marker>[-*+]|[0-9]{1,9}[.)])(?<ws>[ \\t]+)") // null);
     def item_content_indent($x):
-      (($x.ind | length) + ($x.marker | length) + ($x.ws | length));
-    def comment_scan($line; $pos; $state; $hidden):
-      if $pos >= ($line | length) then
-        {comment:$state, inside:$hidden}
-      elif $state then
-        ($line[$pos:] | index("-->")) as $close
-        | if $close == null then {comment:true, inside:true}
-          else comment_scan($line; $pos + $close + 3; false; true)
-          end
+      marker_padding($x) as $pad
+      | (($x.ind | length) + ($x.marker | length)
+         + (if $pad <= 4 then $pad else 1 end));
+    def list_context($line; $current):
+      if ($line | test("^[ \\t]*$")) then $current
       else
-        ($line[$pos:] | index("<!--")) as $open
-        | if $open == null then {comment:false, inside:$hidden}
+        ($line | list_item) as $li
+        | if $li == null then
+            ($line | capture("^(?<ind> *)").ind | length) as $ind
+            | if ($current != null) and ($ind >= $current)
+              then $current
+              else null
+              end
           else
-            ($line[$pos:($pos + $open)] | test("^[ \\t]*$")) as $blank
-            | comment_scan($line; $pos + $open + 4; true; ($hidden or $blank))
+            ($li.ind | length) as $ind
+            | if (($ind >= 4) and ($current == null))
+                 or (($current != null) and ($ind >= ($current + 4)))
+              then $current
+              else item_content_indent($li)
+              end
           end
       end;
-    def comment_line($line; $was_comment):
-      comment_scan($line; 0; $was_comment; $was_comment);
+    def backtick_run($line; $pos):
+      (try ($line[$pos:] | capture("^(?<run>`+)")) catch null) as $m
+      | if $m == null then 0 else ($m.run | length) end;
+    def markup_walk($line; $pos; $comment; $code; $visible; $hidden):
+      if $pos >= ($line | length) then
+        {inside:$hidden, comment:$comment, code:$code}
+      elif $comment then
+        if $line[$pos:($pos + 3)] == "-->" then
+          markup_walk($line; $pos + 3; false; $code; $visible; $hidden)
+        else
+          markup_walk($line; $pos + 1; true; $code; $visible; true)
+        end
+      elif $code > 0 then
+        backtick_run($line; $pos) as $run
+        | if $run == $code then
+            markup_walk($line; $pos + $run; false; 0; true; $hidden)
+          elif $run > 0 then
+            markup_walk($line; $pos + $run; false; $code; $visible; $hidden)
+          else
+            markup_walk($line; $pos + 1; false; $code; $visible; $hidden)
+          end
+      elif $line[$pos:($pos + 1)] == "\\" then
+        markup_walk($line;
+                    (if ($pos + 1) < ($line | length) then $pos + 2 else $pos + 1 end);
+                    false; 0; true; $hidden)
+      else
+        backtick_run($line; $pos) as $run
+        | if $run > 0 then
+            markup_walk($line; $pos + $run; false; $run; true; $hidden)
+          elif $line[$pos:($pos + 4)] == "<!--" then
+            markup_walk($line; $pos + 4; true; 0; $visible;
+                        ($hidden or ($visible | not)))
+          else
+            ($line[$pos:($pos + 1)] | test("[^ \\t]")) as $nonspace
+            | markup_walk($line; $pos + 1; false; 0;
+                          ($visible or $nonspace); $hidden)
+          end
+      end;
+    def markup_line($line; $was_comment; $was_code):
+      markup_walk($line; 0; $was_comment; $was_code; false;
+                  ($was_comment or ($was_code > 0)));
     def acc_lines:
       (. / "\n") as $L
       # Lines hidden by fenced code or HTML comments are not rendered
       # acceptance structure. Track both states before heading/item parsing.
       | (reduce range(0; $L | length) as $i
-          ({open: null, comment: false, inside: []};
+          ({open: null, comment: false, code: 0, inside: []};
             ($L[$i]) as $ln
             | if .open != null then
                 ($ln | fence_run) as $f
@@ -946,23 +1001,21 @@ facts_unit_node() {
                   then (.inside += [false] | .open = null)
                   else .inside += [true]
                   end
-              elif .comment then
-                comment_line($ln; true) as $cs
-                | .inside += [$cs.inside]
-                | .comment = $cs.comment
+              elif .comment or (.code > 0) then
+                markup_line($ln; .comment; .code) as $ms
+                | .inside += [$ms.inside]
+                | .comment = $ms.comment
+                | .code = $ms.code
               else
-                # A real fence opener owns the whole line, including an info
-                # string that happens to contain HTML-comment syntax.
+                # A block fence owns the line before inline markup is scanned.
                 ($ln | fence_run) as $f
                 | if $f != null then
                     (.inside += [false] | .open = $f)
                   else
-                    # Walk every comment delimiter on the line. A close can be
-                    # followed by a new open on the same line, and the final
-                    # state is what controls the next line.
-                    comment_line($ln; false) as $cs
-                    | .inside += [$cs.inside]
-                    | .comment = $cs.comment
+                    markup_line($ln; false; 0) as $ms
+                    | .inside += [$ms.inside]
+                    | .comment = $ms.comment
+                    | .code = $ms.code
                   end
               end)
          | .inside) as $F
@@ -987,16 +1040,7 @@ facts_unit_node() {
                   elif ($ln | test("^[ \\t]*$")) then .
                   else ($ln | task_item) as $t
                     | if $t == null then
-                        ($ln | list_item) as $li
-                        | if $li == null then .list_content = null
-                          else
-                            ($li.ind | length) as $ind
-                            | if (($ind >= 4) and (.list_content == null))
-                                 or ((.list_content != null) and ($ind >= (.list_content + 4)))
-                              then .
-                              else .list_content = item_content_indent($li)
-                              end
-                          end
+                        .list_content = list_context($ln; .list_content)
                       else
                         ($t.ind | length) as $ind
                         | if (($ind >= 4) and (.list_content == null))
