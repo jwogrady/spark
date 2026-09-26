@@ -13,6 +13,17 @@ here="$(cd "$(dirname "$0")" && pwd)"
 repo="${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is required}"
 release_branch="release-please--branches--master"
 
+# A normal implementation PR has no release-readiness decision to make. Running
+# the release gate there only spends GitHub API budget on the separate Release
+# Please PR and can make unrelated work red when the installation rate limit is
+# exhausted. Release-PR, issue, workflow-run, and manual events still evaluate
+# the real gate below.
+if [ "${GITHUB_EVENT_NAME:-}" = "pull_request" ] \
+   && [ "${GITHUB_HEAD_REF:-}" != "$release_branch" ]; then
+  echo "non-release pull request; milestone gate not applicable"
+  exit 0
+fi
+
 pr="$(gh pr list --repo "$repo" --head "$release_branch" --state open \
       --json number,headRefOid --jq '.[0] // empty')"
 if [ -z "$pr" ]; then
