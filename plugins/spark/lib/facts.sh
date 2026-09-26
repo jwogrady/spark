@@ -2517,6 +2517,244 @@ EOF
   return 0
 }
 
+facts_next_action_fact() {
+  local facts_json="$1" observed="$2" out rc=0
+  FACTS_JSON=""
+  FACTS_REFUSED=""
+
+  out="$(printf '%s' "$facts_json" | jq -c \
+    --argjson schema "$FACTS_SCHEMA_VERSION" \
+    --arg observed "$observed" \
+    --rawfile model "$FACTS_MODEL" '
+      . as $facts
+      | def fact($k): ([$facts[] | select(.key == $k)][0] // null);
+        def established($f): ($f != null and $f.status == "ESTABLISHED");
+        def keys_present($ks):
+          [$ks[] as $k | fact($k) | select(. != null) | .key];
+        def input_facts($ks):
+          [$ks[] as $k | fact($k) | select(. != null)];
+        def fresh_envelope($ks):
+          input_facts($ks) as $ins
+          | ([ $ins[]
+               | select(.key == "head.exact")
+               | .value.head? // empty
+               | "head:" + . ][0] // null) as $head_from_head
+          | ([ $ins[].invalidators[]? | select(startswith("head:")) ] | unique) as $heads
+          | (if $head_from_head != null then $head_from_head
+             elif ($heads | length) > 0 then $heads[0]
+             else null end) as $headtok
+          | if $headtok != null then
+              {invalidators:[$headtok],
+               versions:{($headtok):($headtok | sub("^head:";""))}}
+            else
+              reduce $ins[] as $f
+                ({invalidators:[], versions:{}};
+                 reduce ($f.invalidators // [])[] as $tok
+                   (.;
+                    if (.invalidators | index($tok)) == null then
+                      .invalidators += [$tok]
+                      | .versions[$tok] = $f.versions[$tok]
+                    else . end))
+            end;
+        def build($status; $ks; $value; $reason):
+          keys_present($ks) as $inputs
+          | input_facts($inputs) as $ins
+          | ($ins
+             | sort_by(.key)
+             | map(.key + "@" + (.source.version | tostring))
+             | join(";")) as $parts
+          | fresh_envelope($inputs) as $fresh
+          | {schema_version:$schema,
+             key:"next_action.governed",
+             class:"next_action",
+             status:$status,
+             source:{type:"derived",
+                     identity:("fact-model/" + ($schema | tostring)),
+                     version:(($schema | tostring) + ";" + $parts)},
+             observed_at:$observed,
+             invalidators:$fresh.invalidators,
+             versions:$fresh.versions,
+             provenance:"preferences/fact-model.tsv",
+             inputs:$inputs}
+          | if $status == "ESTABLISHED" then . + {value:$value}
+            else . + {detail:{reason:$reason,candidates:[]}}
+            end;
+        def boundary_rows:
+          [$model
+           | split("\n")[]
+           | select(startswith("boundary-evidence\t"))
+           | split("\t")
+           | {boundary:.[1], key:.[2], field:.[3], condition:.[4]}];
+        def modeled($b; $rows): any($rows[]; .boundary == $b);
+        def target_ids($repo; $wu):
+          [($repo | select(established(.)) | .value.id),
+           ($wu | select(established(.)) | .value.id)];
+        def targeted_boundaries($auth; $targets):
+          if established($auth) then
+            [$auth.value.human_boundaries[]?
+             | select(.target as $t | ($targets | index($t)) != null)]
+          else [] end;
+
+        ([ $facts[]
+           | select(.class != "next_action" and .status == "CONFLICT")
+           | .key ]) as $conflicts
+        | fact("head.exact") as $head
+        | fact("review.independent") as $review
+        | fact("checks.required") as $checks
+        | fact("acceptance.contract") as $acceptance
+        | fact("authority.standing") as $authority
+        | fact("repository.identity") as $repository
+        | fact("work_unit.identity") as $work_unit
+        | fact("graph.native") as $graph
+        | fact("placement.current") as $placement
+        | boundary_rows as $rows
+        | target_ids($repository; $work_unit) as $targets
+        | targeted_boundaries($authority; $targets) as $targeted
+        | [$targeted[]
+           | select((.boundary as $b | modeled($b; $rows)) | not)] as $unmodeled
+        | [$targeted[] as $hb
+           | $rows[]
+           | select(.boundary == $hb.boundary)
+           | . as $spec
+           | fact($spec.key) as $evidence
+           | select($evidence == null or (established($evidence) | not))
+           | {boundary:$hb.boundary, key:$spec.key}] as $boundary_unknown
+        | [$targeted[] as $hb
+           | $rows[]
+           | select(.boundary == $hb.boundary)
+           | . as $spec
+           | fact($spec.key) as $evidence
+           | select(established($evidence))
+           | select(($spec.condition == "not-none")
+                    and (($evidence.value[$spec.field] // "none") != "none"))
+           | {boundary:$hb.boundary, key:$spec.key}] as $boundary_applies
+        | (established($head)
+           and $review != null
+           and ((established($review) | not)
+                or ($review.value.head != $head.value.head))) as $no_current_verdict
+        | ($checks != null
+           and ($checks.status == "UNKNOWN"
+                or (established($checks)
+                    and any($checks.value.results[]?;
+                            .state == "pending" or .state == "missing")))) as $checks_wait
+        | if ($conflicts | length) > 0 then
+            build("ESTABLISHED"; $conflicts;
+                  {action:"stop-decision-required",
+                   because:$conflicts,
+                   boundary:"none"}; null)
+          elif $head != null and $head.status == "NOT_APPLICABLE" then
+            build("UNKNOWN"; ["head.exact"]; null;
+                  "no next action is derivable for a work unit without a HEAD in this version")
+          elif established($review)
+               and $review.value.verdict == "DECISION REQUIRED" then
+            build("ESTABLISHED"; ["review.independent"];
+                  {action:"stop-decision-required",
+                   because:["review.independent"],
+                   boundary:"none"}; null)
+          elif established($review) and established($head)
+               and $review.value.verdict == "CHANGES REQUIRED"
+               and $review.value.head == $head.value.head
+               and $head.value.current == true then
+            build("ESTABLISHED"; ["review.independent","head.exact"];
+                  {action:"repair",
+                   because:["review.independent"],
+                   boundary:"none"}; null)
+          elif $no_current_verdict or $checks_wait then
+            ([if $head != null then "head.exact" else empty end,
+              if $review != null then "review.independent" else empty end,
+              if $checks != null then "checks.required" else empty end]) as $wait_inputs
+            | ([if $no_current_verdict then
+                   "head.exact",
+                   (if $review != null then "review.independent" else empty end)
+                 else empty end,
+                if $checks_wait then "checks.required" else empty end]) as $wait_because
+            | build("ESTABLISHED"; $wait_inputs;
+                    {action:"wait-review",
+                     because:$wait_because,
+                     boundary:"none"}; null)
+          elif ($unmodeled | length) > 0 then
+            build("UNKNOWN";
+                  ["authority.standing","repository.identity","work_unit.identity"];
+                  null;
+                  ("reserved boundary " + $unmodeled[0].boundary
+                   + " has no boundary-evidence derivation in this version"))
+          elif ($boundary_unknown | length) > 0 then
+            build("UNKNOWN";
+                  ["authority.standing",$boundary_unknown[0].key,
+                   "repository.identity","work_unit.identity"];
+                  null;
+                  ("reserved boundary " + $boundary_unknown[0].boundary
+                   + " cannot be decided from its evidence fact"))
+          elif ($boundary_applies | length) == 1 then
+            build("ESTABLISHED";
+                  ["authority.standing",$boundary_applies[0].key,
+                   "repository.identity","work_unit.identity"];
+                  {action:"stop-decision-required",
+                   because:["authority.standing",$boundary_applies[0].key,
+                            "repository.identity","work_unit.identity"],
+                   boundary:$boundary_applies[0].boundary}; null)
+          elif ($boundary_applies | length) > 1 then
+            build("UNKNOWN";
+                  ["authority.standing","repository.identity","work_unit.identity"]
+                  + [$boundary_applies[].key];
+                  null;
+                  "more than one reserved boundary applies and this version defines no precedence")
+          else
+            (["review.independent","checks.required","head.exact",
+              "authority.standing","acceptance.contract",
+              "repository.identity","work_unit.identity"]
+             + [$rows[].key]
+             + ["graph.native"] | unique) as $merge_inputs_unordered
+            | (["review.independent","checks.required","head.exact",
+                "authority.standing","acceptance.contract",
+                "repository.identity","work_unit.identity"]
+               + [$rows[].key]
+               + ["graph.native"]) as $merge_order
+            | keys_present($merge_order) as $merge_inputs
+            | (established($review) and established($head)
+               and $review.value.verdict == "PASS"
+               and $review.value.head == $head.value.head
+               and $head.value.current == true
+               and established($checks)
+               and $checks.value.head == $head.value.head
+               and all($checks.value.results[]?; .state == "success")
+               and established($acceptance)
+               and $acceptance.value.head == $head.value.head
+               and all($acceptance.value.items[]?; .state == "MET")
+               and established($authority)
+               and any($authority.value.grants[]?;
+                       (.scopes | index("merge:routine")) != null
+                       and (.target as $t | ($targets | index($t)) != null))
+               and established($graph)
+               and all($graph.value.blocked_by[]?; .state == "closed")
+               and ($merge_inputs | length) == ($merge_order | unique | length))
+              as $can_merge
+            | if $can_merge then
+                build("ESTABLISHED"; $merge_order;
+                      {action:"merge",
+                       because:["review.independent","checks.required","head.exact",
+                                "authority.standing","acceptance.contract"],
+                       boundary:"none"}; null)
+              else
+                build("UNKNOWN"; $merge_inputs; null;
+                      "no governed next action is mechanically derivable from the current facts")
+              end
+          end
+    ' 2>/dev/null)" || rc=$?
+
+  if [ "$rc" -ne 0 ] || [ -z "$out" ]; then
+    FACTS_REFUSED="next_action.governed could not be derived from the compiled facts"
+    return 3
+  fi
+
+  FACTS_JSON="$out"
+  FACTS_EMITTED=$(( FACTS_EMITTED + 1 ))
+  if [ "$(printf '%s' "$out" | jq -r '.status')" = "UNKNOWN" ]; then
+    FACTS_UNKNOWN=$(( FACTS_UNKNOWN + 1 ))
+  fi
+  return 0
+}
+
 facts_record_telemetry() {
   [ -n "${SPARK_RUN_ID:-}" ] || return 0
   SPARK_RECORDING=1 "$SPARK_ROOT/bin/spark" telemetry record --run "$SPARK_RUN_ID" \
