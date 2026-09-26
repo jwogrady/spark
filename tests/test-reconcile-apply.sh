@@ -116,6 +116,10 @@ assert_eq "and independently fails milestone-closure truth closed" "unread" \
   "$(printf '%s\n' "$rows" | awk -F'\t' '$1 == "milestone" { print $2; exit }')"
 assert_contains "the milestone unread finding names the shared missing evidence" "open milestone state is unreadable" \
   "$(printf '%s\n' "$rows" | awk -F'\t' '$1 == "milestone" { print $5; exit }')"
+assert_contains "release unread points at the failed milestone API read" "milestones?state=open" \
+  "$(printf '%s\n' "$rows" | awk -F'\t' '$1 == "release" { print $8; exit }')"
+assert_contains "milestone unread points at the same failed API read" "milestones?state=open" \
+  "$(printf '%s\n' "$rows" | awk -F'\t' '$1 == "milestone" { print $8; exit }')"
 
 # ============ 2. nothing applies without --yes ============================
 before="$(git -C "$r" rev-parse HEAD)"
