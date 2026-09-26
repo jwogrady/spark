@@ -92,4 +92,17 @@ for forbidden in 'gh pr merge' 'gh release' 'git tag' 'git push'; do
   else ok; fi
 done
 
+# The release-notes runner owns its own advisory status. Its transport failure
+# must never become the mandatory milestone-gate verdict, and it must not be
+# allowed to hold that verdict open indefinitely.
+advisory_block="$(awk '
+  /name: check release-notes completeness/ { inside=1 }
+  inside { print }
+  inside && /release-notes-runner.sh/ { exit }
+' "$workflow")"
+printf '%s\n' "$advisory_block" | grep -qE '^[[:space:]]*continue-on-error:[[:space:]]*true[[:space:]]*$' \
+  && ok || bad "release-notes advisory step must be non-blocking"
+printf '%s\n' "$advisory_block" | grep -qF 'run: timeout --kill-after=10s 120s bash .github/scripts/release-notes-runner.sh' \
+  && ok || bad "release-notes advisory runner must have a hard shell timeout"
+
 finish

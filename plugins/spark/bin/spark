@@ -5117,7 +5117,10 @@ EOF
   if [ "$mread" -ne 1 ]; then
     rec_row release unread - current \
       "active release cannot be derived because open milestone state is unreadable" \
-      "none — evidence is unreadable" none "gh auth status" human
+      "none — evidence is unreadable" none "gh api repos/{owner}/{repo}/milestones?state=open" human
+    rec_row milestone unread - all \
+      "milestone closure cannot be assessed because open milestone state is unreadable" \
+      "none — evidence is unreadable" none "gh api repos/{owner}/{repo}/milestones?state=open" human
   else
     # Select only a live version milestone. Non-release milestones are
     # independent work containers and must never suppress release truth merely
