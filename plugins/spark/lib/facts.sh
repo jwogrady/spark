@@ -932,20 +932,23 @@ facts_unit_node() {
                 (.inside += [true]
                  | if ($ln | contains("-->")) then .comment = false else . end)
               else
-                ($ln | index("<!--")) as $cs
-                | if $cs != null then
-                    # If visible content precedes an inline comment, keep that
-                    # visible prefix eligible; a comment-only line is hidden.
-                    ($ln[0:$cs]) as $prefix
-                    | .inside += [($prefix | test("^[ \\t]*$"))]
-                    | if ($ln[$cs + 4:] | contains("-->"))
-                      then .
-                      else .comment = true
-                      end
+                # A real fence opener owns the whole line, including an info
+                # string that happens to contain HTML-comment syntax.
+                ($ln | fence_run) as $f
+                | if $f != null then
+                    (.inside += [false] | .open = $f)
                   else
-                    ($ln | fence_run) as $f
-                    | if $f == null then .inside += [false]
-                      else (.inside += [false] | .open = $f)
+                    ($ln | index("<!--")) as $cs
+                    | if $cs != null then
+                        # If visible content precedes an inline comment, keep that
+                        # visible prefix eligible; a comment-only line is hidden.
+                        ($ln[0:$cs]) as $prefix
+                        | .inside += [($prefix | test("^[ \\t]*$"))]
+                        | if ($ln[$cs + 4:] | contains("-->"))
+                          then .
+                          else .comment = true
+                          end
+                      else .inside += [false]
                       end
                   end
               end)
@@ -973,7 +976,13 @@ facts_unit_node() {
                     | if $t == null then
                         ($ln | list_item) as $li
                         | if $li == null then .list_content = null
-                          else .list_content = item_content_indent($li)
+                          else
+                            ($li.ind | length) as $ind
+                            | if (($ind >= 4) and (.list_content == null))
+                                 or ((.list_content != null) and ($ind >= (.list_content + 4)))
+                              then .
+                              else .list_content = item_content_indent($li)
+                              end
                           end
                       else
                         ($t.ind | length) as $ind
