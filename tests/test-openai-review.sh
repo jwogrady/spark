@@ -35,6 +35,10 @@ haswf "serializes one PR" 'group: openai-review-'
 haswf "does not cancel an in-flight paid review" 'cancel-in-progress: false'
 haswf "paginates comment claims" 'gh api --paginate.*comments\?per_page=100'
 haswf "writes a durable reservation before review" 'orl_reservation'
+ci_gate_ln="$(grep -n 'name: Check required checks are terminal' "$wf" | head -1 | cut -d: -f1)"
+claim_ln="$(grep -n 'name: Claim exact PR HEAD' "$wf" | head -1 | cut -d: -f1)"
+{ [ -n "$ci_gate_ln" ] && [ -n "$claim_ln" ] && [ "$ci_gate_ln" -lt "$claim_ln" ]; } \
+  && ok || bad "terminal-CI gate must run before reservation/comment claims"
 haswf "rechecks the live HEAD before model invocation" 'superseded before reviewer invocation'
 haswf "finalizes the existing reservation comment" 'issues/comments/\$RESERVATION_ID'
 haswf_not "publication failures are not swallowed" 'gh (pr comment|api).*\|\| true'
@@ -364,10 +368,10 @@ if printf '%s\n' "$failed" | orl_checks_passed $REQ; then bad "failed CI must no
   # the workflow maps not-passed → NOT ASSESSED for a would-be PASS
   ok
 fi
-# Criterion-7 transition: each event checks terminality ONCE; the pending events
-# defer (no verdict, reservation stays pending) and the completion event that first
-# sees terminal-green reviews. Modelled as the sequence of per-event outcomes: the
-# decision stays "defer" until the terminal snapshot, then becomes "review" once.
+# Criterion-7 transition: each event checks terminality before any claim work; the
+# pending events defer with no verdict or reservation, and the completion event that
+# first sees terminal-green reviews. Modelled as the sequence of per-event outcomes:
+# the decision stays "defer" until the terminal snapshot, then becomes "review" once.
 seq_reviewed=0
 for snap in "$pending" "$pending" "$green"; do
   if printf '%s\n' "$snap" | orl_checks_terminal $REQ; then seq_reviewed=$((seq_reviewed + 1)); fi
@@ -401,11 +405,11 @@ sm_ci_lines() {
 sm_review() { # <pr> <head>
   local pr="$1" head="$2"
   [ "$head" = "$sm_live" ] || return 0
+  if ! sm_ci_lines | orl_checks_terminal $REQ; then return 0; fi
   if printf '%s\n' "$sm_comments" | orl_has_consumed "$pr" "$head"; then return 0; fi
   if ! printf '%s\n' "$sm_comments" | orl_has_trusted_claim "$pr" "$head"; then
     sm_add "$(orl_reservation "$pr" "$head")"
   fi
-  if ! sm_ci_lines | orl_checks_terminal $REQ; then return 0; fi
   if ! sm_ci_lines | orl_checks_passed $REQ; then sm_add "$(orl_marker 'NOT ASSESSED' "$pr" "$head")"; return 0; fi
   sm_add "$(orl_invoked "$pr" "$head")"; sm_invocations=$((sm_invocations + 1))
   sm_add "$(orl_marker PASS "$pr" "$head")"
@@ -420,20 +424,20 @@ sm_sweep() { # <pr>
   fi
   if printf '%s\n' "$sm_comments" | orl_needs_redispatch "$pr" "$head"; then sm_review "$pr" "$head"; fi
 }
-# Lifecycle A: CI pending across pr_target + both workflow_run events (retry
-# exhaustion) → all defer; no verdict; a stranded bare reservation.
+# Lifecycle A: CI pending across pr_target + workflow_run events → all defer;
+# no verdict and NO reservation/comment claim is created (#795).
 sm_live=h900
 sm_review 900 h900; sm_review 900 h900; sm_review 900 h900
 [ "$sm_invocations" = 0 ] && ok || bad "SM: pending CI must not invoke the model"
 printf '%s\n' "$sm_comments" | orl_has_final_marker 900 h900 && bad "SM: no verdict may exist while CI pending" || ok
-printf '%s\n' "$sm_comments" | orl_needs_redispatch 900 h900 && ok || bad "SM: a stranded bare reservation must be re-dispatchable"
+printf '%s\n' "$sm_comments" | orl_has_trusted_claim 900 h900 && bad "SM: pending CI must not create a reservation claim" || ok
 before=$sm_invocations; sm_review 900 supersededhead
 [ "$sm_invocations" = "$before" ] && ok || bad "SM: a superseded head must not drive review"
-# CI becomes terminal; the scheduled sweep re-dispatches → resumed review finalizes.
-sm_ci=green; sm_sweep 900
-[ "$sm_invocations" = 1 ] && ok || bad "SM: exactly one model invocation after re-dispatch, got $sm_invocations"
-printf '%s\n' "$sm_comments" | orl_has_final_marker 900 h900 && ok || bad "SM: a terminal disposition must exist after re-dispatch"
-# Duplicate completion events + more sweeps must not re-invoke or overwrite.
+# CI becomes terminal; the next completion event claims and reviews exactly once.
+sm_ci=green; sm_review 900 h900
+[ "$sm_invocations" = 1 ] && ok || bad "SM: exactly one model invocation after terminal CI, got $sm_invocations"
+printf '%s\n' "$sm_comments" | orl_has_final_marker 900 h900 && ok || bad "SM: a terminal disposition must exist after terminal review"
+# Duplicate completion events + sweeps must not re-invoke or overwrite.
 sm_review 900 h900; sm_review 900 h900; sm_sweep 900; sm_sweep 900
 [ "$sm_invocations" = 1 ] && ok || bad "SM: duplicate events/sweeps must not re-invoke, got $sm_invocations"
 printf '%s\n' "$sm_comments" | grep -q 'verdict=PASS' && ok || bad "SM: the PASS verdict must stand"
@@ -448,6 +452,14 @@ printf '%s\n' "$sm_comments" | orl_has_final_marker 901 h901 && ok || bad "SM: c
 [ "$sm_invocations" = 0 ] && ok || bad "SM: recovery must not invoke the model"
 sm_sweep 901
 [ "$(printf '%s\n' "$sm_comments" | grep -c 'pr=901 head=h901 verdict=')" -ge 1 ] && ok || bad "SM: recovery finalized a verdict once"
+
+# Lifecycle C: terminal CI claimed a reservation, then the run died before the
+# paid invocation. The existing bare-reservation recovery path remains resumable.
+sm_comments=""; sm_ci=green; sm_invocations=0; sm_live=h902
+sm_add "$(orl_reservation 902 h902)"
+sm_sweep 902
+[ "$sm_invocations" = 1 ] && ok || bad "SM: a terminal bare reservation must resume exactly one invocation"
+printf '%s\n' "$sm_comments" | orl_has_final_marker 902 h902 && ok || bad "SM: resumed bare reservation must reach a terminal verdict"
 
 # TOCTOU (#692): terminal-green at the ci step, but a re-run makes a check pending
 # before the paid call → the ask re-validation defers; no invocation on stale state.
