@@ -3042,6 +3042,34 @@ authority_stub "$WRONG_COMMENT" "$AUTH_ISSUE"
 [ "$(printf '%s' "$("$SPARK" facts 2>/dev/null)" | jq '[.[] | select(.key=="authority.standing")] | length')" = "0" ] && ok \
   || bad "authority from a decision targeting another repository was accepted"
 
+# Repository ownership is not transitive. Even an OWNER-authored human
+# decision in another repository cannot grant standing authority here merely by
+# naming this repository as its payload target.
+cat > .spark/preferences.json <<'JSON'
+{
+  "authority.decision_record": "github.com/other/repo#677/comment/5622552139"
+}
+JSON
+CROSS_COMMENT="$(printf '%s' "$AUTH_COMMENT" | jq -c '.issue_url="https://api.github.com/repos/other/repo/issues/677"')"
+stub_gh "$WORK/bin/gh" <<STUB
+printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
+case "\$*" in
+  *"--hostname github.com repos/other/repo/issues/comments/5622552139"*) answer_json '$CROSS_COMMENT' ;;
+  *"--hostname github.com repos/other/repo/issues/677"*) answer_json '$AUTH_ISSUE' ;;
+  *"--hostname github.com repos/jwogrady/spark"*) answer_json '$NODE' ;;
+  *) exit 1 ;;
+esac
+STUB
+[ "$(printf '%s' "$("$SPARK" facts 2>/dev/null)" | jq '[.[] | select(.key=="authority.standing")] | length')" = "0" ] && ok \
+  || bad "an OWNER-authored decision from another repository established standing authority"
+
+# Restore the canonical same-repository decision for the remaining controls.
+cat > .spark/preferences.json <<'JSON'
+{
+  "authority.decision_record": "github.com/jwogrady/spark#677/comment/5622552139"
+}
+JSON
+
 # Closed vocabularies fail closed rather than expanding authority.
 BAD_BODY="$AUTH_BODY
 grant merge:anything"
