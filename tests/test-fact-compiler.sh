@@ -700,12 +700,12 @@ graph_stub "$FULL"
 GOUT="$("$SPARK" facts --issue 733)"
 G="$(gfact "$GOUT")"
 
-# --- the fragment carries all eight classes, and is still a fragment -------
+# --- the fragment carries all source classes plus the derived action -------
 [ "$(printf '%s' "$GOUT" | jq -r 'type')" = "array" ] && ok || bad "a fragment is a bare list"
-[ "$(printf '%s' "$GOUT" | jq -r 'length')" = "8" ] && ok \
-  || bad "a --issue run compiles repository, work unit, graph, placement, acceptance, head, review and checks"
-[ "$(printf '%s' "$GOUT" | jq -r '[.[].key] | sort | join(",")')" = "acceptance.contract,checks.required,graph.native,head.exact,placement.current,repository.identity,review.independent,work_unit.identity" ] \
-  && ok || bad "and those eight classes exactly"
+[ "$(printf '%s' "$GOUT" | jq -r 'length')" = "9" ] && ok \
+  || bad "a --issue run compiles eight source facts plus next_action.governed"
+[ "$(printf '%s' "$GOUT" | jq -r '[.[].key] | sort | join(",")')" = "acceptance.contract,checks.required,graph.native,head.exact,next_action.governed,placement.current,repository.identity,review.independent,work_unit.identity" ] \
+  && ok || bad "and those nine classes exactly"
 
 # --- the envelope is the schema's ------------------------------------------
 for field in $(required_fields); do
@@ -962,13 +962,13 @@ out="$("$SPARK" facts)"
 [ "$(printf '%s' "$out" | jq -r 'length')" = "1" ] && ok \
   || bad "without the flag only the repository class is compiled"
 
-# --- the compiler's cost, with eight classes ----------------------------
+# --- the compiler's cost, with eight source classes plus one derivation ----
 : > "$GH_CALL_LOG"
 graph_stub "$FULL"
 SPARK_RUN_ID=rgraph "$SPARK" facts --issue 733 >/dev/null
 TELG="$("$SPARK" telemetry show --run rgraph --json)"
-assert_contains "eight classes compiled means eight facts" '"facts_emitted":8' "$TELG"
-# Still TWO reads for eight facts: the repository node, and one work-unit node
+assert_contains "eight source classes plus next action means nine facts" '"facts_emitted":9' "$TELG"
+# Still TWO reads for nine facts: the repository node, and one work-unit node
 # that work_unit, graph, placement, acceptance, head, review and checks share. Another
 # read here would mean two classes had described the same node from two
 # separate observations -- the defect this compiler exists to prevent.
@@ -978,7 +978,7 @@ assert_contains "eight classes compiled means eight facts" '"facts_emitted":8' "
 # pull-request path costs more, and is measured where it is exercised.
 assert_contains "from two source reads, not three" '"facts_api_calls":2' "$TELG"
 assert_contains "and the shared observation is reused six times" '"facts_cache_hits":6' "$TELG"
-assert_contains "and the placement is the one unknown" '"facts_unknown":1' "$TELG"
+assert_contains "placement and no-head next action are the two unknowns" '"facts_unknown":2' "$TELG"
 
 # --- a pageInfo that does not say whether more pages exist ------------------
 # Absence of a completeness signal is not a completeness signal. A list whose
@@ -1101,8 +1101,11 @@ esac
 gout="$("$SPARK" facts --issue 733 2>/dev/null)"
 [ "$(printf '%s' "$gout" | jq -r 'type')" = "array" ] && ok \
   || bad "stdout must stay parseable when a class could not be established"
-[ "$(printf '%s' "$gout" | jq -r 'length')" = "1" ] && ok \
-  || bad "and carry only the class that was established"
+[ "$(printf '%s' "$gout" | jq -r 'length')" = "2" ] && ok \
+  || bad "and carry the established repository plus derived UNKNOWN next action"
+assert_eq "the extra fact is the derived next action, not invented source truth" \
+  "next_action.governed,repository.identity" \
+  "$(printf '%s' "$gout" | jq -r '[.[].key] | sort | join(",")')"
 [ -n "$nout" ] && ok || bad "while the reason is reported on stderr, not dropped"
 
 # --- failing to look is not absence ----------------------------------------
@@ -1704,8 +1707,11 @@ assert_eq "an unrecognised kind establishes no graph either" "false" \
   "$(printf '%s' "$DOUT" | jq -r 'any(.[]; .key == "graph.native")')"
 assert_eq "and no work unit" "false" \
   "$(printf '%s' "$DOUT" | jq -r 'any(.[]; .key == "work_unit.identity")')"
-assert_eq "so only the repository class survives" "1" \
+assert_eq "repository plus derived UNKNOWN next action survive" "2" \
   "$(printf '%s' "$DOUT" | jq -r 'length')"
+assert_eq "the unknown derivation does not resurrect a work-unit fact" \
+  "next_action.governed,repository.identity" \
+  "$(printf '%s' "$DOUT" | jq -r '[.[].key] | sort | join(",")')"
 
 # --- absence is decided by the error PATH, not by its message ---------------
 # When the node does not exist GitHub answers with a typed error, and `gh`
@@ -3157,5 +3163,161 @@ STUB
 [ "$(printf '%s' "$("$SPARK" facts 2>/dev/null)" | jq '[.[] | select(.key=="authority.standing")] | length')" = "0" ] && ok \
   || bad "an unreadable authority record was replaced by inferred authority"
 
+
+
+# --- next_action.governed: pure R15 derivation over compiled facts ---------
+# Source facts are synthetic here on purpose: this tests the derivation without
+# making another GitHub read, which is the contract this packet adds.
+spark_load_module() { return 0; }
+SPARK_ROOT="$WORK/plugin"
+# shellcheck source=/dev/null
+. "$WORK/plugin/lib/facts.sh"
+
+na_derive() {
+  FACTS_JSON=""
+  FACTS_EMITTED=0
+  FACTS_UNKNOWN=0
+  facts_next_action_fact "$1" "2026-09-26T20:00:00Z" || return 1
+  printf '%s' "$FACTS_JSON"
+}
+
+NA_HEAD='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+NA_OLD='bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+NA_BASE="$(cat <<JSON
+[
+ {"key":"repository.identity","class":"repository","status":"ESTABLISHED",
+  "value":{"id":"github.com/jwogrady/spark","default_branch":"master"},
+  "source":{"version":"2026-09-01T00:00:01Z"},
+  "invalidators":["repository:github.com/jwogrady/spark"],
+  "versions":{"repository:github.com/jwogrady/spark":"2026-09-01T00:00:01Z"}},
+ {"key":"authority.standing","class":"authority","status":"ESTABLISHED",
+  "value":{"grants":[{"target":"github.com/jwogrady/spark","scopes":["merge:routine"]}],
+           "human_boundaries":[{"target":"github.com/jwogrady/spark","boundary":"placement:release"}]},
+  "source":{"version":"2026-09-01T00:00:02Z"},
+  "invalidators":["comment:github.com/jwogrady/spark#677/comment/1"],
+  "versions":{"comment:github.com/jwogrady/spark#677/comment/1":"2026-09-01T00:00:02Z"}},
+ {"key":"work_unit.identity","class":"work_unit","status":"ESTABLISHED",
+  "value":{"kind":"pull_request","id":"github.com/jwogrady/spark#791","implements":"github.com/jwogrady/spark#733"},
+  "source":{"version":"2026-09-01T00:00:03Z"},
+  "invalidators":["pull_request:github.com/jwogrady/spark#791"],
+  "versions":{"pull_request:github.com/jwogrady/spark#791":"2026-09-01T00:00:03Z"}},
+ {"key":"graph.native","class":"graph","status":"ESTABLISHED",
+  "value":{"parent":"none","children":[],"blocked_by":[]},
+  "source":{"version":"2026-09-01T00:00:04Z"},
+  "invalidators":["pull_request:github.com/jwogrady/spark#791"],
+  "versions":{"pull_request:github.com/jwogrady/spark#791":"2026-09-01T00:00:03Z"}},
+ {"key":"placement.current","class":"placement","status":"ESTABLISHED",
+  "value":{"release":"none"},
+  "source":{"version":"2026-09-01T00:00:05Z"},
+  "invalidators":["pull_request:github.com/jwogrady/spark#791"],
+  "versions":{"pull_request:github.com/jwogrady/spark#791":"2026-09-01T00:00:03Z"}},
+ {"key":"acceptance.contract","class":"acceptance","status":"ESTABLISHED",
+  "value":{"contract":"github.com/jwogrady/spark#733","head":"$NA_HEAD",
+           "items":[{"id":"1","state":"MET"},{"id":"2","state":"MET"}]},
+  "source":{"version":"2026-09-01T00:00:06Z"},
+  "invalidators":["head:$NA_HEAD"],
+  "versions":{"head:$NA_HEAD":"$NA_HEAD"}},
+ {"key":"head.exact","class":"head","status":"ESTABLISHED",
+  "value":{"head":"$NA_HEAD","base_ref":"master","base":"cccccccccccccccccccccccccccccccccccccccc","current":true},
+  "source":{"version":"$NA_HEAD"},
+  "invalidators":["head:$NA_HEAD"],
+  "versions":{"head:$NA_HEAD":"$NA_HEAD"}},
+ {"key":"review.independent","class":"review","status":"ESTABLISHED",
+  "value":{"verdict":"PASS","head":"$NA_HEAD","reviewer":"login:github-actions[bot]","record":"github.com/jwogrady/spark#791/comment/1"},
+  "source":{"version":"2026-09-01T00:00:07Z"},
+  "invalidators":["head:$NA_HEAD"],
+  "versions":{"head:$NA_HEAD":"$NA_HEAD"}},
+ {"key":"checks.required","class":"checks","status":"ESTABLISHED",
+  "value":{"head":"$NA_HEAD","required":["doctor","tests"],
+           "results":[{"name":"doctor","state":"success"},{"name":"tests","state":"success"}]},
+  "source":{"version":"$NA_HEAD"},
+  "invalidators":["head:$NA_HEAD"],
+  "versions":{"head:$NA_HEAD":"$NA_HEAD"}}
+]
+JSON
+)"
+
+NA="$(na_derive "$NA_BASE")"
+assert_eq "R15 derives merge only from a fully mergeable fact set" "merge"   "$(printf '%s' "$NA" | jq -r '.value.action')"
+assert_eq "merge inputs are exactly the consulted facts in canonical packet order"   "review.independent,checks.required,head.exact,authority.standing,acceptance.contract,repository.identity,work_unit.identity,placement.current,graph.native"   "$(printf '%s' "$NA" | jq -r '.inputs | join(",")')"
+assert_eq "merge because lists the direct gates, not every consulted support fact"   "review.independent,checks.required,head.exact,authority.standing,acceptance.contract"   "$(printf '%s' "$NA" | jq -r '.value.because | join(",")')"
+assert_eq "derived source version is sorted by input key"   "1;acceptance.contract@2026-09-01T00:00:06Z;authority.standing@2026-09-01T00:00:02Z;checks.required@$NA_HEAD;graph.native@2026-09-01T00:00:04Z;head.exact@$NA_HEAD;placement.current@2026-09-01T00:00:05Z;repository.identity@2026-09-01T00:00:01Z;review.independent@2026-09-01T00:00:07Z;work_unit.identity@2026-09-01T00:00:03Z"   "$(printf '%s' "$NA" | jq -r '.source.version')"
+assert_eq "head-bound next action carries only the current head invalidator" "head:$NA_HEAD"   "$(printf '%s' "$NA" | jq -r '.invalidators | join(",")')"
+
+# CHANGES REQUIRED on the current head is repair even if checks are still
+# pending: the reviewer has already supplied the more specific action.
+NA_REPAIR="$(printf '%s' "$NA_BASE" | jq -c   'map(if .key=="review.independent" then .value.verdict="CHANGES REQUIRED"
+       elif .key=="checks.required" then .value.results[1].state="pending"
+       else . end)')"
+NA="$(na_derive "$NA_REPAIR")"
+assert_eq "current-head changes-required takes repair precedence over wait" "repair"   "$(printf '%s' "$NA" | jq -r '.value.action')"
+assert_eq "repair consults review and head only" "review.independent,head.exact"   "$(printf '%s' "$NA" | jq -r '.inputs | join(",")')"
+assert_eq "repair because is the independent review" "review.independent"   "$(printf '%s' "$NA" | jq -r '.value.because | join(",")')"
+
+# A verdict on another head is historical. With checks otherwise settled the
+# governed action is to wait for a verdict on this head.
+NA_STALE_REVIEW="$(printf '%s' "$NA_BASE" | jq -c --arg old "$NA_OLD"   'map(if .key=="review.independent" then .value.head=$old else . end)')"
+NA="$(na_derive "$NA_STALE_REVIEW")"
+assert_eq "a verdict on another head derives wait-review" "wait-review"   "$(printf '%s' "$NA" | jq -r '.value.action')"
+assert_eq "wait-review consults the present head review and checks facts"   "head.exact,review.independent,checks.required"   "$(printf '%s' "$NA" | jq -r '.inputs | join(",")')"
+assert_eq "stale-review wait is because head and review disagree"   "head.exact,review.independent"   "$(printf '%s' "$NA" | jq -r '.value.because | join(",")')"
+
+NA_PENDING="$(printf '%s' "$NA_BASE" | jq -c   'map(if .key=="checks.required" then .value.results[1].state="missing" else . end)')"
+NA="$(na_derive "$NA_PENDING")"
+assert_eq "a missing required check derives wait-review" "wait-review"   "$(printf '%s' "$NA" | jq -r '.value.action')"
+assert_eq "check wait is because checks.required alone" "checks.required"   "$(printf '%s' "$NA" | jq -r '.value.because | join(",")')"
+
+# Any conflict stops with every conflicting fact and nothing else.
+NA_CONFLICT="$(printf '%s' "$NA_BASE" | jq -c   'map(if .key=="graph.native" or .key=="review.independent"
+       then .status="CONFLICT" | del(.value) else . end)')"
+NA="$(na_derive "$NA_CONFLICT")"
+assert_eq "any conflict derives stop-decision-required" "stop-decision-required"   "$(printf '%s' "$NA" | jq -r '.value.action')"
+assert_eq "conflict stop uses every conflict and nothing extra"   "graph.native,review.independent"   "$(printf '%s' "$NA" | jq -r '.inputs | join(",")')"
+assert_eq "conflict because exactly matches the conflicting inputs"   "graph.native,review.independent"   "$(printf '%s' "$NA" | jq -r '.value.because | join(",")')"
+
+NA_DECISION="$(printf '%s' "$NA_BASE" | jq -c   'map(if .key=="review.independent" then .value.verdict="DECISION REQUIRED"
+       elif .key=="checks.required" then .value.results[0].state="pending"
+       else . end)')"
+NA="$(na_derive "$NA_DECISION")"
+assert_eq "DECISION REQUIRED derives a stop before lower-priority wait state" "stop-decision-required"   "$(printf '%s' "$NA" | jq -r '.value.action')"
+assert_eq "decision-required stop is review-minimal" "review.independent"   "$(printf '%s' "$NA" | jq -r '.inputs | join(",")')"
+
+NA_BOUNDARY="$(printf '%s' "$NA_BASE" | jq -c   'map(if .key=="placement.current" then .value.release="v0.23.0" else . end)')"
+NA="$(na_derive "$NA_BOUNDARY")"
+assert_eq "an applicable modeled boundary derives a stop" "stop-decision-required"   "$(printf '%s' "$NA" | jq -r '.value.action')"
+assert_eq "the stop names the modeled boundary" "placement:release"   "$(printf '%s' "$NA" | jq -r '.value.boundary')"
+assert_eq "boundary stop consults authority evidence repository and work unit"   "authority.standing,placement.current,repository.identity,work_unit.identity"   "$(printf '%s' "$NA" | jq -r '.inputs | join(",")')"
+
+NA_BOUNDARY_UNKNOWN="$(printf '%s' "$NA_BASE" | jq -c   'map(if .key=="placement.current"
+       then .status="UNKNOWN" | del(.value)
+       else . end)')"
+NA="$(na_derive "$NA_BOUNDARY_UNKNOWN")"
+assert_eq "unknown boundary evidence is UNKNOWN, not stop and not merge" "UNKNOWN"   "$(printf '%s' "$NA" | jq -r '.status')"
+printf '%s' "$NA" | jq -e 'has("value") | not' >/dev/null && ok   || bad "unknown boundary evidence emitted a value"
+
+NA_UNMODELED="$(printf '%s' "$NA_BASE" | jq -c   'map(if .key=="authority.standing"
+       then .value.human_boundaries=[{"target":"github.com/jwogrady/spark","boundary":"release:approve"}]
+       else . end)')"
+NA="$(na_derive "$NA_UNMODELED")"
+assert_eq "a reserved boundary with no evidence row has no v1 action" "UNKNOWN"   "$(printf '%s' "$NA" | jq -r '.status')"
+assert_eq "unmodeled boundary UNKNOWN consults only authority and its targets"   "authority.standing,repository.identity,work_unit.identity"   "$(printf '%s' "$NA" | jq -r '.inputs | join(",")')"
+
+NA_FAILURE="$(printf '%s' "$NA_BASE" | jq -c   'map(if .key=="checks.required" then .value.results[1].state="failure" else . end)')"
+NA="$(na_derive "$NA_FAILURE")"
+assert_eq "a failed check has no invented R15 action" "UNKNOWN"   "$(printf '%s' "$NA" | jq -r '.status')"
+printf '%s' "$NA" | jq -e 'has("value") | not' >/dev/null && ok   || bad "no-action UNKNOWN carried a value"
+assert_eq "no-action UNKNOWN records every merge fact it actually consulted"   "review.independent,checks.required,head.exact,authority.standing,acceptance.contract,repository.identity,work_unit.identity,placement.current,graph.native"   "$(printf '%s' "$NA" | jq -r '.inputs | join(",")')"
+
+NA_ISSUE="$(printf '%s' "$NA_BASE" | jq -c   'map(if .key=="head.exact"
+       then .status="NOT_APPLICABLE"
+            | del(.value)
+            | .source.version="2026-09-01T00:00:08Z"
+            | .invalidators=["issue:github.com/jwogrady/spark#733"]
+            | .versions={"issue:github.com/jwogrady/spark#733":"2026-09-01T00:00:08Z"}
+       else . end)')"
+NA="$(na_derive "$NA_ISSUE")"
+assert_eq "a work unit with no head has no governed action" "UNKNOWN"   "$(printf '%s' "$NA" | jq -r '.status')"
+assert_eq "no-head UNKNOWN consults head.exact only" "head.exact"   "$(printf '%s' "$NA" | jq -r '.inputs | join(",")')"
+assert_contains "no-head UNKNOWN explains the missing HEAD" "without a HEAD"   "$(printf '%s' "$NA" | jq -r '.detail.reason')"
 
 finish
