@@ -946,7 +946,7 @@ facts_unit_node() {
           end
       end;
     def backtick_run($line; $pos):
-      (try ($line[$pos:] | capture("^(?<run>`+)")) catch null) as $m
+      ((try ($line[$pos:] | capture("^(?<run>`+)")) catch null) // null) as $m
       | if $m == null then 0 else ($m.run | length) end;
     def markup_walk($line; $pos; $comment; $code; $visible; $hidden):
       if $pos >= ($line | length) then
