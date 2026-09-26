@@ -2938,6 +2938,15 @@ pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07
 assert_eq "commented task syntax is not acceptance structure" "1=NOT_MET,2=MET" \
   "$(printf '%s' "$(afact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.items[] | "\(.id)=\(.state)"] | join(",")')"
 
+# A line may close one HTML comment and open another. The parser must scan
+# every delimiter so the final state, not the first transition, governs the
+# following line.
+CHAINED_COMMENTS='## Acceptance\n\n<!-- closed --> <!--\n- [x] hidden one\n--> <!--\n- [x] hidden two\n-->\n- [ ] visible\n'
+pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07:00:00Z",
+                    "repository":{"nameWithOwner":"jwogrady/spark"},"body":"'"$CHAINED_COMMENTS"'"}]'
+assert_eq "chained HTML comment transitions preserve hidden state" "1=NOT_MET" \
+  "$(printf '%s' "$(afact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.items[] | "\(.id)=\(.state)"] | join(",")')"
+
 # A task-looking line can be indented relative to a list far enough that
 # Markdown renders it as code. An open parent list alone is not permission to
 # count arbitrary indentation as a nested criterion.
