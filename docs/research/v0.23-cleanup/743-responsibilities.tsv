@@ -118,7 +118,7 @@ ev_payload	plugins/spark/lib/execution.sh	top-level	-	source-collection	1	1	1	cm
 ev_tokens	plugins/spark/lib/execution.sh	top-level	-	canonicalization	9	1	1	cmd_evidence	cmd_evidence
 ev_write	plugins/spark/lib/execution.sh	top-level	-	domain-semantics	10	1	1	cmd_evidence	cmd_evidence
 facts_acceptance_fact	plugins/spark/lib/facts.sh	top-level	-	evidence-authority	155	10	1	cmd_facts	cmd_facts
-facts_authority_fact	plugins/spark/lib/facts.sh	top-level	-	evidence-authority	158	1	1	cmd_facts	cmd_facts
+facts_authority_fact	plugins/spark/lib/facts.sh	top-level	-	evidence-authority	166	1	1	cmd_facts	cmd_facts
 facts_canonical	plugins/spark/lib/facts.sh	top-level	-	canonicalization	12	1	11	cmd_facts;facts_acceptance_fact;facts_authority_fact;facts_checks_fact;facts_graph_fact;facts_head_fact;facts_placement_fact;facts_repository_fact;facts_review_fact;facts_unit_locator;facts_work_unit_fact	cmd_facts
 facts_check_state	plugins/spark/lib/facts.sh	top-level	-	canonicalization	23	4	1	facts_checks_fact	-
 facts_check_worse	plugins/spark/lib/facts.sh	top-level	-	canonicalization	9	2	1	facts_checks_fact	-
