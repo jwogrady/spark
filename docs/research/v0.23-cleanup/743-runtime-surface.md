@@ -20,7 +20,7 @@ stated rather than smoothed over.
 | `source-collection` | 86 | 94 | 1,754 | 2,352 | reads a source of truth (git, gh, the filesystem) and returns it unjudged |
 | `canonicalization` | 45 | 54 | 631 | 745 | normalizes what was read into this repository's vocabulary |
 | `domain-semantics` | 66 | 67 | 6,809 | 6,964 | owns a rule about what the facts mean |
-| `evidence-authority` | 19 | 28 | 505 | 1,694 | decides what the evidence is admissible for |
+| `evidence-authority` | 19 | 28 | 505 | 1,701 | decides what the evidence is admissible for |
 | `formatting-reporting` | 20 | 20 | 223 | 242 | renders |
 | `compatibility-fallback` | 2 | 2 | 7 | 7 | keeps an older shape working |
 | File | Functions before | after |
@@ -30,8 +30,8 @@ stated rather than smoothed over.
 | `plugins/spark/lib/planning.sh` | 16 | 16 |
 | `plugins/spark/lib/repository.sh` | 10 | 10 |
 | `plugins/spark/lib/facts.sh` | 0 | 27 |
-Module count goes 3 to 4, adding `facts.sh`. The runtime holds 276 functions and 12,099 body lines, against
-249 and 10,034 before: +27 functions, +2065 body lines.
+Module count goes 3 to 4, adding `facts.sh`. The runtime holds 276 functions and 12,106 body lines, against
+249 and 10,034 before: +27 functions, +2072 body lines.
 Those totals count **every** definition, nested ones included — 9 of the 276 are nested
 inside another function, against 12 of 249 before. Counted whole, this unit removes 2 definition(s) — `bg_json_escape`, `json_escape_out` — adds 29 — `__spark_memo_write`, `cmd_facts`, `facts_acceptance_fact`, `facts_authority_fact`, `facts_canonical`, `facts_check_state`, `facts_check_worse`, `facts_checks_fact`, `facts_envelope_tail`, `facts_error_absent`, `facts_graph_entry`, `facts_graph_fact`, `facts_head_fact`, `facts_load_grammars`, `facts_now`, `facts_placement_fact`, `facts_record_telemetry`, `facts_repo_node`, `facts_repository_fact`, `facts_review_fact`, `facts_rules_read`, `facts_state_canonical`, `facts_unit_kind`, `facts_unit_locator`, `facts_unit_node`, `facts_unit_read`, `facts_unreadable_reason`, `facts_work_unit_fact`, `intent_liveness` — and moves 1 — `json_escape` — from nested to top-level, which is why the total goes 249 to 276. A top-level-only inventory saw none of the removals, because all three escapers were nested, and reported this unit adding two functions.
 `tests/structure.sh` reports the top-level half — the right scope for the size of a file — and stays the authority
@@ -44,9 +44,9 @@ actual line count is reported too:
 | `plugins/spark/lib/execution.sh` | 2,182 | 2,203 | +21 |
 | `plugins/spark/lib/planning.sh` | 825 | 825 | +0 |
 | `plugins/spark/lib/repository.sh` | 221 | 234 | +13 |
-| `plugins/spark/lib/facts.sh` | 0 | 2,598 | +2598 |
-**12,166 lines before, 14,844 after (+2678)**, against
-10,034 and 12,099 body lines. Both grow: this tree adds runtime rather than only redistributing it, and the body lines say so rather than being read out of the file total.
+| `plugins/spark/lib/facts.sh` | 0 | 2,605 | +2605 |
+**12,166 lines before, 14,851 after (+2685)**, against
+10,034 and 12,106 body lines. Both grow: this tree adds runtime rather than only redistributing it, and the body lines say so rather than being read out of the file total.
 **Argument parsing, measured rather than assigned.** The map is exclusive — one responsibility per function — and
 that misrepresents parsing, which no function owns: it sits at the head of every verb. Counting the lines of each
 body that touch a positional parameter, `shift`, a usage string or a long option gives the responsibility a size
@@ -133,5 +133,5 @@ In reader bodies the same three facts go two to one, two to one and three to one
   module boundaries.
 - **Module count rises only when duplication or change surface falls** — module count goes 3 to 4, adding `facts.sh`.
 - **The change to public behaviour is stated, not assumed** — the shipped verb surface adds `facts`, so this tree does change public CLI behaviour and says so here.
-- **No cleanup-only refactor became a rewrite** — 29 function(s) added, 2 removed, +2065 body lines — the shape of an increment, not of a restructuring.
+- **No cleanup-only refactor became a rewrite** — 29 function(s) added, 2 removed, +2072 body lines — the shape of an increment, not of a restructuring.
 - **Focused and full suites green on the exact HEAD** — recorded in the pull request.
