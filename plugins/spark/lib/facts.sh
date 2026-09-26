@@ -2886,6 +2886,14 @@ cmd_facts() {
     else
       why="${why:+$why; }checks: $FACTS_REFUSED"
     fi
+
+    if [ -n "$facts" ]; then
+      if facts_next_action_fact "[$facts]" "$observed"; then
+        facts="${facts:+$facts,}$FACTS_JSON"
+      else
+        why="${why:+$why; }next_action: $FACTS_REFUSED"
+      fi
+    fi
   fi
 
   # Every diagnostic goes to stderr. This verb's stdout is a machine surface, and
