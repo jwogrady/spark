@@ -43,6 +43,9 @@ case "$*" in
       no-release)
         printf '9\tAlpha work\t1\n'
         ;;
+      api-fail)
+        exit 1
+        ;;
       *)
         printf '1\t%s\t1\n' "$title"
         ;;
@@ -102,6 +105,21 @@ assert_eq "readable state with no active version milestone is unread release tru
   "$(printf '%s\n' "$rows" | awk -F'\t' '$1 == "release" { print $2; exit }')"
 assert_contains "and explains why no release was derived" "no active version milestone" \
   "$(printf '%s\n' "$rows" | awk -F'\t' '$1 == "release" { print $5; exit }')"
+
+# One failed shared milestone read affects two independent truth paths: current
+# release derivation and zero-open-issue milestone closure. Both must fail
+# closed; emitting only one would make the other silently disappear.
+rows="$(cd "$r" && env PATH="$rgh" MILESTONE_MODE=api-fail bash -c '. '"$SPARK"'; rec_rows "'"$r"'"')"
+assert_eq "unread milestone API fails release truth closed" "unread" \
+  "$(printf '%s\n' "$rows" | awk -F'\t' '$1 == "release" { print $2; exit }')"
+assert_eq "and independently fails milestone-closure truth closed" "unread" \
+  "$(printf '%s\n' "$rows" | awk -F'\t' '$1 == "milestone" { print $2; exit }')"
+assert_contains "the milestone unread finding names the shared missing evidence" "open milestone state is unreadable" \
+  "$(printf '%s\n' "$rows" | awk -F'\t' '$1 == "milestone" { print $5; exit }')"
+assert_contains "release unread points at the failed milestone API read" "milestones?state=open" \
+  "$(printf '%s\n' "$rows" | awk -F'\t' '$1 == "release" { print $8; exit }')"
+assert_contains "milestone unread points at the same failed API read" "milestones?state=open" \
+  "$(printf '%s\n' "$rows" | awk -F'\t' '$1 == "milestone" { print $8; exit }')"
 
 # ============ 2. nothing applies without --yes ============================
 before="$(git -C "$r" rev-parse HEAD)"
