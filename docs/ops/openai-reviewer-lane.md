@@ -28,17 +28,21 @@ the reviewer's role or manufacture a `PASS`.
 Runs are serialized per PR with `cancel-in-progress: false`. Before any model
 call, the lane:
 
-1. re-reads the live PR HEAD and stops if the queued event is stale;
-2. paginates all PR comments;
-3. accepts prior claim markers only when both the comment author is
+1. establishes that every required check for the exact HEAD is terminal;
+2. if CI is still pending, defers **before** reading or writing PR-comment claims;
+3. re-reads the live PR HEAD and stops if the queued event is stale;
+4. paginates all PR comments;
+5. accepts prior claim markers only when both the comment author is
    `github-actions[bot]` and the producing GitHub App is `github-actions`;
-4. requires the marker to bind the exact expected PR number and HEAD SHA;
-5. posts a durable reservation comment for that exact PR + HEAD **before** the
+6. requires the marker to bind the exact expected PR number and HEAD SHA;
+7. posts a durable reservation comment for that exact PR + HEAD **before** the
    model invocation.
 
-The reservation is the at-most-once control. A duplicate event for the same
-HEAD finds the trusted reservation and does not invoke the model again. A new
-HEAD is a different work unit and is reviewed separately.
+The reservation is the at-most-once control once the HEAD is eligible to review.
+A duplicate terminal event for the same HEAD finds the trusted reservation and
+does not invoke the model again. A new HEAD is a different work unit and is
+reviewed separately. Pre-terminal wakeups create no reservation and therefore do
+not spend comment-pagination or reservation-write API budget.
 
 Immediately before the model call, the lane re-checks the live HEAD again. If it
 moved after reservation, the run finalizes that reservation as `NOT ASSESSED`
