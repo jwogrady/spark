@@ -2929,6 +2929,24 @@ pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07
 assert_eq "a nested item is still a criterion" "1=NOT_MET,2=MET" \
   "$(printf '%s' "$(afact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.items[] | "\(.id)=\(.state)"] | join(",")')"
 
+# HTML comments are not rendered structure. Both a single-line hidden task and
+# a task inside a multiline comment must disappear without changing the
+# visible contract.
+COMMENTS='## Acceptance\n\n- [ ] visible\n<!-- - [x] hidden inline comment -->\n<!--\n- [x] hidden multiline\n-->\n- [x] visible met\n'
+pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07:00:00Z",
+                    "repository":{"nameWithOwner":"jwogrady/spark"},"body":"'"$COMMENTS"'"}]'
+assert_eq "commented task syntax is not acceptance structure" "1=NOT_MET,2=MET" \
+  "$(printf '%s' "$(afact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.items[] | "\(.id)=\(.state)"] | join(",")')"
+
+# A task-looking line can be indented relative to a list far enough that
+# Markdown renders it as code. An open parent list alone is not permission to
+# count arbitrary indentation as a nested criterion.
+LISTCODE='## Acceptance\n\n- parent\n        - [x] code sample\n- [ ] the only real criterion\n'
+pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07:00:00Z",
+                    "repository":{"nameWithOwner":"jwogrady/spark"},"body":"'"$LISTCODE"'"}]'
+assert_eq "list-relative indented code is not a criterion" "1=NOT_MET" \
+  "$(printf '%s' "$(afact "$("$SPARK" facts --issue 733)")" | jq -r '[.value.items[] | "\(.id)=\(.state)"] | join(",")')"
+
 # The checkbox must be followed by whitespace or the end of the line.
 NOSPACE='## Acceptance\n\n- [x]not a task item\n- [ ] the only real criterion\n'
 pr_with_contract '[{"__typename":"Issue","number":734,"updatedAt":"2026-09-07T07:00:00Z",
