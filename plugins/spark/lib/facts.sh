@@ -3015,13 +3015,17 @@ facts_record_telemetry() {
 }
 
 cmd_facts() {
-  local usage_line="usage: spark facts [--issue <number>] [--delta] [--help]"
-  local issue="" issue_given="" delta=""
+  local usage_line="usage: spark facts [--issue <number>] [--delta] [--explain <key> --because <reason>] [--help]"
+  local issue="" issue_given="" delta="" explain="" because=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --issue)   issue_given=1; shift; issue="${1:-}" ;;
       --issue=*) issue_given=1; issue="${1#--issue=}" ;;
       --delta)   delta=1 ;;
+      --explain)   shift; explain="${1:-}" ;;
+      --explain=*) explain="${1#--explain=}" ;;
+      --because)   shift; because="${1:-}" ;;
+      --because=*) because="${1#--because=}" ;;
       -h|--help) echo "$usage_line"; return 0 ;;
       *) red "unknown option: $1"; echo "$usage_line"; return 1 ;;
     esac
@@ -3044,6 +3048,20 @@ cmd_facts() {
   # so it has no meaning without the work unit.
   if [ -n "$delta" ] && [ -z "$issue" ]; then
     red "--delta needs --issue <number>"; echo "$usage_line"; return 1
+  fi
+  # A drill-down is a read of history, and the policy admits one only for a
+  # stated reason from its closed vocabulary (P2). The reason is checked
+  # before anything is read, so a run never reaches the source without one
+  # and never records one it did not check.
+  if [ -n "$explain" ] || [ -n "$because" ]; then
+    if [ -z "$explain" ]; then red "--because needs --explain <key>"; echo "$usage_line"; return 1; fi
+    if [ -n "$delta" ]; then red "--explain and --delta are different presentations; ask for one"; return 1; fi
+    if [ -z "$because" ]; then
+      red "a drill-down needs its reason: --because <$(facts_reasons | paste -sd'|')>"; return 1
+    fi
+    if ! facts_reasons | grep -qx -- "$because"; then
+      red "'$because' is not an admissible reason; one of: $(facts_reasons | paste -sd, | sed 's/,/, /g')"; return 1
+    fi
   fi
 
   local top; top="$(git_root)"
@@ -3206,6 +3224,36 @@ cmd_facts() {
     facts_store_record "$rec" "$unit" "$observed" "$( [ -n "$report" ] && printf '%s' "$(printf '%s' "$report" | jq -r .delta.shape)" || printf '%s' "$FACTS_OUTPUT_SHAPE" )" "$full" \
       || yellow "delta: the record under $rel could not be written; the next run will be a full output" >&2
   fi
+  # --explain: one fact's provenance, and the record behind it fetched now,
+  # for the stated reason. The compilation above is the same, so the pointer
+  # is current; the fact is found in this run's output, and a key this run
+  # did not emit is refused by name rather than answered from memory (P5).
+  if [ -n "$explain" ]; then
+    local fact
+    fact="$(printf '%s' "$out" | jq -c --arg k "$explain" '(.facts? // .)[] | select(.key == $k)' 2>/dev/null)"
+    if [ -z "$fact" ]; then
+      red "no fact '$explain' in this output; the keys are: $(printf '%s' "$out" | jq -r '[(.facts? // .)[].key] | join(", ")')"
+      facts_record_telemetry
+      return 1
+    fi
+    local status_; status_="$(printf '%s' "$fact" | jq -r '.status')"
+    local need; need="$(facts_reason_status "$because")"
+    if [ "$need" != any ] && [ "$need" != "$status_" ]; then
+      red "reason '$because' applies to a $need fact; '$explain' is $status_"
+      facts_record_telemetry
+      return 1
+    fi
+    local record
+    if ! record="$(facts_source_record "$(printf '%s' "$fact" | jq -r '.source.type')" "$(printf '%s' "$fact" | jq -r '.source.identity')")"; then
+      record='null'
+    fi
+    out="$(jq -cn --argjson f "$fact" --arg why "$because" --argjson r "$record" \
+      '{explain: {key: $f.key, status: $f.status, because: $why, provenance: $f.provenance, source: $f.source,
+                  invalidators: $f.invalidators, versions: $f.versions, detail: ($f.detail // null),
+                  inputs: ($f.inputs // null), record: $r}}')"
+    facts_log_drilldown "$top" "$explain" "$because" "$observed"
+    FACTS_OUTPUT_SHAPE="explain"
+  fi
   printf '%s\n' "$out"
   # Bytes, not characters: the size a consumer pays to read is what #736
   # compares against its baseline, and a multibyte title would make a
@@ -3259,6 +3307,43 @@ facts_store_record() {
   else
     rm -f "$tmp"; return 1
   fi
+}
+
+# facts_reasons — the closed drill-down vocabulary, read from the policy.
+FACTS_POLICY="$SPARK_ROOT/preferences/fact-consumption.tsv"
+facts_reasons() { awk -F'\t' '$1 == "reason" { print $2 }' "$FACTS_POLICY"; }
+# facts_reason_status <reason> — the status a fact must have for the reason,
+# or `any`.
+facts_reason_status() { awk -F'\t' -v r="$1" '$1 == "reason" && $2 == r { print $3; exit }' "$FACTS_POLICY"; }
+
+# facts_source_record <source type> <source identity> — the record behind a
+# fact, read from GitHub now. Prints JSON and succeeds; fails when the source
+# is derived (its inputs are its record) or the identity has no readable form.
+# Counted as a read: a drill-down is the developer journey the policy bounds,
+# and #736 must see it.
+facts_source_record() {
+  local type="$1" id="$2" host nwo path
+  case "$type" in github-api|human-decision) ;; *) return 1 ;; esac
+  host="${id%%/*}"; nwo="${id#*/}"
+  case "$nwo" in
+    */*#*/comment/*) path="repos/${nwo%%#*}/issues/comments/${nwo##*/comment/}" ;;
+    */*#*)           path="repos/${nwo%%#*}/issues/${nwo##*#}" ;;
+    */*/milestone/*) path="repos/${nwo%%/milestone/*}/milestones/${nwo##*/milestone/}" ;;
+    */*)             path="repos/$nwo" ;;
+    *)               return 1 ;;
+  esac
+  FACTS_API_CALLS=$(( FACTS_API_CALLS + 1 ))
+  gh api --hostname "$host" "$path" 2>/dev/null
+}
+
+# facts_log_drilldown <top> <key> <reason> <at> — one line per drill-down in
+# the run's append-only log, so a count across many invocations can never be
+# overwritten low by a later one (the executions log's reasoning, #665).
+facts_log_drilldown() {
+  [ -n "${SPARK_RUN_ID:-}" ] || return 0
+  local dir="$1/.spark/telemetry"
+  mkdir -p "$dir" 2>/dev/null || return 0
+  printf '%s\t%s\t%s\n' "$3" "$2" "$4" >> "$dir/$SPARK_RUN_ID.drilldowns" 2>/dev/null || true
 }
 
 # facts_complete <fact list json> — succeeds when the list carries every class
