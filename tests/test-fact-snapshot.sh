@@ -281,6 +281,83 @@ assert_eq "an implemented node that is a pull request leaves no graph" "" "$(gfa
 assert_contains "with the reason" "the implemented work unit is not an issue" "$(cat "$WORK/err")"
 assert_eq "and it is not chased a second time" "1" "$(reads_of 734)"
 
+# --- --delta: the same compilation, presented against the last observation ---
+# Every fact is re-read from its source on every run; the stored record is
+# compared, never consulted. What a repair round gets back is the facts whose
+# status, value or versions moved, and the keys of those that did not.
+rm -rf .spark/facts
+assert_eq "--delta without a work unit is refused" "1" \
+  "$("$SPARK" facts --delta >/dev/null 2>&1; echo $?)"
+
+pr_stub "$(pr_node "[$(ref_node 734)]")" "$(issue_node "$PARENTED")"
+FIRST="$("$SPARK" facts --issue 801 --delta 2>"$WORK/err")"
+assert_eq "the first delta run is the full output" "facts,observer" "$(printf '%s' "$FIRST" | jq -r 'keys | join(",")')"
+assert_contains "and says why" "no previous record" "$(cat "$WORK/err")"
+[ -f .spark/facts/801.json ] && ok || bad "the first run stores the observation record"
+assert_eq "the record names its unit and holds the full output" "github.com/jwogrady/spark#801|snapshot|10" \
+  "$(jq -r '"\(.unit)|\(.shape)|\(.output.facts | length)"' .spark/facts/801.json)"
+
+SPARK_RUN_ID=rdelta "$SPARK" facts --issue 801 --delta > "$WORK/delta.out" 2>/dev/null
+D="$(cat "$WORK/delta.out")"
+assert_eq "an unchanged unit yields a delta object, never a snapshot shape (R22)" "delta" \
+  "$(printf '%s' "$D" | jq -r 'keys | join(",")')"
+assert_eq "nothing changed" "0" "$(printf '%s' "$D" | jq '.delta.changed | length')"
+assert_eq "and every fact is reported unchanged by key and version" "10" "$(printf '%s' "$D" | jq '.delta.unchanged | length')"
+assert_eq "an unchanged entry carries key, status, source and versions only" "key,source,status,versions" \
+  "$(printf '%s' "$D" | jq -r '.delta.unchanged[0] | keys | join(",")')"
+assert_eq "the delta names the record it compared against" ".spark/facts/801.json|snapshot" \
+  "$(printf '%s' "$D" | jq -r '"\(.delta.record)|\(.delta.shape)"')"
+TELD="$("$SPARK" telemetry show --run rdelta --json)"
+assert_contains "the run records what moved" '"facts_changed":0' "$TELD"
+assert_contains "and what was reused by key" '"facts_unchanged":10' "$TELD"
+assert_contains "and that a delta was printed" '"facts_output_shape":"delta"' "$TELD"
+assert_contains "with the delta's own size" "\"facts_output_bytes\":$(wc -c < "$WORK/delta.out" | tr -d ' ')" "$TELD"
+
+# A push: only the HEAD-bound facts and what derives from them move.
+NEWHEAD="c1d2e3f4a5b60718293a4b5c6d7e8f9012345678"
+pr_stub "$(pr_node "[$(ref_node 734)]" | jq -c --arg h "$NEWHEAD" '.headRefOid = $h | .commits.nodes[0].commit.oid = $h')" "$(issue_node "$PARENTED")"
+D="$("$SPARK" facts --issue 801 --delta 2>/dev/null)"
+assert_eq "a new HEAD changes exactly the HEAD-bound facts and the derived action" \
+  "acceptance.contract,checks.required,head.exact,next_action.governed,review.independent" \
+  "$(printf '%s' "$D" | jq -r '[.delta.changed[].key] | sort | join(",")')"
+assert_eq "and leaves the non-HEAD facts unchanged" \
+  "authority.standing,graph.native,placement.current,repository.identity,work_unit.identity" \
+  "$(printf '%s' "$D" | jq -r '[.delta.unchanged[].key] | sort | join(",")')"
+assert_eq "a changed fact is carried in full" "$NEWHEAD" \
+  "$(printf '%s' "$D" | jq -r '.delta.changed[] | select(.key == "head.exact") | .value.head')"
+
+# An edit to the implemented issue moves what is read from it, and nothing else.
+pr_stub "$(pr_node "[$(ref_node 734 jwogrady/spark 2026-09-21T11:00:00Z)]" | jq -c --arg h "$NEWHEAD" '.headRefOid = $h | .commits.nodes[0].commit.oid = $h')" "$(issue_node "$PARENTED" | jq -c '.updatedAt = "2026-09-21T11:00:00Z"')"
+D="$("$SPARK" facts --issue 801 --delta 2>/dev/null)"
+assert_eq "an edited contract issue moves the facts read from it" \
+  "acceptance.contract,graph.native" \
+  "$(printf '%s' "$D" | jq -r '[.delta.changed[].key] | sort | join(",")')"
+# The derived action did not move because it did not consult them: its inputs
+# are exactly the facts the derivation read (R15), and a wait-review verdict is
+# decided before acceptance or the graph is looked at.
+assert_eq "and a derived fact moves only when an input it consulted moved" "unchanged|false" \
+  "$(printf '%s' "$D" | jq -r '(.delta.unchanged[] | select(.key == "next_action.governed") | "unchanged") + "|" + ((.delta.unchanged[] | select(.key == "next_action.governed") | .source.version | test("acceptance.contract|graph.native")) | tostring)')"
+
+# The record is compared, never believed: a tampered record cannot make a
+# fact "unchanged", because the fact was re-read from its source.
+jq -c '.output.facts |= map(if .key == "placement.current" then .status = "ESTABLISHED" | .value = {milestone: "none", release: "v9.9.9", gate: "none"} else . end)' \
+  .spark/facts/801.json > "$WORK/tampered.json" && mv "$WORK/tampered.json" .spark/facts/801.json
+D="$("$SPARK" facts --issue 801 --delta 2>/dev/null)"
+assert_eq "a tampered record is reported as a change, with the source's truth" "placement.current|UNKNOWN" \
+  "$(printf '%s' "$D" | jq -r '.delta.changed[] | select(.key == "placement.current") | "\(.key)|\(.status)"')"
+
+# A record for another unit is not a record for this one.
+jq -c '.unit = "github.com/jwogrady/spark#999"' .spark/facts/801.json > "$WORK/other.json" && mv "$WORK/other.json" .spark/facts/801.json
+D="$("$SPARK" facts --issue 801 --delta 2>"$WORK/err")"
+assert_eq "a record naming another unit is ignored" "facts,observer" "$(printf '%s' "$D" | jq -r 'keys | join(",")')"
+assert_contains "and the run says so" "no previous record" "$(cat "$WORK/err")"
+
+# Without --delta nothing is stored or compared; the output is the full one.
+rm -rf .spark/facts
+F="$("$SPARK" facts --issue 801 2>/dev/null)"
+assert_eq "a plain run is the full output" "facts,observer" "$(printf '%s' "$F" | jq -r 'keys | join(",")')"
+[ ! -e .spark/facts ] && ok || bad "a plain run must not write a record"
+
 # --- the size #736 compares is the size that was read -------------------------
 snapshot_stub "$(issue_node)"
 SPARK_RUN_ID=rsnap "$SPARK" facts --issue 734 > "$WORK/snap.out" 2>/dev/null
