@@ -27,4 +27,19 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      # gh evaluates --jq with its embedded gojq, so the stubs must certify the
+      # same evaluator rather than the system jq (#807). Pinned and checksummed;
+      # SPARK_TEST_REQUIRE_GOJQ makes a missing binary fail every suite instead
+      # of quietly certifying jq.
+      - name: install gojq
+        run: |
+          v=0.12.16
+          curl -fsSL -o /tmp/gojq.tgz \
+            "https://github.com/itchyny/gojq/releases/download/v$v/gojq_v${v}_linux_amd64.tar.gz"
+          echo "03a940f0584174afe3c50174b249067ffac93afbaa160844facda02b1b249b96  /tmp/gojq.tgz" \
+            | sha256sum -c -
+          tar -xzf /tmp/gojq.tgz -C /tmp
+          sudo install /tmp/gojq_v${v}_linux_amd64/gojq /usr/local/bin/gojq
       - run: bash tests/run.sh
+        env:
+          SPARK_TEST_REQUIRE_GOJQ: "1"
