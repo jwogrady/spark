@@ -62,7 +62,7 @@ for a in "$@"; do
   prev="$a"
 done
 if [ "$isq" = 1 ]; then
-  if [ -n "$jqexpr" ]; then jq -r "$jqexpr" "$(dirname "$0")/cap.json"
+  if [ -n "$jqexpr" ]; then "${GH_JQ_EVAL:-jq}" -r "$jqexpr" "$(dirname "$0")/cap.json"
   else cat "$(dirname "$0")/cap.json"; fi
   exit 0
 fi
@@ -327,7 +327,7 @@ case "${1:-}" in
   issue)
     jqx=""; prev=""
     for a in "$@"; do [ "$prev" = "--jq" ] && jqx="$a"; prev="$a"; done
-    if [ -n "$jqx" ]; then printf '%s' "$ISSUES" | jq -r "$jqx"; else printf '%s' "$ISSUES"; fi
+    if [ -n "$jqx" ]; then printf '%s' "$ISSUES" | "${GH_JQ_EVAL:-jq}" -r "$jqx"; else printf '%s' "$ISSUES"; fi
     exit 0 ;;
 esac
 for a in "$@"; do
@@ -335,7 +335,7 @@ for a in "$@"; do
     jqx=""; prev=""
     for b in "$@"; do [ "$prev" = "--jq" ] && jqx="$b"; prev="$b"; done
     if [ -n "${GATECAP:-}" ]; then
-      if [ -n "$jqx" ]; then printf '%s' "$GATECAP" | jq -r "$jqx"; else printf '%s' "$GATECAP"; fi
+      if [ -n "$jqx" ]; then printf '%s' "$GATECAP" | "${GH_JQ_EVAL:-jq}" -r "$jqx"; else printf '%s' "$GATECAP"; fi
     fi
     exit 0
   fi

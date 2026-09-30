@@ -6,6 +6,23 @@
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# The evaluator every gh stub applies a --jq program with. gh runs --jq through
+# its embedded gojq, not the system jq, and the two disagree — gojq's regexes
+# are RE2, for one — so a stub that answered through jq certified a different
+# evaluator than production runs (#803, #807). gojq is used whenever it is on
+# PATH; where it is required (CI) its absence fails the suite instead of
+# quietly certifying jq. The runtime's own direct jq calls are untouched: those
+# really do run under jq.
+if command -v gojq >/dev/null 2>&1; then
+  GH_JQ_EVAL="$(command -v gojq)"
+elif [ -n "${SPARK_TEST_REQUIRE_GOJQ:-}" ]; then
+  echo "✖ SPARK_TEST_REQUIRE_GOJQ is set but gojq is not on PATH — gh --jq programs cannot be certified" >&2
+  exit 1
+else
+  GH_JQ_EVAL="$(command -v jq)"
+fi
+export GH_JQ_EVAL
+
 sandbox_init() {
   WORK="$(mktemp -d)"
   trap 'chmod -R u+w "$WORK" 2>/dev/null; rm -rf "$WORK"' EXIT
@@ -270,7 +287,7 @@ gh_stub_prelude() {
   cat <<'PRELUDE'
 GH_JQ=""; __prev=""
 for __a in "$@"; do [ "$__prev" = "--jq" ] && GH_JQ="$__a"; __prev="$__a"; done
-answer_json() { if [ -n "$GH_JQ" ]; then printf '%s' "$1" | jq -r "$GH_JQ"; else printf '%s\n' "$1"; fi; }
+answer_json() { if [ -n "$GH_JQ" ]; then printf '%s' "$1" | "${GH_JQ_EVAL:-jq}" -r "$GH_JQ"; else printf '%s\n' "$1"; fi; }
 PRELUDE
 }
 

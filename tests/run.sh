@@ -46,6 +46,11 @@ tree_before="$(snapshot)"
 now_s() { date +%s; }
 run_start="$(now_s)"
 
+# Which evaluator the gh stubs certify --jq programs with (#807). lib.sh owns
+# the choice and fails every suite when gojq is required but absent; this only
+# says, once, which one the result below speaks for.
+if command -v gojq >/dev/null 2>&1; then echo "gh --jq evaluator: gojq"; else echo "gh --jq evaluator: jq (gojq not on PATH — gh's own evaluator is not certified)"; fi
+
 for suite in "$here"/test-*.sh; do
   [ -e "$suite" ] || { echo "no test suites found"; exit 1; }
   name="$(basename "$suite")"
