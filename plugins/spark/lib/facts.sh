@@ -3249,9 +3249,12 @@ cmd_facts() {
       facts_record_telemetry
       return 1
     fi
-    local record
-    if ! record="$(facts_source_record "$(printf '%s' "$fact" | jq -r '.source.type')" "$(printf '%s' "$fact" | jq -r '.source.identity')")"; then
-      record='null'
+    local record='null' endpoint
+    if endpoint="$(facts_source_endpoint "$(printf '%s' "$fact" | jq -r '.source.type')" "$(printf '%s' "$fact" | jq -r '.source.identity')")"; then
+      # Counted here, not in the fetch: a command substitution runs in a
+      # subshell, and an increment made there is discarded with it.
+      FACTS_API_CALLS=$(( FACTS_API_CALLS + 1 ))
+      record="$(gh api --hostname "${endpoint%%	*}" "${endpoint#*	}" 2>/dev/null)" || record='null'
     fi
     out="$(jq -cn --argjson f "$fact" --arg why "$because" --argjson r "$record" \
       '{explain: {key: $f.key, status: $f.status, because: $why, provenance: $f.provenance, source: $f.source,
@@ -3325,12 +3328,11 @@ facts_reason_status() { awk -F'\t' -v r="$1" '$1 == "reason" && $2 == r { print 
 # facts_model_keys — every fact key the shipped model declares, one per line.
 facts_model_keys() { awk -F'\t' '$1 == "key" { print $3 }' "$FACTS_MODEL"; }
 
-# facts_source_record <source type> <source identity> — the record behind a
-# fact, read from GitHub now. Prints JSON and succeeds; fails when the source
-# is derived (its inputs are its record) or the identity has no readable form.
-# Counted as a read: a drill-down is the developer journey the policy bounds,
-# and #736 must see it.
-facts_source_record() {
+# facts_source_endpoint <source type> <source identity> — where the record
+# behind a fact is read: `<host>\t<api path>`. Fails when the source is derived
+# (its inputs are its record) or the identity has no readable form. Reads
+# nothing itself, so the caller owns the read and its count.
+facts_source_endpoint() {
   local type="$1" id="$2" host nwo path
   case "$type" in github-api|human-decision) ;; *) return 1 ;; esac
   host="${id%%/*}"; nwo="${id#*/}"
@@ -3341,8 +3343,7 @@ facts_source_record() {
     */*)             path="repos/$nwo" ;;
     *)               return 1 ;;
   esac
-  FACTS_API_CALLS=$(( FACTS_API_CALLS + 1 ))
-  gh api --hostname "$host" "$path" 2>/dev/null
+  printf '%s\t%s' "$host" "$path"
 }
 
 # facts_log_drilldown <top> <key> <reason> <at> — one line per drill-down in

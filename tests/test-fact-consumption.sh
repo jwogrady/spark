@@ -9,6 +9,7 @@
 #     reason does not apply to the fact's status never reads the source;
 #   * the record fetched is the node the fact's SOURCE names, so an audit of
 #     authority reaches the decision comment and not the work unit;
+#   * the drill-down's read is counted in `facts_api_calls`;
 #   * every drill-down is on the run's log, and the count derives from the
 #     log — a later invocation cannot overwrite it low;
 #   * the page renders every policy and every reason the data declares.
@@ -149,6 +150,12 @@ assert_contains "and that an explain was printed" '"facts_output_shape":"explain
 SPARK_RECORDING=1 "$SPARK" telemetry record --run rexp facts_drilldowns=1 >/dev/null 2>&1 || true
 assert_contains "a stored projection cannot lower the derived count" '"facts_drilldowns":4' \
   "$("$SPARK" telemetry show --run rexp --json)"
+# The drill-down's read is in the run's API count: the fetch runs in a
+# command substitution, and a count kept in that subshell would be lost.
+SPARK_RUN_ID=rcmp "$SPARK" facts --issue 734 >/dev/null 2>&1
+SPARK_RUN_ID=rone "$SPARK" facts --issue 734 --explain authority.standing --because audit >/dev/null 2>&1
+calls() { "$SPARK" telemetry show --run "$1" --json | jq -r '.fields.facts_api_calls'; }
+assert_eq "a drill-down is one API call more than the compile alone" "$(( $(calls rcmp) + 1 ))" "$(calls rone)"
 # Without a run, nothing is logged and nothing fails.
 rm -rf .spark/telemetry
 "$SPARK" facts --issue 734 --explain authority.standing --because audit >/dev/null 2>&1 && ok || bad "a drill-down outside a run still answers"
