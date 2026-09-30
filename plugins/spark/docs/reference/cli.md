@@ -2230,7 +2230,7 @@ a rebind is a human act, and its absence is what allowed the original incident.
 This is an additional authority dimension, not a replacement: force-push and
 trunk-push protections are unchanged.
 
-## `spark facts [--issue <number>]`
+## `spark facts [--issue <number>] [--delta] [--explain <key> --because <reason>]`
 
 Compiles authoritative repository and GitHub truth into normalized facts, so
 each command stops re-deriving the same truth in its own vocabulary — with its
@@ -2252,6 +2252,25 @@ is where the history is reached on demand. Growth elsewhere in the repository or
 milestone does not change a byte of it. When a run is observed, the printed
 shape and its size in bytes are recorded as `facts_output_shape` and
 `facts_output_bytes` beside the compiler's other counters.
+
+**`--delta` is the same compilation, shown against the last observation.**
+Every fact is re-read from its source exactly as without the flag; the record
+of the previous run under `.spark/facts/<n>.json` is then compared — never
+consulted — and the output is `{"delta": {changed, unchanged, …}}`: the facts
+whose status, value, source version or invalidator versions moved, in full,
+and the rest by key and version. A repair round therefore re-sends the
+HEAD-bound facts and not the milestone, authority and graph it already holds.
+The first run, and a run whose record names another unit, prints the full
+output and says so on stderr. `facts_changed` and `facts_unchanged` are
+recorded.
+
+**`--explain <key> --because <reason>` is the drill-down.** It prints one
+fact's provenance and fetches the record behind it — the issue, comment,
+milestone or repository its source names — for a reason from the closed
+vocabulary in [fact-consumption.md](fact-consumption.md); a key the run did
+not emit, an unknown reason, or a reason whose required status the fact lacks
+is refused. Each drill-down is appended to the run's log and surfaces as
+`facts_drilldowns` / `facts_drilldown_reasons`.
 
 | Class | Key | What it establishes |
 |---|---|---|
