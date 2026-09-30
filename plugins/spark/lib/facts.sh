@@ -3027,7 +3027,7 @@ cmd_facts() {
       --because)   shift; because="${1:-}" ;;
       --because=*) because="${1#--because=}" ;;
       -h|--help) echo "$usage_line"; return 0 ;;
-      *) red "unknown option: $1"; echo "$usage_line"; return 1 ;;
+      *) red "unknown option: $1" >&2; echo "$usage_line" >&2; return 1 ;;
     esac
     if [ "$#" -gt 0 ]; then shift; fi
   done
@@ -3041,32 +3041,32 @@ cmd_facts() {
   if [ -n "$issue_given" ]; then
     case "$issue" in
       ''|0|0*|*[!0-9]*)
-        red "--issue takes an issue number"; echo "$usage_line"; return 1 ;;
+        red "--issue takes an issue number" >&2; echo "$usage_line" >&2; return 1 ;;
     esac
   fi
   # A delta is a comparison of one work unit's facts across two observations,
   # so it has no meaning without the work unit.
   if [ -n "$delta" ] && [ -z "$issue" ]; then
-    red "--delta needs --issue <number>"; echo "$usage_line"; return 1
+    red "--delta needs --issue <number>" >&2; echo "$usage_line" >&2; return 1
   fi
   # A drill-down is a read of history, and the policy admits one only for a
   # stated reason from its closed vocabulary (P2). The reason is checked
   # before anything is read, so a run never reaches the source without one
   # and never records one it did not check.
   if [ -n "$explain" ] || [ -n "$because" ]; then
-    if [ -z "$explain" ]; then red "--because needs --explain <key>"; echo "$usage_line"; return 1; fi
-    if [ -n "$delta" ]; then red "--explain and --delta are different presentations; ask for one"; return 1; fi
+    if [ -z "$explain" ]; then red "--because needs --explain <key>" >&2; echo "$usage_line" >&2; return 1; fi
+    if [ -n "$delta" ]; then red "--explain and --delta are different presentations; ask for one" >&2; return 1; fi
     if [ -z "$because" ]; then
-      red "a drill-down needs its reason: --because <$(facts_reasons | paste -sd'|')>"; return 1
+      red "a drill-down needs its reason: --because <$(facts_reasons | paste -sd'|')>" >&2; return 1
     fi
     if ! facts_reasons | grep -qx -- "$because"; then
-      red "'$because' is not an admissible reason; one of: $(facts_reasons | paste -sd, | sed 's/,/, /g')"; return 1
+      red "'$because' is not an admissible reason; one of: $(facts_reasons | paste -sd, | sed 's/,/, /g')" >&2; return 1
     fi
   fi
 
   local top; top="$(git_root)"
   if [ -z "$top" ]; then
-    red "spark facts needs a git repo — run it from inside the project."
+    red "spark facts needs a git repo — run it from inside the project." >&2
     return 1
   fi
 
@@ -3232,14 +3232,14 @@ cmd_facts() {
     local fact
     fact="$(printf '%s' "$out" | jq -c --arg k "$explain" '(.facts? // .)[] | select(.key == $k)' 2>/dev/null)"
     if [ -z "$fact" ]; then
-      red "no fact '$explain' in this output; the keys are: $(printf '%s' "$out" | jq -r '[(.facts? // .)[].key] | join(", ")')"
+      red "no fact '$explain' in this output; the keys are: $(printf '%s' "$out" | jq -r '[(.facts? // .)[].key] | join(", ")')" >&2
       facts_record_telemetry
       return 1
     fi
     local status_; status_="$(printf '%s' "$fact" | jq -r '.status')"
     local need; need="$(facts_reason_status "$because")"
     if [ "$need" != any ] && [ "$need" != "$status_" ]; then
-      red "reason '$because' applies to a $need fact; '$explain' is $status_"
+      red "reason '$because' applies to a $need fact; '$explain' is $status_" >&2
       facts_record_telemetry
       return 1
     fi
