@@ -1065,7 +1065,8 @@ graph_refused '{"number":733,"repository":{"nameWithOwner":"jwogrady/spark"},"st
 
 # --- the root is an issue, and the reason says which case applies -----------
 # GitHub gives parent, subIssues and blockedBy to Issue and to nothing else, so
-# a pull request has no native graph to report. "That is a pull request" and
+# a pull request's graph is its implemented issue's, and one that implements
+# nothing has none to report. "That is a pull request" and
 # "there is no such work unit" send a caller to different places, so they are
 # told apart by the SAME read: `issueOrPullRequest` returns either kind as data.
 # A GraphQL resolve failure therefore means neither exists, and it is decided
@@ -1213,9 +1214,10 @@ esac
 graph_stub '{"__typename":"PullRequest","number":733,"repository":{"nameWithOwner":"jwogrady/spark"},
   "updatedAt":"2026-09-08T10:00:00Z",
   "closingIssuesReferences":{"pageInfo":{"hasNextPage":false},"nodes":[]}}'
-pout="$("$SPARK" facts --issue 733 2>&1 >/dev/null)"
-assert_contains "a pull request has no native graph, decided from the one read" \
-  "a pull request has no native graph" "$pout"
+pout="$("$SPARK" facts --issue 733 2>/dev/null | jq -c '.[] | select(.key == "graph.native")')"
+assert_eq "a pull request closing nothing has an unknown graph, decided from the one read" \
+  "UNKNOWN|a pull request that implements no issue has no native graph|pull_request:github.com/jwogrady/spark#733" \
+  "$(printf '%s' "$pout" | jq -r '"\(.status)|\(.detail.reason)|\(.invalidators | join(","))"')"
 assert_eq "and no second request was made to find that out" "1" \
   "$(grep -c graphql "$GH_CALL_LOG")"
 assert_eq "with no REST probe at all" "0" \

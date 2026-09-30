@@ -175,6 +175,112 @@ assert_eq "and outside the graph fact the snapshot is unchanged" \
   "$(printf '%s' "$BASE" | jq -c '.facts | map(select(.class != "graph" and .class != "next_action"))')" \
   "$(printf '%s' "$CHILD" | jq -c '.facts | map(select(.class != "graph" and .class != "next_action"))')"
 
+# --- a pull request's graph is the graph of the issue it implements ----------
+# GitHub gives a pull request no parent, children or blockers. R17 and the
+# model's first example read them from the issue the pull request closes, name
+# that issue as the source, and let it invalidate the fact — so a pull request
+# has a complete snapshot, and the issue is read once, as itself.
+RULES='[{"type":"required_status_checks","ruleset_id":1,"parameters":{"required_status_checks":[{"context":"tests"}]}}]'
+HEADOID="a1b2c3d4e5f60718293a4b5c6d7e8f9012345678"
+BASEOID="b1c2d3e4f5061728394a5b6c7d8e9f0123456789"
+PARENTED='{parent:{__typename:"Issue", number:728, state:"OPEN", updatedAt:"2026-09-01T10:00:00Z", repository:{nameWithOwner:"jwogrady/spark"}}}'
+
+pr_node() { # pr_node <closing reference nodes json>
+  jq -nc --argjson refs "$1" --arg h "$HEADOID" --arg b "$BASEOID" '
+    {__typename:"PullRequest", number:801, updatedAt:"2026-09-22T10:00:00Z",
+     repository:{nameWithOwner:"jwogrady/spark"}, milestone:null,
+     headRefOid:$h, baseRefName:"master", baseRefOid:$b, baseRef:{target:{oid:$b}},
+     commits:{nodes:[{commit:{oid:$h, statusCheckRollup:null}}]},
+     comments:{pageInfo:{hasPreviousPage:false}, nodes:[]},
+     closingIssuesReferences:{pageInfo:{hasNextPage:false}, nodes:$refs}}'
+}
+ref_node() { # ref_node <number> [owner/name] [updatedAt]
+  jq -nc --argjson n "$1" --arg r "${2:-jwogrady/spark}" --arg u "${3:-2026-09-20T10:00:00Z}" \
+    '{__typename:"Issue", number:$n, updatedAt:$u, repository:{nameWithOwner:$r},
+      body:"## Acceptance\n\n- [ ] the one criterion\n"}'
+}
+
+# pr_stub <pr node> <node answered for 734> — the pull request and its issue
+# are two reads, told apart by the number each one asks for.
+pr_stub() {
+  local pr="$1" issue="$2"
+  stub_gh "$WORK/bin/gh" <<STUB
+printf '%s\n' "\$*" >> "\$GH_CALL_LOG"
+case "\$*" in
+  *viewerPermission*) answer_json '$VIEWER' ;;
+  *"number=801"*) answer_json '{"data":{"repository":{"issueOrPullRequest":$pr}}}' ;;
+  *"number=734"*) answer_json '{"data":{"repository":{"issueOrPullRequest":$issue}}}' ;;
+  *"repos/jwogrady/spark/rules/branches/"*) answer_json '$RULES' ;;
+  *"--hostname github.com repos/jwogrady/spark/issues/comments/5622552139"*) answer_json '$AUTH_COMMENT' ;;
+  *"--hostname github.com repos/jwogrady/spark/issues/677"*) answer_json '$AUTH_ISSUE' ;;
+  *"--hostname github.com repos/jwogrady/spark"*) answer_json '$NODE' ;;
+  *) exit 1 ;;
+esac
+STUB
+}
+reads_of() { command grep -c "number=$1 " "$GH_CALL_LOG" || true; }
+gfact() { printf '%s' "$1" | jq -c '(.facts? // .)[] | select(.class == "graph")'; }
+
+pr_stub "$(pr_node "[$(ref_node 734)]")" "$(issue_node "$PARENTED")"
+: > "$GH_CALL_LOG"
+P="$("$SPARK" facts --issue 801 2>"$WORK/err")"
+G="$(gfact "$P")"
+assert_eq "a pull request implementing one issue has a complete snapshot" "object" \
+  "$(printf '%s' "$P" | jq -r type)"
+assert_eq "whose graph is established" "ESTABLISHED" "$(printf '%s' "$G" | jq -r .status)"
+assert_eq "sourced from the implemented issue, not the pull request" "github.com/jwogrady/spark#734" \
+  "$(printf '%s' "$G" | jq -r .source.identity)"
+assert_eq "carrying that issue's parent" "github.com/jwogrady/spark#728" \
+  "$(printf '%s' "$G" | jq -r .value.parent.id)"
+assert_eq "invalidated by the issue and its relatives, never the pull request" \
+  "issue:github.com/jwogrady/spark#728,issue:github.com/jwogrady/spark#734" \
+  "$(printf '%s' "$G" | jq -r '.invalidators | sort | join(",")')"
+assert_eq "the pull request is read once, whatever reads the issue" "1" "$(reads_of 801)"
+assert_eq "and the issue is read once" "1" "$(reads_of 734)"
+assert_eq "so the head is still the pull request's own" "$HEADOID" \
+  "$(printf '%s' "$P" | jq -r '.facts[] | select(.class == "head") | .value.head')"
+assert_eq "and the issue has one version across the set (R20)" "1" \
+  "$(printf '%s' "$P" | jq '[.facts[] | .versions["issue:github.com/jwogrady/spark#734"] // empty] | unique | length')"
+assert_eq "and nothing is reported missing" "" "$(cat "$WORK/err")"
+
+# The issue edited between the two reads has two versions, and one set cannot
+# carry both: the graph is withdrawn rather than published beside the other.
+pr_stub "$(pr_node "[$(ref_node 734 jwogrady/spark 2026-09-19T09:00:00Z)]")" "$(issue_node)"
+P="$("$SPARK" facts --issue 801 2>"$WORK/err")"
+assert_eq "an issue seen in two versions leaves no graph" "" "$(gfact "$P")"
+assert_eq "so the output is a fragment" "array" "$(printf '%s' "$P" | jq -r type)"
+assert_contains "and says the issue changed between reads" "the implemented issue changed between reads" "$(cat "$WORK/err")"
+
+pr_unknown() { # pr_unknown <closing refs json> <reason> <label>
+  pr_stub "$(pr_node "$1")" "$(issue_node)"
+  : > "$GH_CALL_LOG"
+  local out g
+  out="$("$SPARK" facts --issue 801 2>/dev/null)"
+  g="$(gfact "$out")"
+  assert_eq "$3: the graph is unknown with its reason" "UNKNOWN|$2" \
+    "$(printf '%s' "$g" | jq -r '"\(.status)|\(.detail.reason)"')"
+  assert_eq "$3: named and invalidated by the pull request it was read from" \
+    "github.com/jwogrady/spark#801|pull_request:github.com/jwogrady/spark#801" \
+    "$(printf '%s' "$g" | jq -r '"\(.source.identity)|\(.invalidators | join(","))"')"
+  assert_eq "$3: and no issue is read to find that out" "0" "$(reads_of 734)"
+}
+pr_unknown '[]' "a pull request that implements no issue has no native graph" "closing nothing"
+pr_unknown "[$(ref_node 734 other/repo)]" "the implemented issue is in another repository" "closing another repository's issue"
+pr_unknown "[$(ref_node 734),$(ref_node 735)]" "the pull request declares more than one closing issue" "closing two issues"
+
+pr_stub "$(pr_node '[]')" "$(issue_node)"
+P="$("$SPARK" facts --issue 801 2>/dev/null)"
+assert_eq "an unknown graph is still a complete snapshot" "object" "$(printf '%s' "$P" | jq -r type)"
+
+# A closing reference that turns out to be a pull request is a reply that
+# contradicts itself; it is refused, never followed again.
+pr_stub "$(pr_node "[$(ref_node 734)]")" "$(pr_node "[$(ref_node 734)]" | jq -c '.number = 734')"
+: > "$GH_CALL_LOG"
+P="$("$SPARK" facts --issue 801 2>"$WORK/err")"
+assert_eq "an implemented node that is a pull request leaves no graph" "" "$(gfact "$P")"
+assert_contains "with the reason" "the implemented work unit is not an issue" "$(cat "$WORK/err")"
+assert_eq "and it is not chased a second time" "1" "$(reads_of 734)"
+
 # --- the size #736 compares is the size that was read -------------------------
 snapshot_stub "$(issue_node)"
 SPARK_RUN_ID=rsnap "$SPARK" facts --issue 734 > "$WORK/snap.out" 2>/dev/null
