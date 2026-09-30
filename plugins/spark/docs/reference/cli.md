@@ -2236,10 +2236,22 @@ Compiles authoritative repository and GitHub truth into normalized facts, so
 each command stops re-deriving the same truth in its own vocabulary — with its
 own idea of what "unreadable" means.
 
-Prints a **fragment**: a bare JSON list of facts. A complete snapshot is exactly
-`{observer, facts}` carrying every required class, and a fragment is never
-consumed as one. The classes compiled so far are listed below; asking for a
-snapshot is not yet possible, which is why one is never claimed.
+**The shape says whether the set is complete.** When `--issue <number>` names a
+work unit and every required class compiled, it prints the **snapshot**: exactly
+`{observer, facts}`, where `observer` is the login that read the facts, that
+login's permission on the repository, and when it was checked. Anything less —
+no work unit, a class that could not be established, or an observer that could
+not be read — prints a **fragment**: a bare JSON list of the facts that did
+compile, with the reason on stderr. A fragment is never consumed as a snapshot,
+and no flag asks for one: the object appears only when it is true.
+
+The snapshot is bounded by the work unit's governing graph. It carries facts,
+never the bodies, titles or comment history they were read from — each fact
+points at its source through `provenance`, `invalidators` and `versions`, which
+is where the history is reached on demand. Growth elsewhere in the repository or
+milestone does not change a byte of it. When a run is observed, the printed
+shape and its size in bytes are recorded as `facts_output_shape` and
+`facts_output_bytes` beside the compiler's other counters.
 
 | Class | Key | What it establishes |
 |---|---|---|

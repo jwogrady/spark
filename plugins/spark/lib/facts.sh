@@ -33,10 +33,11 @@
 # must say which node it is about, and that must match what was asked, before
 # anything it contains becomes a fact.
 #
-# The output is a FRAGMENT, not a snapshot: a bare list of facts (R11, R22). A
-# snapshot is exactly {observer, facts} with every required class present, and
-# this module compiles two of them — `repository` and `graph` — so calling its
-# output a snapshot would be a lie a consumer is entitled to act on.
+# The output is a SNAPSHOT only when it is one: exactly {observer, facts} with
+# every required class present once (R11, R21, R22). Anything less is a
+# FRAGMENT, a bare list, because calling a smaller set a snapshot would be a lie
+# a consumer is entitled to act on. Completeness decides the shape; no caller
+# can request it.
 #
 # The functions here SET a variable rather than printing their result, the same
 # discipline __spark_memo_key follows and for a sharper reason: a command
@@ -64,6 +65,11 @@ FACTS_API_CALLS=0
 # site can show hits rising while the read count stays flat.
 FACTS_CACHE_HITS=0
 FACTS_CACHE_MISSES=0
+# What was printed, so #736 can compare a task's snapshot against its baseline
+# without re-running it. Empty until something is printed: a run that emitted
+# nothing has no size, and zero would claim it printed an empty output.
+FACTS_OUTPUT_SHAPE=""
+FACTS_OUTPUT_BYTES=""
 
 # The result variables the functions below set.
 FACTS_NODE=""
@@ -84,6 +90,7 @@ FACTS_RE_WORK_UNIT=""
 FACTS_RE_ISSUE_STATE=""
 FACTS_RE_VERDICT=""
 FACTS_RE_LOGIN=""
+FACTS_RE_PERMISSION=""
 FACTS_RE_COMMENT=""
 FACTS_RE_DECISION_RECORD=""
 FACTS_RE_SCOPE=""
@@ -105,6 +112,7 @@ facts_load_grammars() {
       identifier/issue-state) FACTS_RE_ISSUE_STATE="$rest" ;;
       identifier/verdict)    FACTS_RE_VERDICT="$rest" ;;
       identifier/login)      FACTS_RE_LOGIN="$rest" ;;
+      identifier/permission) FACTS_RE_PERMISSION="$rest" ;;
       identifier/comment)    FACTS_RE_COMMENT="$rest" ;;
       identifier/decision-record) FACTS_RE_DECISION_RECORD="$rest" ;;
       identifier/scope)      FACTS_RE_SCOPE="$rest" ;;
@@ -116,7 +124,7 @@ facts_load_grammars() {
       constraint/ref)        FACTS_CON_REF="$FACTS_CON_REF$rest"$'\n' ;;
     esac
   done < <(awk -F'\t' '
-    $1 == "identifier" && ($2 == "repository" || $2 == "ref" || $2 == "timestamp" || $2 == "work-unit" || $2 == "issue-state" || $2 == "milestone" || $2 == "commit" || $2 == "verdict" || $2 == "login" || $2 == "comment" || $2 == "decision-record" || $2 == "scope" || $2 == "boundary") { print $1 "\t" $2 "\t" $3 }
+    $1 == "identifier" && ($2 == "repository" || $2 == "ref" || $2 == "timestamp" || $2 == "work-unit" || $2 == "issue-state" || $2 == "milestone" || $2 == "commit" || $2 == "verdict" || $2 == "login" || $2 == "permission" || $2 == "comment" || $2 == "decision-record" || $2 == "scope" || $2 == "boundary") { print $1 "\t" $2 "\t" $3 }
     $1 == "constraint" && ($2 == "repository" || $2 == "ref" || $2 == "work-unit") { print $1 "\t" $2 "\t" $3 }' "$FACTS_MODEL")
   FACTS_GRAMMARS_LOADED=1
 }
@@ -2827,6 +2835,60 @@ facts_next_action_fact() {
   return 0
 }
 
+# facts_observer <locator> <observed_at> — sets FACTS_OBSERVER to the snapshot's
+# observer (R21): the login that read these facts, its permission on this
+# repository, and when that was checked. Returns 3 with FACTS_REFUSED set when
+# either half cannot be read canonically.
+#
+# It is its own read rather than two more fields on the work-unit query. That
+# query's projection is the validator for every class compiled from the unit
+# node, and an observer field there would make a viewer the token cannot name
+# a malformed reply for all of them. Asked separately, a failure here costs the
+# snapshot shape and nothing else: every fact still compiles, and the output
+# stays the fragment it honestly is.
+#
+# A refusal is never repaired into a permissive answer. `none` is in the
+# vocabulary, but a token that read the facts plainly had some permission, so
+# a null viewerPermission is an observation this read did not make, not
+# evidence of none.
+#
+# checked_at is the run's one observation instant, the same one every fact
+# carries as observed_at: the permission is read in the same run that read the
+# facts it vouches for, and a second clock reading would claim a precision the
+# sequence of reads does not have.
+FACTS_OBSERVER=""
+facts_observer() {
+  local locator="$1" observed="$2" host="${1%%/*}" nwo="${1#*/}" out rc=0 login perm
+  FACTS_OBSERVER=""
+  FACTS_REFUSED=""
+  FACTS_API_CALLS=$(( FACTS_API_CALLS + 1 ))
+  out="$(gh api graphql --hostname "$host" \
+    -F owner="${nwo%%/*}" -F name="${nwo##*/}" -f query='
+    query($owner:String!,$name:String!){
+      viewer{ login }
+      repository(owner:$owner,name:$name){ viewerPermission }
+    }' --jq '[(.data.viewer.login? // ""), (.data.repository.viewerPermission? // "")]
+             | map(if type == "string" then . else "" end) | @tsv' 2>/dev/null)" || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    FACTS_REFUSED="the observer could not be read"
+    return 3
+  fi
+  login="$(printf '%s' "$out" | cut -f1)"
+  perm="$(printf '%s' "$out" | cut -f2)"
+  if [ -z "$login" ] || [ -z "$perm" ]; then
+    FACTS_REFUSED="the observer could not be read"
+    return 3
+  fi
+  login="login:${login,,}"
+  perm="${perm,,}"
+  if ! facts_canonical "$FACTS_RE_LOGIN" "" "$login" \
+     || ! facts_canonical "$FACTS_RE_PERMISSION" "" "$perm"; then
+    FACTS_REFUSED="the observer is malformed"
+    return 3
+  fi
+  FACTS_OBSERVER='{"login":"'"$(json_escape "$login")"'","permission":"'"$perm"'","checked_at":"'"$observed"'"}'
+}
+
 facts_record_telemetry() {
   [ -n "${SPARK_RUN_ID:-}" ] || return 0
   SPARK_RECORDING=1 "$SPARK_ROOT/bin/spark" telemetry record --run "$SPARK_RUN_ID" \
@@ -2834,7 +2896,9 @@ facts_record_telemetry() {
     facts_unknown="$FACTS_UNKNOWN" \
     facts_api_calls="$FACTS_API_CALLS" \
     facts_cache_hits="$FACTS_CACHE_HITS" \
-    facts_cache_misses="$FACTS_CACHE_MISSES" >/dev/null 2>&1 || true
+    facts_cache_misses="$FACTS_CACHE_MISSES" \
+    ${FACTS_OUTPUT_SHAPE:+facts_output_shape="$FACTS_OUTPUT_SHAPE"} \
+    ${FACTS_OUTPUT_BYTES:+facts_output_bytes="$FACTS_OUTPUT_BYTES"} >/dev/null 2>&1 || true
   return 0
 }
 
@@ -2976,11 +3040,41 @@ cmd_facts() {
     facts_record_telemetry
     return 3
   fi
-  # The fragment shape: a bare list, never an object, so it can never be read as
-  # the {observer, facts} snapshot a consumer is allowed to act on (R22). Two
-  # classes are not the required set either, so this stays a fragment however
-  # many facts it carries.
-  printf '[%s]\n' "$facts"
+  # The shape is decided by completeness, never requested. A snapshot is exactly
+  # {observer, facts} with every required class present once (R11, R21, R22),
+  # and only then is it the object a consumer may act on; anything less is a
+  # bare list, however many facts it carries. A caller therefore cannot ask for
+  # a snapshot and receive a smaller set dressed as one.
+  local out="[$facts]"
+  FACTS_OUTPUT_SHAPE="fragment"
+  if [ -n "$issue" ] && facts_complete "$out"; then
+    if facts_observer "$locator" "$observed"; then
+      out='{"observer":'"$FACTS_OBSERVER"',"facts":'"$out"'}'
+      FACTS_OUTPUT_SHAPE="snapshot"
+    else
+      why="${why:+$why; }observer: $FACTS_REFUSED"
+    fi
+  fi
+  printf '%s\n' "$out"
+  # Bytes, not characters: the size a consumer pays to read is what #736
+  # compares against its baseline, and a multibyte title would make a
+  # character count understate it.
+  local LC_ALL=C
+  FACTS_OUTPUT_BYTES=$(( ${#out} + 1 ))
   [ -z "$why" ] || yellow "not established — $why" >&2
   facts_record_telemetry
+}
+
+# facts_complete <fact list json> — succeeds when the list carries every class
+# the shipped model marks required exactly once (R11). The required set is read
+# from the model rather than spelled here, so a class the model adds is missing
+# from every snapshot until the compiler emits it, not silently absent.
+facts_complete() {
+  local list="$1" required
+  required="$(awk -F'\t' '$1 == "class" && $3 == "required" { print $2 }' "$FACTS_MODEL")"
+  [ -n "$required" ] || return 1
+  printf '%s' "$list" | jq -e --arg req "$required" '
+    ($req | split("\n") | map(select(length > 0))) as $r
+    | [.[].class] as $c
+    | $r | all(. as $k | ($c | map(select(. == $k)) | length) == 1)' >/dev/null 2>&1
 }

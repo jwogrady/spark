@@ -18,7 +18,7 @@ MODULE_RESP = {
     "plan_live_rows", "plan_created_rows", "repo_binding_path", "repo_bound_locator", "repo_fact",
     "repo_target_of_command", "repo_gh_repo_of_command",
     "facts_now", "facts_repo_node", "facts_load_grammars",
-    "facts_unit_node", "facts_unit_read"],
+    "facts_unit_node", "facts_unit_read", "facts_observer"],
 "canonicalization": [
     "tm_is_key", "tm_is_int_key", "tm_valid_run", "tm_cache_ratio", "tm_delta", "bg_is_key", "bg_is_int_key",
     "bg_stage", "ev_tokens", "plan_label_scope", "artifact_labels", "label_set_equal", "plan_body_matches",
@@ -32,7 +32,7 @@ MODULE_RESP = {
 "evidence-authority": [
     "tm_no_progress", "tm_binding_status", "bg_reject_framing", "ci_sentinel_state", "ci_verdict",
     "tm_secret_shaped", "facts_repository_fact", "facts_graph_fact", "facts_work_unit_fact",
-    "facts_placement_fact", "facts_acceptance_fact", "facts_head_fact", "facts_review_fact", "facts_checks_fact", "facts_authority_fact", "facts_next_action_fact"],
+    "facts_placement_fact", "facts_acceptance_fact", "facts_head_fact", "facts_review_fact", "facts_checks_fact", "facts_authority_fact", "facts_next_action_fact", "facts_complete"],
 "formatting-reporting": [
     "facts_envelope_tail", "facts_record_telemetry","label_set_show", "ci_sentinel_report", "json_escape_out", "bg_json_escape",
     # nested helpers: row printers inside the verb that prints them
