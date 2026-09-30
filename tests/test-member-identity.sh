@@ -194,7 +194,7 @@ case "${1:-}" in
   issue)
     jqx=""; prev=""
     for a in "$@"; do [ "$prev" = "--jq" ] && jqx="$a"; prev="$a"; done
-    if [ -n "$jqx" ]; then printf '%s' "$ISSUES" | jq -r "$jqx"; else printf '%s' "$ISSUES"; fi
+    if [ -n "$jqx" ]; then printf '%s' "$ISSUES" | "${GH_JQ_EVAL:-jq}" -r "$jqx"; else printf '%s' "$ISSUES"; fi
     exit 0 ;;
 esac
 # The release-gate capture. Gate identity is a governed fact read here, not
@@ -204,7 +204,7 @@ for a in "$@"; do
   if [ "$a" = "graphql" ]; then
     jqx=""; prev=""
     for b in "$@"; do [ "$prev" = "--jq" ] && jqx="$b"; prev="$b"; done
-    if [ -n "$jqx" ]; then printf '%s' "$GATECAP" | jq -r "$jqx"; else printf '%s' "$GATECAP"; fi
+    if [ -n "$jqx" ]; then printf '%s' "$GATECAP" | "${GH_JQ_EVAL:-jq}" -r "$jqx"; else printf '%s' "$GATECAP"; fi
     exit 0
   fi
 done

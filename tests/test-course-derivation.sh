@@ -83,7 +83,7 @@ for a in "$@"; do
   prev="$a"
 done
 if [ "$isq" = 1 ]; then
-  if [ -n "$jqexpr" ]; then jq -r "$jqexpr" "$(dirname "$0")/snap.json"
+  if [ -n "$jqexpr" ]; then "${GH_JQ_EVAL:-jq}" -r "$jqexpr" "$(dirname "$0")/snap.json"
   else cat "$(dirname "$0")/snap.json"; fi
   exit 0
 fi
@@ -270,7 +270,7 @@ done
 if [ "$isq" = 1 ]; then
   d="$(dirname "$0")"
   if [ -f "$MSFLAG" ]; then f="$d/rest.json"; else f="$d/first.json"; : > "$MSFLAG"; fi
-  if [ -n "$jqx" ]; then jq -r "$jqx" "$f"; else cat "$f"; fi
+  if [ -n "$jqx" ]; then "${GH_JQ_EVAL:-jq}" -r "$jqx" "$f"; else cat "$f"; fi
   exit 0
 fi
 exit 0
@@ -304,7 +304,7 @@ for a in "$@"; do
   prev="$a"
 done
 if [ "$isq" = 1 ]; then
-  if [ -n "$jqexpr" ]; then jq -r "$jqexpr" "$(dirname "$0")/snap.json"
+  if [ -n "$jqexpr" ]; then "${GH_JQ_EVAL:-jq}" -r "$jqexpr" "$(dirname "$0")/snap.json"
   else cat "$(dirname "$0")/snap.json"; fi
   exit 0
 fi
@@ -362,7 +362,7 @@ done
 for a in "$@"; do
   case "$a" in
     *milestones*)
-      if [ -n "$jqexpr" ]; then jq -r "$jqexpr" "$(dirname "$0")/milestones.json"
+      if [ -n "$jqexpr" ]; then "${GH_JQ_EVAL:-jq}" -r "$jqexpr" "$(dirname "$0")/milestones.json"
       else cat "$(dirname "$0")/milestones.json"; fi
       exit 0 ;;
   esac
@@ -551,11 +551,11 @@ for a in "$@"; do
   prev="$a"
 done
 if [ "$isq" = 1 ]; then
-  if [ -n "$jqx" ]; then printf '%s' "$SNAP" | jq -r "$jqx"; else printf '%s' "$SNAP"; fi
+  if [ -n "$jqx" ]; then printf '%s' "$SNAP" | "${GH_JQ_EVAL:-jq}" -r "$jqx"; else printf '%s' "$SNAP"; fi
   exit 0
 fi
 if [ "${1:-}" = "issue" ]; then
-  if [ -n "$jqx" ]; then printf '%s' "$ISSUES" | jq -r "$jqx"; else printf '%s' "$ISSUES"; fi
+  if [ -n "$jqx" ]; then printf '%s' "$ISSUES" | "${GH_JQ_EVAL:-jq}" -r "$jqx"; else printf '%s' "$ISSUES"; fi
   exit 0
 fi
 # The dependency graph is read through the shared reader, which validates every

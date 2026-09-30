@@ -80,7 +80,7 @@ gh_issue_json() {
     '{title: $t,
       milestone: (if $m == "" then null else {title: $m} end),
       labels: ($l | split(",") | map(select(. != "") | {name: .}))}')"
-  if [ -n "$GH_JQ" ]; then printf '%s' "$json" | jq -r "$GH_JQ"; else printf '%s' "$json"; fi
+  if [ -n "$GH_JQ" ]; then printf '%s' "$json" | "${GH_JQ_EVAL:-jq}" -r "$GH_JQ"; else printf '%s' "$json"; fi
 }
 
 if [ "$1" = "issue" ] && [ "$2" = "view" ]; then
@@ -234,7 +234,7 @@ gh_issue_json() {
     '{title: $t,
       milestone: (if $m == "" then null else {title: $m} end),
       labels: ($l | split(",") | map(select(. != "") | {name: .}))}')"
-  if [ -n "$GH_JQ" ]; then printf '%s' "$json" | jq -r "$GH_JQ"; else printf '%s' "$json"; fi
+  if [ -n "$GH_JQ" ]; then printf '%s' "$json" | "${GH_JQ_EVAL:-jq}" -r "$GH_JQ"; else printf '%s' "$json"; fi
 }
 
 if [ "$1" = "issue" ] && [ "$2" = "view" ]; then
@@ -294,7 +294,7 @@ gh_issue_json() {
     '{title: $t,
       milestone: (if $m == "" then null else {title: $m} end),
       labels: ($l | split(",") | map(select(. != "") | {name: .}))}')"
-  if [ -n "$GH_JQ" ]; then printf '%s' "$json" | jq -r "$GH_JQ"; else printf '%s' "$json"; fi
+  if [ -n "$GH_JQ" ]; then printf '%s' "$json" | "${GH_JQ_EVAL:-jq}" -r "$GH_JQ"; else printf '%s' "$json"; fi
 }
 
 if [ "$1" = "issue" ] && [ "$2" = "view" ]; then
@@ -338,7 +338,7 @@ gh_issue_json() {
     '{title: $t,
       milestone: (if $m == "" then null else {title: $m} end),
       labels: ($l | split(",") | map(select(. != "") | {name: .}))}')"
-  if [ -n "$GH_JQ" ]; then printf '%s' "$json" | jq -r "$GH_JQ"; else printf '%s' "$json"; fi
+  if [ -n "$GH_JQ" ]; then printf '%s' "$json" | "${GH_JQ_EVAL:-jq}" -r "$GH_JQ"; else printf '%s' "$json"; fi
 }
 
 if [ "$1" = "issue" ] && [ "$2" = "view" ]; then
@@ -399,7 +399,7 @@ if [ "$1" = "issue" ] && [ "$2" = "view" ]; then
   # --jq the binary passes.
   json="$(jq -n --argjson l "$LIVE_LABELS" \
     '{title: "T", milestone: null, labels: ($l | map({name: .}))}')"
-  if [ -n "$GH_JQ" ]; then printf '%s' "$json" | jq -r "$GH_JQ"; else printf '%s' "$json"; fi
+  if [ -n "$GH_JQ" ]; then printf '%s' "$json" | "${GH_JQ_EVAL:-jq}" -r "$GH_JQ"; else printf '%s' "$json"; fi
   exit 0
 fi
 exit 0
