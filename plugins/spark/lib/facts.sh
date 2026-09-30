@@ -483,10 +483,9 @@ facts_graph_fact() {
   # this work unit's identity — one node wearing another's name, which is the
   # failure the identity discipline exists to prevent.
   # A pull request HAS no native graph — the schema gives parent, subIssues and
-  # blockedBy to Issue alone — and the model offers no conforming fact to say
-  # so: graph admits ESTABLISHED, UNKNOWN and CONFLICT, and NOT_APPLICABLE
-  # belongs to the HEAD-bound classes. So this is a refusal with an accurate
-  # reason, now read from the shared observation rather than a second request.
+  # blockedBy to Issue alone — so its graph is the graph of the issue it
+  # implements, read from that issue and naming it as the source (R17; the
+  # model's first example). That derivation is its own function below.
   #
   # Stated positively: this class needs an ISSUE, so anything else is refused by
   # what it is rather than by a list of what it is not. Naming only the pull
@@ -494,8 +493,16 @@ facts_graph_fact() {
   local self_kind
   self_kind="$(printf '%s' "$FACTS_NODE" | awk -F'\t' '$1 == "self" { print $5; exit }')"
   if [ "$self_kind" = "PullRequest" ]; then
-    FACTS_REFUSED="a pull request has no native graph"
-    return 3
+    # Only a pull request asked for directly is followed to its issue. A node
+    # reached THROUGH a closing reference that turns out to be a pull request
+    # is a reply that contradicts itself, and following it again could chase a
+    # cycle the reply invented.
+    if [ -n "$FACTS_GRAPH_VIA_PR" ]; then
+      FACTS_REFUSED="the implemented work unit is not an issue"
+      return 3
+    fi
+    facts_pr_graph_fact "$locator" "$number" "$observed"
+    return $?
   elif [ "$self_kind" != "Issue" ]; then
     FACTS_REFUSED="malformed"
     return 3
@@ -613,6 +620,106 @@ EOF
     return 0
   fi
   FACTS_JSON="$head"'"ESTABLISHED","value":{"parent":'"$parent"',"children":['"$kids"'],"blocked_by":['"$blocks"']}'"$tail"'}'
+}
+
+# facts_pr_graph_fact <locator> <number> <observed_at> — graph.native for a pull
+# request, with FACTS_NODE holding that pull request's rows. Sets FACTS_JSON or
+# FACTS_REFUSED exactly as facts_graph_fact does.
+#
+# The statuses, and what decides them:
+#
+#   ESTABLISHED  the pull request closes exactly one issue in this repository,
+#                and that issue's graph compiles — the fact IS that issue's
+#                graph fact, sourced from and invalidated by the issue;
+#   UNKNOWN      which issue it implements is not settled: it closes none,
+#                several, one in another repository, or the closing list was
+#                truncated. The pull request's own version WAS observed, so the
+#                envelope conforms, names the pull request as the node it was
+#                read from, and says why no graph could be attributed to it;
+#   refused      the issue's graph cannot be compiled, or the issue was observed
+#                in two versions between the pull request read and its own.
+#
+# An UNKNOWN rather than an empty graph, because "no parent, no children, no
+# blockers" is a claim about an issue that nobody read.
+#
+# The issue is a second read, and the single-slot unit memo would lose the pull
+# request to it — every class compiled afterwards would read the pull request
+# AGAIN and could see it in another state. So the memo is saved around the read
+# and restored after it. The same set also carries this issue's version as the
+# acceptance contract's, read off the pull request's observation; one node has
+# one version within one set (R20), so a second read that saw a different one
+# is refused rather than published beside it.
+FACTS_GRAPH_VIA_PR=""
+facts_pr_graph_fact() {
+  local locator="$1" number="$2" observed="$3" host="${1%%/*}" nwo="${1#*/}"
+  local wu="$locator#$number" self_version rows row rnum rnwo rtype rver n=0
+  local impl_num="" impl_nwo="" impl_ver="" reason=""
+  self_version="$(printf '%s' "$FACTS_NODE" | awk -F'\t' '$1 == "self" { print $4; exit }')"
+  if [ -z "$self_version" ] || ! facts_canonical "$FACTS_RE_TIMESTAMP" "" "$self_version"; then
+    FACTS_REFUSED="malformed"; return 3
+  fi
+
+  # Every returned reference is validated before truncation is decided, for the
+  # reason work_unit gives: a node the reply returned is a node it claimed.
+  rows="$(printf '%s\n' "$FACTS_NODE" | awk -F'\t' '$1 == "implements"')"
+  while IFS= read -r row; do
+    [ -n "$row" ] || continue
+    rnum="$(printf '%s' "$row" | cut -f2)"
+    rnwo="$(printf '%s' "$row" | cut -f3)"
+    rtype="$(printf '%s' "$row" | cut -f4)"
+    rver="$(printf '%s' "$row" | cut -f5)"
+    [ "$rtype" = "Issue" ] || { FACTS_REFUSED="malformed"; return 3; }
+    facts_unit_locator "$host" "$rnwo" "$rnum" >/dev/null || { FACTS_REFUSED="malformed"; return 3; }
+    n=$(( n + 1 ))
+    impl_num="$rnum"; impl_nwo="$rnwo"; impl_ver="$rver"
+  done <<EOF
+$rows
+EOF
+
+  if printf '%s\n' "$FACTS_NODE" \
+     | awk -F'\t' '$1 == "truncated" && $2 == "implements" { found = 1 } END { exit !found }'; then
+    reason="the closing references were truncated, so the implemented issue is unknown"
+  elif [ "$n" -eq 0 ]; then
+    reason="a pull request that implements no issue has no native graph"
+  elif [ "$n" -gt 1 ]; then
+    reason="the pull request declares more than one closing issue"
+  elif [ "${impl_nwo,,}" != "${nwo,,}" ]; then
+    reason="the implemented issue is in another repository"
+  fi
+
+  if [ -n "$reason" ]; then
+    local inv="pull_request:$wu"
+    FACTS_EMITTED=$(( FACTS_EMITTED + 1 ))
+    FACTS_UNKNOWN=$(( FACTS_UNKNOWN + 1 ))
+    FACTS_JSON='{"schema_version":'"$FACTS_SCHEMA_VERSION"',"key":"graph.native","class":"graph","status":"UNKNOWN"'
+    FACTS_JSON="$FACTS_JSON"',"source":{"type":"github-api","identity":"'"$(json_escape "$wu")"'","version":"'"$(json_escape "$self_version")"'"}'
+    FACTS_JSON="$FACTS_JSON"',"observed_at":"'"$observed"'","invalidators":["'"$(json_escape "$inv")"'"]'
+    FACTS_JSON="$FACTS_JSON"',"versions":{"'"$(json_escape "$inv")"'":"'"$(json_escape "$self_version")"'"}'
+    FACTS_JSON="$FACTS_JSON"',"provenance":"'"$(json_escape "https://$locator/issues/$number")"'"'
+    FACTS_JSON="$FACTS_JSON"',"detail":{"reason":"'"$(json_escape "$reason")"'","candidates":[]}}'
+    return 0
+  fi
+
+  local saved_key="$FACTS_UNIT_KEY" saved_rows="$FACTS_UNIT_ROWS" saved_rc="$FACTS_UNIT_RC" rc=0
+  local impl_wu="$locator#$impl_num" seen
+  FACTS_GRAPH_VIA_PR=1
+  facts_graph_fact "$locator" "$impl_num" "$observed" || rc=$?
+  FACTS_GRAPH_VIA_PR=""
+  FACTS_UNIT_KEY="$saved_key"; FACTS_UNIT_ROWS="$saved_rows"; FACTS_UNIT_RC="$saved_rc"
+  FACTS_NODE="$saved_rows"
+  [ "$rc" -eq 0 ] || return "$rc"
+
+  seen="$(printf '%s' "$FACTS_JSON" | jq -r --arg k "issue:$impl_wu" '.versions[$k] // ""' 2>/dev/null)"
+  if [ "$seen" != "$impl_ver" ]; then
+    # The fact was counted when it was built; it is withdrawn, not published.
+    FACTS_EMITTED=$(( FACTS_EMITTED - 1 ))
+    [ "$(printf '%s' "$FACTS_JSON" | jq -r '.status' 2>/dev/null)" != "UNKNOWN" ] \
+      || FACTS_UNKNOWN=$(( FACTS_UNKNOWN - 1 ))
+    FACTS_JSON=""
+    FACTS_REFUSED="the implemented issue changed between reads"
+    return 3
+  fi
+  return 0
 }
 
 # facts_error_absent <response body> — true when the reply carries a GraphQL
