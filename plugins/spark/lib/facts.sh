@@ -70,6 +70,9 @@ FACTS_CACHE_MISSES=0
 # nothing has no size, and zero would claim it printed an empty output.
 FACTS_OUTPUT_SHAPE=""
 FACTS_OUTPUT_BYTES=""
+# --delta only: how many facts moved and how many were reported by key alone.
+FACTS_CHANGED=""
+FACTS_UNCHANGED=""
 
 # The result variables the functions below set.
 FACTS_NODE=""
@@ -3005,17 +3008,20 @@ facts_record_telemetry() {
     facts_cache_hits="$FACTS_CACHE_HITS" \
     facts_cache_misses="$FACTS_CACHE_MISSES" \
     ${FACTS_OUTPUT_SHAPE:+facts_output_shape="$FACTS_OUTPUT_SHAPE"} \
-    ${FACTS_OUTPUT_BYTES:+facts_output_bytes="$FACTS_OUTPUT_BYTES"} >/dev/null 2>&1 || true
+    ${FACTS_OUTPUT_BYTES:+facts_output_bytes="$FACTS_OUTPUT_BYTES"} \
+    ${FACTS_CHANGED:+facts_changed="$FACTS_CHANGED"} \
+    ${FACTS_UNCHANGED:+facts_unchanged="$FACTS_UNCHANGED"} >/dev/null 2>&1 || true
   return 0
 }
 
 cmd_facts() {
-  local usage_line="usage: spark facts [--issue <number>] [--help]"
-  local issue="" issue_given=""
+  local usage_line="usage: spark facts [--issue <number>] [--delta] [--help]"
+  local issue="" issue_given="" delta=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --issue)   issue_given=1; shift; issue="${1:-}" ;;
       --issue=*) issue_given=1; issue="${1#--issue=}" ;;
+      --delta)   delta=1 ;;
       -h|--help) echo "$usage_line"; return 0 ;;
       *) red "unknown option: $1"; echo "$usage_line"; return 1 ;;
     esac
@@ -3033,6 +3039,11 @@ cmd_facts() {
       ''|0|0*|*[!0-9]*)
         red "--issue takes an issue number"; echo "$usage_line"; return 1 ;;
     esac
+  fi
+  # A delta is a comparison of one work unit's facts across two observations,
+  # so it has no meaning without the work unit.
+  if [ -n "$delta" ] && [ -z "$issue" ]; then
+    red "--delta needs --issue <number>"; echo "$usage_line"; return 1
   fi
 
   local top; top="$(git_root)"
@@ -3162,6 +3173,39 @@ cmd_facts() {
       why="${why:+$why; }observer: $FACTS_REFUSED"
     fi
   fi
+  # --delta: the SAME compilation, presented against the last observation of
+  # this work unit. Every fact above was re-read from its source this run; the
+  # stored record is compared, never consulted, so a stale record can only ever
+  # be reported as changed (F1, F3). What the caller gets back is the facts
+  # whose status, value, source version or invalidator versions moved, plus
+  # the keys and versions of those that did not — so a repair round re-sends
+  # the HEAD-bound facts and not the milestone, authority and graph it already
+  # holds. The record is written after the comparison, atomically.
+  if [ -n "$delta" ]; then
+    local rel=".spark/facts/$issue.json" rec="$top/.spark/facts/$issue.json" unit="$locator#$issue" prev="" report="" full="$out"
+    if [ -f "$rec" ]; then
+      prev="$(jq -c --arg u "$unit" 'select(.unit == $u)' "$rec" 2>/dev/null || true)"
+    fi
+    if [ -n "$prev" ]; then
+      report="$(facts_delta "$prev" "$out" "$unit" "$rel" "$FACTS_OUTPUT_SHAPE")" || report=""
+    fi
+    if [ -n "$report" ]; then
+      FACTS_CHANGED="$(printf '%s' "$report" | jq '.delta.changed | length')"
+      FACTS_UNCHANGED="$(printf '%s' "$report" | jq '.delta.unchanged | length')"
+      out="$report"
+      # What was printed is what #736 measures; the compiled shape is inside.
+      FACTS_OUTPUT_SHAPE="delta"
+    else
+      # No comparable record: the full output is the delta, and the reason is
+      # said on stderr so a caller never mistakes a first run for "nothing
+      # changed".
+      FACTS_CHANGED="$(printf '%s' "$out" | jq '(.facts? // .) | length')"
+      FACTS_UNCHANGED=0
+      yellow "delta: no previous record for $unit — full output" >&2
+    fi
+    facts_store_record "$rec" "$unit" "$observed" "$( [ -n "$report" ] && printf '%s' "$(printf '%s' "$report" | jq -r .delta.shape)" || printf '%s' "$FACTS_OUTPUT_SHAPE" )" "$full" \
+      || yellow "delta: the record under $rel could not be written; the next run will be a full output" >&2
+  fi
   printf '%s\n' "$out"
   # Bytes, not characters: the size a consumer pays to read is what #736
   # compares against its baseline, and a multibyte title would make a
@@ -3170,6 +3214,51 @@ cmd_facts() {
   FACTS_OUTPUT_BYTES=$(( ${#out} + 1 ))
   [ -z "$why" ] || yellow "not established — $why" >&2
   facts_record_telemetry
+}
+
+# facts_delta <previous record json> <current output json> <unit> <record path> <shape> — the
+# partition of the current facts against the record's, as one delta object.
+#
+# A fact is UNCHANGED only when the record holds the same key with the same
+# status, the same value and detail, the same source version and the same
+# version for every invalidator (F1: identity and version, never age). Anything
+# else — a new key, a moved version, a value that differs under equal versions
+# (which would be a compiler defect worth seeing) — is CHANGED and carried in
+# full. The shape is deliberately not {observer, facts}: a delta is a
+# presentation of a snapshot, not a snapshot, and R22 makes a consumer refuse
+# to act on it as one.
+#
+facts_delta() {
+  local prev="$1" cur="$2" unit="$3" rel="$4" shape="$5"
+  jq -cn --argjson p "$prev" --argjson c "$cur" --arg unit "$unit" --arg rel "$rel" --arg shape "$shape" '
+    ($p.output | (.facts? // .)) as $pf
+    | ($c | (.facts? // .)) as $cf
+    | ($pf | map({key: .key, value: .}) | from_entries) as $by
+    | def same($a; $b):
+        $a.status == $b.status and $a.value == $b.value and $a.detail == $b.detail
+        and $a.source == $b.source and $a.versions == $b.versions and $a.invalidators == $b.invalidators;
+    {delta: {
+       unit: $unit, since: $p.observed_at, record: $rel, shape: $shape,
+       changed:   [ $cf[] | select(($by[.key] // null) as $o | ($o == null) or (same($o; .) | not)) ],
+       unchanged: [ $cf[] | select(($by[.key] // null) as $o | ($o != null) and same($o; .)) | {key, status, source, versions} ]
+     }}'
+}
+
+# facts_store_record <path> <unit> <observed_at> <shape> <full output> — the
+# last observation of a work unit, for the next --delta to compare against.
+# Written whole then moved into place, so a reader never sees half a record.
+# It is not state (R10): nothing reads it as truth, and deleting it costs one
+# full output.
+facts_store_record() {
+  local rec="$1" unit="$2" observed="$3" shape="$4" full="$5" tmp
+  mkdir -p "$(dirname "$rec")" || return 1
+  tmp="$(mktemp "$rec.XXXXXX")" || return 1
+  if jq -cn --arg u "$unit" --arg o "$observed" --arg s "$shape" --argjson out "$full" \
+       '{unit: $u, observed_at: $o, shape: $s, output: $out}' > "$tmp" 2>/dev/null; then
+    mv "$tmp" "$rec"
+  else
+    rm -f "$tmp"; return 1
+  fi
 }
 
 # facts_complete <fact list json> — succeeds when the list carries every class
