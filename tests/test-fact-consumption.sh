@@ -9,7 +9,8 @@
 #     reason does not apply to the fact's status never reads the source;
 #   * the record fetched is the node the fact's SOURCE names, so an audit of
 #     authority reaches the decision comment and not the work unit;
-#   * the drill-down's read is counted in `facts_api_calls`;
+#   * the drill-down's read is counted in `facts_api_calls`, and the log line
+#     is written before it — a log that cannot be written refuses the read;
 #   * every drill-down is on the run's log, and the count derives from the
 #     log — a later invocation cannot overwrite it low;
 #   * the page renders every policy and every reason the data declares.
@@ -160,5 +161,15 @@ assert_eq "a drill-down is one API call more than the compile alone" "$(( $(call
 rm -rf .spark/telemetry
 "$SPARK" facts --issue 734 --explain authority.standing --because audit >/dev/null 2>&1 && ok || bad "a drill-down outside a run still answers"
 [ ! -e .spark/telemetry ] && ok || bad "a drill-down outside a run logs nothing"
+# Inside a run, a log that cannot take the line refuses the read: the source
+# is not fetched, and the refusal says why.
+: > .spark/telemetry
+: > "$GH_CALL_LOG"
+ERR="$(SPARK_RUN_ID=rbad "$SPARK" facts --issue 734 --explain authority.standing --because audit 2>&1 >/dev/null; echo "rc=$?")"
+assert_contains "an unwritable drill-down log refuses" "rc=1" "$ERR"
+assert_contains "and says the log is the reason" "drill-down log" "$ERR"
+assert_eq "and the source was not read unrecorded" "1" \
+  "$(command grep -c 'repos/jwogrady/spark/issues/comments/5622552139' "$GH_CALL_LOG" || true)"
+rm -f .spark/telemetry
 
 finish

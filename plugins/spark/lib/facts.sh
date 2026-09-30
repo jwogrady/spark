@@ -3249,6 +3249,15 @@ cmd_facts() {
       facts_record_telemetry
       return 1
     fi
+    # The log line goes down BEFORE the source is read, and a log that cannot
+    # take it refuses the read: an unrecorded drill-down is a source read #736
+    # cannot see, which is the developer journey the policy exists to count
+    # (P2), so it is never traded for the answer.
+    if ! facts_log_drilldown "$top" "$explain" "$because" "$observed"; then
+      red "the drill-down log under .spark/telemetry cannot be written; '$explain' is not read unrecorded" >&2
+      facts_record_telemetry
+      return 1
+    fi
     local record='null' endpoint
     if endpoint="$(facts_source_endpoint "$(printf '%s' "$fact" | jq -r '.source.type')" "$(printf '%s' "$fact" | jq -r '.source.identity')")"; then
       # Counted here, not in the fetch: a command substitution runs in a
@@ -3260,7 +3269,6 @@ cmd_facts() {
       '{explain: {key: $f.key, status: $f.status, because: $why, provenance: $f.provenance, source: $f.source,
                   invalidators: $f.invalidators, versions: $f.versions, detail: ($f.detail // null),
                   inputs: ($f.inputs // null), record: $r}}')"
-    facts_log_drilldown "$top" "$explain" "$because" "$observed"
     FACTS_OUTPUT_SHAPE="explain"
   fi
   printf '%s\n' "$out"
@@ -3349,11 +3357,13 @@ facts_source_endpoint() {
 # facts_log_drilldown <top> <key> <reason> <at> — one line per drill-down in
 # the run's append-only log, so a count across many invocations can never be
 # overwritten low by a later one (the executions log's reasoning, #665).
+# Outside a run there is nothing to record and it succeeds; inside one it
+# fails when the line could not be appended, and the caller must not read.
 facts_log_drilldown() {
   [ -n "${SPARK_RUN_ID:-}" ] || return 0
   local dir="$1/.spark/telemetry"
-  mkdir -p "$dir" 2>/dev/null || return 0
-  printf '%s\t%s\t%s\n' "$3" "$2" "$4" >> "$dir/$SPARK_RUN_ID.drilldowns" 2>/dev/null || true
+  mkdir -p "$dir" 2>/dev/null || return 1
+  printf '%s\t%s\t%s\n' "$3" "$2" "$4" >> "$dir/$SPARK_RUN_ID.drilldowns" 2>/dev/null || return 1
 }
 
 # facts_complete <fact list json> — succeeds when the list carries every class

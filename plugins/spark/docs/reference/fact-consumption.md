@@ -32,10 +32,11 @@ snapshot shape — `{"delta": …}` — and a consumer must not act on it as one
 `--explain` refuses a key the model does not declare and a reason outside the
 vocabulary before anything is read; it refuses a declared key the run did not
 emit, and a reason whose required status the fact does not have, after the
-compile and without reading the source. The
-record it fetches is the GitHub node the fact's source identity names — the
-issue, the comment, the milestone or the repository — and a derived fact has
-none: its `inputs` are its record.
+compile and without reading the source. Inside a run the log line is written
+before the read, and a log that cannot take it refuses the read rather than
+answer unrecorded. The record it fetches is the GitHub node the fact's source
+identity names — the issue, the comment, the milestone or the repository — and
+a derived fact has none: its `inputs` are its record.
 
 ## Policy
 
