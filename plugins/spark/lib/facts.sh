@@ -915,7 +915,7 @@ facts_unit_node() {
            else . + 1
            end)) - $start;
     def task_item:
-      (capture("^(?<ind> *)(?<marker>[-*+]|[0-9]{1,9}[.)])(?<ws>[ \\t]+)\\[(?<mark>[ xX])\\](?=[ \\t]|$)") // null)
+      (capture("^(?<ind> *)(?<marker>[-*+]|[0-9]{1,9}[.)])(?<ws>[ \\t]+)\\[(?<mark>[ xX])\\](?:[ \\t]|$)") // null)
       | if . == null then null
         else marker_padding(.) as $pad
           | if ($pad >= 1 and $pad <= 4) then . else null end
