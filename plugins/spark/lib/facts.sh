@@ -70,6 +70,9 @@ FACTS_CACHE_MISSES=0
 # nothing has no size, and zero would claim it printed an empty output.
 FACTS_OUTPUT_SHAPE=""
 FACTS_OUTPUT_BYTES=""
+# --delta only: how many facts moved and how many were reported by key alone.
+FACTS_CHANGED=""
+FACTS_UNCHANGED=""
 
 # The result variables the functions below set.
 FACTS_NODE=""
@@ -3005,19 +3008,26 @@ facts_record_telemetry() {
     facts_cache_hits="$FACTS_CACHE_HITS" \
     facts_cache_misses="$FACTS_CACHE_MISSES" \
     ${FACTS_OUTPUT_SHAPE:+facts_output_shape="$FACTS_OUTPUT_SHAPE"} \
-    ${FACTS_OUTPUT_BYTES:+facts_output_bytes="$FACTS_OUTPUT_BYTES"} >/dev/null 2>&1 || true
+    ${FACTS_OUTPUT_BYTES:+facts_output_bytes="$FACTS_OUTPUT_BYTES"} \
+    ${FACTS_CHANGED:+facts_changed="$FACTS_CHANGED"} \
+    ${FACTS_UNCHANGED:+facts_unchanged="$FACTS_UNCHANGED"} >/dev/null 2>&1 || true
   return 0
 }
 
 cmd_facts() {
-  local usage_line="usage: spark facts [--issue <number>] [--help]"
-  local issue="" issue_given=""
+  local usage_line="usage: spark facts [--issue <number>] [--delta] [--explain <key> --because <reason>] [--help]"
+  local issue="" issue_given="" delta="" explain="" because=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --issue)   issue_given=1; shift; issue="${1:-}" ;;
       --issue=*) issue_given=1; issue="${1#--issue=}" ;;
+      --delta)   delta=1 ;;
+      --explain)   shift; explain="${1:-}" ;;
+      --explain=*) explain="${1#--explain=}" ;;
+      --because)   shift; because="${1:-}" ;;
+      --because=*) because="${1#--because=}" ;;
       -h|--help) echo "$usage_line"; return 0 ;;
-      *) red "unknown option: $1"; echo "$usage_line"; return 1 ;;
+      *) red "unknown option: $1" >&2; echo "$usage_line" >&2; return 1 ;;
     esac
     if [ "$#" -gt 0 ]; then shift; fi
   done
@@ -3031,13 +3041,38 @@ cmd_facts() {
   if [ -n "$issue_given" ]; then
     case "$issue" in
       ''|0|0*|*[!0-9]*)
-        red "--issue takes an issue number"; echo "$usage_line"; return 1 ;;
+        red "--issue takes an issue number" >&2; echo "$usage_line" >&2; return 1 ;;
     esac
+  fi
+  # A delta is a comparison of one work unit's facts across two observations,
+  # so it has no meaning without the work unit.
+  if [ -n "$delta" ] && [ -z "$issue" ]; then
+    red "--delta needs --issue <number>" >&2; echo "$usage_line" >&2; return 1
+  fi
+  # A drill-down is a read of history, and the policy admits one only for a
+  # stated reason from its closed vocabulary (P2). The reason is checked
+  # before anything is read, so a run never reaches the source without one
+  # and never records one it did not check.
+  if [ -n "$explain" ] || [ -n "$because" ]; then
+    if [ -z "$explain" ]; then red "--because needs --explain <key>" >&2; echo "$usage_line" >&2; return 1; fi
+    if [ -n "$delta" ]; then red "--explain and --delta are different presentations; ask for one" >&2; return 1; fi
+    if [ -z "$because" ]; then
+      red "a drill-down needs its reason: --because <$(facts_reasons | paste -sd'|')>" >&2; return 1
+    fi
+    if ! facts_reasons | grep -qx -- "$because"; then
+      red "'$because' is not an admissible reason; one of: $(facts_reasons | paste -sd, | sed 's/,/, /g')" >&2; return 1
+    fi
+    # The key is checked against the model here for the same reason: a key no
+    # fact can ever carry is refused before the compile spends its reads. A
+    # declared key this run failed to emit is refused after, by name.
+    if ! facts_model_keys | grep -qx -- "$explain"; then
+      red "no fact '$explain' in the model; the keys are: $(facts_model_keys | paste -sd, | sed 's/,/, /g')" >&2; return 1
+    fi
   fi
 
   local top; top="$(git_root)"
   if [ -z "$top" ]; then
-    red "spark facts needs a git repo — run it from inside the project."
+    red "spark facts needs a git repo — run it from inside the project." >&2
     return 1
   fi
 
@@ -3162,6 +3197,80 @@ cmd_facts() {
       why="${why:+$why; }observer: $FACTS_REFUSED"
     fi
   fi
+  # --delta: the SAME compilation, presented against the last observation of
+  # this work unit. Every fact above was re-read from its source this run; the
+  # stored record is compared, never consulted, so a stale record can only ever
+  # be reported as changed (F1, F3). What the caller gets back is the facts
+  # whose status, value, source version or invalidator versions moved, plus
+  # the keys and versions of those that did not — so a repair round re-sends
+  # the HEAD-bound facts and not the milestone, authority and graph it already
+  # holds. The record is written after the comparison, atomically.
+  if [ -n "$delta" ]; then
+    local rel=".spark/facts/$issue.json" rec="$top/.spark/facts/$issue.json" unit="$locator#$issue" prev="" report="" full="$out"
+    if [ -f "$rec" ]; then
+      prev="$(jq -c --arg u "$unit" 'select(.unit == $u)' "$rec" 2>/dev/null || true)"
+    fi
+    if [ -n "$prev" ]; then
+      report="$(facts_delta "$prev" "$out" "$unit" "$rel" "$FACTS_OUTPUT_SHAPE")" || report=""
+    fi
+    if [ -n "$report" ]; then
+      FACTS_CHANGED="$(printf '%s' "$report" | jq '.delta.changed | length')"
+      FACTS_UNCHANGED="$(printf '%s' "$report" | jq '.delta.unchanged | length')"
+      out="$report"
+      # What was printed is what #736 measures; the compiled shape is inside.
+      FACTS_OUTPUT_SHAPE="delta"
+    else
+      # No comparable record: the full output is the delta, and the reason is
+      # said on stderr so a caller never mistakes a first run for "nothing
+      # changed".
+      FACTS_CHANGED="$(printf '%s' "$out" | jq '(.facts? // .) | length')"
+      FACTS_UNCHANGED=0
+      yellow "delta: no previous record for $unit — full output" >&2
+    fi
+    facts_store_record "$rec" "$unit" "$observed" "$( [ -n "$report" ] && printf '%s' "$(printf '%s' "$report" | jq -r .delta.shape)" || printf '%s' "$FACTS_OUTPUT_SHAPE" )" "$full" \
+      || yellow "delta: the record under $rel could not be written; the next run will be a full output" >&2
+  fi
+  # --explain: one fact's provenance, and the record behind it fetched now,
+  # for the stated reason. The compilation above is the same, so the pointer
+  # is current; the fact is found in this run's output, and a key this run
+  # did not emit is refused by name rather than answered from memory (P5).
+  if [ -n "$explain" ]; then
+    local fact
+    fact="$(printf '%s' "$out" | jq -c --arg k "$explain" '(.facts? // .)[] | select(.key == $k)' 2>/dev/null)"
+    if [ -z "$fact" ]; then
+      red "no fact '$explain' in this output; the keys are: $(printf '%s' "$out" | jq -r '[(.facts? // .)[].key] | join(", ")')" >&2
+      facts_record_telemetry
+      return 1
+    fi
+    local status_; status_="$(printf '%s' "$fact" | jq -r '.status')"
+    local need; need="$(facts_reason_status "$because")"
+    if [ "$need" != any ] && [ "$need" != "$status_" ]; then
+      red "reason '$because' applies to a $need fact; '$explain' is $status_" >&2
+      facts_record_telemetry
+      return 1
+    fi
+    # The log line goes down BEFORE the source is read, and a log that cannot
+    # take it refuses the read: an unrecorded drill-down is a source read #736
+    # cannot see, which is the developer journey the policy exists to count
+    # (P2), so it is never traded for the answer.
+    if ! facts_log_drilldown "$top" "$explain" "$because" "$observed"; then
+      red "the drill-down log under .spark/telemetry cannot be written; '$explain' is not read unrecorded" >&2
+      facts_record_telemetry
+      return 1
+    fi
+    local record='null' endpoint
+    if endpoint="$(facts_source_endpoint "$(printf '%s' "$fact" | jq -r '.source.type')" "$(printf '%s' "$fact" | jq -r '.source.identity')")"; then
+      # Counted here, not in the fetch: a command substitution runs in a
+      # subshell, and an increment made there is discarded with it.
+      FACTS_API_CALLS=$(( FACTS_API_CALLS + 1 ))
+      record="$(gh api --hostname "${endpoint%%	*}" "${endpoint#*	}" 2>/dev/null)" || record='null'
+    fi
+    out="$(jq -cn --argjson f "$fact" --arg why "$because" --argjson r "$record" \
+      '{explain: {key: $f.key, status: $f.status, because: $why, provenance: $f.provenance, source: $f.source,
+                  invalidators: $f.invalidators, versions: $f.versions, detail: ($f.detail // null),
+                  inputs: ($f.inputs // null), record: $r}}')"
+    FACTS_OUTPUT_SHAPE="explain"
+  fi
   printf '%s\n' "$out"
   # Bytes, not characters: the size a consumer pays to read is what #736
   # compares against its baseline, and a multibyte title would make a
@@ -3170,6 +3279,91 @@ cmd_facts() {
   FACTS_OUTPUT_BYTES=$(( ${#out} + 1 ))
   [ -z "$why" ] || yellow "not established — $why" >&2
   facts_record_telemetry
+}
+
+# facts_delta <previous record json> <current output json> <unit> <record path> <shape> — the
+# partition of the current facts against the record's, as one delta object.
+#
+# A fact is UNCHANGED only when the record holds the same key with the same
+# status, the same value and detail, the same source version and the same
+# version for every invalidator (F1: identity and version, never age). Anything
+# else — a new key, a moved version, a value that differs under equal versions
+# (which would be a compiler defect worth seeing) — is CHANGED and carried in
+# full. The shape is deliberately not {observer, facts}: a delta is a
+# presentation of a snapshot, not a snapshot, and R22 makes a consumer refuse
+# to act on it as one.
+#
+facts_delta() {
+  local prev="$1" cur="$2" unit="$3" rel="$4" shape="$5"
+  jq -cn --argjson p "$prev" --argjson c "$cur" --arg unit "$unit" --arg rel "$rel" --arg shape "$shape" '
+    ($p.output | (.facts? // .)) as $pf
+    | ($c | (.facts? // .)) as $cf
+    | ($pf | map({key: .key, value: .}) | from_entries) as $by
+    | def same($a; $b):
+        $a.status == $b.status and $a.value == $b.value and $a.detail == $b.detail
+        and $a.source == $b.source and $a.versions == $b.versions and $a.invalidators == $b.invalidators;
+    {delta: {
+       unit: $unit, since: $p.observed_at, record: $rel, shape: $shape,
+       changed:   [ $cf[] | select(($by[.key] // null) as $o | ($o == null) or (same($o; .) | not)) ],
+       unchanged: [ $cf[] | select(($by[.key] // null) as $o | ($o != null) and same($o; .)) | {key, status, source, versions} ]
+     }}'
+}
+
+# facts_store_record <path> <unit> <observed_at> <shape> <full output> — the
+# last observation of a work unit, for the next --delta to compare against.
+# Written whole then moved into place, so a reader never sees half a record.
+# It is not state (R10): nothing reads it as truth, and deleting it costs one
+# full output.
+facts_store_record() {
+  local rec="$1" unit="$2" observed="$3" shape="$4" full="$5" tmp
+  mkdir -p "$(dirname "$rec")" || return 1
+  tmp="$(mktemp "$rec.XXXXXX")" || return 1
+  if jq -cn --arg u "$unit" --arg o "$observed" --arg s "$shape" --argjson out "$full" \
+       '{unit: $u, observed_at: $o, shape: $s, output: $out}' > "$tmp" 2>/dev/null; then
+    mv "$tmp" "$rec"
+  else
+    rm -f "$tmp"; return 1
+  fi
+}
+
+# facts_reasons — the closed drill-down vocabulary, read from the policy.
+FACTS_POLICY="$SPARK_ROOT/preferences/fact-consumption.tsv"
+facts_reasons() { awk -F'\t' '$1 == "reason" { print $2 }' "$FACTS_POLICY"; }
+# facts_reason_status <reason> — the status a fact must have for the reason,
+# or `any`.
+facts_reason_status() { awk -F'\t' -v r="$1" '$1 == "reason" && $2 == r { print $3; exit }' "$FACTS_POLICY"; }
+
+# facts_model_keys — every fact key the shipped model declares, one per line.
+facts_model_keys() { awk -F'\t' '$1 == "key" { print $3 }' "$FACTS_MODEL"; }
+
+# facts_source_endpoint <source type> <source identity> — where the record
+# behind a fact is read: `<host>\t<api path>`. Fails when the source is derived
+# (its inputs are its record) or the identity has no readable form. Reads
+# nothing itself, so the caller owns the read and its count.
+facts_source_endpoint() {
+  local type="$1" id="$2" host nwo path
+  case "$type" in github-api|human-decision) ;; *) return 1 ;; esac
+  host="${id%%/*}"; nwo="${id#*/}"
+  case "$nwo" in
+    */*#*/comment/*) path="repos/${nwo%%#*}/issues/comments/${nwo##*/comment/}" ;;
+    */*#*)           path="repos/${nwo%%#*}/issues/${nwo##*#}" ;;
+    */*/milestone/*) path="repos/${nwo%%/milestone/*}/milestones/${nwo##*/milestone/}" ;;
+    */*)             path="repos/$nwo" ;;
+    *)               return 1 ;;
+  esac
+  printf '%s\t%s' "$host" "$path"
+}
+
+# facts_log_drilldown <top> <key> <reason> <at> — one line per drill-down in
+# the run's append-only log, so a count across many invocations can never be
+# overwritten low by a later one (the executions log's reasoning, #665).
+# Outside a run there is nothing to record and it succeeds; inside one it
+# fails when the line could not be appended, and the caller must not read.
+facts_log_drilldown() {
+  [ -n "${SPARK_RUN_ID:-}" ] || return 0
+  local dir="$1/.spark/telemetry"
+  mkdir -p "$dir" 2>/dev/null || return 1
+  printf '%s\t%s\t%s\n' "$3" "$2" "$4" >> "$dir/$SPARK_RUN_ID.drilldowns" 2>/dev/null || return 1
 }
 
 # facts_complete <fact list json> — succeeds when the list carries every class

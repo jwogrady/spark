@@ -38,7 +38,7 @@
 # What was not recorded reports as NOT ASSESSED. A missing provider metric is an
 # unknown, and an unknown rendered as a number is a lie the operator would then
 # optimize against.
-TELEMETRY_KEYS="run_id attempt trigger pr head_sha actions_run provider model routing_reason effort preflight_tokens input_tokens output_tokens cache_write_tokens cache_read_tokens cache_reason tool_schema_tokens cost_usd wall_seconds tool_calls api_requests full_suite_runs targeted_checks iterations batch_usage compaction_events context_before context_after failing_before failing_after verdict overhead_ms certified_at ci_state runtime_peak_source_bytes runtime_modules_loaded facts_emitted facts_unknown facts_api_calls facts_cache_hits facts_cache_misses facts_output_shape facts_output_bytes"
+TELEMETRY_KEYS="run_id attempt trigger pr head_sha actions_run provider model routing_reason effort preflight_tokens input_tokens output_tokens cache_write_tokens cache_read_tokens cache_reason tool_schema_tokens cost_usd wall_seconds tool_calls api_requests full_suite_runs targeted_checks iterations batch_usage compaction_events context_before context_after failing_before failing_after verdict overhead_ms certified_at ci_state runtime_peak_source_bytes runtime_modules_loaded facts_emitted facts_unknown facts_api_calls facts_cache_hits facts_cache_misses facts_output_shape facts_output_bytes facts_changed facts_unchanged facts_drilldowns facts_drilldown_reasons"
 
 # The facts_* keys are the fact compiler's efficiency observability (#733): what
 # it read, what it reused, and what it produced. They are COUNTS, deliberately —
@@ -58,7 +58,7 @@ TELEMETRY_KEYS="run_id attempt trigger pr head_sha actions_run provider model ro
 # Counts and measurements are integers. A field that must be a number and is not
 # is a recording error: taking it anyway would put a value in a comparison column
 # that cannot be compared.
-TELEMETRY_INT_KEYS="attempt pr preflight_tokens input_tokens output_tokens cache_write_tokens cache_read_tokens tool_schema_tokens wall_seconds tool_calls api_requests full_suite_runs targeted_checks iterations compaction_events context_before context_after failing_before failing_after overhead_ms runtime_peak_source_bytes facts_emitted facts_unknown facts_api_calls facts_cache_hits facts_cache_misses facts_output_bytes"
+TELEMETRY_INT_KEYS="attempt pr preflight_tokens input_tokens output_tokens cache_write_tokens cache_read_tokens tool_schema_tokens wall_seconds tool_calls api_requests full_suite_runs targeted_checks iterations compaction_events context_before context_after failing_before failing_after overhead_ms runtime_peak_source_bytes facts_emitted facts_unknown facts_api_calls facts_cache_hits facts_cache_misses facts_output_bytes facts_changed facts_unchanged facts_drilldowns"
 
 # The verdict vocabulary is closed and matches the lifecycle's own answers, so a
 # run's outcome is comparable across runs. NOT ASSESSED is a legitimate verdict —
@@ -120,6 +120,22 @@ tm_exec_count() {
 # earlier one loaded a module. Both readers below derive the run summary from that
 # log and, like tm_exec_count, fail (no output) when it is absent so a value set
 # without the runtime recorder keeps its stored projection (#670).
+
+# tm_drilldowns <top> <run> — how many times the run read the history behind a
+# fact, and for which reasons, derived from the append-only
+# .spark/telemetry/<run>.drilldowns log (`<reason>\t<key>\t<iso8601>` per read).
+# Two projections from one log: the count, and `reason:n` pairs sorted by
+# reason. Like tm_exec_count, fails (no output) when the log is absent.
+tm_drilldowns() {
+  local dlog; dlog="$(tm_dir "$1")/$2.drilldowns"
+  [ -f "$dlog" ] || return 1
+  awk -F'\t' 'NF { n++ } END { print n+0 }' "$dlog"
+}
+tm_drilldown_reasons() {
+  local dlog; dlog="$(tm_dir "$1")/$2.drilldowns"
+  [ -f "$dlog" ] || return 1
+  awk -F'\t' 'NF { c[$1]++ } END { for (r in c) print r ":" c[r] }' "$dlog" | LC_ALL=C sort | paste -sd';'
+}
 
 # tm_footprint_bytes <top> <run> — the run's PEAK single-invocation source bytes.
 # Peak, not sum: it is the heaviest command's exact wc -c footprint, monotonic
@@ -446,6 +462,12 @@ EOF
       # same run cannot erase a module load or shrink the peak byte count (#670).
       dbytes="$(tm_footprint_bytes "$top" "$run")"   && tmv_runtime_peak_source_bytes="$dbytes"
       dmods="$(tm_footprint_modules "$top" "$run")"  && tmv_runtime_modules_loaded="$dmods"
+      # Drill-downs into the history behind a fact are likewise derived from
+      # their append-only log, so a run of many invocations cannot report fewer
+      # reads than it made (#735).
+      local ddown dreasons
+      ddown="$(tm_drilldowns "$top" "$run")"          && tmv_facts_drilldowns="$ddown"
+      dreasons="$(tm_drilldown_reasons "$top" "$run")" && tmv_facts_drilldown_reasons="$dreasons"
       local live ratio cdelta fdelta noprog binding
       live="$head"; [ -n "$live" ] || live="$(tm_live_head "$tmv_pr")"
       binding="$(tm_binding_status "$tmv_head_sha" "$live")"
@@ -548,6 +570,8 @@ EOF
       tm_row "source api calls"   "${tmv_facts_api_calls:-NOT ASSESSED}"
       tm_row "reuse hit / miss"   "${tmv_facts_cache_hits:-NOT ASSESSED} / ${tmv_facts_cache_misses:-NOT ASSESSED}"
       tm_row "output shape / bytes" "${tmv_facts_output_shape:-NOT ASSESSED} / ${tmv_facts_output_bytes:-NOT ASSESSED}"
+      tm_row "delta changed / unchanged" "${tmv_facts_changed:-NOT ASSESSED} / ${tmv_facts_unchanged:-NOT ASSESSED}"
+      tm_row "history drill-downs"  "${tmv_facts_drilldowns:-NOT ASSESSED} (${tmv_facts_drilldown_reasons:-no reasons})"
       echo
       echo "outcome"
       tm_row "verdict"            "${tmv_verdict:-NOT ASSESSED}"

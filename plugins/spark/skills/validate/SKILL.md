@@ -13,6 +13,12 @@ ones, then drives the fixes.
 
 ## Do this
 
+0. **Start each round from the snapshot.** `spark facts --issue <pr> --delta`
+   gives the facts that moved since the last round in full and the rest by
+   key — a new HEAD moves the HEAD-bound facts, not the milestone, authority
+   or contract you already hold. Read a fact's history only for a reason:
+   `--explain <key> --because <reason>`
+   ([fact-consumption.md](../../docs/reference/fact-consumption.md)).
 1. **Review with the built-ins** (don't reinvent them):
    - `/code-review` — correctness, reuse, simplification, efficiency.
    - `/security-review` — vulnerabilities, when the change touches auth, input

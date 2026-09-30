@@ -1,6 +1,6 @@
 # Canonical governance and documentation truth — the audit and its register (v0.23 cleanup, #741)
 
-**Scope.** Every documentation surface of the repository — 172 files: the root contract and roadmap, the
+**Scope.** Every documentation surface of the repository — 173 files: the root contract and roadmap, the
 `.github` templates (the Markdown pull-request template and the YAML issue forms, governance prose in
 either syntax),
 the repo-root developer docs (ADRs, ops, releases, governance, research, alpha), the shipped plugin
@@ -27,7 +27,7 @@ and checked as numbers.
 | Role | Surfaces |
 |---|---|
 | `operative-authority` | 30 |
-| `current-projection` | 18 |
+| `current-projection` | 19 |
 | `explanation` | 59 |
 | `historical-evidence` | 65 |
 | `superseded` | 0 |
@@ -56,6 +56,7 @@ the suite checks each is a number.
 | `exact-head-stale-evidence` | 7 | 0 + 2 non-prose |
 | `verdict-vocabulary` | 6 | 0 + 1 non-prose |
 | `parent-dependency` | 7 | 0 + 2 non-prose |
+| `snapshot-first-consumption` | 0 | 0 + 1 non-prose |
 | `review-lifecycle` | 6 | 1 + 1 non-prose |
 | `agent-contract` | 1 | 1 |
 | `merge-method` | 3 | 1 + 2 non-prose |

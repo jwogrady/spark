@@ -1,0 +1,32 @@
+# Spark — fact consumption policy: snapshot first, history on demand (policy version 1)
+#
+# This file is the machine-readable authority for HOW an agent or operator consumes the operative facts
+# (preferences/fact-model.tsv, schema version 1): the bounded snapshot `spark facts --issue <n>` compiles is
+# read first, and the raw history behind a fact — issue bodies, comment threads, review timelines — is
+# fetched only for a reason from the closed vocabulary below, through `spark facts --explain <key> --because
+# <reason>`, which records the reason so #736 can tell a legitimate drill-down from a continued developer
+# journey. reference/fact-consumption.md renders these records for a reader and is checked against this
+# data by tests/test-fact-consumption.sh; prose is never the contract.
+#
+# Record kinds (tab-separated; a line starting with # is a comment):
+#   version   <n>                     this policy's version
+#   schema    <n>                     the fact-model schema version it is written against
+#   policy    <id> <text>             a consumption rule
+#   reason    <token> <fact-status> <text>   an admissible reason to read a fact's source; fact-status is the
+#                                     status the fact must have for the reason to apply, or any
+version	1
+schema	1
+policy	P1	Current truth for a supported work unit is read from the snapshot first: `spark facts --issue <n>` (or its `--delta` against the last observation), never from issue bodies, comment threads or review timelines. A fact that is ESTABLISHED, canonical and provenance-backed is not re-derived from history.
+policy	P2	The source behind a fact is read only for a reason in the closed vocabulary, through `--explain <key> --because <reason>`. A raw read without a recorded reason is the developer journey the policy exists to end, and #736 counts it by its absence from the drill-down log.
+policy	P3	Reuse is decided by invalidators, never by age or by session (F1). Across repair rounds the facts whose versions did not move are reported by key and version and are not re-sent; a new HEAD moves the HEAD-bound facts and what derives from them, and nothing else (F12).
+policy	P4	No source read is suppressed to preserve a metric. Every run of `spark facts` re-reads every fact from its source; the stored observation is compared, never consulted (F3). A cache hit that skips a required read is a correctness failure, not a saving.
+policy	P5	An UNKNOWN, CONFLICT or missing fact is never guessed around: it is resolved at the source with its reason recorded, or the work declines. A work unit the snapshot does not support yet is read from history with the reason `unsupported`, not silently.
+policy	P6	Human authority, exact-HEAD evidence and review completeness are unchanged by this policy: the snapshot projects authority and never replaces it, and an independent reviewer may read any source it needs, with the reason recorded.
+policy	P7	The benchmark harness can hold this policy off: a run that does not use the snapshot is the journey-mode arm of #736, and one that uses `--delta` is the reuse arm; the telemetry keys facts_output_shape, facts_changed, facts_unchanged, facts_drilldowns and facts_drilldown_reasons are what the two arms are compared on.
+reason	unknown	UNKNOWN	The fact is UNKNOWN and the work needs its value, so the source is read to establish it or to confirm it cannot be
+reason	conflict	CONFLICT	The fact is CONFLICT and the candidates it names must be resolved where they were written; the model never picks one
+reason	audit	any	An audit, an independent review or a release check needs the source record itself, not the fact derived from it
+reason	explanation	any	The reader asked why a fact is what it is, which only the source can say; the answer is explanation, never a new fact
+reason	missing-fact	any	The work needs something no fact class carries, so the source is the only place it can be read
+reason	invalidation	any	A source moved and the dependent fact is being re-established; the read is the refresh the freshness contract requires
+reason	unsupported	any	The work unit, class or path has no snapshot support yet, so history is the only current truth available

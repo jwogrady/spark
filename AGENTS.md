@@ -110,6 +110,10 @@ issue PR → `master` (ADR-0027, and the delivery section of
 [`sdlc-doctrine.md`](plugins/spark/docs/explanation/sdlc-doctrine.md)):
 
 - One issue per branch; multiple focused Conventional Commits per branch.
+- **Snapshot first:** a work unit's current truth is `spark facts --issue <n>`
+  (its `--delta` between rounds), never re-derived from issue prose or comment
+  threads; history is read only through `--explain <key> --because <reason>`
+  ([`fact-consumption.md`](plugins/spark/docs/reference/fact-consumption.md)).
 - **Ordering invariant:** if issue B depends on issue A, B's base must
   verifiably contain A's merged result. Record true prerequisites with
   GitHub's native `blocked-by` relationship; codify's preflight treats that

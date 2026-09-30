@@ -35,7 +35,9 @@ nothing.
 ## What Claude can do
 
 - Wake on a trusted `@claude` mention.
-- Read the repository and the pull request.
+- Read the repository and the pull request — the pull request's current
+  state through `spark facts --issue <pr>` first, its history only for a
+  stated reason (the snapshot-first policy, `fact-consumption.md`).
 - Reason about the request and propose the smallest correct change.
 - Converse and report on the issue or pull request.
 - Cause a validated change to reach the PR's feature branch **through the

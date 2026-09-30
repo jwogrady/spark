@@ -17,8 +17,9 @@ identically.
 
 ## Do this
 
-1. **Confirm the branch.** Never commit or push on `master`/`main` — if you're on
-   it, branch first. Confirm the change passed [`validate`](../validate/SKILL.md).
+1. **Confirm the branch and the facts.** Never commit or push on `master`/`main` — if you're on
+   it, branch first. Confirm the change passed [`validate`](../validate/SKILL.md), and read the
+   unit's current state from `spark facts --issue <n>` — not from its thread ([fact-consumption.md](../../docs/reference/fact-consumption.md)).
 2. **Review the commit series.** `git log --oneline <trunk>..HEAD` — each
    commit a coherent Conventional Commit, the series scoped to this one issue.
    Two concerns in the series means the branch should split before it ships.
@@ -36,9 +37,7 @@ identically.
    ```bash
    git push -u origin <branch>
    ```
-5. **Open the PR** into the default branch. **Title it to match how PRs land
-   here** — `merge.strategy` (`spark prefs`; `merge` by default): plainly for `merge` and `rebase`, conventionally for `squash`; the
-   wrong one doubles or drops the entry ([release-please.md](references/release-please.md)). Body should cover:
+5. **Open the PR** into the default branch. **Title it to match how PRs land here** — `merge.strategy` (`spark prefs`; `merge` by default): plainly for `merge` and `rebase`, conventionally for `squash`; the wrong one doubles or drops the entry ([release-please.md](references/release-please.md)). Body should cover:
    - **What** changed and **why** (link the issue: `Closes #12`).
    - How it was verified (tests run, app exercised) — use the evidence classes
      from [`validate`](../validate/SKILL.md) where the distinction matters.

@@ -21,10 +21,15 @@ lane (Codify, stage 3).
    `plan`, don't guess a stack mid-implementation.
 2. **Read the issue.** The acceptance criteria are the contract. If they're
    missing or vague, go back to [`plan`](../plan/SKILL.md) — don't guess.
-3. **Check prerequisites — positive proof, fail closed.** From the **project
-   root** (it reads the *current* repo's issues and trunk), run this skill's
-   script: `bash <path-to-this-skill>/scripts/check-prereqs.sh <issue>`. It
-   demands proof of the ordering invariant on two axes: every declared
+3. **Read the facts first, then prove the order.** `spark facts --issue <n>`
+   is the current truth of the work unit — placement, graph, authority,
+   contract — read once as a bounded snapshot, never re-derived from issue
+   prose or comment threads; the history behind a fact is read only through
+   `--explain <key> --because <reason>`
+   ([fact-consumption.md](../../docs/reference/fact-consumption.md)). Then,
+   from the **project root**, run `bash <path-to-this-skill>/scripts/check-prereqs.sh <issue>`:
+   its reads are the ordering *proof* the snapshot cannot carry (merged
+   results and their ancestry), and it demands that proof on two axes: every declared
    blocker's **merged result is an ancestor of HEAD** (a closed issue alone
    proves nothing), and **HEAD sits exactly at the fresh remote trunk**
    (neither behind nor diverged). `ready` = proven; `blocked` = the invariant
