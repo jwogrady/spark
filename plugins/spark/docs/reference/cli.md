@@ -2257,7 +2257,7 @@ shape and its size in bytes are recorded as `facts_output_shape` and
 |---|---|---|
 | `repository` | `repository.identity` | The canonical `host/owner/name` of this repository and its default branch |
 | `work_unit` | `work_unit.identity` | Which task is being executed: its kind, its canonical id, and the issue a pull request closes |
-| `graph` | `graph.native` | An issue's native parent, children and blockers, each with its current state |
+| `graph` | `graph.native` | An issue's native parent, children and blockers, each with its current state — for a pull request, those of the one issue it implements, or `UNKNOWN` with the reason when it implements none, several, or one in another repository |
 | `placement` | `placement.current` | Where the work unit sits in the release, milestone and gate structure |
 | `head` | `head.exact` | A pull request's exact HEAD, the branch it targets, that branch's current commit, and whether the change still sits on it |
 | `acceptance` | `acceptance.contract` | Which contract the change is judged against, and how its items stand on that exact HEAD |
