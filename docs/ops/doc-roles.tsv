@@ -18,7 +18,7 @@
 .github/ISSUE_TEMPLATE/feature.yml	operative-authority	issue-template-feature,parent-dependency	governance prose in YAML: the feature issue form; its Dependencies field says prose explains and the native relationship records (this audit)
 .github/ISSUE_TEMPLATE/skill.yml	operative-authority	issue-template-skill	governance prose in YAML: the skill issue form
 .github/PULL_REQUEST_TEMPLATE.md	operative-authority	pr-template	the pull-request body every PR opens with; the plan and ship skills fill it
-AGENTS.md	operative-authority	version-minting,authority-boundaries,parent-dependency,agent-contract	the one agent contract; states other concepts only as projections that point at their sources
+AGENTS.md	operative-authority	version-minting,authority-boundaries,parent-dependency,agent-contract,snapshot-first-consumption	the one agent contract; states other concepts only as projections that point at their sources
 CLAUDE.md	current-projection	agent-contract	imports AGENTS.md
 README.md	explanation	verdict-vocabulary	public positioning
 ROADMAP.md	current-projection	release-gate-placement,routine-merge-authority,parent-dependency	dated projection of intent; placement lives in GitHub — declares so since this audit
@@ -69,8 +69,8 @@ docs/governance/is-state-baseline-pre-v020.md	historical-evidence	parent-depende
 docs/governance/self-conformance-audit-v020.md	historical-evidence	release-gate-placement	banner: historical record, superseded as current truth
 docs/ops/bounded-execution.md	explanation	authority-boundaries	
 docs/ops/ci-handoff.md	explanation	exact-head-stale-evidence	handoff states are not the reviewer verdict vocabulary — says so since this audit
-docs/ops/claude-coding-lane.md	operative-authority	coding-lane	the coding lane's definition — a lane that writes, distinct from the review lifecycle
-docs/ops/context-efficiency.md	explanation	-	developer operations doc
+docs/ops/claude-coding-lane.md	operative-authority	coding-lane,snapshot-first-consumption	the coding lane's definition — a lane that writes, distinct from the review lifecycle
+docs/ops/context-efficiency.md	explanation	snapshot-first-consumption	developer operations doc
 docs/ops/evaluation.md	explanation	-	developer operations doc
 docs/ops/execution-configuration-surface.md	explanation	routine-merge-authority	cites #677; defines nothing about it
 docs/ops/execution-routing.md	explanation	authority-boundaries	points at the shipped statement of the non-escalatable human boundary since this audit
@@ -108,7 +108,7 @@ docs/research/v0.23-cleanup/740-test-consolidation.md	historical-evidence	-	rese
 docs/research/v0.23-cleanup/741-canonical-truth.md	historical-evidence	-	research and baseline evidence
 docs/research/v0.23-cleanup/742-evidence-separation.md	historical-evidence	-	research and baseline evidence
 docs/research/v0.23-cleanup/743-runtime-surface.md	historical-evidence	-	research and baseline evidence
-docs/research/v0.23-optimization-baseline/README.md	current-projection	-	index
+docs/research/v0.23-optimization-baseline/README.md	current-projection	snapshot-first-consumption	index
 docs/research/v0.23-optimization-baseline/raw/FINDINGS-TEXT.md	historical-evidence	-	research and baseline evidence
 docs/research/v0.23-optimization-baseline/raw/agent-docs-governance-truth.md	historical-evidence	-	research and baseline evidence
 docs/research/v0.23-optimization-baseline/raw/agent-duplicate-truth-code.md	historical-evidence	-	research and baseline evidence
@@ -146,7 +146,7 @@ plugins/spark/docs/how-to/plan.md	explanation	-	shipped user documentation
 plugins/spark/docs/how-to/resume.md	explanation	-	shipped user documentation
 plugins/spark/docs/how-to/ship.md	explanation	routine-merge-authority,merge-method	restates the ship guardrail for users; the skill is the agent-facing statement
 plugins/spark/docs/how-to/validate.md	explanation	verdict-vocabulary,review-lifecycle	the built-in review lane, distinct from the independent reviewer lane
-plugins/spark/docs/reference/cli.md	current-projection	release-gate-placement,authority-boundaries,exact-head-stale-evidence,parent-dependency	VERBS table parity (doctor); the crossroad definition points at the doctrine since this audit
+plugins/spark/docs/reference/cli.md	current-projection	release-gate-placement,authority-boundaries,exact-head-stale-evidence,parent-dependency,snapshot-first-consumption	VERBS table parity (doctor); the crossroad definition points at the doctrine since this audit
 plugins/spark/docs/reference/codify-readiness.md	current-projection	-	shipped reference page rendering a machine-readable authority or the code
 plugins/spark/docs/reference/compatibility.md	operative-authority	supported-environments	the support statement
 plugins/spark/docs/reference/engineering-preferences.md	current-projection	version-minting	shipped reference page rendering a machine-readable authority or the code
@@ -167,7 +167,7 @@ plugins/spark/skills/agents-md/references/contract-and-sections.md	explanation	-
 plugins/spark/skills/agents-md/references/methodology-boundary.md	explanation	-	progressive-disclosure reference of a skill
 plugins/spark/skills/bootstrap/SKILL.md	operative-authority	skill-bootstrap	the skill's procedure, agent-facing; its concept is the skill itself
 plugins/spark/skills/bootstrap/references/profiles.md	explanation	-	progressive-disclosure reference of a skill
-plugins/spark/skills/codify/SKILL.md	operative-authority	skill-codify	the skill's procedure, agent-facing; its concept is the skill itself
+plugins/spark/skills/codify/SKILL.md	operative-authority	skill-codify,snapshot-first-consumption	the skill's procedure, agent-facing; its concept is the skill itself
 plugins/spark/skills/ideate/SKILL.md	operative-authority	skill-ideate	the skill's procedure, agent-facing; its concept is the skill itself
 plugins/spark/skills/knowledge/SKILL.md	operative-authority	skill-knowledge	the skill's procedure, agent-facing; its concept is the skill itself
 plugins/spark/skills/knowledge/references/collaboration-protocol.md	explanation	-	progressive-disclosure reference of a skill
@@ -179,8 +179,9 @@ plugins/spark/skills/onboard/SKILL.md	operative-authority	skill-onboard	the skil
 plugins/spark/skills/plan/SKILL.md	operative-authority	skill-plan	the skill's procedure, agent-facing; its concept is the skill itself
 plugins/spark/skills/plan/references/creating-issues.md	explanation	-	progressive-disclosure reference of a skill
 plugins/spark/skills/plan/references/release-assignment.md	explanation	-	progressive-disclosure reference of a skill
-plugins/spark/skills/ship/SKILL.md	operative-authority	skill-ship,merge-method	the skill's procedure, agent-facing; its concept is the skill itself
+plugins/spark/skills/ship/SKILL.md	operative-authority	skill-ship,merge-method,snapshot-first-consumption	the skill's procedure, agent-facing; its concept is the skill itself
 plugins/spark/skills/ship/references/release-fallback.md	explanation	-	progressive-disclosure reference of a skill
 plugins/spark/skills/ship/references/release-please.md	explanation	-	progressive-disclosure reference of a skill
-plugins/spark/skills/validate/SKILL.md	operative-authority	skill-validate	the skill's procedure, agent-facing; its concept is the skill itself
+plugins/spark/skills/validate/SKILL.md	operative-authority	skill-validate,snapshot-first-consumption	the skill's procedure, agent-facing; its concept is the skill itself
 plugins/spark/skills/validate/references/integration-validation.md	explanation	-	progressive-disclosure reference of a skill
+plugins/spark/docs/reference/fact-consumption.md	current-projection	snapshot-first-consumption	renders fact-consumption.tsv
