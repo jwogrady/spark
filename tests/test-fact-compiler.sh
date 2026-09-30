@@ -3059,6 +3059,14 @@ assert_eq "a contract written entirely with one marker still establishes" "ESTAB
   "$(printf '%s' "$(afact "$("$SPARK" facts --issue 733)")" | jq -r '.status')"
 
 
+# gh evaluates every --jq program with its embedded gojq, whose regexes are RE2:
+# no lookahead, no lookbehind. The stubs answer through the system jq, which
+# accepts both — so a lookaround passes every fixture above and fails every real
+# read of a pull request with a closing reference, taking all seven work-unit
+# classes down with it. The runtime is held to what gh can actually compile.
+assert_eq "no runtime regex uses lookaround that gh's jq cannot compile" "" \
+  "$(grep -nE '\(\?[=!]|\(\?<[=!]' "$WORK/plugin/lib/"*.sh "$WORK/plugin/bin/spark" || true)"
+
 # --- authority.standing: one configured human decision, never inferred -----
 mkdir -p .spark
 cat > .spark/preferences.json <<'JSON'
