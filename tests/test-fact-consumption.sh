@@ -5,7 +5,8 @@
 # The things a happy-path check would miss:
 #
 #   * a drill-down without a reason, with a reason outside the vocabulary, or
-#     with a reason whose required status the fact lacks, reads nothing;
+#     with a key the model does not declare, reads nothing at all; one whose
+#     reason does not apply to the fact's status never reads the source;
 #   * the record fetched is the node the fact's SOURCE names, so an audit of
 #     authority reaches the decision comment and not the work unit;
 #   * every drill-down is on the run's log, and the count derives from the
@@ -90,14 +91,20 @@ assert_eq "and none of those reached GitHub" "0" "$(command grep -c . "$GH_CALL_
 ERR="$("$SPARK" facts --issue 734 --explain authority.standing --because vibes 2>&1 >/dev/null || true)"
 assert_contains "the refusal lists the vocabulary" "unknown, conflict, audit" "$ERR"
 
-# A key this run did not emit is refused by name; a reason with a required
-# status is refused for a fact in another status.
+# A key the model does not declare is refused by name before the compile
+# spends a read; a reason with a required status is refused for a fact in
+# another status, after the compile and without a read of the source.
+: > "$GH_CALL_LOG"
 assert_eq "an unknown key is refused" "1" \
   "$("$SPARK" facts --issue 734 --explain review.cached --because audit >/dev/null 2>&1; echo $?)"
 assert_contains "naming the keys that exist" "authority.standing" \
   "$("$SPARK" facts --issue 734 --explain review.cached --because audit 2>&1 >/dev/null || true)"
+assert_eq "and an unknown key reached GitHub for nothing" "0" "$(command grep -c . "$GH_CALL_LOG" || true)"
+: > "$GH_CALL_LOG"
 assert_eq "reason unknown does not apply to an ESTABLISHED fact" "1" \
   "$("$SPARK" facts --issue 734 --explain authority.standing --because unknown >/dev/null 2>&1; echo $?)"
+assert_eq "a status refusal read the comment for the compile only, never as the source" "1" \
+  "$(command grep -c 'repos/jwogrady/spark/issues/comments/5622552139' "$GH_CALL_LOG" || true)"
 assert_eq "reason unknown applies to an UNKNOWN fact" "0" \
   "$("$SPARK" facts --issue 734 --explain placement.current --because unknown >/dev/null 2>&1; echo $?)"
 

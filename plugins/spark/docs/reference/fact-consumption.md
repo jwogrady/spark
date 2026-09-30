@@ -29,8 +29,10 @@ stale record can only ever be reported as a change. Its output is not a
 snapshot shape — `{"delta": …}` — and a consumer must not act on it as one
 (R22); the full observation it was compared to is in the record it names.
 
-`--explain` refuses a key the run did not emit, a reason outside the
-vocabulary, and a reason whose required status the fact does not have. The
+`--explain` refuses a key the model does not declare and a reason outside the
+vocabulary before anything is read; it refuses a declared key the run did not
+emit, and a reason whose required status the fact does not have, after the
+compile and without reading the source. The
 record it fetches is the GitHub node the fact's source identity names — the
 issue, the comment, the milestone or the repository — and a derived fact has
 none: its `inputs` are its record.

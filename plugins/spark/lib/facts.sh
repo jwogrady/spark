@@ -3062,6 +3062,12 @@ cmd_facts() {
     if ! facts_reasons | grep -qx -- "$because"; then
       red "'$because' is not an admissible reason; one of: $(facts_reasons | paste -sd, | sed 's/,/, /g')" >&2; return 1
     fi
+    # The key is checked against the model here for the same reason: a key no
+    # fact can ever carry is refused before the compile spends its reads. A
+    # declared key this run failed to emit is refused after, by name.
+    if ! facts_model_keys | grep -qx -- "$explain"; then
+      red "no fact '$explain' in the model; the keys are: $(facts_model_keys | paste -sd, | sed 's/,/, /g')" >&2; return 1
+    fi
   fi
 
   local top; top="$(git_root)"
@@ -3315,6 +3321,9 @@ facts_reasons() { awk -F'\t' '$1 == "reason" { print $2 }' "$FACTS_POLICY"; }
 # facts_reason_status <reason> — the status a fact must have for the reason,
 # or `any`.
 facts_reason_status() { awk -F'\t' -v r="$1" '$1 == "reason" && $2 == r { print $3; exit }' "$FACTS_POLICY"; }
+
+# facts_model_keys — every fact key the shipped model declares, one per line.
+facts_model_keys() { awk -F'\t' '$1 == "key" { print $3 }' "$FACTS_MODEL"; }
 
 # facts_source_record <source type> <source identity> — the record behind a
 # fact, read from GitHub now. Prints JSON and succeeds; fails when the source
