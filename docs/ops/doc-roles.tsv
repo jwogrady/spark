@@ -184,3 +184,4 @@ plugins/spark/skills/ship/references/release-fallback.md	explanation	-	progressi
 plugins/spark/skills/ship/references/release-please.md	explanation	-	progressive-disclosure reference of a skill
 plugins/spark/skills/validate/SKILL.md	operative-authority	skill-validate	the skill's procedure, agent-facing; its concept is the skill itself
 plugins/spark/skills/validate/references/integration-validation.md	explanation	-	progressive-disclosure reference of a skill
+docs/research/v0.23-cleanup/736-snapshot-benchmark.md	historical-evidence	-	research and baseline evidence
