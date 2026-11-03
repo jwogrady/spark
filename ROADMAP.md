@@ -1,5 +1,9 @@
 # Roadmap
 
+> **Archived 2026-11-03.** Development has stopped; `v0.22.0` is the final
+> release and the v0.23–v0.25 milestones were closed unreleased. This file is
+> kept as the historical record. See [Archiving Spark](docs/archive.md).
+
 This roadmap reflects current intent, not a commitment or timeline.
 Priorities may shift as the project evolves. Milestones, issues and each
 release gate live in GitHub and move; this file is a dated projection of intent,

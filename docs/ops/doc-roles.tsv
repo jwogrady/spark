@@ -85,6 +85,7 @@ docs/ops/release-token-governance.md	operative-authority	release-token	token pol
 docs/ops/repository-boundary.md	explanation	-	developer operations doc
 docs/ops/telemetry-baseline.md	historical-evidence	-	dated baseline
 docs/ops/v0.21-dogfood-evaluation.md	historical-evidence	-	dated evaluation
+docs/archive.md	historical-evidence	-	self-marked Archived; why the project stopped
 docs/problem-statement.md	historical-evidence	-	self-marked Historical
 docs/product-constitution.md	operative-authority	product-constitution,release-gate-placement	the constitution; its Platform Compatibility Review paragraph is marked superseded (ADR-0026) since this audit
 docs/releases/README.md	current-projection	-	index
