@@ -1,3 +1,9 @@
+> [!IMPORTANT]
+> **Spark is archived (2026-11-03).** Claude Code and Codex now ship most of
+> what Spark supplied, and the Alpha never produced evidence from anyone but
+> the author that it worked. The repository is read-only and `v0.22.0` is the
+> final release. Why: [Archiving Spark](docs/archive.md).
+
 <div align="center">
 
 <picture>
